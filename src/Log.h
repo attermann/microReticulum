@@ -20,6 +20,7 @@ namespace RNS {
 	};
 
 	void loglevel(LogLevel level);
+	LogLevel loglevel();
 
 	void doLog(const char* msg, LogLevel level);
 

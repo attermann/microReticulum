@@ -21,8 +21,16 @@ namespace RNS {
 		using SharedData = std::shared_ptr<Data>;
 
 	public:
+		enum NoneConstructor {
+			NONE
+		};
+
+	public:
 		Bytes() {
 			//extreme("Bytes object created from default, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+		}
+		Bytes(NoneConstructor none) {
+			//extreme("Bytes object created from NONE, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
 		}
 		Bytes(const Bytes &bytes) {
 			//extreme("Bytes is using shared data");

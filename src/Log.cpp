@@ -33,6 +33,10 @@ void RNS::loglevel(LogLevel level) {
 	_level = level;
 }
 
+LogLevel RNS::loglevel() {
+	return _level;
+}
+
 void RNS::doLog(const char* msg, LogLevel level) {
 	if (level > _level) {
 		return;

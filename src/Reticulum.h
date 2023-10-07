@@ -104,6 +104,9 @@ namespace RNS {
 			return _object.get() != nullptr;
 		}
 
+	public:
+		void loop();
+
 	private:
 		std::shared_ptr<Object> _object;
 

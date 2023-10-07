@@ -18,27 +18,33 @@ Identity::Identity(bool create_keys) : _object(new Object()) {
 void Identity::createKeys() {
 	assert(_object);
 
-/*
-	self.prv           = X25519PrivateKey.generate()
-	self.prv_bytes     = self.prv.private_bytes()
+	_object->_prv           = Cryptography::X25519PrivateKey::generate();
+	_object->_prv_bytes     = _object->_prv->private_bytes();
+	debug("Identity::createKeys: prv bytes: " + _object->_prv_bytes.toHex());
 
-	self.sig_prv       = Ed25519PrivateKey.generate()
-	self.sig_prv_bytes = self.sig_prv.private_bytes()
+	_object->_sig_prv       = Cryptography::Ed25519PrivateKey::generate();
+	_object->_sig_prv_bytes = _object->_sig_prv->private_bytes();
+	debug("Identity::createKeys: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
 
-	self.pub           = self.prv.public_key()
-	self.pub_bytes     = self.pub.public_bytes()
+	_object->_pub           = _object->_prv->public_key();
+	_object->_pub_bytes     = _object->_pub->public_bytes();
+	debug("Identity::createKeys: pub bytes: " + _object->_pub_bytes.toHex());
 
-	self.sig_pub       = self.sig_prv.public_key()
-	self.sig_pub_bytes = self.sig_pub.public_bytes()
-*/
+	_object->_sig_pub       = _object->_sig_prv->public_key();
+	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
+	debug("Identity::createKeys: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 	update_hashes();
 
-	//verbose("Identity keys created for " + _object->_hash.toHex());
+	verbose("Identity keys created for " + _object->_hash.toHex());
 }
 
+/*
+:returns: The public key as *bytes*
+*/
 Bytes Identity::get_public_key() {
 	assert(_object);
+	return _object->_pub_bytes + _object->_sig_pub_bytes;
 	// MOCK
 	return "abc123";
 }
@@ -60,18 +66,18 @@ Signs information by the identity.
 */
 Bytes Identity::sign(const Bytes &message) {
 	assert(_object);
-/*
-	if self.sig_prv != None:
-		try:
-			return self.sig_prv.sign(message)    
-		except Exception as e:
-			RNS.log("The identity "+str(self)+" could not sign the requested message. The contained exception was: "+str(e), RNS.LOG_ERROR)
-			raise e
-	else:
-		raise KeyError("Signing failed because identity does not hold a private key")
-*/
-	// MOCK
-	return {message};
+	if (_object->_sig_prv) {
+		try {
+			return _object->_sig_prv->sign(message);
+		}
+		catch (std::exception e) {
+			error("The identity " + toString() + " could not sign the requested message. The contained exception was: " + e.what());
+			throw e;
+		}
+	}
+	else {
+		throw std::runtime_error("Signing failed because identity does not hold a private key");
+	}
 }
 
 

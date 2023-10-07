@@ -4,6 +4,9 @@
 #include "Log.h"
 #include "Bytes.h"
 #include "Cryptography/Fernet.h"
+#include "Cryptography/X25519.h"
+#include "Cryptography/Ed25519.h"
+
 
 #include <memory>
 #include <string>
@@ -65,21 +68,37 @@ namespace RNS {
 		static Bytes truncated_hash(const Bytes &data);
 		Bytes sign(const Bytes &message);
 
+		inline Bytes encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }
+		inline Bytes signingPrivateKey() const { assert(_object); return _object->_sig_prv_bytes; }
+		inline Bytes encryptionPublicKey() const { assert(_object); return _object->_prv_bytes; }
+		inline Bytes signingPublicKey() const { assert(_object); return _object->_sig_prv_bytes; }
 		inline Bytes hash() const { assert(_object); return _object->_hash; }
 		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
+
+		inline std::string toString() const { assert(_object); return _object->_hash.toHex(); }
 
 	private:
 		class Object {
 		public:
-			Object() {
-				extreme("Identity::Data object created, this: " + std::to_string((ulong)this));
-			}
-			~Object() {
-				extreme("Identity::Data object destroyed, this: " + std::to_string((ulong)this));
-			}
+			Object() { extreme("Identity::Data object created, this: " + std::to_string((ulong)this)); }
+			~Object() { extreme("Identity::Data object destroyed, this: " + std::to_string((ulong)this)); }
 		private:
+
+			RNS::Cryptography::X25519PrivateKey::Ptr _prv;
+			Bytes _prv_bytes;
+
+			RNS::Cryptography::Ed25519PrivateKey::Ptr _sig_prv;
+			Bytes _sig_prv_bytes;
+
+			RNS::Cryptography::X25519PublicKey::Ptr _pub;
+			Bytes _pub_bytes;
+
+			RNS::Cryptography::Ed25519PublicKey::Ptr _sig_pub;
+			Bytes _sig_pub_bytes;
+
 			Bytes _hash;
 			std::string _hexhash;
+
 		friend class Identity;
 		};
 		std::shared_ptr<Object> _object;
