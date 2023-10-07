@@ -14,6 +14,7 @@ namespace RNS {
 
 	class Packet;
 	class PacketProof;
+	class ProofDestination;
 	class PacketReceipt;
 	class PacketReceiptCallbacks;
 
@@ -84,7 +85,9 @@ namespace RNS {
 		uint8_t EMPTY_DESTINATION[Reticulum::DESTINATION_LENGTH] = {0};
 
 	public:
-		Packet(const Destination &destination, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const uint8_t *transport_id = nullptr, Interface *attached_interface = nullptr, bool create_receipt = true);
+		Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const uint8_t *transport_id = nullptr, bool create_receipt = true);
+		Packet(const Destination &destination, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const uint8_t *transport_id = nullptr, bool create_receipt = true) : Packet(destination, Interface::NONE, data, DATA, CONTEXT_NONE, Transport::BROADCAST, HEADER_1, nullptr, create_receipt) {
+		}
 		Packet(NoneConstructor none) {
 			extreme("Packet NONE object created");
 		}
@@ -110,16 +113,6 @@ namespace RNS {
 		void setData(const uint8_t* rata, uint16_t len);
 	*/
 
-	private:
-		class Object {
-		public:
-			Object(const Destination &destination) : _destination(destination) {}
-		private:
-			Destination _destination;
-		friend class Packet;
-		};
-		std::shared_ptr<Object> _object;
-
 	public:
 		uint8_t get_packed_flags();
 		void pack();
@@ -130,8 +123,12 @@ namespace RNS {
 		Bytes get_hash();
 		Bytes getTruncatedHash();
 		Bytes get_hashable_part();
+		//zProofDestination &generate_proof_destination();
 
-	private:
+		// getters/setters
+		inline const Interface& receiving_interface() const { assert(_object); return _object->_receiving_interface; }
+
+	public:
 		types _packet_type;
 		header_types _header_type;
 		context_types _context;
@@ -151,9 +148,6 @@ namespace RNS {
 		uint16_t _mtu = Reticulum::MTU;
 		time_t _sent_at = 0;
 
-		Interface *_attached_interface = nullptr;
-		Interface *_receiving_interface = nullptr;
-
 		float _rssi = 0.0;
 		float _snr = 0.0;
 
@@ -166,6 +160,21 @@ namespace RNS {
 		uint8_t _header[Reticulum::HEADER_MAXSIZE];
 		uint8_t *_data = _raw + Reticulum::HEADER_MAXSIZE;
 		uint16_t _data_len = 0;
+
+	private:
+		class Object {
+		public:
+			Object(const Destination &destination, const Interface &attached_interface) : _destination(destination), _attached_interface(attached_interface) {}
+		private:
+
+			Destination _destination;
+
+			Interface _attached_interface;
+			Interface _receiving_interface;
+
+		friend class Packet;
+		};
+		std::shared_ptr<Object> _object;
 	};
 
 

@@ -23,7 +23,7 @@ void testReference() {
 int main(void)
 {
 	UNITY_BEGIN();
-	RUN_TEST(testObjects);
+	RUN_TEST(testReference);
 	return UNITY_END();
 }
 */

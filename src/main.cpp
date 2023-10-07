@@ -39,45 +39,50 @@ void setup() {
 	Serial.print("Hello from T-Beam on PlatformIO!\n");
 #endif
 
+	try {
+
 #ifndef NDEBUG
-	//RNS::loglevel(RNS::LOG_WARNING);
-	RNS::loglevel(RNS::LOG_EXTREME);
-	//test();
-	testCrypto();
-	return;
+		RNS::loglevel(RNS::LOG_WARNING);
+		//RNS::loglevel(RNS::LOG_EXTREME);
+		test();
 #endif
 
-	//std::stringstream test;
-	// !!! just adding this single stringstream alone (not even using it) adds a whopping 17.1% !!!
-	// !!! JUST SAY NO TO STRINGSTREAM !!!
+		//std::stringstream test;
+		// !!! just adding this single stringstream alone (not even using it) adds a whopping 17.1% !!!
+		// !!! JUST SAY NO TO STRINGSTREAM !!!
 
-	RNS::loglevel(RNS::LOG_EXTREME);
+		RNS::loglevel(RNS::LOG_EXTREME);
 
-	// 18.5% completely empty program
+		// 18.5% completely empty program
 
-	// 21.8% baseline here with serial
+		// 21.8% baseline here with serial
 
-	RNS::Reticulum reticulum;
-	// 21.9% (+0.1%)
+		RNS::Reticulum reticulum;
+		// 21.9% (+0.1%)
 
-	RNS::Identity identity;
-	// 22.6% (+0.7%)
+		RNS::Identity identity;
+		// 22.6% (+0.7%)
 
-	RNS::Destination destination(identity, RNS::Destination::IN, RNS::Destination::SINGLE, "test", "context");
-	// 23.0% (+0.4%)
+		RNS::Destination destination(identity, RNS::Destination::IN, RNS::Destination::SINGLE, "test", "context");
+		// 23.0% (+0.4%)
 
-	//destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
-	// test path
-	destination.announce(RNS::bytesFromString(fruits[rand() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
-	// 23.9% (+0.8%)
+		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
+		// test path
+		destination.announce(RNS::bytesFromString(fruits[rand() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
+		// 23.9% (+0.8%)
 
-	//zdestination.set_proof_strategy(RNS::Destination::PROVE_ALL);
+		//zdestination.set_proof_strategy(RNS::Destination::PROVE_ALL);
 
-	//zannounce_handler = ExampleAnnounceHandler(
-	//z    aspect_filter="example_utilities.announcesample.fruits";
-	//z)
+		//zannounce_handler = ExampleAnnounceHandler(
+		//z    aspect_filter="example_utilities.announcesample.fruits";
+		//z)
 
-	//zRNS::Transport.register_announce_handler(announce_handler);
+		//zRNS::Transport.register_announce_handler(announce_handler);
+
+	}
+	catch (std::exception& e) {
+		RNS::error(std::string("!!! Exception in main: ") + e.what() + " !!!");
+	}
 
 #ifndef NATIVE
 	Serial.print("Goodbye from T-Beam on PlatformIO!\n");

@@ -38,6 +38,6 @@ Transport::~Transport() {
 }
 
 /*static*/ bool Transport::outbound(const Packet &packet) {
-	// mock
+	// MOCK
 	return true;
 }

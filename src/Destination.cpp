@@ -272,15 +272,15 @@ Bytes Destination::encrypt(const Bytes &data) {
 	assert(_object);
 	debug("Destination::encrypt: encrypting bytes");
 
-/*
 	if (_object->_type == Destination::PLAIN) {
 		return data;
 	}
 
 	if (_object->_type == Destination::SINGLE && _object->_identity) {
-		return _object->_identity.encrypt(data)
+		return _object->_identity.encrypt(data);
 	}
 
+/*
 	if (_object->_type == Destination::GROUP {
 		if hasattr(self, "prv") and self.prv != None:
 			try:
@@ -292,9 +292,8 @@ Bytes Destination::encrypt(const Bytes &data) {
 			raise ValueError("No private key held by GROUP destination. Did you create or load one?")
 	}
 */
-
 	// MOCK
-	return data;
+	return Bytes::NONE;
 }
 
 /*
@@ -307,15 +306,15 @@ Bytes Destination::decrypt(const Bytes &data) {
 	assert(_object);
 	debug("Destination::decrypt: decrypting bytes");
 
-/*
 	if (_object->_type == Destination::PLAIN) {
 		return data;
 	}
 
 	if (_object->_type == Destination::SINGLE && _object->_identity) {
-		return identity.decrypt(data);
+		return _object->_identity.decrypt(data);
 	}
 
+/*
 	if (_object->_type == Destination::GROUP) {
 		if hasattr(self, "prv") and self.prv != None:
 			try:
@@ -327,9 +326,8 @@ Bytes Destination::decrypt(const Bytes &data) {
 			raise ValueError("No private key held by GROUP destination. Did you create or load one?")
 	}
 */
-
 	// MOCK
-	return data;
+	return Bytes::NONE;
 }
 
 /*
@@ -343,5 +341,5 @@ Bytes Destination::sign(const Bytes &message) {
 	if (_object->_type == Destination::SINGLE && _object->_identity) {
 		return _object->_identity.sign(message);
 	}
-	return nullptr;
+	return Bytes::NONE;
 }

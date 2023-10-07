@@ -10,12 +10,6 @@ namespace RNS {
 
 	class Reticulum {
 
-	private:
-		class Object {
-		private:
-		friend class Reticulum;
-		};
-
 	public:
 		enum NoneConstructor {
 			NONE
@@ -85,6 +79,12 @@ namespace RNS {
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes
 
+        static const bool __transport_enabled = false;
+        static const bool __use_implicit_proof = true;
+        static const bool __allow_probes = false;
+
+        static const bool panic_on_interface_error = false;
+
 	public:
 		Reticulum();
 		Reticulum(NoneConstructor none) {
@@ -105,9 +105,14 @@ namespace RNS {
 		}
 
 	public:
+		static bool should_use_implicit_proof();
 		void loop();
 
 	private:
+		class Object {
+		private:
+		friend class Reticulum;
+		};
 		std::shared_ptr<Object> _object;
 
 	};

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Reticulum.h"
+// CBA TODO determine why including Destination.h here causes build errors
+//#include "Destination.h"
 #include "Log.h"
 #include "Bytes.h"
 #include "Cryptography/Fernet.h"
@@ -12,6 +14,9 @@
 #include <string>
 
 namespace RNS {
+
+	class Destination;
+	class Packet;
 
 	class Identity {
 
@@ -66,8 +71,15 @@ namespace RNS {
 
 		static Bytes full_hash(const Bytes &data);
 		static Bytes truncated_hash(const Bytes &data);
-		Bytes sign(const Bytes &message);
 
+		Bytes encrypt(const Bytes &plaintext);
+		Bytes decrypt(const Bytes &ciphertext_token);
+		Bytes sign(const Bytes &message);
+		bool validate(const Bytes &signature, const Bytes &message);
+		//void prove(const Packet &packet, const Destination &destination = Destination::NONE);
+		void prove(const Packet &packet, const Destination &destination);
+
+		// getters/setters
 		inline Bytes encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }
 		inline Bytes signingPrivateKey() const { assert(_object); return _object->_sig_prv_bytes; }
 		inline Bytes encryptionPublicKey() const { assert(_object); return _object->_prv_bytes; }

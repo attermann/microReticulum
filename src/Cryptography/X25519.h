@@ -2,6 +2,8 @@
 
 #include "Bytes.h"
 
+#include <Curve25519.h>
+
 #include <memory>
 #include <stdint.h>
 
@@ -10,8 +12,13 @@ namespace RNS { namespace Cryptography {
 	class X25519PublicKey {
 
 	public:
+/*
 		X25519PublicKey(const Bytes &x) {
 			_x = x;
+		}
+*/
+		X25519PublicKey(const Bytes &publicKey) {
+			_publicKey = publicKey;
 		}
 		~X25519PublicKey() {}
 
@@ -19,20 +26,27 @@ namespace RNS { namespace Cryptography {
 
 	public:
 		// creates a new instance with specified seed
+/*
 		static inline Ptr from_public_bytes(const Bytes &data) {
-			//return Ptr(new X25519PublicKey(_unpack_number(data)));
-			// MOCK
-			return Ptr(new X25519PublicKey(nullptr));
+			return Ptr(new X25519PublicKey(_unpack_number(data)));
+		}
+*/
+		static inline Ptr from_public_bytes(const Bytes &publicKey) {
+			return Ptr(new X25519PublicKey(publicKey));
 		}
 
+/*
 		Bytes public_bytes() {
-			//return _pack_number(_x);
-			// MOCK
-			return nullptr;
+			return _pack_number(_x);
+		}
+*/
+		Bytes public_bytes() {
+			return _publicKey;
 		}
 
 	private:
-		Bytes _x;
+		//Bytes _x;
+		Bytes _publicKey;
 
 	};
 
@@ -47,8 +61,27 @@ namespace RNS { namespace Cryptography {
 		const uint8_t T_MAX = 0;
 
 	public:
+/*
 		X25519PrivateKey(const Bytes &a) {
 			_a = a;
+		}
+*/
+		X25519PrivateKey(const Bytes &privateKey) {
+			if (privateKey) {
+				// use specified private key
+				_privateKey = privateKey;
+				// similar to derive public key from private key
+				// second param "f" is secret
+				//eval(uint8_t result[32], const uint8_t s[32], const uint8_t x[32])
+				// derive public key from private key
+				Curve25519::eval(_publicKey.writable(32), _privateKey.data(), 0);
+			}
+			else {
+				// create random private key and derive public key
+				// second param "f" is secret
+				//dh1(uint8_t k[32], uint8_t f[32])
+				Curve25519::dh1(_publicKey.writable(32), _privateKey.writable(32));
+			}
 		}
 		~X25519PrivateKey() {}
 
@@ -56,34 +89,46 @@ namespace RNS { namespace Cryptography {
 
 	public:
 		// creates a new instance with a random seed
+/*
 		static inline Ptr generate() {
-			//return from_private_bytes(os.urandom(32));
-			// MOCK
-			return from_private_bytes(nullptr);
+			return from_private_bytes(os.urandom(32));
+		}
+*/
+		static inline Ptr generate() {
+			return from_private_bytes(Bytes::NONE);
 		}
 
 		// creates a new instance with specified seed
+/*
 		static inline Ptr from_private_bytes(const Bytes &data) {
-			//return Ptr(new X25519PrivateKey(_fix_secret(_unpack_number(data))));
-			// MOCK
-			return Ptr(new X25519PrivateKey(nullptr));
+			return Ptr(new X25519PrivateKey(_fix_secret(_unpack_number(data))));
+		}
+*/
+		static inline Ptr from_private_bytes(const Bytes &privateKey) {
+			return Ptr(new X25519PrivateKey(privateKey));
 		}
 
+/*
 		inline Bytes private_bytes() {
-			//return _pack_number(_a);
-			// MOCK
-			return nullptr;
+			return _pack_number(_a);
+		}
+*/
+		inline Bytes private_bytes() {
+			return _privateKey;
 		}
 
 		// creates a new instance of public key for this private key
+/*
 		inline X25519PublicKey::Ptr public_key() {
-			//return X25519PublicKey::from_public_bytes(_pack_number(_raw_curve25519(9, _a)));
-			// MOCK
-			return X25519PublicKey::from_public_bytes(nullptr);
+			return X25519PublicKey::from_public_bytes(_pack_number(_raw_curve25519(9, _a)));
+		}
+*/
+		inline X25519PublicKey::Ptr public_key() {
+			return X25519PublicKey::from_public_bytes(_publicKey);
 		}
 
-		inline Bytes exchange(const Bytes &peer_public_key) {
 /*
+		inline Bytes exchange(const Bytes &peer_public_key) {
 			if isinstance(peer_public_key, bytes):
 				peer_public_key = X25519PublicKey.from_public_bytes(peer_public_key)
 
@@ -119,12 +164,18 @@ namespace RNS { namespace Cryptography {
 				X25519PrivateKey.T_MAX = duration
 
 			return shared
+		}
 */
-			return nullptr;
+		inline Bytes exchange(const Bytes &peer_public_key) {
+			Bytes sharedKey(peer_public_key);
+			Curve25519::dh2(sharedKey.writable(32), _privateKey.writable(32));
+			return sharedKey;
 		}
 
 	private:
-		Bytes _a;
+		//Bytes _a;
+		Bytes _privateKey;
+		Bytes _publicKey;
 
 	};
 

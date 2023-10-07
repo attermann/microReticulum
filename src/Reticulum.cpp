@@ -18,6 +18,15 @@ Reticulum::~Reticulum() {
 	extreme("Reticulum object destroyed");
 }
 
+/*
+Returns whether proofs sent are explicit or implicit.
+
+:returns: True if the current running configuration specifies to use implicit proofs. False if not.
+*/
+/*static*/ bool Reticulum::should_use_implicit_proof() {
+	return __use_implicit_proof;
+}
+
 void Reticulum::loop() {
 	// Perform random number gnerator housekeeping
 	RNG.loop();

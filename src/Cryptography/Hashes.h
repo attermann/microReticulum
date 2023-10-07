@@ -1,10 +1,12 @@
 #pragma once
 
+#include "../Bytes.h"
+
 #include <stdint.h>
 
 namespace RNS { namespace Cryptography {
 
-	void sha256(uint8_t *hash, const uint8_t *data, uint16_t data_len);
-	void sha512(uint8_t *hash, const uint8_t *data, uint16_t data_len);
+	Bytes sha256(const Bytes &data);
+	Bytes sha512(const Bytes &data);
 
 } }

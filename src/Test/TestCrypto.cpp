@@ -25,7 +25,7 @@ void testCrypto() {
 int main(void)
 {
 	UNITY_BEGIN();
-	RUN_TEST(testObjects);
+	RUN_TEST(testCrypto);
 	return UNITY_END();
 }
 */

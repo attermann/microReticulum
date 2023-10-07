@@ -12,6 +12,8 @@
 
 namespace RNS {
 
+	#define COW
+
 	class Bytes {
 
 	private:
@@ -34,8 +36,7 @@ namespace RNS {
 		}
 		Bytes(const Bytes &bytes) {
 			//extreme("Bytes is using shared data");
-			_data = bytes.shareData();
-			_owner = false;
+			assign(bytes);
 			//extreme("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
 		}
 		Bytes(const uint8_t *chunk, size_t size) {
@@ -103,21 +104,11 @@ namespace RNS {
 		void ownData();
 
 	public:
-		int8_t compare(const Bytes &bytes) const;
-		inline size_t size() const { if (!_data) return 0; return _data->size(); }
-		inline bool empty() const { if (!_data) return true; return _data->empty(); }
-		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
-		inline const uint8_t *data() const { if (!_data) return nullptr; return _data->data(); }
-
-		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
-		std::string toHex(bool upper = true) const;
-
-		inline uint8_t *writable(size_t size) {
-			newData(size);
-			return _data->data();
-		}
-
 		inline void assign(const Bytes& bytes) {
+#ifdef COW
+			_data = bytes.shareData();
+			_owner = false;
+#else
 			// if assignment is empty then clear data and don't bother creating new
 			if (bytes.size() <= 0) {
 				_data = nullptr;
@@ -125,6 +116,7 @@ namespace RNS {
 			}
 			newData();
 			_data->insert(_data->begin(), bytes._data->begin(), bytes._data->end());
+#endif
 		}
 		inline void assign(const uint8_t *chunk, size_t size) {
 			// if assignment is empty then clear data and don't bother creating new
@@ -177,6 +169,24 @@ namespace RNS {
 			_data->push_back(byte);
 		}
 		void appendHex(const char* hex);
+
+	public:
+		int8_t compare(const Bytes &bytes) const;
+		inline size_t size() const { if (!_data) return 0; return _data->size(); }
+		inline bool empty() const { if (!_data) return true; return _data->empty(); }
+		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
+		inline const uint8_t *data() const { if (!_data) return nullptr; return _data->data(); }
+
+		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
+		std::string toHex(bool upper = true) const;
+		Bytes mid(size_t pos, size_t len) const;
+		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
+		inline Bytes right(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data() + (size() - len), len}; }
+
+		inline uint8_t *writable(size_t size) {
+			newData(size);
+			return _data->data();
+		}
 
 	private:
 		SharedData _data;

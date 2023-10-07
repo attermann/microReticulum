@@ -105,6 +105,56 @@ void testBytes() {
 	assert(bytes.size() == 11);
 	assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
 
+	// test left in range
+	{
+		RNS::Bytes left(bytes.left(5));
+		RNS::extreme("left: " + left.toString());
+		assert(left.size() == 5);
+		assert(memcmp(left.data(), "Hello", left.size()) == 0);
+	}
+	// test left oob
+	{
+		RNS::Bytes left(bytes.left(20));
+		RNS::extreme("oob left: " + left.toString());
+		assert(left.size() == 11);
+		assert(memcmp(left.data(), "Hello World", left.size()) == 0);
+	}
+	// test right in range
+	{
+		RNS::Bytes right(bytes.right(5));
+		RNS::extreme("right: " + right.toString());
+		assert(right.size() == 5);
+		assert(memcmp(right.data(), "World", right.size()) == 0);
+	}
+	// test right oob
+	{
+		RNS::Bytes right(bytes.right(20));
+		RNS::extreme("oob right: " + right.toString());
+		assert(right.size() == 11);
+		assert(memcmp(right.data(), "Hello World", right.size()) == 0);
+	}
+	// test mid in range
+	{
+		RNS::Bytes mid(bytes.mid(3, 5));
+		RNS::extreme("mid: " + mid.toString());
+		assert(mid.size() == 5);
+		assert(memcmp(mid.data(), "lo Wo", mid.size()) == 0);
+	}
+	// test mid oob pos
+	{
+		RNS::Bytes mid(bytes.mid(20, 5));
+		RNS::extreme("oob pos mid: " + mid.toString());
+		assert(!mid);
+		assert(mid.size() == 0);
+	}
+	// test mid oob pos
+	{
+		RNS::Bytes mid(bytes.mid(3, 20));
+		RNS::extreme("oob len mid: " + mid.toString());
+		assert(mid.size() == 8);
+		assert(memcmp(mid.data(), "lo World", mid.size()) == 0);
+	}
+
 	// stream into empty bytes
 	{
 		RNS::Bytes strmbuf;

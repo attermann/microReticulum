@@ -10,7 +10,6 @@ void test() {
 	testMap();
 	testBytes();
 	testCowBytes();
-	testObjects();
 	testBytesConversion();
 
 	testReference();

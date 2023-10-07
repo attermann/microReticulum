@@ -8,8 +8,8 @@
 
 using namespace RNS;
 
-Packet::Packet(const Destination &destination, const Bytes &data, types packet_type, context_types context, Transport::types transport_type, header_types header_type, const uint8_t *transport_id, Interface *attached_interface, bool create_receipt) : _object(new Object(destination)) {
-	assert(_object);
+//Packet::Packet(const Destination &destination, const Bytes &data, types packet_type, context_types context, Transport::types transport_type, header_types header_type, const uint8_t *transport_id, Interface *attached_interface, bool create_receipt) : _object(new Object(destination)) {
+Packet::Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Transport::types transport_type /*= Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const uint8_t *transport_id /*= nullptr*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
 
 	if (_object->_destination) {
 		// CBA TODO handle NONE
@@ -52,7 +52,6 @@ Packet::Packet(const Destination &destination, const Bytes &data, types packet_t
 		_fromPacked = true;
 		_create_receipt = false;
 	}
-	_attached_interface = attached_interface;
 	extreme("Packet object created");
 }
 
@@ -427,8 +426,8 @@ bool Packet::unpack() {
 		_packed = false;
 		update_hash();
 	}
-	catch (std::exception& ex) {
-		log(std::string("Received malformed packet, dropping it. The contained exception was: ") + ex.what(), LOG_EXTREME);
+	catch (std::exception& e) {
+		error(std::string("Received malformed packet, dropping it. The contained exception was: ") + e.what());
 		return false;
 	}
 
@@ -530,3 +529,10 @@ Bytes Packet::get_hashable_part() {
 	hashable_part.append(_data-Reticulum::DESTINATION_LENGTH-1, _data_len+Reticulum::DESTINATION_LENGTH+1);
 	return hashable_part;
 }
+
+// Generates a special destination that allows Reticulum
+// to direct the proof back to the proved packet's sender
+//ProofDestination &Packet::generate_proof_destination() {
+//	return ProofDestination();
+//}
+

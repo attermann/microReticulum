@@ -55,6 +55,7 @@ namespace RNS { namespace Cryptography {
 				// create random private key
 				Ed25519::generatePrivateKey(_privateKey.writable(32));
 			}
+			// derive public key from private key
 			Ed25519::derivePublicKey(_publicKey.writable(32), _privateKey.data());
 		}
 		~Ed25519PrivateKey() {}

@@ -5,10 +5,10 @@
 using namespace RNS;
 
 Interface::Interface() {
-	log("Interface object created", LOG_EXTREME);
+	extreme("Interface object created");
 }
 
 Interface::~Interface() {
-	log("Interface object destroyed", LOG_EXTREME);
+	extreme("Interface object destroyed");
 }
 
