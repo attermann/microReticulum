@@ -137,7 +137,9 @@ namespace RNS {
 		inline const Bytes &raw() const { assert(_object); return _object->_raw; }
 		inline Bytes packet_hash() const { assert(_object); return _object->_packet_hash; }
 
-		std::string toString();
+		inline std::string toString() const { assert(_object); return "{Packet:" + _object->_packet_hash.toHex() + "}"; }
+
+		std::string debugString();
 
 	private:
 		class Object {

@@ -29,6 +29,10 @@ const char* APP_NAME = "example_utilities";
 const char* fruits[] = {"Peach", "Quince", "Date", "Tangerine", "Pomelo", "Carambola", "Grape"};
 const char* noble_gases[] = {"Helium", "Neon", "Argon", "Krypton", "Xenon", "Radon", "Oganesson"};
 
+void onPacket(const RNS::Bytes &data, const RNS::Packet &packet) {
+	RNS::extreme("onPacket: data: " + data.toHex());
+	RNS::extreme("onPacket: data string: \"" + data.toString() + "\"");
+}
 
 void setup() {
 
@@ -81,12 +85,13 @@ void setup() {
 		// test data send packet
 		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
 		send_packet.pack();
-		RNS::extreme("Test send_packet packet: " + send_packet.toString());
+		RNS::extreme("Test send_packet packet: " + send_packet.debugString());
 
 		// test data receive packet
+		destination.set_packet_callback(onPacket);
 		RNS::Packet recv_packet(RNS::Destination::NONE, send_packet.raw());
 		recv_packet.unpack();
-		RNS::extreme("Test recv_packet packet: " + recv_packet.toString());
+		RNS::extreme("Test recv_packet packet: " + recv_packet.debugString());
 		destination.receive(recv_packet);
 
 	}

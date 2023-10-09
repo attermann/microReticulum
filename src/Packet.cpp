@@ -480,7 +480,7 @@ Bytes Packet::get_hashable_part() {
 //}
 
 
-std::string Packet::toString() {
+std::string Packet::debugString() {
 	if (_object->_packed) {
 		//unpack();
 	}
