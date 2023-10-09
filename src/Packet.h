@@ -127,51 +127,57 @@ namespace RNS {
 		//zProofDestination &generate_proof_destination();
 
 		// getters/setters
-		inline const Interface& receiving_interface() const { assert(_object); return _object->_receiving_interface; }
+		inline const Interface &receiving_interface() const { assert(_object); return _object->_receiving_interface; }
+		inline header_types header_type() const { assert(_object); return _object->_header_type; }
+		inline Transport::types transport_type() const { assert(_object); return _object->_transport_type; }
+		inline Destination::types destination_type() const { assert(_object); return _object->_destination_type; }
+		inline types packet_type() const { assert(_object); return _object->_packet_type; }
+		inline context_types context() const { assert(_object); return _object->_context; }
+		inline const Bytes &data() const { assert(_object); return _object->_data; }
+		inline const Bytes &raw() const { assert(_object); return _object->_raw; }
+		inline Bytes packet_hash() const { assert(_object); return _object->_packet_hash; }
 
 		std::string toString();
-
-	public:
-		header_types _header_type = HEADER_1;
-		Transport::types _transport_type = Transport::BROADCAST;
-		Destination::types _destination_type = Destination::SINGLE;
-		types _packet_type = DATA;
-		context_types _context = CONTEXT_NONE;
-
-		uint8_t _flags = 0;
-		uint8_t _hops = 0;
-
-		bool _packed = false;
-		bool _sent = false;
-		bool _create_receipt = false;
-		bool _fromPacked = false;
-		bool _truncated = false;	// whether data was truncated
-		bool _encrypted = false;	// whether data is encrytpted
-		//z_receipt = nullptr;
-
-		uint16_t _mtu = Reticulum::MTU;
-		time_t _sent_at = 0;
-
-		float _rssi = 0.0;
-		float _snr = 0.0;
-
-		Bytes _packet_hash;
-		Bytes _destination_hash;
-		Bytes _transport_id;
-
-		Bytes _raw;		// header + ( plaintext | ciphertext-token )
-		Bytes _data;	// plaintext | ciphertext
 
 	private:
 		class Object {
 		public:
 			Object(const Destination &destination, const Interface &attached_interface) : _destination(destination), _attached_interface(attached_interface) {}
 		private:
-
 			Destination _destination;
 
 			Interface _attached_interface;
 			Interface _receiving_interface;
+				
+			header_types _header_type = HEADER_1;
+			Transport::types _transport_type = Transport::BROADCAST;
+			Destination::types _destination_type = Destination::SINGLE;
+			types _packet_type = DATA;
+			context_types _context = CONTEXT_NONE;
+
+			uint8_t _flags = 0;
+			uint8_t _hops = 0;
+
+			bool _packed = false;
+			bool _sent = false;
+			bool _create_receipt = false;
+			bool _fromPacked = false;
+			bool _truncated = false;	// whether data was truncated
+			bool _encrypted = false;	// whether data is encrytpted
+			//z_receipt = nullptr;
+
+			uint16_t _mtu = Reticulum::MTU;
+			time_t _sent_at = 0;
+
+			float _rssi = 0.0;
+			float _snr = 0.0;
+
+			Bytes _packet_hash;
+			Bytes _destination_hash;
+			Bytes _transport_id;
+
+			Bytes _raw;		// header + ( plaintext | ciphertext-token )
+			Bytes _data;	// plaintext | ciphertext
 
 		friend class Packet;
 		};

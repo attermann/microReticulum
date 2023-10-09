@@ -190,13 +190,13 @@ bool Identity::validate(const Bytes &signature, const Bytes &message) {
 
 void Identity::prove(const Packet &packet, const Destination &destination /*= Destination::NONE*/) {
 	assert(_object);
-	Bytes signature(sign(packet._packet_hash));
+	Bytes signature(sign(packet.packet_hash()));
 	Bytes proof_data;
 	if (RNS::Reticulum::should_use_implicit_proof()) {
 		proof_data = signature;
 	}
 	else {
-		proof_data = packet._packet_hash + signature;
+		proof_data = packet.packet_hash() + signature;
 	}
 	
 	//zif (!destination) {

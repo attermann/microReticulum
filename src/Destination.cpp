@@ -270,16 +270,16 @@ bool Destination::deregister_request_handler(const Bytes &path) {
 
 void Destination::receive(const Packet &packet) {
 	assert(_object);
-	if (packet._packet_type == Packet::LINKREQUEST) {
-		Bytes plaintext(packet._data);
+	if (packet.packet_type() == Packet::LINKREQUEST) {
+		Bytes plaintext(packet.data());
 		incoming_link_request(plaintext, packet);
 	}
 	else {
 		// CBA TODO Why isn't the Packet decrypting itself?
-		Bytes plaintext(decrypt(packet._data));
+		Bytes plaintext(decrypt(packet.data()));
 		extreme("Destination::receive: decrypted data: " + plaintext.toHex());
 		if (plaintext) {
-			if (packet._packet_type == RNS::Packet::DATA) {
+			if (packet.packet_type() == RNS::Packet::DATA) {
 				if (_object->_callbacks._packet) {
 					try {
 						_object->_callbacks._packet(plaintext, packet);

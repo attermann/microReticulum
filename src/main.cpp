@@ -64,6 +64,13 @@ void setup() {
 		RNS::Destination destination(identity, RNS::Destination::IN, RNS::Destination::SINGLE, "test", "context");
 		// 23.0% (+0.4%)
 
+		destination.set_proof_strategy(RNS::Destination::PROVE_ALL);
+
+		//zannounce_handler = ExampleAnnounceHandler(
+		//z    aspect_filter="example_utilities.announcesample.fruits";
+		//z)
+		//zRNS::Transport.register_announce_handler(announce_handler);
+
 		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// test path
 		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
@@ -71,24 +78,16 @@ void setup() {
 		destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// 23.9% (+0.8%)
 
+		// test data send packet
 		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
 		send_packet.pack();
 		RNS::extreme("Test send_packet packet: " + send_packet.toString());
 
-		// test packet receive
-		RNS::Packet recv_packet(RNS::Destination::NONE, send_packet._raw);
+		// test data receive packet
+		RNS::Packet recv_packet(RNS::Destination::NONE, send_packet.raw());
 		recv_packet.unpack();
 		RNS::extreme("Test recv_packet packet: " + recv_packet.toString());
-
 		destination.receive(recv_packet);
-
-		//zdestination.set_proof_strategy(RNS::Destination::PROVE_ALL);
-
-		//zannounce_handler = ExampleAnnounceHandler(
-		//z    aspect_filter="example_utilities.announcesample.fruits";
-		//z)
-
-		//zRNS::Transport.register_announce_handler(announce_handler);
 
 	}
 	catch (std::exception& e) {
