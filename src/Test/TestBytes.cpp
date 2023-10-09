@@ -4,54 +4,7 @@
 #include "Log.h"
 
 #include <map>
-
-void testMap()
-{
-	const uint8_t prestr[] = "Hello";
-	const uint8_t poststr[] = "World";
-
-	RNS::Bytes prebuf(prestr, 5);
-	assert(prebuf.size() == 5);
-	assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
-
-	RNS::Bytes postbuf(poststr, 5);
-	assert(postbuf.size() == 5);
-	assert(memcmp(postbuf.data(), "World", postbuf.size()) == 0);
-
-	std::map<RNS::Bytes, std::string> map;
-	map.insert({prebuf, "hello"});
-	map.insert({postbuf, "world"});
-	assert(map.size() == 2);
-
-	auto preit = map.find(prebuf);
-	assert(preit != map.end());
-	assert((*preit).second.compare("hello") == 0);
-	if (preit != map.end()) {
-		RNS::extreme(std::string("found prebuf: ") + (*preit).second);
-	}
-
-	auto postit = map.find(postbuf);
-	assert(postit != map.end());
-	assert((*postit).second.compare("world") == 0);
-	if (postit != map.end()) {
-		RNS::extreme(std::string("found postbuf: ") + (*postit).second);
-	}
-
-	const uint8_t newstr[] = "World";
-	RNS::Bytes newbuf(newstr, 5);
-	assert(newbuf.size() == 5);
-	assert(memcmp(newbuf.data(), "World", newbuf.size()) == 0);
-	auto newit = map.find(newbuf);
-	assert(newit != map.end());
-	assert((*newit).second.compare("world") == 0);
-	if (newit != map.end()) {
-		RNS::extreme(std::string("found newbuf: ") + (*newit).second);
-	}
-
-	std::string str = map["World"];
-	assert(str.size() == 5);
-	assert(str.compare("world") == 0);
-}
+#include <assert.h>
 
 void testBytes() {
 
@@ -154,6 +107,22 @@ void testBytes() {
 		assert(mid.size() == 8);
 		assert(memcmp(mid.data(), "lo World", mid.size()) == 0);
 	}
+	// test mid to end variant
+	{
+		RNS::Bytes mid(bytes.mid(3));
+		RNS::extreme("end mid: " + mid.toString());
+		assert(mid.size() == 8);
+		assert(memcmp(mid.data(), "lo World", mid.size()) == 0);
+	}
+
+	// test resize
+	{
+		RNS::Bytes shrink(bytes);
+		shrink.resize(5);
+		RNS::extreme("shrink: " + shrink.toString());
+		assert(shrink.size() == 5);
+		assert(memcmp(shrink.data(), "Hello", shrink.size()) == 0);
+	}
 
 	// stream into empty bytes
 	{
@@ -219,6 +188,8 @@ void testBytes() {
 		assert(bytes.size() == 0);
 		assert(bytes.data() == nullptr);
 	}
+
+	// TODO test comparison
 
 }
 
@@ -311,14 +282,62 @@ void testBytesConversion() {
 
 }
 
+void testMap()
+{
+	const uint8_t prestr[] = "Hello";
+	const uint8_t poststr[] = "World";
+
+	RNS::Bytes prebuf(prestr, 5);
+	assert(prebuf.size() == 5);
+	assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
+
+	RNS::Bytes postbuf(poststr, 5);
+	assert(postbuf.size() == 5);
+	assert(memcmp(postbuf.data(), "World", postbuf.size()) == 0);
+
+	std::map<RNS::Bytes, std::string> map;
+	map.insert({prebuf, "hello"});
+	map.insert({postbuf, "world"});
+	assert(map.size() == 2);
+
+	auto preit = map.find(prebuf);
+	assert(preit != map.end());
+	assert((*preit).second.compare("hello") == 0);
+	if (preit != map.end()) {
+		RNS::extreme(std::string("found prebuf: ") + (*preit).second);
+	}
+
+	auto postit = map.find(postbuf);
+	assert(postit != map.end());
+	assert((*postit).second.compare("world") == 0);
+	if (postit != map.end()) {
+		RNS::extreme(std::string("found postbuf: ") + (*postit).second);
+	}
+
+	const uint8_t newstr[] = "World";
+	RNS::Bytes newbuf(newstr, 5);
+	assert(newbuf.size() == 5);
+	assert(memcmp(newbuf.data(), "World", newbuf.size()) == 0);
+	auto newit = map.find(newbuf);
+	assert(newit != map.end());
+	assert((*newit).second.compare("world") == 0);
+	if (newit != map.end()) {
+		RNS::extreme(std::string("found newbuf: ") + (*newit).second);
+	}
+
+	std::string str = map["World"];
+	assert(str.size() == 5);
+	assert(str.compare("world") == 0);
+}
+
 /*
 int main(void)
 {
 	UNITY_BEGIN();
-	RUN_TEST(testMap);
 	RUN_TEST(testBytes);
 	RUN_TEST(testCowBytes);
 	RUN_TEST(testBytesConversion);
+	RUN_TEST(testMap);
 	return UNITY_END();
 }
 */

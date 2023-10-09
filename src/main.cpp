@@ -19,8 +19,6 @@
 #include <map>
 //#include <sstream>
 
-#include <assert.h>
-
 // Let's define an app name. We'll use this for all
 // destinations we create. Since this basic example
 // is part of a range of example utilities, we'll put
@@ -68,8 +66,19 @@ void setup() {
 
 		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// test path
-		destination.announce(RNS::bytesFromString(fruits[rand() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
+		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
+		// test packet send
+		RNS::Packet send_packet = destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
+		//RNS::Packet packet = destination.announce(RNS::bytesFromString(fruits[rand() % 7]), false, nullptr, RNS::Bytes::NONE, false);
 		// 23.9% (+0.8%)
+
+		RNS::extreme("Test send_packet packet: " + send_packet.toString());
+
+		// test packet receive
+		RNS::Packet recv_packet(RNS::Destination::NONE, send_packet._raw);
+		RNS::extreme("Test recv_packet packet: " + recv_packet.toString());
+
+		destination.receive(recv_packet);
 
 		//zdestination.set_proof_strategy(RNS::Destination::PROVE_ALL);
 

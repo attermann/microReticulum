@@ -85,8 +85,8 @@ namespace RNS {
 		uint8_t EMPTY_DESTINATION[Reticulum::DESTINATION_LENGTH] = {0};
 
 	public:
-		Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const uint8_t *transport_id = nullptr, bool create_receipt = true);
-		Packet(const Destination &destination, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const uint8_t *transport_id = nullptr, bool create_receipt = true) : Packet(destination, Interface::NONE, data, DATA, CONTEXT_NONE, Transport::BROADCAST, HEADER_1, nullptr, create_receipt) {
+		Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const Bytes &transport_id = Bytes::NONE, bool create_receipt = true);
+		Packet(const Destination &destination, const Bytes &data, types packet_type = DATA, context_types context = CONTEXT_NONE, Transport::types transport_type = Transport::BROADCAST, header_types header_type = HEADER_1, const Bytes &transport_id = Bytes::NONE, bool create_receipt = true) : Packet(destination, Interface::NONE, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {
 		}
 		Packet(NoneConstructor none) {
 			extreme("Packet NONE object created");
@@ -115,6 +115,7 @@ namespace RNS {
 
 	public:
 		uint8_t get_packed_flags();
+		void unpack_flags(uint8_t flags);
 		void pack();
 		bool unpack();
 		bool send();
@@ -128,12 +129,14 @@ namespace RNS {
 		// getters/setters
 		inline const Interface& receiving_interface() const { assert(_object); return _object->_receiving_interface; }
 
+		std::string toString();
+
 	public:
-		types _packet_type;
-		header_types _header_type;
-		context_types _context;
-		Transport::types _transport_type;
-		Destination::types _destination_type;
+		header_types _header_type = HEADER_1;
+		Transport::types _transport_type = Transport::BROADCAST;
+		Destination::types _destination_type = Destination::SINGLE;
+		types _packet_type = DATA;
+		context_types _context = CONTEXT_NONE;
 
 		uint8_t _flags = 0;
 		uint8_t _hops = 0;
@@ -153,13 +156,25 @@ namespace RNS {
 
 		//uint8_t _packet_hash[Reticulum::HASHLENGTH] = {0};
 		Bytes _packet_hash;
+/*
 		uint8_t _destination_hash[Reticulum::DESTINATION_LENGTH] = {0};
 		uint8_t _transport_id[Reticulum::DESTINATION_LENGTH] = {0};
 
+		// universal packet buffer
 		uint8_t _raw[Reticulum::MTU];
-		uint8_t _header[Reticulum::HEADER_MAXSIZE];
+		// header pointer into universal packet buffer
+		uint8_t *_header = _raw;
+		uint16_t _header_len = 0;
+		// data pointer into universal packet buffer
 		uint8_t *_data = _raw + Reticulum::HEADER_MAXSIZE;
 		uint16_t _data_len = 0;
+		uint8_t _raw[Reticulum::MTU];
+*/
+		Bytes _destination_hash;
+		Bytes _transport_id;
+
+		Bytes _raw;		// header + ciphertext
+		Bytes _data;	// plaintext
 
 	private:
 		class Object {

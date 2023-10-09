@@ -1,6 +1,5 @@
 #include "Hashes.h"
 
-#include "../Log.h"
 #include "../Bytes.h"
 
 #include <SHA256.h>

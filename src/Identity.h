@@ -5,9 +5,10 @@
 //#include "Destination.h"
 #include "Log.h"
 #include "Bytes.h"
-#include "Cryptography/Fernet.h"
-#include "Cryptography/X25519.h"
+#include "Cryptography/Hashes.h"
 #include "Cryptography/Ed25519.h"
+#include "Cryptography/X25519.h"
+#include "Cryptography/Fernet.h"
 
 
 #include <memory>
@@ -66,11 +67,51 @@ namespace RNS {
 
 	public:
 		void createKeys();
-		Bytes get_public_key();
-		void update_hashes();
+		/*
+		:returns: The public key as *bytes*
+		*/
+		inline Bytes get_public_key() {
+			assert(_object);
+			return _object->_pub_bytes + _object->_sig_pub_bytes;
+		}
+		inline void update_hashes() {
+			assert(_object);
+			_object->_hash = truncated_hash(get_public_key());
+			debug("Identity::update_hashes: hash:       " + _object->_hash.toHex());
+			_object->_hexhash = _object->_hash.toHex();
+		};
 
-		static Bytes full_hash(const Bytes &data);
-		static Bytes truncated_hash(const Bytes &data);
+		/*
+		Get a SHA-256 hash of passed data.
+
+		:param data: Data to be hashed as *bytes*.
+		:returns: SHA-256 hash as *bytes*
+		*/
+		static inline Bytes full_hash(const Bytes &data) {
+			return Cryptography::sha256(data);
+		}
+		/*
+		Get a truncated SHA-256 hash of passed data.
+
+		:param data: Data to be hashed as *bytes*.
+		:returns: Truncated SHA-256 hash as *bytes*
+		*/
+		static inline Bytes truncated_hash(const Bytes &data) {
+			//return Identity.full_hash(data)[:(Identity.TRUNCATED_HASHLENGTH//8)]
+			return full_hash(data).left(TRUNCATED_HASHLENGTH/8);
+		}
+		/*
+		Get a random SHA-256 hash.
+
+		:param data: Data to be hashed as *bytes*.
+		:returns: Truncated SHA-256 hash of random data as *bytes*
+		*/
+		static inline Bytes get_random_hash() {
+			return truncated_hash(Cryptography::random(Identity::TRUNCATED_HASHLENGTH/8));
+		}
+
+		inline Bytes get_salt() { assert(_object); return _object->_hash; }
+		inline Bytes get_context() { return Bytes::NONE; }
 
 		Bytes encrypt(const Bytes &plaintext);
 		Bytes decrypt(const Bytes &ciphertext_token);
@@ -87,7 +128,7 @@ namespace RNS {
 		inline Bytes hash() const { assert(_object); return _object->_hash; }
 		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
 
-		inline std::string toString() const { assert(_object); return _object->_hash.toHex(); }
+		inline std::string toString() const { assert(_object); return "{Identity:" + _object->_hash.toHex() + "}"; }
 
 	private:
 		class Object {

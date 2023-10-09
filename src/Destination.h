@@ -4,12 +4,13 @@
 #include "Identity.h"
 #include "Bytes.h"
 
-#include <stdint.h>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 #include <map>
+#include <stdexcept>
+#include <stdint.h>
 
 namespace RNS {
 
@@ -36,14 +37,15 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			using link_established = void(*)(Link *link);
+			using link_established = void(*)(const Link &link);
 			//using packet = void(*)(uint8_t *data, uint16_t data_len, Packet *packet);
-			using packet = void(*)(const Bytes &data, Packet *packet);
-			using proof_requested = void(*)(Packet *packet);
-
+			using packet = void(*)(const Bytes &data, const Packet &packet);
+			using proof_requested = void(*)(const Packet &packet);
+		public:
 			link_established _link_established = nullptr;
 			packet _packet = nullptr;
 			proof_requested _proof_requested = nullptr;
+		friend class Detination;
 		};
 
 		//typedef std::pair<time_t, std::string> Response;
@@ -106,11 +108,64 @@ namespace RNS {
 
 	public:
 		Packet announce(const Bytes &app_data = {}, bool path_response = false, Interface *attached_interface = nullptr, const Bytes &tag = {}, bool send = true);
+
+		/*
+		Set or query whether the destination accepts incoming link requests.
+
+		:param accepts: If ``True`` or ``False``, this method sets whether the destination accepts incoming link requests. If not provided or ``None``, the method returns whether the destination currently accepts link requests.
+		:returns: ``True`` or ``False`` depending on whether the destination accepts incoming link requests, if the *accepts* parameter is not provided or ``None``.
+		*/
 		inline void set_accepts_links(bool accepts) { assert(_object); _object->_accept_link_requests = accepts; }
 		inline bool get_accepts_links() { assert(_object); return _object->_accept_link_requests; }
-		void set_link_established_callback(Callbacks::link_established callback);
-		void set_packet_callback(Callbacks::packet callback);
-		void set_proof_requested_callback(Callbacks::proof_requested callback);
+
+		/*
+			Registers a function to be called when a link has been established to
+			this destination.
+
+			:param callback: A function or method with the signature *callback(link)* to be called when a new link is established with this destination.
+		*/
+		inline void set_link_established_callback(Callbacks::link_established callback) {
+			assert(_object);
+			_object->_callbacks._link_established = callback;
+		}
+		/*
+			Registers a function to be called when a packet has been received by
+			this destination.
+
+			:param callback: A function or method with the signature *callback(data, packet)* to be called when this destination receives a packet.
+		*/
+		inline void set_packet_callback(Callbacks::packet callback)  {
+			assert(_object);
+			_object->_callbacks._packet = callback;
+		}
+		/*
+			Registers a function to be called when a proof has been requested for
+			a packet sent to this destination. Allows control over when and if
+			proofs should be returned for received packets.
+
+			:param callback: A function or method to with the signature *callback(packet)* be called when a packet that requests a proof is received. The callback must return one of True or False. If the callback returns True, a proof will be sent. If it returns False, a proof will not be sent.
+		*/
+		inline void set_proof_requested_callback(Callbacks::proof_requested callback)  {
+			assert(_object);
+			_object->_callbacks._proof_requested = callback;
+		}
+
+		/*
+		Sets the destinations proof strategy.
+
+		:param proof_strategy: One of ``RNS.Destination.PROVE_NONE``, ``RNS.Destination.PROVE_ALL`` or ``RNS.Destination.PROVE_APP``. If ``RNS.Destination.PROVE_APP`` is set, the `proof_requested_callback` will be called to determine whether a proof should be sent or not.
+		*/
+		inline void set_proof_strategy(proof_strategies proof_strategy) {
+			assert(_object);
+			//if (proof_strategy <= PROOF_NONE) {
+			//	throw throw std::invalid_argument("Unsupported proof strategy");
+			//}
+			_object->_proof_strategy = proof_strategy;
+		}
+
+		void receive(const Packet &packet);
+		void incoming_link_request(const Bytes &data, const Packet &packet);
+
 		Bytes encrypt(const Bytes &data);
 		Bytes decrypt(const Bytes &data);
 		Bytes sign(const Bytes &message);
@@ -123,6 +178,8 @@ namespace RNS {
 		inline Bytes link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
+
+		inline std::string toString() const { assert(_object); return "{Destination:" + _object->_hash.toHex() + "}"; }
 
 	private:
 		class Object {

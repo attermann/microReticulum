@@ -34,8 +34,11 @@ int8_t Bytes::compare(const Bytes &bytes) const {
 	else if (*_data < *(bytes._data)) {
 		return -1;
 	}
-	else {
+	else if (*_data > *(bytes._data)) {
 		return 1;
+	}
+	else {
+		return 0;
 	}
 }
 
@@ -43,6 +46,7 @@ void Bytes::assignHex(const char* hex) {
 	// if assignment is empty then clear data and don't bother creating new
 	if (hex == nullptr || hex[0] == 0) {
 		_data = nullptr;
+		_owner = true;
 		return;
 	}
 	newData();
@@ -66,8 +70,21 @@ void Bytes::appendHex(const char* hex) {
 	}
 }
 
-char const hex_upper_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-char const hex_lower_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+const char hex_upper_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+const char hex_lower_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+
+std::string RNS::hexFromByte(uint8_t byte, bool upper /*= true*/) {
+	std::string hex;
+	if (upper) {
+		hex += hex_upper_chars[ (byte & 0xF0) >> 4];
+		hex += hex_upper_chars[ (byte & 0x0F) >> 0];
+	}
+	else {
+		hex += hex_lower_chars[ (byte & 0xF0) >> 4];
+		hex += hex_lower_chars[ (byte & 0x0F) >> 0];
+	}
+	return hex;
+}
 
 std::string Bytes::toHex(bool upper /*= true*/) const {
 	if (!_data) {
@@ -87,12 +104,21 @@ std::string Bytes::toHex(bool upper /*= true*/) const {
 	return hex;
 }
 
-Bytes Bytes::mid(size_t pos, size_t len) const {
-	if (!_data || pos >= size()) {
+// mid
+Bytes Bytes::mid(size_t beginpos, size_t len) const {
+	if (!_data || beginpos >= size()) {
 		return NONE;
 	}
-	if ((pos + len) >= size()) {
-		len = (size() - pos);
+	if ((beginpos + len) >= size()) {
+		len = (size() - beginpos);
 	 }
-	 return {data() + pos, len};
+	 return {data() + beginpos, len};
+}
+
+// to end
+Bytes Bytes::mid(size_t beginpos) const {
+	if (!_data || beginpos >= size()) {
+		return NONE;
+	}
+	 return {data() + beginpos, size() - beginpos};
 }

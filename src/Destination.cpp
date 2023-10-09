@@ -7,7 +7,6 @@
 
 #include <time.h>
 #include <string.h>
-#include <stdexcept>
 #include <vector>
 
 using namespace RNS;
@@ -42,13 +41,12 @@ Destination::Destination(const Identity &identity, const directions direction, c
 	// Generate the destination address hash
 	debug("Destination::Destination: creating hash...");
 	_object->_hash = hash(_object->_identity, app_name, fullaspects.c_str());
-	debug("Destination::Destination: hash: " + _object->_hash.toHex());
+	_object->_hexhash = _object->_hash.toHex();
+	debug("Destination::Destination: hash:      " + _object->_hash.toHex());
 	// CBA TEST CRASH
 	debug("Destination::Destination: creating name hash...");
 	_object->_name_hash = Identity::truncated_hash(expand_name(Identity::NONE, app_name, fullaspects.c_str()));
 	debug("Destination::Destination: name hash: " + _object->_name_hash.toHex());
-	_object->_hexhash = _object->_hash.toHex();
-	debug("Destination::Destination: hexhash: " + _object->_hexhash);
 
 	debug("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
@@ -178,7 +176,7 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	}
 	else {
 		Bytes destination_hash = _object->_hash;
-		//zBytes random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big");
+		//random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
 		Bytes random_hash;
 
 		Bytes new_app_data(app_data);
@@ -187,19 +185,19 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 		}
 
 		Bytes signed_data;
-		debug("Destination::announce: hash: " + _object->_hash.toHex());
-		debug("Destination::announce: identity public key: " + _object->_identity.get_public_key().toHex());
-		debug("Destination::announce: name hash: " + _object->_name_hash.toHex());
-		debug("Destination::announce: random hash: " + random_hash.toHex());
+		debug("Destination::announce: hash:         " + _object->_hash.toHex());
+		debug("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
+		debug("Destination::announce: name hash:    " + _object->_name_hash.toHex());
+		debug("Destination::announce: random hash:  " + random_hash.toHex());
 		debug("Destination::announce: new app data: " + new_app_data.toHex());
 		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
 		if (new_app_data) {
 			signed_data << new_app_data;
 		}
-		debug("Destination::announce: signed data: " + signed_data.toHex());
+		debug("Destination::announce: signed data:  " + signed_data.toHex());
 
 		Bytes signature(_object->_identity.sign(signed_data));
-		debug("Destination::announce: signature: " + signature.toHex());
+		debug("Destination::announce: signature:    " + signature.toHex());
 
 		announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
 
@@ -209,7 +207,7 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 
 		_object->_path_responses.insert({tag, {time(nullptr), announce_data}});
 	}
-	debug("Destination::announce: announce_data: " + announce_data.toHex());
+	debug("Destination::announce: announce_data:" + announce_data.toHex());
 
 	Packet::context_types announce_context = Packet::CONTEXT_NONE;
 	if (path_response) {
@@ -217,49 +215,99 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	}
 
 	debug("Destination::announce: creating announce packet...");
-	Packet announce_packet(*this, announce_data, Packet::ANNOUNCE, announce_context,Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
+    //announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
+	//Packet announce_packet(*this, announce_data, Packet::ANNOUNCE, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
+	Packet announce_packet(*this, announce_data, Packet::DATA, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
+	extreme("Destination::announce: pre announce packet: " + announce_packet.toString());
 
 	if (send) {
 		announce_packet.send();
-		return Packet::NONE;
+		extreme("Destination::announce: post announce packet: " + announce_packet.toString());
+		// CBA temporarily returning copy of sent packet for testing purposes
+		//return Packet::NONE;
+		return announce_packet;
 	}
 	else {
 		return announce_packet;
 	}
 }
 
-/*
-	Registers a function to be called when a link has been established to
-	this destination.
 
-	:param callback: A function or method with the signature *callback(link)* to be called when a new link is established with this destination.
+/*
+Registers a request handler.
+
+:param path: The path for the request handler to be registered.
+:param response_generator: A function or method with the signature *response_generator(path, data, request_id, link_id, remote_identity, requested_at)* to be called. Whatever this funcion returns will be sent as a response to the requester. If the function returns ``None``, no response will be sent.
+:param allow: One of ``RNS.Destination.ALLOW_NONE``, ``RNS.Destination.ALLOW_ALL`` or ``RNS.Destination.ALLOW_LIST``. If ``RNS.Destination.ALLOW_LIST`` is set, the request handler will only respond to requests for identified peers in the supplied list.
+:param allowed_list: A list of *bytes-like* :ref:`RNS.Identity<api-identity>` hashes.
+:raises: ``ValueError`` if any of the supplied arguments are invalid.
 */
-void Destination::set_link_established_callback(Callbacks::link_established callback) {
+/*
+void Destination::register_request_handler(const Bytes &path, response_generator = None, request_policies allow = ALLOW_NONE, allowed_list = None) {
+	if path == None or path == "":
+		raise ValueError("Invalid path specified")
+	elif not callable(response_generator):
+		raise ValueError("Invalid response generator specified")
+	elif not allow in Destination.request_policies:
+		raise ValueError("Invalid request policy")
+	else:
+		path_hash = RNS.Identity.truncated_hash(path.encode("utf-8"))
+		request_handler = [path, response_generator, allow, allowed_list]
+		self.request_handlers[path_hash] = request_handler
+}
+*/
+
+/*
+Deregisters a request handler.
+
+:param path: The path for the request handler to be deregistered.
+:returns: True if the handler was deregistered, otherwise False.
+*/
+/*
+bool Destination::deregister_request_handler(const Bytes &path) {
+	path_hash = RNS.Identity.truncated_hash(path.encode("utf-8"))
+	if path_hash in self.request_handlers:
+		self.request_handlers.pop(path_hash)
+		return True
+	else:
+		return False
+}
+*/
+
+void Destination::receive(const Packet &packet) {
 	assert(_object);
-	_object->_callbacks._link_established = callback;
+	if (packet._packet_type == Packet::LINKREQUEST) {
+		Bytes plaintext(packet._data);
+		incoming_link_request(plaintext, packet);
+	}
+	else {
+		// CBA TEST determine why packet._data is being used instead of packet._raw for incoming packets
+		//Bytes plaintext(decrypt(packet._data));
+		Bytes plaintext(decrypt(packet._raw.mid(19)));
+		extreme("Destination::receive: decrypted data: " + plaintext.toHex());
+		if (plaintext) {
+			if (packet._packet_type == RNS::Packet::DATA) {
+				if (_object->_callbacks._packet) {
+					try {
+						_object->_callbacks._packet(plaintext, packet);
+					}
+					catch (std::exception &e) {
+						debug("Error while executing receive callback from " + toString() + ". The contained exception was: " + e.what());
+					}
+				}
+			}
+		}
+	}
 }
 
-/*
-	Registers a function to be called when a packet has been received by
-	this destination.
-
-	:param callback: A function or method with the signature *callback(data, packet)* to be called when this destination receives a packet.
-*/
-void Destination::set_packet_callback(Callbacks::packet callback) {
+void Destination::incoming_link_request(const Bytes &data, const Packet &packet) {
 	assert(_object);
-	_object->_callbacks._packet = callback;
-}
-
-/*
-	Registers a function to be called when a proof has been requested for
-	a packet sent to this destination. Allows control over when and if
-	proofs should be returned for received packets.
-
-	:param callback: A function or method to with the signature *callback(packet)* be called when a packet that requests a proof is received. The callback must return one of True or False. If the callback returns True, a proof will be sent. If it returns False, a proof will not be sent.
-*/
-void Destination::set_proof_requested_callback(Callbacks::proof_requested callback) {
-	assert(_object);
-	_object->_callbacks._proof_requested = callback;
+	if (_object->_accept_link_requests) {
+		//zlink = RNS::Link::validate_request(data, packet);
+		//zif (link) {
+		//z	_links.append(link);
+		//z}
+	}
 }
 
 /*
@@ -270,7 +318,7 @@ Encrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 */
 Bytes Destination::encrypt(const Bytes &data) {
 	assert(_object);
-	debug("Destination::encrypt: encrypting bytes");
+	debug("Destination::encrypt: encrypting data...");
 
 	if (_object->_type == Destination::PLAIN) {
 		return data;
@@ -304,7 +352,7 @@ Decrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 */
 Bytes Destination::decrypt(const Bytes &data) {
 	assert(_object);
-	debug("Destination::decrypt: decrypting bytes");
+	debug("Destination::decrypt: decrypting data...");
 
 	if (_object->_type == Destination::PLAIN) {
 		return data;

@@ -3,6 +3,8 @@
 #include "Reticulum.h"
 #include "Bytes.h"
 
+#include <assert.h>
+
 void testReference() {
 
 	RNS::Reticulum reticulum_default;

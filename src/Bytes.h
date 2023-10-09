@@ -104,6 +104,11 @@ namespace RNS {
 		void ownData();
 
 	public:
+		inline void clear() {
+			_data = nullptr;
+			_owner = true;
+		}
+
 		inline void assign(const Bytes& bytes) {
 #ifdef COW
 			_data = bytes.shareData();
@@ -112,6 +117,7 @@ namespace RNS {
 			// if assignment is empty then clear data and don't bother creating new
 			if (bytes.size() <= 0) {
 				_data = nullptr;
+				_owner = true;
 				return;
 			}
 			newData();
@@ -122,6 +128,7 @@ namespace RNS {
 			// if assignment is empty then clear data and don't bother creating new
 			if (chunk == nullptr || size <= 0) {
 				_data = nullptr;
+				_owner = true;
 				return;
 			}
 			newData();
@@ -131,6 +138,7 @@ namespace RNS {
 			// if assignment is empty then clear data and don't bother creating new
 			if (string == nullptr || string[0] == 0) {
 				_data = nullptr;
+				_owner = true;
 				return;
 			}
 			newData();
@@ -170,6 +178,20 @@ namespace RNS {
 		}
 		void appendHex(const char* hex);
 
+		inline void resize(size_t newsize) {
+			// if size is unchanged then do nothing
+			if (newsize == size()) {
+				return;
+			}
+			ownData();
+			_data->resize(newsize);
+		}
+
+		inline uint8_t *writable(size_t size) {
+			newData(size);
+			return _data->data();
+		}
+
 	public:
 		int8_t compare(const Bytes &bytes) const;
 		inline size_t size() const { if (!_data) return 0; return _data->size(); }
@@ -179,14 +201,10 @@ namespace RNS {
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = true) const;
-		Bytes mid(size_t pos, size_t len) const;
+		Bytes mid(size_t beginpos, size_t len) const;
+		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
 		inline Bytes right(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data() + (size() - len), len}; }
-
-		inline uint8_t *writable(size_t size) {
-			newData(size);
-			return _data->data();
-		}
 
 	private:
 		SharedData _data;
@@ -195,14 +213,16 @@ namespace RNS {
 	};
 
 	// following array function doesn't work without size since it's past as a pointer to the array sizeof() is of the pointer
-	//static inline Bytes bytesFromArray(const uint8_t arr[]) { return Bytes(arr, sizeof(arr)); }
-	//static inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return Bytes(ptr, len); }
-	static inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return {ptr, len}; }
-	//static inline Bytes bytesFromString(const char *str) { return Bytes((uint8_t*)str, strlen(str)); }
-	static inline Bytes bytesFromString(const char *str) { return {(uint8_t*)str, strlen(str)}; }
-	//zstatic inline Bytes bytesFromInt(const int) { return {(uint8_t*)str, strlen(str)}; }
+	//inline Bytes bytesFromArray(const uint8_t arr[]) { return Bytes(arr, sizeof(arr)); }
+	//inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return Bytes(ptr, len); }
+	inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return {ptr, len}; }
+	//inline Bytes bytesFromString(const char *str) { return Bytes((uint8_t*)str, strlen(str)); }
+	inline Bytes bytesFromString(const char *str) { return {(uint8_t*)str, strlen(str)}; }
+	//zinline Bytes bytesFromInt(const int) { return {(uint8_t*)str, strlen(str)}; }
 
-	static inline std::string stringFromBytes(const Bytes& bytes) { return {(const char*)bytes.data(), bytes.size()}; }
+	inline std::string stringFromBytes(const Bytes& bytes) { return bytes.toString(); }
+	inline std::string hexFromBytes(const Bytes& bytes) { return bytes.toHex(); }
+	std::string hexFromByte(uint8_t byte, bool upper = true);
 
 }
 

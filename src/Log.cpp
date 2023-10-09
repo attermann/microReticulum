@@ -45,6 +45,7 @@ void RNS::doLog(const char* msg, LogLevel level) {
 	Serial.print(getLevelName(level));
 	Serial.print(" ");
 	Serial.println(msg);
+	Serial.flush();
 #else
 	printf("%s: %s\n", getLevelName(level), msg);
 #endif
