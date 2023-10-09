@@ -68,14 +68,16 @@ void setup() {
 		// test path
 		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
 		// test packet send
-		RNS::Packet send_packet = destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
-		//RNS::Packet packet = destination.announce(RNS::bytesFromString(fruits[rand() % 7]), false, nullptr, RNS::Bytes::NONE, false);
+		destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// 23.9% (+0.8%)
 
+		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
+		send_packet.pack();
 		RNS::extreme("Test send_packet packet: " + send_packet.toString());
 
 		// test packet receive
 		RNS::Packet recv_packet(RNS::Destination::NONE, send_packet._raw);
+		recv_packet.unpack();
 		RNS::extreme("Test recv_packet packet: " + recv_packet.toString());
 
 		destination.receive(recv_packet);

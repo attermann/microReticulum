@@ -215,17 +215,11 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	}
 
 	debug("Destination::announce: creating announce packet...");
-    //announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
-	//Packet announce_packet(*this, announce_data, Packet::ANNOUNCE, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
-	Packet announce_packet(*this, announce_data, Packet::DATA, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
-	extreme("Destination::announce: pre announce packet: " + announce_packet.toString());
+	Packet announce_packet(*this, announce_data, Packet::ANNOUNCE, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
 
 	if (send) {
 		announce_packet.send();
-		extreme("Destination::announce: post announce packet: " + announce_packet.toString());
-		// CBA temporarily returning copy of sent packet for testing purposes
-		//return Packet::NONE;
-		return announce_packet;
+		return Packet::NONE;
 	}
 	else {
 		return announce_packet;
@@ -281,9 +275,8 @@ void Destination::receive(const Packet &packet) {
 		incoming_link_request(plaintext, packet);
 	}
 	else {
-		// CBA TEST determine why packet._data is being used instead of packet._raw for incoming packets
-		//Bytes plaintext(decrypt(packet._data));
-		Bytes plaintext(decrypt(packet._raw.mid(19)));
+		// CBA TODO Why isn't the Packet decrypting itself?
+		Bytes plaintext(decrypt(packet._data));
 		extreme("Destination::receive: decrypted data: " + plaintext.toHex());
 		if (plaintext) {
 			if (packet._packet_type == RNS::Packet::DATA) {

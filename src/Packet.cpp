@@ -22,38 +22,18 @@ Packet::Packet(const Destination &destination, const Interface &attached_interfa
 		_packet_type = packet_type;
 		_transport_type = transport_type;
 		_context = context;
-
 		_transport_id = transport_id;
-
 		_data = data;
 		if (_data.size() > MDU) {
 			_truncated = true;
 			_data.resize(MDU);
 		}
-/*
-		if (data) {
-			// data is plaintext
-			if (data.size() > MDU) {
-				_truncated = true;
-				// CBA TODO add method to truncate
-				//zdata_len = MDU;
-			}
-			_data = _raw + Reticulum::HEADER_MAXSIZE;
-			memcpy(_data, data.data(), data.size());
-		}
-*/
 		_flags = get_packed_flags();
-
 		_create_receipt = create_receipt;
 	}
 	else {
 		extreme("Creating packet without detination...");
 		_raw = data;
-/*
-		if (data) {
-			memcpy(_raw, data.data(), data.size());
-		}
-*/
 		_packed = true;
 		_fromPacked = true;
 		_create_receipt = false;
@@ -249,129 +229,14 @@ but excluding any interface access codes.
 // |      ...destination_2         |    context    |    data ...   |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-/*
 void Packet::pack() {
 	assert(_object);
 	debug("Packet::pack: packing packet...");
-	extreme("Packet::pack: pre hops: " + std::to_string(_hops));
-
-	//memcpy(_destination_hash, _destination->_hash.data(), Reticulum::DESTINATION_LENGTH);
-	memcpy(_destination_hash, _object->_destination.hash().data(), _object->_destination.hash().size());
-
-	//uint8_t *ciphertext;
-	if (_context == LRPROOF) {
-		// write header
-		_header = _data - Reticulum::HEADER_MINSIZE;
-		_header[0] = _flags;
-		_header[1] = _hops;
-		//memcpy(header+2, _destination->_link_id, Reticulum::DESTINATION_LENGTH);
-		debug("Packet::pack: destination link id: " + _object->_destination.link_id().toHex() );
-		memcpy(_header+2, _object->_destination.link_id().data(), _object->_destination.link_id().size());
-		_header[Reticulum::DESTINATION_LENGTH+2] = _context;
-		// prepend header to _data in _raw bytes
-		memcpy(_data-Reticulum::HEADER_MINSIZE, _header, Reticulum::HEADER_MINSIZE);
-		//ciphertext = _data;
-	}
-	else {
-		if (_header_type == HEADER_1) {
-			// write header
-			_header = _data - Reticulum::HEADER_MINSIZE;
-			_header[0] = _flags;
-			_header[1] = _hops;
-			//memcpy(header+2, _destination->_hash.data(), Reticulum::DESTINATION_LENGTH);
-			debug("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
-			memcpy(_header+2, _object->_destination.hash().data(), _object->_destination.hash().size());
-			_header[Reticulum::DESTINATION_LENGTH+2] = _context;
-			// prepend header to _data in _raw bytes
-			memcpy(_data-Reticulum::HEADER_MINSIZE, _header, Reticulum::HEADER_MINSIZE);
-
-			if (_packet_type == ANNOUNCE) {
-				// Announce packets are not encrypted
-				//ciphertext = _data;
-			}
-			else if (_packet_type == LINKREQUEST) {
-				// Link request packets are not encrypted
-				//ciphertext = _data;
-			}
-			else if (_packet_type == PROOF && _context == RESOURCE_PRF) {
-				// Resource proofs are not encrypted
-				//ciphertext = _data;
-			}
-			else if (_packet_type == PROOF && _object->_destination.type() == Destination::LINK) {
-				// Packet proofs over links are not encrypted
-				//ciphertext = _data;
-			}
-			else if (_context == RESOURCE) {
-				// A resource takes care of encryption
-				// by itself
-				//ciphertext = _data;
-			}
-			else if (_context == KEEPALIVE) {
-				// Keepalive packets contain no actual
-				// data
-				//ciphertext = _data;
-			}
-			else if (_context == CACHE_REQUEST) {
-				// Cache-requests are not encrypted
-				//ciphertext = _data;
-			}
-			else {
-				// In all other cases, we encrypt the packet
-				// with the destination's encryption method
-				// CBA TODO Figure out how to most efficiently pass in data and receive encrypted data back into _raw bytes
-				// CBA TODO Ensure that encrypted data does not exceed ENCRYPTED_MDU
-				// CBA TODO Determine if encrypt method can read from and write to the same bytes
-				//_data_len = _destination->encrypt(_data, _data, _data_len);
-				//uint8_t data[_data_len];
-				//memcpy(data, _data, _data_len);
-				//_data_len = _destination->encrypt(_data, data, _data_len);
-				Bytes plaintext(_data, _data_len);
-				Bytes ciphertext = _object->_destination.encrypt(plaintext);
-				memcpy(_data, ciphertext.data(), ciphertext.size());
-				_data_len = ciphertext.size();
-			}
-		}
-		else if (_header_type == HEADER_2) {
-			if (memcmp(_transport_id, EMPTY_DESTINATION, Reticulum::DESTINATION_LENGTH) == 0) {
-                throw std::invalid_argument("Packet with header type 2 must have a transport ID");
-			}
-			// write header
-			_header = _data - Reticulum::HEADER_MAXSIZE;
-			_header[0] = _flags;
-			_header[1] = _hops;
-			memcpy(_header+2, _transport_id, Reticulum::DESTINATION_LENGTH);
-			//memcpy(header+Reticulum::DESTINATION_LENGTH+2, _destination->_hash.data(), Reticulum::DESTINATION_LENGTH);
-			debug("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
-			memcpy(_header+Reticulum::DESTINATION_LENGTH+2, _object->_destination.hash().data(), _object->_destination.hash().size());
-			_header[2*Reticulum::DESTINATION_LENGTH+2] = _context;
-			// prepend header to _data in _raw bytes
-			memcpy(_data-Reticulum::HEADER_MAXSIZE, _header, Reticulum::HEADER_MAXSIZE);
-
-			if (_packet_type == ANNOUNCE) {
-				// Announce packets are not encrypted
-				//ciphertext = _data;
-			}
-		}
-	}
-
-	if (_data_len > _mtu) {
-		throw std::length_error("Packet size of " + std::to_string(_data_len) + " exceeds MTU of " + std::to_string(_mtu) +" bytes");
-	}
-
-	_packed = true;
-	update_hash();
-
-	extreme("Packet::pack: post hops: " + std::to_string(_hops));
-}
-*/
-void Packet::pack() {
-	assert(_object);
-	debug("Packet::pack: packing packet...");
-	extreme("Packet::pack: pre hops: " + std::to_string(_hops));
 
 	_destination_hash = _object->_destination.hash();
 
 	_raw.clear();
+	_encrypted = false;
 
 	_raw << _flags;
 	_raw << _hops;
@@ -422,6 +287,7 @@ void Packet::pack() {
 				// In all other cases, we encrypt the packet
 				// with the destination's encryption method
 				_raw << _object->_destination.encrypt(_data);
+				_encrypted = true;
 			}
 		}
 		else if (_header_type == HEADER_2) {
@@ -447,61 +313,11 @@ void Packet::pack() {
 
 	_packed = true;
 	update_hash();
-
-	extreme("Packet::pack: post hops: " + std::to_string(_hops));
 }
 
-/*
 bool Packet::unpack() {
 	assert(_object);
 	debug("Packet::unpack: unpacking packet...");
-	extreme("Packet::unpack: pre hops: " + std::to_string(_hops));
-	try {
-
-		// read header
-		_flags = _raw[0];
-		_hops  = _raw[1];
-
-		_header_type      = static_cast<header_types>((_flags & 0b01000000) >> 6);
-		_transport_type   = static_cast<Transport::types>((_flags & 0b00110000) >> 4);
-		_destination_type = static_cast<Destination::types>((_flags & 0b00001100) >> 2);
-		_packet_type      = static_cast<types>(_flags & 0b00000011);
-
-		// CBA TODO detect invalid flags and throw error
-		if (false) {
-			log("Received malformed packet, dropping it.");
-			return false;
-		}
-
-		if (_header_type == HEADER_2) {
-			memcpy(_transport_id, _raw+2, Reticulum::DESTINATION_LENGTH);
-			memcpy(_destination_hash, _raw+Reticulum::DESTINATION_LENGTH+2, Reticulum::DESTINATION_LENGTH);
-			_context = static_cast<context_types>(_raw[2*Reticulum::DESTINATION_LENGTH+2]);
-			_data = _raw+2*Reticulum::DESTINATION_LENGTH+3;
-		}
-		else {
-			//memcpy(_transport_id, EMPTY_DESTINATION, Reticulum::DESTINATION_LENGTH);
-			memcpy(_destination_hash, _raw+2, Reticulum::DESTINATION_LENGTH);
-			_context = static_cast<context_types>(_raw[Reticulum::DESTINATION_LENGTH+2]);
-			_data = _raw+Reticulum::DESTINATION_LENGTH+3;
-		}
-
-		_packed = false;
-		update_hash();
-	}
-	catch (std::exception& e) {
-		error(std::string("Received malformed packet, dropping it. The contained exception was: ") + e.what());
-		return false;
-	}
-
-	extreme("Packet::unpack: post hops: " + std::to_string(_hops));
-	return true;
-}
-*/
-bool Packet::unpack() {
-	assert(_object);
-	debug("Packet::unpack: unpacking packet...");
-	extreme("Packet::unpack: pre hops: " + std::to_string(_hops));
 	try {
 		if (_raw.size() < Reticulum::HEADER_MINSIZE) {
 			throw std::length_error("Packet size of " + std::to_string(_raw.size()) + " does not meet minimum header size of " + std::to_string(Reticulum::HEADER_MINSIZE) +" bytes");
@@ -529,12 +345,16 @@ bool Packet::unpack() {
 			_destination_hash.assign(raw+Reticulum::DESTINATION_LENGTH+2, Reticulum::DESTINATION_LENGTH);
 			_context = static_cast<context_types>(raw[2*Reticulum::DESTINATION_LENGTH+2]);
 			_data.assign(raw+2*Reticulum::DESTINATION_LENGTH+3, _raw.size()-(2*Reticulum::DESTINATION_LENGTH+3));
+			// uknown at this point whether data is encrypted or not
+			_encrypted = true;
 		}
 		else {
 			_transport_id.clear();
 			_destination_hash.assign(raw+2, Reticulum::DESTINATION_LENGTH);
 			_context = static_cast<context_types>(raw[Reticulum::DESTINATION_LENGTH+2]);
 			_data.assign(raw+Reticulum::DESTINATION_LENGTH+3, _raw.size()-(Reticulum::DESTINATION_LENGTH+3));
+			// uknown at this point whether data is encrypted or not
+			_encrypted = true;
 		}
 
 		_packed = false;
@@ -545,7 +365,6 @@ bool Packet::unpack() {
 		return false;
 	}
 
-	extreme("Packet::unpack: post hops: " + std::to_string(_hops));
 	return true;
 }
 
@@ -674,11 +493,11 @@ std::string Packet::toString() {
 	dump += "transport:    " + _transport_id.toHex() + "\n";
 	dump += "destination:  " + _destination_hash.toHex() + "\n";
 	dump += "context_type: " + std::to_string(_header_type) + "\n";
-	dump += "plaintext:    " + _data.toHex() + "\n";
+	dump += "data:         " + _data.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_data.size()) + "\n";
 	dump += "raw:          " + _raw.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_raw.size()) + "\n";
-	if (_raw.size() > 0) {
+	if (_encrypted && _raw.size() > 0) {
 		size_t header_len = Reticulum::HEADER_MINSIZE;
 		if (_header_type == HEADER_2) {
 			header_len = Reticulum::HEADER_MAXSIZE;

@@ -145,7 +145,8 @@ namespace RNS {
 		bool _sent = false;
 		bool _create_receipt = false;
 		bool _fromPacked = false;
-		bool _truncated = false;
+		bool _truncated = false;	// whether data was truncated
+		bool _encrypted = false;	// whether data is encrytpted
 		//z_receipt = nullptr;
 
 		uint16_t _mtu = Reticulum::MTU;
@@ -154,27 +155,12 @@ namespace RNS {
 		float _rssi = 0.0;
 		float _snr = 0.0;
 
-		//uint8_t _packet_hash[Reticulum::HASHLENGTH] = {0};
 		Bytes _packet_hash;
-/*
-		uint8_t _destination_hash[Reticulum::DESTINATION_LENGTH] = {0};
-		uint8_t _transport_id[Reticulum::DESTINATION_LENGTH] = {0};
-
-		// universal packet buffer
-		uint8_t _raw[Reticulum::MTU];
-		// header pointer into universal packet buffer
-		uint8_t *_header = _raw;
-		uint16_t _header_len = 0;
-		// data pointer into universal packet buffer
-		uint8_t *_data = _raw + Reticulum::HEADER_MAXSIZE;
-		uint16_t _data_len = 0;
-		uint8_t _raw[Reticulum::MTU];
-*/
 		Bytes _destination_hash;
 		Bytes _transport_id;
 
-		Bytes _raw;		// header + ciphertext
-		Bytes _data;	// plaintext
+		Bytes _raw;		// header + ( plaintext | ciphertext-token )
+		Bytes _data;	// plaintext | ciphertext
 
 	private:
 		class Object {
