@@ -1,2 +1,2 @@
 # reticulum-cpp
-WIP: Port of Reticulum Network Stack to C++ specifically but not exclusively targeting ESP32 and better MCUs.
+WIP: Port of Reticulum Network Stack to C++ specifically but not exclusively targeting 32-bit and better MCUs.
