@@ -10,6 +10,7 @@
 #include <vector>
 
 using namespace RNS;
+using namespace RNS::Type::Destination;
 
 Destination::Destination(const Identity &identity, const directions direction, const types type, const char* app_name, const char *aspects) : _object(new Object(identity)) {
 	assert(_object);
@@ -23,7 +24,7 @@ Destination::Destination(const Identity &identity, const directions direction, c
 	_object->_direction = direction;
 
 	std::string fullaspects(aspects);
-	if (!identity && direction == Destination::IN && _object->_type != Destination::PLAIN) {
+	if (!identity && direction == IN && _object->_type != PLAIN) {
 		debug("Destination::Destination: identity not provided, creating new one");
 		_object->_identity = Identity();
 		// CBA TODO should following include a "." delimiter?
@@ -31,7 +32,7 @@ Destination::Destination(const Identity &identity, const directions direction, c
 	}
 	debug("Destination::Destination: full aspects: " + fullaspects);
 
-	if (_object->_identity && _object->_type == Destination::PLAIN) {
+	if (_object->_identity && _object->_type == PLAIN) {
 		throw std::invalid_argument("Selected destination type PLAIN cannot hold an identity");
 	}
 
@@ -45,7 +46,7 @@ Destination::Destination(const Identity &identity, const directions direction, c
 	debug("Destination::Destination: hash:      " + _object->_hash.toHex());
 	// CBA TEST CRASH
 	debug("Destination::Destination: creating name hash...");
-	_object->_name_hash = Identity::truncated_hash(expand_name(Identity::NONE, app_name, fullaspects.c_str()));
+	_object->_name_hash = Identity::truncated_hash(expand_name({Type::NONE}, app_name, fullaspects.c_str()));
 	debug("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
 	debug("Destination::Destination: calling register_destination");
@@ -60,7 +61,7 @@ Destination::Destination(const Identity &identity, const directions direction, c
 /*static*/ Bytes Destination::hash(const Identity &identity, const char *app_name, const char *aspects) {
 	//name_hash = Identity::full_hash(Destination.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	//addr_hash_material = name_hash
-	Bytes addr_hash_material = Identity::truncated_hash(expand_name(Identity::NONE, app_name, aspects));
+	Bytes addr_hash_material = Identity::truncated_hash(expand_name({Type::NONE}, app_name, aspects));
 	//if identity != None:
 	//	if isinstance(identity, RNS.Identity):
 	//		addr_hash_material += identity.hash
@@ -121,7 +122,7 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 		//Response &entry = *it;
 		// map
 		PathResponse &entry = (*it).second;
-		if (now > (entry.first + Destination::PR_TAG_WINDOW)) {
+		if (now > (entry.first + PR_TAG_WINDOW)) {
 			it = _object->_path_responses.erase(it);
 		}
 		else {
@@ -205,18 +206,18 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	}
 	debug("Destination::announce: announce_data:" + announce_data.toHex());
 
-	Packet::context_types announce_context = Packet::CONTEXT_NONE;
+	Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 	if (path_response) {
-		announce_context = Packet::PATH_RESPONSE;
+		announce_context = Type::Packet::PATH_RESPONSE;
 	}
 
 	debug("Destination::announce: creating announce packet...");
-	Packet announce_packet(*this, announce_data, Packet::ANNOUNCE, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
+	Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
 
 	if (send) {
 		debug("Destination::announce: sending announce packet...");
 		announce_packet.send();
-		return Packet::NONE;
+		return {Type::NONE};
 	}
 	else {
 		return announce_packet;
@@ -267,7 +268,7 @@ bool Destination::deregister_request_handler(const Bytes &path) {
 
 void Destination::receive(const Packet &packet) {
 	assert(_object);
-	if (packet.packet_type() == Packet::LINKREQUEST) {
+	if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 		Bytes plaintext(packet.data());
 		incoming_link_request(plaintext, packet);
 	}
@@ -276,7 +277,7 @@ void Destination::receive(const Packet &packet) {
 		Bytes plaintext(decrypt(packet.data()));
 		extreme("Destination::receive: decrypted data: " + plaintext.toHex());
 		if (plaintext) {
-			if (packet.packet_type() == RNS::Packet::DATA) {
+			if (packet.packet_type() == Type::Packet::DATA) {
 				if (_object->_callbacks._packet) {
 					try {
 						_object->_callbacks._packet(plaintext, packet);
@@ -293,10 +294,10 @@ void Destination::receive(const Packet &packet) {
 void Destination::incoming_link_request(const Bytes &data, const Packet &packet) {
 	assert(_object);
 	if (_object->_accept_link_requests) {
-		//zlink = RNS::Link::validate_request(data, packet);
-		//zif (link) {
+		//z link = Link::validate_request(data, packet);
+		//z if (link) {
 		//z	_links.append(link);
-		//z}
+		//z }
 	}
 }
 
@@ -310,16 +311,16 @@ Bytes Destination::encrypt(const Bytes &data) {
 	assert(_object);
 	debug("Destination::encrypt: encrypting data...");
 
-	if (_object->_type == Destination::PLAIN) {
+	if (_object->_type == PLAIN) {
 		return data;
 	}
 
-	if (_object->_type == Destination::SINGLE && _object->_identity) {
+	if (_object->_type == SINGLE && _object->_identity) {
 		return _object->_identity.encrypt(data);
 	}
 
 /*
-	if (_object->_type == Destination::GROUP {
+	if (_object->_type == GROUP {
 		if hasattr(self, "prv") and self.prv != None:
 			try:
 				return self.prv.encrypt(plaintext)
@@ -331,7 +332,7 @@ Bytes Destination::encrypt(const Bytes &data) {
 	}
 */
 	// MOCK
-	return Bytes::NONE;
+	return {Bytes::NONE};
 }
 
 /*
@@ -344,16 +345,16 @@ Bytes Destination::decrypt(const Bytes &data) {
 	assert(_object);
 	debug("Destination::decrypt: decrypting data...");
 
-	if (_object->_type == Destination::PLAIN) {
+	if (_object->_type == PLAIN) {
 		return data;
 	}
 
-	if (_object->_type == Destination::SINGLE && _object->_identity) {
+	if (_object->_type == SINGLE && _object->_identity) {
 		return _object->_identity.decrypt(data);
 	}
 
 /*
-	if (_object->_type == Destination::GROUP) {
+	if (_object->_type == GROUP) {
 		if hasattr(self, "prv") and self.prv != None:
 			try:
 				return self.prv.decrypt(ciphertext)
@@ -365,7 +366,7 @@ Bytes Destination::decrypt(const Bytes &data) {
 	}
 */
 	// MOCK
-	return Bytes::NONE;
+	return {Bytes::NONE};
 }
 
 /*
@@ -376,8 +377,8 @@ Signs information for ``RNS.Destination.SINGLE`` type destination.
 */
 Bytes Destination::sign(const Bytes &message) {
 	assert(_object);
-	if (_object->_type == Destination::SINGLE && _object->_identity) {
+	if (_object->_type == SINGLE && _object->_identity) {
 		return _object->_identity.sign(message);
 	}
-	return Bytes::NONE;
+	return {Bytes::NONE};
 }

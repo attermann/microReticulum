@@ -3,10 +3,10 @@
 #include "Reticulum.h"
 #include "Link.h"
 // CBA TODO resolve circular dependency with following header file
-//#include "Packet.h"
+#include "Packet.h"
 #include "Bytes.h"
-#include "None.h"
 #include "Interfaces/Interface.h"
+#include "Type.h"
 
 #include <memory>
 #include <vector>
@@ -133,6 +133,7 @@ namespace RNS {
 
 	public:
 		// Constants
+/*
 		enum types {
 			BROADCAST    = 0x00,
 			TRANSPORT    = 0x01,
@@ -140,6 +141,7 @@ namespace RNS {
 			TUNNEL       = 0x03,
 			NONE         = 0xFF,
 		};
+*/
 
 		enum reachabilities {
 			REACHABILITY_UNREACHABLE = 0x00,
@@ -168,7 +170,7 @@ namespace RNS {
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 5;            // Minimum interval in seconds for automated path requests
 
-		static constexpr const float LINK_TIMEOUT            = Link::STALE_TIME * 1.25;
+		static constexpr const float LINK_TIMEOUT            = Type::Link::STALE_TIME * 1.25;
 		static const uint16_t REVERSE_TIMEOUT      = 30*60;        // Reverse table entries are removed after 30 minutes
 		static const uint32_t DESTINATION_TIMEOUT  = 60*60*24*7;   // Destination table entries are removed if unused for one week
 		static const uint16_t MAX_RECEIPTS         = 1024;         // Maximum number of receipts to keep track of
@@ -181,7 +183,7 @@ namespace RNS {
 		static void transmit(Interface &interface, const Bytes &raw);
 		static bool outbound(Packet &packet);
 		static bool packet_filter(const Packet &packet);
-		static void inbound(const Bytes &raw, const Interface &interface = Interface::NONE);
+		static void inbound(const Bytes &raw, const Interface &interface = {Type::NONE});
 		static void synthesize_tunnel(const Interface &interface);
 		static void tunnel_synthesize_handler(const Bytes &data, const Packet &packet);
 		static void handle_tunnel(const Bytes &tunnel_id, const Interface &interface);
@@ -204,7 +206,7 @@ namespace RNS {
 		static Bytes next_hop(const Bytes &destination_hash);
 		static Interface next_hop_interface(const Bytes &destination_hash);
 		static bool expire_path(const Bytes &destination_hash);
-		static void request_path(const Bytes &destination_hash, const Interface &on_interface = {Interface::NONE}, const Bytes &tag = {}, bool recursive = false);
+		static void request_path(const Bytes &destination_hash, const Interface &on_interface = {Type::NONE}, const Bytes &tag = {}, bool recursive = false);
 		static void path_request_handler(const Bytes &data, const Packet &packet);
 		static void path_request(const Bytes &destination_hash, bool is_from_local_client, const Interface &attached_interface, const Bytes &requestor_transport_id = {}, const Bytes &tag = {});
 		static bool from_local_client(const Packet &packet);

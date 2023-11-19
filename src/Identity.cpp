@@ -11,6 +11,7 @@
 #include <string.h>
 
 using namespace RNS;
+using namespace RNS::Type::Identity;
 
 Identity::Identity(bool create_keys) : _object(new Object()) {
 	if (create_keys) {
@@ -177,14 +178,14 @@ Bytes Identity::decrypt(const Bytes &ciphertext_token) {
 	if (!_object->_prv) {
 		throw std::runtime_error("Decryption failed because identity does not hold a private key");
 	}
-	if (ciphertext_token.size() <= Identity::KEYSIZE/8/2) {
+	if (ciphertext_token.size() <= Type::Identity::KEYSIZE/8/2) {
 		debug("Decryption failed because the token size " + std::to_string(ciphertext_token.size()) + " was invalid.");
-		return Bytes::NONE;
+		return {Bytes::NONE};
 	}
 	Bytes plaintext;
 	try {
 		//peer_pub_bytes = ciphertext_token[:Identity.KEYSIZE//8//2]
-		Bytes peer_pub_bytes = ciphertext_token.left(Identity::KEYSIZE/8/2);
+		Bytes peer_pub_bytes = ciphertext_token.left(Type::Identity::KEYSIZE/8/2);
 		//peer_pub = X25519PublicKey.from_public_bytes(peer_pub_bytes)
 		//Cryptography::X25519PublicKey::Ptr peer_pub = Cryptography::X25519PublicKey::from_public_bytes(peer_pub_bytes);
 		debug("Identity::decrypt: peer public key:      " + peer_pub_bytes.toHex());
@@ -204,7 +205,7 @@ Bytes Identity::decrypt(const Bytes &ciphertext_token) {
 
 		Cryptography::Fernet fernet(derived_key);
 		//ciphertext = ciphertext_token[Identity.KEYSIZE//8//2:]
-		Bytes ciphertext(ciphertext_token.mid(Identity::KEYSIZE/8/2));
+		Bytes ciphertext(ciphertext_token.mid(Type::Identity::KEYSIZE/8/2));
 		debug("Identity::decrypt: Fernet decrypting data of length " + std::to_string(ciphertext.size()));
 		extreme("Identity::decrypt: ciphertext: " + ciphertext.toHex());
 		plaintext = fernet.decrypt(ciphertext);
@@ -263,7 +264,7 @@ bool Identity::validate(const Bytes &signature, const Bytes &message) {
 	}
 }
 
-void Identity::prove(const Packet &packet, const Destination &destination /*= Destination::NONE*/) {
+void Identity::prove(const Packet &packet, const Destination &destination /*= {Destination::NONE}*/) {
 	assert(_object);
 	Bytes signature(sign(packet.packet_hash()));
 	Bytes proof_data;
@@ -278,6 +279,6 @@ void Identity::prove(const Packet &packet, const Destination &destination /*= De
 	//z	destination = packet.generate_proof_destination();
 	//z}
 
-	Packet proof(destination, packet.receiving_interface(), proof_data, RNS::Packet::PROOF);
+	Packet proof(destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
 	proof.send();
 }

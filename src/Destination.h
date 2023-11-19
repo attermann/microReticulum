@@ -4,7 +4,7 @@
 #include "Link.h"
 #include "Identity.h"
 #include "Bytes.h"
-#include "None.h"
+#include "Type.h"
 
 #include <memory>
 #include <string>
@@ -54,48 +54,14 @@ namespace RNS {
 		using PathResponse = std::pair<time_t, Bytes>;
 		//using PathResponse = std::pair<time_t, std::vector<uint8_t>>;
 
-		enum NoneConstructor {
-			NONE
-		};
-
-		// Constants
-		enum types {
-			SINGLE     = 0x00,
-			GROUP      = 0x01,
-			PLAIN      = 0x02,
-			LINK       = 0x03,
-		};
-
-		enum proof_strategies {
-			PROVE_NONE = 0x21,
-			PROVE_APP  = 0x22,
-			PROVE_ALL  = 0x23,
-		};
-
-		enum request_policies {
-			ALLOW_NONE = 0x00,
-			ALLOW_ALL  = 0x01,
-			ALLOW_LIST = 0x02,
-		};
-
-		enum directions {
-			IN         = 0x11,
-			OUT        = 0x12,
-		};
-
-		const uint8_t PR_TAG_WINDOW = 30;
-
 	public:
-		Destination(NoneConstructor none) {
-			extreme("Destination NONE object created");
-		}
-		Destination(RNS::NoneConstructor none) {
+		Destination(Type::NoneConstructor none) {
 			extreme("Destination NONE object created");
 		}
 		Destination(const Destination &destination) : _object(destination._object) {
 			extreme("Destination object copy created");
 		}
-		Destination(const Identity &identity, const directions direction, const types type, const char* app_name, const char *aspects);
+		Destination(const Identity &identity, const Type::Destination::directions direction, const Type::Destination::types type, const char* app_name, const char *aspects);
 		virtual ~Destination() {
 			extreme("Destination object destroyed");
 		}
@@ -165,7 +131,7 @@ namespace RNS {
 
 		:param proof_strategy: One of ``RNS.Destination.PROVE_NONE``, ``RNS.Destination.PROVE_ALL`` or ``RNS.Destination.PROVE_APP``. If ``RNS.Destination.PROVE_APP`` is set, the `proof_requested_callback` will be called to determine whether a proof should be sent or not.
 		*/
-		inline void set_proof_strategy(proof_strategies proof_strategy) {
+		inline void set_proof_strategy(Type::Destination::proof_strategies proof_strategy) {
 			assert(_object);
 			//if (proof_strategy <= PROOF_NONE) {
 			//	throw throw std::invalid_argument("Unsupported proof strategy");
@@ -181,14 +147,14 @@ namespace RNS {
 		Bytes sign(const Bytes &message);
 
 		// getters/setters
-		inline types type() const { assert(_object); return _object->_type; }
-		inline directions direction() const { assert(_object); return _object->_direction; }
-		inline proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
+		inline Type::Destination::types type() const { assert(_object); return _object->_type; }
+		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
+		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
 		inline Bytes hash() const { assert(_object); return _object->_hash; }
 		inline Bytes link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
-		inline Link::status status() const { assert(_object); return _object->_status; }
+		inline Type::Link::status status() const { assert(_object); return _object->_status; }
 		inline const Callbacks &callbacks() const { assert(_object); return _object->_callbacks; }
 		inline const Identity &identity() const { assert(_object); return _object->_identity; }
 
@@ -203,9 +169,9 @@ namespace RNS {
 			bool _accept_link_requests = true;
 			Callbacks _callbacks;
 			//z_request_handlers = {}
-			types _type;
-			directions _direction;
-			proof_strategies _proof_strategy = PROVE_NONE;
+			Type::Destination::types _type;
+			Type::Destination::directions _direction;
+			Type::Destination::proof_strategies _proof_strategy = Type::Destination::PROVE_NONE;
 			uint16_t _mtu = 0;
 
 			//std::vector<PathResponse> _path_responses;
@@ -229,7 +195,7 @@ namespace RNS {
 			// CBA TODO determine if Link needs to inherit from Destination or vice-versa
 			Bytes _link_id;
 
-			Link::status _status;
+			Type::Link::status _status;
 
 		friend class Destination;
 		};

@@ -2,7 +2,7 @@
 
 #include "../Log.h"
 #include "../Bytes.h"
-#include "../None.h"
+#include "../Type.h"
 
 #include <list>
 #include <memory>
@@ -31,31 +31,12 @@ namespace RNS {
 	};
 
 	public:
-		enum NoneConstructor {
-			NONE
-		};
-
-	public:
-		// Interface mode definitions
-		enum modes {
-			MODE_NONE           = 0x00,
-			MODE_FULL           = 0x01,
-			MODE_POINT_TO_POINT = 0x04,
-			MODE_ACCESS_POINT   = 0x08,
-			MODE_ROAMING        = 0x10,
-			MODE_BOUNDARY       = 0x20,
-			MODE_GATEWAY        = 0x40,
-		};
-
 		// Which interface modes a Transport Node
 		// should actively discover paths for.
-		uint8_t DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
+		uint8_t DISCOVER_PATHS_FOR = Type::Interface::MODE_ACCESS_POINT | Type::Interface::MODE_GATEWAY;
 
 	public:
-		Interface(NoneConstructor none) {
-			extreme("Interface object NONE created");
-		}
-		Interface(RNS::NoneConstructor none) {
+		Interface(Type::NoneConstructor none) {
 			extreme("Interface object NONE created");
 		}
 		Interface(const Interface &interface) : _object(interface._object) {
@@ -107,7 +88,7 @@ namespace RNS {
 		inline bool RPT() const { assert(_object); return _object->_RPT; }
 		inline std::string name() const { assert(_object); return _object->_name; }
 		inline Bytes ifac_identity() const { assert(_object); return _object->_ifac_identity; }
-		inline modes mode() const { assert(_object); return _object->_mode; }
+		inline Type::Interface::modes mode() const { assert(_object); return _object->_mode; }
 		inline uint32_t bitrate() const { assert(_object); return _object->_bitrate; }
 		inline uint64_t announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
 		inline void announce_allowed_at(uint64_t announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
@@ -132,7 +113,7 @@ namespace RNS {
 			size_t _txb = 0;
 			bool online = false;
 			Bytes _ifac_identity;
-			modes _mode = MODE_NONE;
+			Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 			uint32_t _bitrate = 0;
 			uint64_t _announce_allowed_at = 0;
 			float _announce_cap = 0.0;

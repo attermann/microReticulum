@@ -6,6 +6,12 @@
 #include <RNG.h>
 
 using namespace RNS;
+using namespace RNS::Type::Reticulum;
+
+/*static*/ bool Reticulum::__transport_enabled = false;
+/*static*/ bool Reticulum::__use_implicit_proof = true;
+/*static*/ bool Reticulum::__allow_probes = false;
+/*static*/ bool Reticulum::panic_on_interface_error = false;
 
 /*
 Initialises and starts a Reticulum instance. This must be

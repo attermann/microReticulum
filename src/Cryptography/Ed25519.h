@@ -65,6 +65,8 @@ namespace RNS { namespace Cryptography {
 	public:
 		// creates a new instance with a random seed
 		static inline Ptr generate() {
+			// CBA TODO determine why below is confused with (implicit) copy constructor
+			//return Ptr(new Ed25519PrivateKey({Bytes::NONE}));
 			return Ptr(new Ed25519PrivateKey(Bytes::NONE));
 		}
 

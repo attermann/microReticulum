@@ -4,6 +4,7 @@
 #include "Log.h"
 
 using namespace RNS;
+using namespace RNS::Type::Link;
 
 Link::Link() : _object(new Object()) {
 	assert(_object);

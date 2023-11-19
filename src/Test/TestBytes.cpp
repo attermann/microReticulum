@@ -183,7 +183,7 @@ void testBytes() {
 
 	// test creating bytes from NONE
 	{
-		RNS::Bytes bytes(RNS::Bytes::NONE);
+		RNS::Bytes bytes({RNS::Bytes::NONE});
 		assert(!bytes);
 		assert(bytes.size() == 0);
 		assert(bytes.data() == nullptr);

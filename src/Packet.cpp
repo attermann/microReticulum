@@ -7,14 +7,16 @@
 #include <stdexcept>
 
 using namespace RNS;
+using namespace RNS::Type::PacketReceipt;
+using namespace RNS::Type::Packet;
 
-Packet::Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Transport::types transport_type /*= Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes &transport_id /*= Bytes::NONE*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
+Packet::Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes &transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
 
 	if (_object->_destination) {
 		extreme("Creating packet with destination...");
 		// CBA TODO handle NONE
 		if (transport_type == -1) {
-			transport_type = Transport::BROADCAST;
+			transport_type = Type::Transport::BROADCAST;
 		}
 		// following moved to object constructor to avoid extra NONE object
 		//_destination = destination;
@@ -50,7 +52,7 @@ uint8_t Packet::get_packed_flags() {
 	assert(_object);
 	uint8_t packed_flags = 0;
 	if (_object->_context == LRPROOF) {
-		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (Destination::LINK << 2) | _object->_packet_type;
+		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (Type::Destination::LINK << 2) | _object->_packet_type;
 	}
 	else {
 		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (_object->_destination.type() << 2) | _object->_packet_type;
@@ -61,8 +63,8 @@ uint8_t Packet::get_packed_flags() {
 void Packet::unpack_flags(uint8_t flags) {
 	assert(_object);
 	_object->_header_type      = static_cast<header_types>((flags & 0b01000000) >> 6);
-	_object->_transport_type   = static_cast<Transport::types>((flags & 0b00110000) >> 4);
-	_object->_destination_type = static_cast<Destination::types>((flags & 0b00001100) >> 2);
+	_object->_transport_type   = static_cast<Type::Transport::types>((flags & 0b00110000) >> 4);
+	_object->_destination_type = static_cast<Type::Destination::types>((flags & 0b00001100) >> 2);
 	_object->_packet_type      = static_cast<types>(flags & 0b00000011);
 }
 
@@ -267,7 +269,7 @@ void Packet::pack() {
 				// Resource proofs are not encrypted
 				_object->_raw << _object->_data;
 			}
-			else if (_object->_packet_type == PROOF && _object->_destination.type() == Destination::LINK) {
+			else if (_object->_packet_type == PROOF && _object->_destination.type() == Type::Destination::LINK) {
 				// Packet proofs over links are not encrypted
 				_object->_raw << _object->_data;
 			}
@@ -321,8 +323,8 @@ bool Packet::unpack() {
 	assert(_object);
 	debug("Packet::unpack: unpacking packet...");
 	try {
-		if (_object->_raw.size() < Reticulum::HEADER_MINSIZE) {
-			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Reticulum::HEADER_MINSIZE) +" bytes");
+		if (_object->_raw.size() < Type::Reticulum::HEADER_MINSIZE) {
+			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MINSIZE) +" bytes");
 		}
 
 		const uint8_t *raw = _object->_raw.data();
@@ -340,21 +342,21 @@ bool Packet::unpack() {
 		}
 
 		if (_object->_header_type == HEADER_2) {
-			if (_object->_raw.size() < Reticulum::HEADER_MAXSIZE) {
-				throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Reticulum::HEADER_MAXSIZE) +" bytes");
+			if (_object->_raw.size() < Type::Reticulum::HEADER_MAXSIZE) {
+				throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MAXSIZE) +" bytes");
 			}
-			_object->_transport_id.assign(raw+2, Reticulum::DESTINATION_LENGTH);
-			_object->_destination_hash.assign(raw+Reticulum::DESTINATION_LENGTH+2, Reticulum::DESTINATION_LENGTH);
-			_object->_context = static_cast<context_types>(raw[2*Reticulum::DESTINATION_LENGTH+2]);
-			_object->_data.assign(raw+2*Reticulum::DESTINATION_LENGTH+3, _object->_raw.size()-(2*Reticulum::DESTINATION_LENGTH+3));
+			_object->_transport_id.assign(raw+2, Type::Reticulum::DESTINATION_LENGTH);
+			_object->_destination_hash.assign(raw+Type::Reticulum::DESTINATION_LENGTH+2, Type::Reticulum::DESTINATION_LENGTH);
+			_object->_context = static_cast<context_types>(raw[2*Type::Reticulum::DESTINATION_LENGTH+2]);
+			_object->_data.assign(raw+2*Type::Reticulum::DESTINATION_LENGTH+3, _object->_raw.size()-(2*Type::Reticulum::DESTINATION_LENGTH+3));
 			// uknown at this point whether data is encrypted or not
 			_object->_encrypted = true;
 		}
 		else {
 			_object->_transport_id.clear();
-			_object->_destination_hash.assign(raw+2, Reticulum::DESTINATION_LENGTH);
-			_object->_context = static_cast<context_types>(raw[Reticulum::DESTINATION_LENGTH+2]);
-			_object->_data.assign(raw+Reticulum::DESTINATION_LENGTH+3, _object->_raw.size()-(Reticulum::DESTINATION_LENGTH+3));
+			_object->_destination_hash.assign(raw+2, Type::Reticulum::DESTINATION_LENGTH);
+			_object->_context = static_cast<context_types>(raw[Type::Reticulum::DESTINATION_LENGTH+2]);
+			_object->_data.assign(raw+Type::Reticulum::DESTINATION_LENGTH+3, _object->_raw.size()-(Type::Reticulum::DESTINATION_LENGTH+3));
 			// uknown at this point whether data is encrypted or not
 			_object->_encrypted = true;
 		}
@@ -383,7 +385,7 @@ bool Packet::send() {
 	}
 /*
 	if (_destination->type == RNS::Destination::LINK) {
-		if (_destination->status == RNS::Link::CLOSED) {
+		if (_destination->status == Type::Link::CLOSED) {
             throw std::runtime_error("Attempt to transmit over a closed link");
 		}
 		else {
@@ -398,7 +400,7 @@ bool Packet::send() {
 		pack();
 	}
 
-	if (RNS::Transport::outbound(*this)) {
+	if (Transport::outbound(*this)) {
 		debug("Packet::send: successfully sent packet!!!");
 		//zreturn self.receipt
 		// MOCK
@@ -427,7 +429,7 @@ bool Packet::resend() {
 	// encrypted destinations
 	pack();
 
-	if (RNS::Transport::outbound(*this)) {
+	if (Transport::outbound(*this)) {
 		debug("Packet::resend: successfully sent packet!!!");
 		//zreturn self.receipt
 		// MOCK
@@ -441,7 +443,7 @@ bool Packet::resend() {
 	}
 }
 
-void Packet::prove(const Destination &destination /*= {Destination::NONE}*/) {
+void Packet::prove(const Destination &destination /*= {Type::NONE}*/) {
 /*
 	assert(_object);
 	if (_object->_fromPacked && _object->_destination) {
@@ -479,9 +481,9 @@ const Bytes Packet::get_hashable_part() const {
 	assert(_object);
 	Bytes hashable_part;
 	hashable_part << (uint8_t)(_object->_raw.data()[0] & 0b00001111);
-	if (_object->_header_type == Packet::HEADER_2) {
+	if (_object->_header_type == HEADER_2) {
 		//hashable_part += self.raw[(RNS.Identity.TRUNCATED_HASHLENGTH//8)+2:]
-		hashable_part << _object->_raw.mid((Identity::TRUNCATED_HASHLENGTH/8)+2);
+		hashable_part << _object->_raw.mid((Type::Identity::TRUNCATED_HASHLENGTH/8)+2);
 	}
 	else {
 		//hashable_part += self.raw[2:];
@@ -517,14 +519,14 @@ std::string Packet::debugString() const {
 	dump += "data:         " + _object->_data.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_object->_data.size()) + "\n";
 	if (_object->_encrypted && _object->_raw.size() > 0) {
-		size_t header_len = Reticulum::HEADER_MINSIZE;
+		size_t header_len = Type::Reticulum::HEADER_MINSIZE;
 		if (_object->_header_type == HEADER_2) {
-			header_len = Reticulum::HEADER_MAXSIZE;
+			header_len = Type::Reticulum::HEADER_MAXSIZE;
 		}
 		dump += "encrypted:\n";
 		dump += "  header:           " + _object->_raw.left(header_len).toHex() + "\n";
-		dump += "  key:              " + _object->_raw.mid(header_len, Identity::KEYSIZE/8/2).toHex() + "\n";
-		Bytes ciphertext(_object->_raw.mid(header_len+Identity::KEYSIZE/8/2));
+		dump += "  key:              " + _object->_raw.mid(header_len, Type::Identity::KEYSIZE/8/2).toHex() + "\n";
+		Bytes ciphertext(_object->_raw.mid(header_len+Type::Identity::KEYSIZE/8/2));
 		dump += "  ciphertext:       " + ciphertext.toHex() + "\n";
 		dump += "    length:           " + std::to_string(ciphertext.size()) + "\n";
 		dump += "    iv:               " + ciphertext.left(16).toHex() + "\n";

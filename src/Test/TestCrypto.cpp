@@ -18,7 +18,7 @@ void testCrypto() {
 
 	RNS::Identity identity;
 
-	RNS::Destination destination(identity, RNS::Destination::IN, RNS::Destination::SINGLE, "appname", "aspects");
+	RNS::Destination destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "appname", "aspects");
 	//assert(encryptionPrivateKey().toHex().compare("") == );
 	//assert(signingPrivateKey().toHex().compare("") == );
 	//assert(encryptionPublicKey().toHex().compare("") == );

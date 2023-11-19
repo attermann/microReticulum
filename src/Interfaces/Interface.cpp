@@ -3,7 +3,7 @@
 #include "../Transport.h"
 
 using namespace RNS;
-
+using namespace RNS::Type::Interface;
 
 /*virtual*/ inline void Interface::processIncoming(const Bytes &data) {
 	extreme("Interface::processIncoming: data: " + data.toHex());

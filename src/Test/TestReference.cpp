@@ -10,7 +10,7 @@ void testReference() {
 	RNS::Reticulum reticulum_default;
 	assert(reticulum_default);
 
-	RNS::Reticulum reticulum_none(RNS::Reticulum::NONE);
+	RNS::Reticulum reticulum_none({RNS::Type::NONE});
 	assert(!reticulum_none);
 
 	RNS::Reticulum reticulum_default_copy(reticulum_default);

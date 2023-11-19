@@ -1,15 +1,14 @@
 #pragma once
 
 #include "Reticulum.h"
-// CBA TODO determine why including Destination.h here causes build errors
 //#include "Destination.h"
 #include "Log.h"
 #include "Bytes.h"
-#include "None.h"
 #include "Cryptography/Hashes.h"
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/Fernet.h"
+#include "Type.h"
 
 
 #include <memory>
@@ -23,33 +22,7 @@ namespace RNS {
 	class Identity {
 
 	public:
-		enum NoneConstructor {
-			NONE
-		};
-
-		//static const char CURVE[] = "Curve25519";
-		static constexpr const char* CURVE = "Curve25519";
-		// The curve used for Elliptic Curve DH key exchanges
-
-		static const uint16_t KEYSIZE     = 256*2;
-		// X25519 key size in bits. A complete key is the concatenation of a 256 bit encryption key, and a 256 bit signing key.
-
-		// Non-configurable constants
-		static const uint8_t FERNET_OVERHEAD           = RNS::Cryptography::Fernet::FERNET_OVERHEAD;
-		static const uint8_t AES128_BLOCKSIZE           = 16;          // In bytes
-		static const uint16_t HASHLENGTH                = Reticulum::HASHLENGTH;	// In bits
-		static const uint16_t SIGLENGTH                 = KEYSIZE;     // In bits
-
-		static const uint8_t NAME_HASH_LENGTH     = 80;
-		static const uint16_t TRUNCATED_HASHLENGTH = Reticulum::TRUNCATED_HASHLENGTH;	// In bits
-		// Constant specifying the truncated hash length (in bits) used by Reticulum
-		// for addressable hashes and other purposes. Non-configurable.
-
-	public:
-		Identity(NoneConstructor none) {
-			extreme("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
-		}
-		Identity(RNS::NoneConstructor none) {
+		Identity(Type::NoneConstructor none) {
 			extreme("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(const Identity &identity) : _object(identity._object) {
@@ -105,7 +78,7 @@ namespace RNS {
 		*/
 		static inline Bytes truncated_hash(const Bytes &data) {
 			//return Identity.full_hash(data)[:(Identity.TRUNCATED_HASHLENGTH//8)]
-			return full_hash(data).left(TRUNCATED_HASHLENGTH/8);
+			return full_hash(data).left(Type::Identity::TRUNCATED_HASHLENGTH/8);
 		}
 		/*
 		Get a random SHA-256 hash.
@@ -114,19 +87,19 @@ namespace RNS {
 		:returns: Truncated SHA-256 hash of random data as *bytes*
 		*/
 		static inline Bytes get_random_hash() {
-			return truncated_hash(Cryptography::random(Identity::TRUNCATED_HASHLENGTH/8));
+			return truncated_hash(Cryptography::random(Type::Identity::TRUNCATED_HASHLENGTH/8));
 		}
 
 		static bool validate_announce(const Packet &packet);
 
 		inline Bytes get_salt() { assert(_object); return _object->_hash; }
-		inline Bytes get_context() { return Bytes::NONE; }
+		inline Bytes get_context() { return {Bytes::NONE}; }
 
 		Bytes encrypt(const Bytes &plaintext);
 		Bytes decrypt(const Bytes &ciphertext_token);
 		Bytes sign(const Bytes &message);
 		bool validate(const Bytes &signature, const Bytes &message);
-		//void prove(const Packet &packet, const Destination &destination = Destination::NONE);
+		//void prove(const Packet &packet, const Destination &destination = {Destination::NONE});
 		void prove(const Packet &packet, const Destination &destination);
 
 		// getters/setters

@@ -97,7 +97,7 @@ namespace RNS { namespace Cryptography {
 		}
 */
 		static inline Ptr generate() {
-			return from_private_bytes(Bytes::NONE);
+			return from_private_bytes({Bytes::NONE});
 		}
 
 		// creates a new instance with specified seed

@@ -175,7 +175,7 @@ void setup() {
 		// 22.6% (+0.7%)
 
 		RNS::head("Creating Destination instance...", RNS::LOG_EXTREME);
-		RNS::Destination destination(identity, RNS::Destination::IN, RNS::Destination::SINGLE, "test", "context");
+		RNS::Destination destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "test", "context");
 		// 23.0% (+0.4%)
 
 /*
@@ -197,7 +197,7 @@ void setup() {
 		}
 */
 
-		destination.set_proof_strategy(RNS::Destination::PROVE_ALL);
+		destination.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
 		//zRNS::head("Registering announce handler with Transport...", RNS::LOG_EXTREME);
 		//zannounce_handler = ExampleAnnounceHandler(
@@ -213,7 +213,7 @@ void setup() {
 		destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// 23.9% (+0.8%)
 
-/*
+/**/
 		// test data send packet
 		RNS::head("Creating send packet...", RNS::LOG_EXTREME);
 		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
@@ -227,13 +227,13 @@ void setup() {
 		destination.set_packet_callback(onPacket);
 
 		RNS::head("Creating recv packet...", RNS::LOG_EXTREME);
-		RNS::Packet recv_packet(RNS::Destination::NONE, send_packet.raw());
+		RNS::Packet recv_packet({RNS::Type::NONE}, send_packet.raw());
 		recv_packet.unpack();
 		RNS::extreme("Test recv_packet: " + recv_packet.debugString());
 
 		RNS::head("Spoofing recv packet to destination...", RNS::LOG_EXTREME);
 		destination.receive(recv_packet);
-*/
+/**/
 
 	}
 	catch (std::exception& e) {
