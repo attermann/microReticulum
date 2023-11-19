@@ -16,7 +16,7 @@ Identity::Identity(bool create_keys) : _object(new Object()) {
 	if (create_keys) {
 		createKeys();
 	}
-	extreme("Identity object created, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_object.get()));
+	extreme("Identity object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 
@@ -48,6 +48,81 @@ void Identity::createKeys() {
 	verbose("Identity keys created for " + _object->_hash.toHex());
 }
 
+
+/*static*/ bool Identity::validate_announce(const Packet &packet) {
+/*
+	try:
+		if packet.packet_type == RNS.Packet.ANNOUNCE:
+			destination_hash = packet.destination_hash
+			public_key = packet.data[:Identity.KEYSIZE//8]
+			name_hash = packet.data[Identity.KEYSIZE//8:Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8]
+			random_hash = packet.data[Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8:Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10]
+			signature = packet.data[Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10:Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8]
+			app_data = b""
+			if len(packet.data) > Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8:
+				app_data = packet.data[Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8:]
+
+			signed_data = destination_hash+public_key+name_hash+random_hash+app_data
+
+			if not len(packet.data) > Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8:
+				app_data = None
+
+			announced_identity = Identity(create_keys=False)
+			announced_identity.load_public_key(public_key)
+
+			if announced_identity.pub != None and announced_identity.validate(signature, signed_data):
+				hash_material = name_hash+announced_identity.hash
+				expected_hash = RNS.Identity.full_hash(hash_material)[:RNS.Reticulum.TRUNCATED_HASHLENGTH//8]
+
+				if destination_hash == expected_hash:
+					# Check if we already have a public key for this destination
+					# and make sure the public key is not different.
+					if destination_hash in Identity.known_destinations:
+						if public_key != Identity.known_destinations[destination_hash][2]:
+							# In reality, this should never occur, but in the odd case
+							# that someone manages a hash collision, we reject the announce.
+							RNS.log("Received announce with valid signature and destination hash, but announced public key does not match already known public key.", RNS.LOG_CRITICAL)
+							RNS.log("This may indicate an attempt to modify network paths, or a random hash collision. The announce was rejected.", RNS.LOG_CRITICAL)
+							return False
+
+					RNS.Identity.remember(packet.get_hash(), destination_hash, public_key, app_data)
+					del announced_identity
+
+					if packet.rssi != None or packet.snr != None:
+						signal_str = " ["
+						if packet.rssi != None:
+							signal_str += "RSSI "+str(packet.rssi)+"dBm"
+							if packet.snr != None:
+								signal_str += ", "
+						if packet.snr != None:
+							signal_str += "SNR "+str(packet.snr)+"dB"
+						signal_str += "]"
+					else:
+						signal_str = ""
+
+					if hasattr(packet, "transport_id") and packet.transport_id != None:
+						RNS.log("Valid announce for "+RNS.prettyhexrep(destination_hash)+" "+str(packet.hops)+" hops away, received via "+RNS.prettyhexrep(packet.transport_id)+" on "+str(packet.receiving_interface)+signal_str, RNS.LOG_EXTREME)
+					else:
+						RNS.log("Valid announce for "+RNS.prettyhexrep(destination_hash)+" "+str(packet.hops)+" hops away, received on "+str(packet.receiving_interface)+signal_str, RNS.LOG_EXTREME)
+
+					return True
+
+				else:
+					RNS.log("Received invalid announce for "+RNS.prettyhexrep(destination_hash)+": Destination mismatch.", RNS.LOG_DEBUG)
+					return False
+
+			else:
+				RNS.log("Received invalid announce for "+RNS.prettyhexrep(destination_hash)+": Invalid signature.", RNS.LOG_DEBUG)
+				del announced_identity
+				return False
+	
+	except Exception as e:
+		RNS.log("Error occurred while validating announce. The contained exception was: "+str(e), RNS.LOG_ERROR)
+		return False
+*/
+	// MOCK
+	return true;
+}
 
 /*
 Encrypts information for the identity.

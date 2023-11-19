@@ -5,6 +5,7 @@
 //#include "Destination.h"
 #include "Log.h"
 #include "Bytes.h"
+#include "None.h"
 #include "Cryptography/Hashes.h"
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
@@ -46,23 +47,29 @@ namespace RNS {
 
 	public:
 		Identity(NoneConstructor none) {
-			extreme("Identity NONE object created, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_object.get()));
+			extreme("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+		}
+		Identity(RNS::NoneConstructor none) {
+			extreme("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(const Identity &identity) : _object(identity._object) {
-			extreme("Identity object copy created, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_object.get()));
+			extreme("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(bool create_keys = true);
-		~Identity() {
-			extreme("Identity object destroyed, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_object.get()));
+		virtual ~Identity() {
+			extreme("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Identity& operator = (const Identity &identity) {
 			_object = identity._object;
-			extreme("Identity object copy created by assignment, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((uint32_t)_object.get()));
+			extreme("Identity object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
 			return _object.get() != nullptr;
+		}
+		inline bool operator < (const Identity &identity) const {
+			return _object.get() < identity._object.get();
 		}
 
 	public:
@@ -110,6 +117,8 @@ namespace RNS {
 			return truncated_hash(Cryptography::random(Identity::TRUNCATED_HASHLENGTH/8));
 		}
 
+		static bool validate_announce(const Packet &packet);
+
 		inline Bytes get_salt() { assert(_object); return _object->_hash; }
 		inline Bytes get_context() { return Bytes::NONE; }
 
@@ -133,8 +142,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object() { extreme("Identity::Data object created, this: " + std::to_string((ulong)this)); }
-			~Object() { extreme("Identity::Data object destroyed, this: " + std::to_string((ulong)this)); }
+			Object() { extreme("Identity::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { extreme("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 
 			RNS::Cryptography::X25519PrivateKey::Ptr _prv;

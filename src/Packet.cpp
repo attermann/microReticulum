@@ -11,7 +11,7 @@ using namespace RNS;
 Packet::Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Transport::types transport_type /*= Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes &transport_id /*= Bytes::NONE*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
 
 	if (_object->_destination) {
-		extreme("Creating packet with detination...");
+		extreme("Creating packet with destination...");
 		// CBA TODO handle NONE
 		if (transport_type == -1) {
 			transport_type = Transport::BROADCAST;
@@ -32,7 +32,7 @@ Packet::Packet(const Destination &destination, const Interface &attached_interfa
 		_object->_create_receipt = create_receipt;
 	}
 	else {
-		extreme("Creating packet without detination...");
+		extreme("Creating packet without destination...");
 		_object->_raw = data;
 		_object->_packed = true;
 		_object->_fromPacked = true;
@@ -399,8 +399,8 @@ bool Packet::send() {
 	}
 
 	if (RNS::Transport::outbound(*this)) {
-		//zreturn self.receipt
 		debug("Packet::send: successfully sent packet!!!");
+		//zreturn self.receipt
 		// MOCK
 		return true;
 	}
@@ -428,8 +428,8 @@ bool Packet::resend() {
 	pack();
 
 	if (RNS::Transport::outbound(*this)) {
-		//zreturn self.receipt
 		debug("Packet::resend: successfully sent packet!!!");
+		//zreturn self.receipt
 		// MOCK
 		return true;
 	}
@@ -441,24 +441,41 @@ bool Packet::resend() {
 	}
 }
 
+void Packet::prove(const Destination &destination /*= {Destination::NONE}*/) {
+/*
+	assert(_object);
+	if (_object->_fromPacked && _object->_destination) {
+		if (_object->_destination.identity() && _object->_destination.identity().prv()) {
+			_object->_destination.identity().prove(*this, _object->_destination);
+		}
+	}
+	else if (_object->_fromPacked && _object->_link) {
+		_object->_link.prove_packet(*this);
+	}
+	else {
+		error("Could not prove packet associated with neither a destination nor a link");
+	}
+*/
+}
+
 void Packet::update_hash() {
 	assert(_object);
 	_object->_packet_hash = get_hash();
 }
 
-Bytes Packet::get_hash() {
+const Bytes Packet::get_hash() const {
 	assert(_object);
 	Bytes hashable_part = get_hashable_part();
 	return Identity::full_hash(hashable_part);
 }
 
-Bytes Packet::getTruncatedHash() {
+const Bytes Packet::getTruncatedHash() const {
 	assert(_object);
 	Bytes hashable_part = get_hashable_part();
 	return Identity::truncated_hash(hashable_part);
 }
 
-Bytes Packet::get_hashable_part() {
+const Bytes Packet::get_hashable_part() const {
 	assert(_object);
 	Bytes hashable_part;
 	hashable_part << (uint8_t)(_object->_raw.data()[0] & 0b00001111);
@@ -480,7 +497,7 @@ Bytes Packet::get_hashable_part() {
 //}
 
 
-std::string Packet::debugString() {
+std::string Packet::debugString() const {
 	if (_object->_packed) {
 		//unpack();
 	}
@@ -495,15 +512,16 @@ std::string Packet::debugString() {
 	dump += "transport:    " + _object->_transport_id.toHex() + "\n";
 	dump += "destination:  " + _object->_destination_hash.toHex() + "\n";
 	dump += "context_type: " + std::to_string(_object->_header_type) + "\n";
-	dump += "data:         " + _object->_data.toHex() + "\n";
-	dump += "  length:           " + std::to_string(_object->_data.size()) + "\n";
 	dump += "raw:          " + _object->_raw.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_object->_raw.size()) + "\n";
+	dump += "data:         " + _object->_data.toHex() + "\n";
+	dump += "  length:           " + std::to_string(_object->_data.size()) + "\n";
 	if (_object->_encrypted && _object->_raw.size() > 0) {
 		size_t header_len = Reticulum::HEADER_MINSIZE;
 		if (_object->_header_type == HEADER_2) {
 			header_len = Reticulum::HEADER_MAXSIZE;
 		}
+		dump += "encrypted:\n";
 		dump += "  header:           " + _object->_raw.left(header_len).toHex() + "\n";
 		dump += "  key:              " + _object->_raw.mid(header_len, Identity::KEYSIZE/8/2).toHex() + "\n";
 		Bytes ciphertext(_object->_raw.mid(header_len+Identity::KEYSIZE/8/2));
@@ -516,4 +534,24 @@ std::string Packet::debugString() {
 	}
 	dump += "--------------------\n";
 	return dump;
+}
+
+void PacketReceipt::check_timeout() {
+	assert(_object);
+	if (_object->_status == SENT && is_timed_out()) {
+		if (_object->_timeout == -1) {
+			_object->_status = CULLED;
+		}
+		else {
+			_object->_status = FAILED;
+		}
+
+		_object->_concluded_at = Utilities::OS::time();
+
+		if (_object->_callbacks._timeout) {
+			//zthread = threading.Thread(target=self.callbacks.timeout, args=(self,))
+			//zthread.daemon = True
+			//zthread.start();
+		}
+	}
 }

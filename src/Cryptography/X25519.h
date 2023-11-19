@@ -55,8 +55,8 @@ namespace RNS { namespace Cryptography {
 	class X25519PrivateKey {
 
 	public:
-		const float MIN_EXEC_TIME = 0.002;
-		const float MAX_EXEC_TIME = 0.5;
+		const float MIN_EXEC_TIME = 2;		// in milliseconds
+		const float MAX_EXEC_TIME = 500;	// in milliseconds
 		const uint8_t DELAY_WINDOW = 10;
 
 		//zT_CLEAR = None
@@ -134,11 +134,11 @@ namespace RNS { namespace Cryptography {
 			if isinstance(peer_public_key, bytes):
 				peer_public_key = X25519PublicKey.from_public_bytes(peer_public_key)
 
-			start = time.time()
+			start = OS::time()
 			
 			shared = _pack_number(_raw_curve25519(peer_public_key.x, _a))
 			
-			end = time.time()
+			end = OS::time()
 			duration = end-start
 
 			if X25519PrivateKey.T_CLEAR == None:
@@ -158,7 +158,7 @@ namespace RNS { namespace Cryptography {
 					target = start+X25519PrivateKey.MIN_EXEC_TIME
 
 				try:
-					time.sleep(target-time.time())
+					OS::sleep(target-OS::time())
 				except Exception as e:
 					pass
 

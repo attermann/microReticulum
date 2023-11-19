@@ -37,7 +37,7 @@ LogLevel RNS::loglevel() {
 	return _level;
 }
 
-void RNS::doLog(const char* msg, LogLevel level) {
+void RNS::doLog(const char *msg, LogLevel level) {
 	if (level > _level) {
 		return;
 	}
@@ -49,4 +49,16 @@ void RNS::doLog(const char* msg, LogLevel level) {
 #else
 	printf("%s: %s\n", getLevelName(level), msg);
 #endif
+}
+
+void RNS::head(const char *msg, LogLevel level) {
+	if (level > _level) {
+		return;
+	}
+#ifndef NATIVE
+	Serial.println("");
+#else
+	printf("\n");
+#endif
+	doLog(msg, level);
 }

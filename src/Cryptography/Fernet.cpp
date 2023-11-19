@@ -21,28 +21,6 @@ Fernet::Fernet(const Bytes &key) {
 		throw std::invalid_argument("Fernet key must be 32 bytes, not " + std::to_string(key.size()));
 	}
 
-	// Python array indexing
-	// [8:16]
-	//   pos 8 to pos 16
-	//   mid(8, 8)
-	// [:16]
-	//   start to pos 16 (same as first 16)
-	//   left(16)
-	// [16:]
-	//   pos 16 to end
-	//   mid(16)
-	// [-16:]
-	//   last 16
-	//   right(16)
-	// [:-16]
-	//   all except the last 16
-	//   left(size()-16)
-	//   mid(0, size()-16)
-	// [-1]
-	//   last element
-	// [-2]
-	//   seocnd to last element
-
 	//self._signing_key = key[:16]
 	_signing_key = key.left(16);
 	//self._encryption_key = key[16:]

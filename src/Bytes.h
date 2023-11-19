@@ -29,30 +29,30 @@ namespace RNS {
 
 	public:
 		Bytes() {
-			//extreme("Bytes object created from default, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+			//extreme("Bytes object created from default, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(NoneConstructor none) {
-			//extreme("Bytes object created from NONE, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+			//extreme("Bytes object created from NONE, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const Bytes &bytes) {
 			//extreme("Bytes is using shared data");
 			assign(bytes);
-			//extreme("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+			//extreme("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const uint8_t *chunk, size_t size) {
 			assign(chunk, size);
-			//extreme(std::string("Bytes object created from chunk \"") + toString() + "\", this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+			//extreme(std::string("Bytes object created from chunk \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const char *string) {
 			assign(string);
-			//extreme(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+			//extreme(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const std::string &string) {
 			assign(string);
-			//extreme(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+			//extreme(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
-		~Bytes() {
-			//extreme(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((ulong)this) + ", data: " + std::to_string((ulong)_data.get()));
+		virtual ~Bytes() {
+			//extreme(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 
 		inline Bytes& operator = (const Bytes &bytes) {
@@ -205,6 +205,28 @@ namespace RNS {
 		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
 		inline Bytes right(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data() + (size() - len), len}; }
+
+		// Python array indexing
+		// [8:16]
+		//   pos 8 to pos 16
+		//   mid(8, 8)
+		// [:16]
+		//   start to pos 16 (same as first 16)
+		//   left(16)
+		// [16:]
+		//   pos 16 to end
+		//   mid(16)
+		// [-16:]
+		//   last 16
+		//   right(16)
+		// [:-16]
+		//   all except the last 16
+		//   left(size()-16)
+		//   mid(0, size()-16)
+		// [-1]
+		//   last element
+		// [-2]
+		//   second to last element
 
 	private:
 		SharedData _data;

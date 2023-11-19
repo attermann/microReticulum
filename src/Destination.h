@@ -1,15 +1,16 @@
 #pragma once
 
 #include "Reticulum.h"
+#include "Link.h"
 #include "Identity.h"
 #include "Bytes.h"
+#include "None.h"
 
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 #include <map>
-#include <stdexcept>
 #include <stdint.h>
 
 namespace RNS {
@@ -17,6 +18,7 @@ namespace RNS {
 	class Interface;
 	class Packet;
 	class Link;
+	class Identity;
 
     /**
      * @brief A class used to describe endpoints in a Reticulum Network. Destination
@@ -40,7 +42,7 @@ namespace RNS {
 			using link_established = void(*)(const Link &link);
 			//using packet = void(*)(uint8_t *data, uint16_t data_len, Packet *packet);
 			using packet = void(*)(const Bytes &data, const Packet &packet);
-			using proof_requested = void(*)(const Packet &packet);
+			using proof_requested = bool(*)(const Packet &packet);
 		public:
 			link_established _link_established = nullptr;
 			packet _packet = nullptr;
@@ -49,8 +51,8 @@ namespace RNS {
 		};
 
 		//typedef std::pair<time_t, std::string> Response;
-		using Response = std::pair<time_t, Bytes>;
-		//using Response = std::pair<time_t, std::vector<uint8_t>>;
+		using PathResponse = std::pair<time_t, Bytes>;
+		//using PathResponse = std::pair<time_t, std::vector<uint8_t>>;
 
 		enum NoneConstructor {
 			NONE
@@ -87,19 +89,27 @@ namespace RNS {
 		Destination(NoneConstructor none) {
 			extreme("Destination NONE object created");
 		}
+		Destination(RNS::NoneConstructor none) {
+			extreme("Destination NONE object created");
+		}
 		Destination(const Destination &destination) : _object(destination._object) {
 			extreme("Destination object copy created");
 		}
 		Destination(const Identity &identity, const directions direction, const types type, const char* app_name, const char *aspects);
-		~Destination();
+		virtual ~Destination() {
+			extreme("Destination object destroyed");
+		}
 
 		inline Destination& operator = (const Destination &destination) {
 			_object = destination._object;
-			extreme("Destination object copy created by assignment, this: " + std::to_string((ulong)this) + ", data: " + std::to_string((uint32_t)_object.get()));
+			extreme("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
 			return _object.get() != nullptr;
+		}
+		inline bool operator < (const Destination &destination) const {
+			return _object.get() < destination._object.get();
 		}
 
 	public:
@@ -172,12 +182,15 @@ namespace RNS {
 
 		// getters/setters
 		inline types type() const { assert(_object); return _object->_type; }
-		inline directions _direction() const { assert(_object); return _object->_direction; }
-		inline proof_strategies _proof_strategy() const { assert(_object); return _object->_proof_strategy; }
+		inline directions direction() const { assert(_object); return _object->_direction; }
+		inline proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
 		inline Bytes hash() const { assert(_object); return _object->_hash; }
 		inline Bytes link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
+		inline Link::status status() const { assert(_object); return _object->_status; }
+		inline const Callbacks &callbacks() const { assert(_object); return _object->_callbacks; }
+		inline const Identity &identity() const { assert(_object); return _object->_identity; }
 
 		inline std::string toString() const { assert(_object); return "{Destination:" + _object->_hash.toHex() + "}"; }
 
@@ -185,6 +198,7 @@ namespace RNS {
 		class Object {
 		public:
 			Object(const Identity &identity) : _identity(identity) {}
+			virtual ~Object() {}
 		private:
 			bool _accept_link_requests = true;
 			Callbacks _callbacks;
@@ -194,8 +208,8 @@ namespace RNS {
 			proof_strategies _proof_strategy = PROVE_NONE;
 			uint16_t _mtu = 0;
 
-			//std::vector<Response> _path_responses;
-			std::map<Bytes, Response> _path_responses;
+			//std::vector<PathResponse> _path_responses;
+			std::map<Bytes, PathResponse> _path_responses;
 			//z_links = []
 
 			Identity _identity;
@@ -214,6 +228,9 @@ namespace RNS {
 			// CBA _link_id is expected by packet but only present in Link
 			// CBA TODO determine if Link needs to inherit from Destination or vice-versa
 			Bytes _link_id;
+
+			Link::status _status;
+
 		friend class Destination;
 		};
 		std::shared_ptr<Object> _object;

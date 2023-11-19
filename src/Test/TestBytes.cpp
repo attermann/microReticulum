@@ -1,4 +1,4 @@
-#include <unity.h>
+//#include <unity.h>
 
 #include "Bytes.h"
 #include "Log.h"
@@ -209,9 +209,9 @@ void testCowBytes() {
 	assert(memcmp(bytes3.data(), "1", bytes3.size()) == 0);
 	assert(bytes3.data() == bytes2.data());
 
-	RNS::extreme("pre bytes1 ptr: " + std::to_string((uint32_t)bytes1.data()) + " data: " + bytes1.toString());
-	RNS::extreme("pre bytes2 ptr: " + std::to_string((uint32_t)bytes2.data()) + " data: " + bytes2.toString());
-	RNS::extreme("pre bytes3 ptr: " + std::to_string((uint32_t)bytes3.data()) + " data: " + bytes3.toString());
+	RNS::extreme("pre bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
+	RNS::extreme("pre bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
+	RNS::extreme("pre bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
 
 	//bytes1.append("mississippi");
 	//assert(bytes1.size() == 12);
@@ -228,9 +228,9 @@ void testCowBytes() {
 	assert(memcmp(bytes3.data(), "mississippi", bytes3.size()) == 0);
 	assert(bytes3.data() != bytes2.data());
 
-	RNS::extreme("post bytes1 ptr: " + std::to_string((uint32_t)bytes1.data()) + " data: " + bytes1.toString());
-	RNS::extreme("post bytes2 ptr: " + std::to_string((uint32_t)bytes2.data()) + " data: " + bytes2.toString());
-	RNS::extreme("post bytes3 ptr: " + std::to_string((uint32_t)bytes3.data()) + " data: " + bytes3.toString());
+	RNS::extreme("post bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
+	RNS::extreme("post bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
+	RNS::extreme("post bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
 }
 
 void testBytesConversion() {
@@ -331,13 +331,40 @@ void testMap()
 }
 
 /*
-int main(void)
-{
+void setUp(void) {
+	// set stuff up here
+}
+
+void tearDown(void) {
+	// clean stuff up here
+}
+
+int runUnityTests(void) {
 	UNITY_BEGIN();
 	RUN_TEST(testBytes);
 	RUN_TEST(testCowBytes);
 	RUN_TEST(testBytesConversion);
 	RUN_TEST(testMap);
 	return UNITY_END();
+}
+
+// For native dev-platform or for some embedded frameworks
+int main(void) {
+	return runUnityTests();
+}
+
+// For Arduino framework
+void setup() {
+	// Wait ~2 seconds before the Unity test runner
+	// establishes connection with a board Serial interface
+	delay(2000);
+
+	runUnityTests();
+}
+void loop() {}
+
+// For ESP-IDF framework
+void app_main() {
+	runUnityTests();
 }
 */

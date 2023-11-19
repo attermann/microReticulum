@@ -54,10 +54,6 @@ Destination::Destination(const Identity &identity, const directions direction, c
 	extreme("Destination object created");
 }
 
-Destination::~Destination() {
-    extreme("Destination object destroyed");
-}
-
 /*
 :returns: A destination name in adressable hash form, for an app_name and a number of aspects.
 */
@@ -124,7 +120,7 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 		// vector
 		//Response &entry = *it;
 		// map
-		Response &entry = (*it).second;
+		PathResponse &entry = (*it).second;
 		if (now > (entry.first + Destination::PR_TAG_WINDOW)) {
 			it = _object->_path_responses.erase(it);
 		}
@@ -218,6 +214,7 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	Packet announce_packet(*this, announce_data, Packet::ANNOUNCE, announce_context, Transport::BROADCAST, Packet::HEADER_1, nullptr, attached_interface);
 
 	if (send) {
+		debug("Destination::announce: sending announce packet...");
 		announce_packet.send();
 		return Packet::NONE;
 	}
