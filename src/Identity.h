@@ -1,14 +1,12 @@
 #pragma once
 
-#include "Reticulum.h"
-//#include "Destination.h"
 #include "Log.h"
 #include "Bytes.h"
+#include "Type.h"
 #include "Cryptography/Hashes.h"
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/Fernet.h"
-#include "Type.h"
 
 
 #include <memory>
@@ -99,8 +97,10 @@ namespace RNS {
 		Bytes decrypt(const Bytes &ciphertext_token);
 		Bytes sign(const Bytes &message);
 		bool validate(const Bytes &signature, const Bytes &message);
-		//void prove(const Packet &packet, const Destination &destination = {Destination::NONE});
+		// CBA following default for reference value requires inclusiion of header
+		//void prove(const Packet &packet, const Destination &destination = {Type::NONE});
 		void prove(const Packet &packet, const Destination &destination);
+		void prove(const Packet &packet);
 
 		// getters/setters
 		inline Bytes encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }

@@ -1,15 +1,13 @@
 #pragma once
 
-#include "Reticulum.h"
-#include "Identity.h"
-// CBA TODO resolve circular dependency with following header file
-//#include "Packet.h"
 #include "Bytes.h"
 #include "Type.h"
 
 #include <memory>
 
 namespace RNS {
+
+	class Packet;
 
 	class Link {
 

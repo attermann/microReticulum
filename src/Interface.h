@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Log.h"
-#include "../Bytes.h"
-#include "../Type.h"
+#include "Log.h"
+#include "Bytes.h"
+#include "Type.h"
 
 #include <list>
 #include <memory>

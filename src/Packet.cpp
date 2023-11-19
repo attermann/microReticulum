@@ -1,5 +1,6 @@
 #include "Packet.h"
 
+#include "Transport.h"
 #include "Identity.h"
 #include "Log.h"
 

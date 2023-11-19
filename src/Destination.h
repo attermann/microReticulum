@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Reticulum.h"
-#include "Link.h"
+//#include "Reticulum.h"
+//#include "Link.h"
+//#include "Interface.h"
 #include "Identity.h"
 #include "Bytes.h"
 #include "Type.h"
@@ -16,9 +17,8 @@
 namespace RNS {
 
 	class Interface;
-	class Packet;
 	class Link;
-	class Identity;
+	class Packet;
 
     /**
      * @brief A class used to describe endpoints in a Reticulum Network. Destination
@@ -83,7 +83,9 @@ namespace RNS {
 		static std::string expand_name(const Identity &identity, const char *app_name, const char *aspects);
 
 	public:
-		Packet announce(const Bytes &app_data = {}, bool path_response = false, Interface *attached_interface = nullptr, const Bytes &tag = {}, bool send = true);
+		//Packet announce(const Bytes &app_data = {}, bool path_response = false, const Interface &attached_interface = {Type::NONE}, const Bytes &tag = {}, bool send = true);
+		Packet announce(const Bytes &app_data, bool path_response, const Interface &attached_interface, const Bytes &tag = {}, bool send = true);
+		Packet announce(const Bytes &app_data = {}, bool path_response = false);
 
 		/*
 		Set or query whether the destination accepts incoming link requests.

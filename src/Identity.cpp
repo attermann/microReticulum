@@ -264,7 +264,7 @@ bool Identity::validate(const Bytes &signature, const Bytes &message) {
 	}
 }
 
-void Identity::prove(const Packet &packet, const Destination &destination /*= {Destination::NONE}*/) {
+void Identity::prove(const Packet &packet, const Destination &destination /*= {Type::NONE}*/) {
 	assert(_object);
 	Bytes signature(sign(packet.packet_hash()));
 	Bytes proof_data;
@@ -275,10 +275,14 @@ void Identity::prove(const Packet &packet, const Destination &destination /*= {D
 		proof_data = packet.packet_hash() + signature;
 	}
 	
-	//zif (!destination) {
-	//z	destination = packet.generate_proof_destination();
-	//z}
+	//z if (!destination) {
+	//z		destination = packet.generate_proof_destination();
+	//z }
 
 	Packet proof(destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
 	proof.send();
+}
+
+void Identity::prove(const Packet &packet) {
+	prove(packet, {Type::NONE});
 }

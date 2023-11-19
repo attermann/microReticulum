@@ -4,8 +4,8 @@
 #include "Destination.h"
 #include "Identity.h"
 #include "Packet.h"
+#include "Interface.h"
 #include "Log.h"
-#include "Interfaces/Interface.h"
 #include "Cryptography/Random.h"
 #include "Utilities/OS.h"
 
@@ -2354,7 +2354,8 @@ will announce it.
 :param destination_hash: A destination hash as *bytes*.
 :param on_interface: If specified, the path request will only be sent on this interface. In normal use, Reticulum handles this automatically, and this parameter should not be used.
 */
-/*static*/ void Transport::request_path(const Bytes &destination_hash, const Interface &on_interface /*= {Type::NONE}*/, const Bytes &tag /*= {}*/, bool recursive /*= false*/) {
+///*static*/ void Transport::request_path(const Bytes &destination_hash, const Interface &on_interface /*= {Type::NONE}*/, const Bytes &tag /*= {}*/, bool recursive /*= false*/) {
+/*static*/ void Transport::request_path(const Bytes &destination_hash, const Interface &on_interface, const Bytes &tag /*= {}*/, bool recursive /*= false*/) {
 /*
 	if tag == None:
 		request_tag = RNS.Identity.get_random_hash()
@@ -2396,6 +2397,10 @@ will announce it.
 	packet.send()
 	Transport.path_requests[destination_hash] = time.time()
 */
+}
+
+/*static*/ void Transport::request_path(const Bytes &destination_hash) {
+	return request_path(destination_hash, {Type::NONE});
 }
 
 /*static*/ void Transport::path_request_handler(const Bytes &data, const Packet &packet) {

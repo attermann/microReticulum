@@ -173,6 +173,14 @@ void testBytes() {
 		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
 	}
 
+	// test creating bytes from default
+	{
+		RNS::Bytes bytes;
+		assert(!bytes);
+		assert(bytes.size() == 0);
+		assert(bytes.data() == nullptr);
+	}
+
 	// test creating bytes from nullptr
 	{
 		RNS::Bytes bytes = nullptr;
@@ -184,6 +192,14 @@ void testBytes() {
 	// test creating bytes from NONE
 	{
 		RNS::Bytes bytes({RNS::Bytes::NONE});
+		assert(!bytes);
+		assert(bytes.size() == 0);
+		assert(bytes.data() == nullptr);
+	}
+
+	// test creating bytes from empty
+	{
+		RNS::Bytes bytes = {};
 		assert(!bytes);
 		assert(bytes.size() == 0);
 		assert(bytes.data() == nullptr);

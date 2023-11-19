@@ -1,13 +1,10 @@
 #pragma once
 
-#include "Transport.h"
-#include "Reticulum.h"
-//#include "Link.h"
-#include "Identity.h"
 #include "Destination.h"
-#include "Interfaces/Interface.h"
-#include "Utilities/OS.h"
+#include "Link.h"
+#include "Interface.h"
 #include "Type.h"
+#include "Utilities/OS.h"
 
 #include <memory>
 #include <stdint.h>
@@ -18,7 +15,6 @@ namespace RNS {
 	class ProofDestination;
 	class PacketReceipt;
 	class Packet;
-
 
 	class ProofDestination {
 	};

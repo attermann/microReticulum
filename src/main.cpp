@@ -6,8 +6,10 @@
 #include "Identity.h"
 #include "Destination.h"
 #include "Packet.h"
-#include "Interfaces/Interface.h"
+#include "Transport.h"
+#include "Interface.h"
 #include "Bytes.h"
+#include "Type.h"
 
 #ifndef NATIVE
 #include <Arduino.h>

@@ -1,13 +1,13 @@
 #include "Destination.h"
 
-#include "Log.h"
 #include "Transport.h"
+#include "Interface.h"
 #include "Packet.h"
-#include "Interfaces/Interface.h"
+#include "Log.h"
 
+#include <vector>
 #include <time.h>
 #include <string.h>
-#include <vector>
 
 using namespace RNS;
 using namespace RNS::Type::Destination;
@@ -103,7 +103,8 @@ relevant interfaces. Application specific data can be added to the announce.
 :param app_data: *bytes* containing the app_data.
 :param path_response: Internal flag used by :ref:`RNS.Transport<api-transport>`. Ignore.
 */
-Packet Destination::announce(const Bytes &app_data, bool path_response, Interface *attached_interface, const Bytes &tag, bool send) {
+//Packet Destination::announce(const Bytes &app_data /*= {}*/, bool path_response /*= false*/, const Interface &attached_interface /*= {Type::NONE}*/, const Bytes &tag /*= {}*/, bool send /*= true*/) {
+Packet Destination::announce(const Bytes &app_data, bool path_response, const Interface &attached_interface, const Bytes &tag /*= {}*/, bool send /*= true*/) {
 	assert(_object);
 	debug("Destination::announce: announcing destination...");
 
@@ -212,7 +213,9 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	}
 
 	debug("Destination::announce: creating announce packet...");
-	Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
+    //p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
+	//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
+	Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
 
 	if (send) {
 		debug("Destination::announce: sending announce packet...");
@@ -222,6 +225,10 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, Interfac
 	else {
 		return announce_packet;
 	}
+}
+
+Packet Destination::announce(const Bytes &app_data /*= {}*/, bool path_response /*= false*/) {
+	return announce(app_data, path_response, {Type::NONE});
 }
 
 

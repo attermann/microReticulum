@@ -1,6 +1,6 @@
 #include "Interface.h"
 
-#include "../Transport.h"
+#include "Transport.h"
 
 using namespace RNS;
 using namespace RNS::Type::Interface;
