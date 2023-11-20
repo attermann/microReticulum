@@ -39,10 +39,10 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			using link_established = void(*)(const Link &link);
+			using link_established = void(*)(const Link& link);
 			//using packet = void(*)(uint8_t *data, uint16_t data_len, Packet *packet);
-			using packet = void(*)(const Bytes &data, const Packet &packet);
-			using proof_requested = bool(*)(const Packet &packet);
+			using packet = void(*)(const Bytes& data, const Packet& packet);
+			using proof_requested = bool(*)(const Packet& packet);
 		public:
 			link_established _link_established = nullptr;
 			packet _packet = nullptr;
@@ -58,15 +58,15 @@ namespace RNS {
 		Destination(Type::NoneConstructor none) {
 			extreme("Destination NONE object created");
 		}
-		Destination(const Destination &destination) : _object(destination._object) {
+		Destination(const Destination& destination) : _object(destination._object) {
 			extreme("Destination object copy created");
 		}
-		Destination(const Identity &identity, const Type::Destination::directions direction, const Type::Destination::types type, const char* app_name, const char *aspects);
+		Destination(const Identity& identity, const Type::Destination::directions direction, const Type::Destination::types type, const char* app_name, const char *aspects);
 		virtual ~Destination() {
 			extreme("Destination object destroyed");
 		}
 
-		inline Destination& operator = (const Destination &destination) {
+		inline Destination& operator = (const Destination& destination) {
 			_object = destination._object;
 			extreme("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
@@ -74,18 +74,18 @@ namespace RNS {
 		inline operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const Destination &destination) const {
+		inline bool operator < (const Destination& destination) const {
 			return _object.get() < destination._object.get();
 		}
 
 	public:
-		static Bytes hash(const Identity &identity, const char *app_name, const char *aspects);
-		static std::string expand_name(const Identity &identity, const char *app_name, const char *aspects);
+		static Bytes hash(const Identity& identity, const char *app_name, const char *aspects);
+		static std::string expand_name(const Identity& identity, const char *app_name, const char *aspects);
 
 	public:
-		//Packet announce(const Bytes &app_data = {}, bool path_response = false, const Interface &attached_interface = {Type::NONE}, const Bytes &tag = {}, bool send = true);
-		Packet announce(const Bytes &app_data, bool path_response, const Interface &attached_interface, const Bytes &tag = {}, bool send = true);
-		Packet announce(const Bytes &app_data = {}, bool path_response = false);
+		//Packet announce(const Bytes& app_data = {}, bool path_response = false, const Interface& attached_interface = {Type::NONE}, const Bytes& tag = {}, bool send = true);
+		Packet announce(const Bytes& app_data, bool path_response, const Interface& attached_interface, const Bytes& tag = {}, bool send = true);
+		Packet announce(const Bytes& app_data = {}, bool path_response = false);
 
 		/*
 		Set or query whether the destination accepts incoming link requests.
@@ -141,31 +141,31 @@ namespace RNS {
 			_object->_proof_strategy = proof_strategy;
 		}
 
-		void receive(const Packet &packet);
-		void incoming_link_request(const Bytes &data, const Packet &packet);
+		void receive(const Packet& packet);
+		void incoming_link_request(const Bytes& data, const Packet& packet);
 
-		const Bytes encrypt(const Bytes &data);
-		const Bytes decrypt(const Bytes &data);
-		const Bytes sign(const Bytes &message);
+		const Bytes encrypt(const Bytes& data);
+		const Bytes decrypt(const Bytes& data);
+		const Bytes sign(const Bytes& message);
 
 		// getters/setters
 		inline Type::Destination::types type() const { assert(_object); return _object->_type; }
 		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
 		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
-		inline const Bytes &hash() const { assert(_object); return _object->_hash; }
-		inline const Bytes &link_id() const { assert(_object); return _object->_link_id; }
+		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
+		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
 		inline Type::Link::status status() const { assert(_object); return _object->_status; }
-		inline const Callbacks &callbacks() const { assert(_object); return _object->_callbacks; }
-		inline const Identity &identity() const { assert(_object); return _object->_identity; }
+		inline const Callbacks& callbacks() const { assert(_object); return _object->_callbacks; }
+		inline const Identity& identity() const { assert(_object); return _object->_identity; }
 
 		inline std::string toString() const { assert(_object); return "{Destination:" + _object->_hash.toHex() + "}"; }
 
 	private:
 		class Object {
 		public:
-			Object(const Identity &identity) : _identity(identity) {}
+			Object(const Identity& identity) : _identity(identity) {}
 			virtual ~Object() {}
 		private:
 			bool _accept_link_requests = true;

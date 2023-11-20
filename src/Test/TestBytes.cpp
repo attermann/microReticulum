@@ -6,15 +6,15 @@
 #include <map>
 #include <assert.h>
 
-//void testBytesDefault(const RNS::Bytes &bytes = {RNS::Bytes::NONE}) {
-void testBytesDefault(const RNS::Bytes &bytes = {}) {
+//void testBytesDefault(const RNS::Bytes& bytes = {RNS::Bytes::NONE}) {
+void testBytesDefault(const RNS::Bytes& bytes = {}) {
 	assert(!bytes);
 	assert(bytes.size() == 0);
 	assert(bytes.data() == nullptr);
 }
 
 RNS::Bytes ref("Test");
-const RNS::Bytes &testBytesReference() {
+const RNS::Bytes& testBytesReference() {
 	// NOTE: Can NOT return local instance as reference!!!
 	//RNS::Bytes ref("Test");
 	RNS::extreme("returning...");

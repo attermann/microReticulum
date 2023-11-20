@@ -50,7 +50,7 @@ void Identity::createKeys() {
 }
 
 
-/*static*/ bool Identity::validate_announce(const Packet &packet) {
+/*static*/ bool Identity::validate_announce(const Packet& packet) {
 /*
 	try:
 		if packet.packet_type == RNS.Packet.ANNOUNCE:
@@ -132,7 +132,7 @@ Encrypts information for the identity.
 :returns: Ciphertext token as *bytes*.
 :raises: *KeyError* if the instance does not hold a public key.
 */
-const Bytes Identity::encrypt(const Bytes &plaintext) {
+const Bytes Identity::encrypt(const Bytes& plaintext) {
 	assert(_object);
 	debug("Identity::encrypt: encrypting data...");
 	if (!_object->_pub) {
@@ -172,7 +172,7 @@ Decrypts information for the identity.
 :returns: Plaintext as *bytes*, or *None* if decryption fails.
 :raises: *KeyError* if the instance does not hold a private key.
 */
-const Bytes Identity::decrypt(const Bytes &ciphertext_token) {
+const Bytes Identity::decrypt(const Bytes& ciphertext_token) {
 	assert(_object);
 	debug("Identity::decrypt: decrypting data...");
 	if (!_object->_prv) {
@@ -212,7 +212,7 @@ const Bytes Identity::decrypt(const Bytes &ciphertext_token) {
 		extreme("Identity::decrypt: plaintext:  " + plaintext.toHex());
 		debug("Identity::decrypt: Fernet decrypted data of length " + std::to_string(plaintext.size()));
 	}
-	catch (std::exception &e) {
+	catch (std::exception& e) {
 		debug("Decryption by " + toString() + " failed: " + e.what());
 	}
 		
@@ -226,7 +226,7 @@ Signs information by the identity.
 :returns: Signature as *bytes*.
 :raises: *KeyError* if the instance does not hold a private key.
 */
-const Bytes Identity::sign(const Bytes &message) {
+const Bytes Identity::sign(const Bytes& message) {
 	assert(_object);
 	if (!_object->_sig_prv) {
 		throw std::runtime_error("Signing failed because identity does not hold a private key");
@@ -234,7 +234,7 @@ const Bytes Identity::sign(const Bytes &message) {
 	try {
 		return _object->_sig_prv->sign(message);
 	}
-	catch (std::exception &e) {
+	catch (std::exception& e) {
 		error("The identity " + toString() + " could not sign the requested message. The contained exception was: " + e.what());
 		throw e;
 	}
@@ -248,14 +248,14 @@ Validates the signature of a signed message.
 :returns: True if the signature is valid, otherwise False.
 :raises: *KeyError* if the instance does not hold a public key.
 */
-bool Identity::validate(const Bytes &signature, const Bytes &message) {
+bool Identity::validate(const Bytes& signature, const Bytes& message) {
 	assert(_object);
 	if (_object->_pub) {
 		try {
 			_object->_sig_pub->verify(signature, message);
 			return true;
 		}
-		catch (std::exception &e) {
+		catch (std::exception& e) {
 			return false;
 		}
 	}
@@ -264,7 +264,7 @@ bool Identity::validate(const Bytes &signature, const Bytes &message) {
 	}
 }
 
-void Identity::prove(const Packet &packet, const Destination &destination /*= {Type::NONE}*/) {
+void Identity::prove(const Packet& packet, const Destination& destination /*= {Type::NONE}*/) {
 	assert(_object);
 	Bytes signature(sign(packet.packet_hash()));
 	Bytes proof_data;
@@ -283,6 +283,6 @@ void Identity::prove(const Packet &packet, const Destination &destination /*= {T
 	proof.send();
 }
 
-void Identity::prove(const Packet &packet) {
+void Identity::prove(const Packet& packet) {
 	prove(packet, {Type::NONE});
 }

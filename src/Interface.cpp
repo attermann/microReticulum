@@ -6,7 +6,7 @@
 using namespace RNS;
 using namespace RNS::Type::Interface;
 
-/*virtual*/ inline void Interface::processIncoming(const Bytes &data) {
+/*virtual*/ inline void Interface::processIncoming(const Bytes& data) {
 	extreme("Interface::processIncoming: data: " + data.toHex());
 	assert(_object);
 	_object->_rxb += data.size();
@@ -15,7 +15,7 @@ using namespace RNS::Type::Interface;
 	Transport::inbound(data, *this);
 }
 
-/*virtual*/ inline void Interface::processOutgoing(const Bytes &data) {
+/*virtual*/ inline void Interface::processOutgoing(const Bytes& data) {
 	extreme("Interface::processOutgoing: data: " + data.toHex());
 	assert(_object);
 	_object->_txb += data.size();

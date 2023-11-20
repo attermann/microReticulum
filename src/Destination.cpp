@@ -12,7 +12,7 @@
 using namespace RNS;
 using namespace RNS::Type::Destination;
 
-Destination::Destination(const Identity &identity, const directions direction, const types type, const char* app_name, const char *aspects) : _object(new Object(identity)) {
+Destination::Destination(const Identity& identity, const directions direction, const types type, const char* app_name, const char *aspects) : _object(new Object(identity)) {
 	assert(_object);
 
 	// Check input values and build name string
@@ -58,7 +58,7 @@ Destination::Destination(const Identity &identity, const directions direction, c
 /*
 :returns: A destination name in adressable hash form, for an app_name and a number of aspects.
 */
-/*static*/ Bytes Destination::hash(const Identity &identity, const char *app_name, const char *aspects) {
+/*static*/ Bytes Destination::hash(const Identity& identity, const char *app_name, const char *aspects) {
 	//name_hash = Identity::full_hash(Destination.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	//addr_hash_material = name_hash
 	Bytes addr_hash_material = Identity::truncated_hash(expand_name({Type::NONE}, app_name, aspects));
@@ -77,7 +77,7 @@ Destination::Destination(const Identity &identity, const directions direction, c
 /*
 :returns: A string containing the full human-readable name of the destination, for an app_name and a number of aspects.
 */
-/*static*/ std::string Destination::expand_name(const Identity &identity, const char *app_name, const char *aspects) {
+/*static*/ std::string Destination::expand_name(const Identity& identity, const char *app_name, const char *aspects) {
 
 	if (strchr(app_name, '.') != nullptr) {
 		throw std::invalid_argument("Dots can't be used in app names");
@@ -103,8 +103,8 @@ relevant interfaces. Application specific data can be added to the announce.
 :param app_data: *bytes* containing the app_data.
 :param path_response: Internal flag used by :ref:`RNS.Transport<api-transport>`. Ignore.
 */
-//Packet Destination::announce(const Bytes &app_data /*= {}*/, bool path_response /*= false*/, const Interface &attached_interface /*= {Type::NONE}*/, const Bytes &tag /*= {}*/, bool send /*= true*/) {
-Packet Destination::announce(const Bytes &app_data, bool path_response, const Interface &attached_interface, const Bytes &tag /*= {}*/, bool send /*= true*/) {
+//Packet Destination::announce(const Bytes& app_data /*= {}*/, bool path_response /*= false*/, const Interface& attached_interface /*= {Type::NONE}*/, const Bytes& tag /*= {}*/, bool send /*= true*/) {
+Packet Destination::announce(const Bytes& app_data, bool path_response, const Interface& attached_interface, const Bytes& tag /*= {}*/, bool send /*= true*/) {
 	assert(_object);
 	debug("Destination::announce: announcing destination...");
 
@@ -120,9 +120,9 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, const In
     auto it = _object->_path_responses.begin();
     while (it != _object->_path_responses.end()) {
 		// vector
-		//Response &entry = *it;
+		//Response& entry = *it;
 		// map
-		PathResponse &entry = (*it).second;
+		PathResponse& entry = (*it).second;
 		if (now > (entry.first + PR_TAG_WINDOW)) {
 			it = _object->_path_responses.erase(it);
 		}
@@ -227,7 +227,7 @@ Packet Destination::announce(const Bytes &app_data, bool path_response, const In
 	}
 }
 
-Packet Destination::announce(const Bytes &app_data /*= {}*/, bool path_response /*= false*/) {
+Packet Destination::announce(const Bytes& app_data /*= {}*/, bool path_response /*= false*/) {
 	return announce(app_data, path_response, {Type::NONE});
 }
 
@@ -242,7 +242,7 @@ Registers a request handler.
 :raises: ``ValueError`` if any of the supplied arguments are invalid.
 */
 /*
-void Destination::register_request_handler(const Bytes &path, response_generator = None, request_policies allow = ALLOW_NONE, allowed_list = None) {
+void Destination::register_request_handler(const Bytes& path, response_generator = None, request_policies allow = ALLOW_NONE, allowed_list = None) {
 	if path == None or path == "":
 		raise ValueError("Invalid path specified")
 	elif not callable(response_generator):
@@ -263,7 +263,7 @@ Deregisters a request handler.
 :returns: True if the handler was deregistered, otherwise False.
 */
 /*
-bool Destination::deregister_request_handler(const Bytes &path) {
+bool Destination::deregister_request_handler(const Bytes& path) {
 	path_hash = RNS.Identity.truncated_hash(path.encode("utf-8"))
 	if path_hash in self.request_handlers:
 		self.request_handlers.pop(path_hash)
@@ -273,7 +273,7 @@ bool Destination::deregister_request_handler(const Bytes &path) {
 }
 */
 
-void Destination::receive(const Packet &packet) {
+void Destination::receive(const Packet& packet) {
 	assert(_object);
 	if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 		Bytes plaintext(packet.data());
@@ -289,7 +289,7 @@ void Destination::receive(const Packet &packet) {
 					try {
 						_object->_callbacks._packet(plaintext, packet);
 					}
-					catch (std::exception &e) {
+					catch (std::exception& e) {
 						debug("Error while executing receive callback from " + toString() + ". The contained exception was: " + e.what());
 					}
 				}
@@ -298,7 +298,7 @@ void Destination::receive(const Packet &packet) {
 	}
 }
 
-void Destination::incoming_link_request(const Bytes &data, const Packet &packet) {
+void Destination::incoming_link_request(const Bytes& data, const Packet& packet) {
 	assert(_object);
 	if (_object->_accept_link_requests) {
 		//z link = Link::validate_request(data, packet);
@@ -314,7 +314,7 @@ Encrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 :param plaintext: A *bytes-like* containing the plaintext to be encrypted.
 :raises: ``ValueError`` if destination does not hold a necessary key for encryption.
 */
-const Bytes Destination::encrypt(const Bytes &data) {
+const Bytes Destination::encrypt(const Bytes& data) {
 	assert(_object);
 	debug("Destination::encrypt: encrypting data...");
 
@@ -348,7 +348,7 @@ Decrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 :param ciphertext: *Bytes* containing the ciphertext to be decrypted.
 :raises: ``ValueError`` if destination does not hold a necessary key for decryption.
 */
-const Bytes Destination::decrypt(const Bytes &data) {
+const Bytes Destination::decrypt(const Bytes& data) {
 	assert(_object);
 	debug("Destination::decrypt: decrypting data...");
 
@@ -382,7 +382,7 @@ Signs information for ``RNS.Destination.SINGLE`` type destination.
 :param message: *Bytes* containing the message to be signed.
 :returns: A *bytes-like* containing the message signature, or *None* if the destination could not sign the message.
 */
-const Bytes Destination::sign(const Bytes &message) {
+const Bytes Destination::sign(const Bytes& message) {
 	assert(_object);
 	if (_object->_type == SINGLE && _object->_identity) {
 		return _object->_identity.sign(message);

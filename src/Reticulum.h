@@ -21,13 +21,13 @@ namespace RNS {
 		Reticulum(Type::NoneConstructor none) {
 			extreme("Reticulum NONE object created");
 		}
-		Reticulum(const Reticulum &reticulum) : _object(reticulum._object) {
+		Reticulum(const Reticulum& reticulum) : _object(reticulum._object) {
 			extreme("Reticulum object copy created");
 		}
 		Reticulum();
 		virtual ~Reticulum();
 
-		inline Reticulum& operator = (const Reticulum &reticulum) {
+		inline Reticulum& operator = (const Reticulum& reticulum) {
 			_object = reticulum._object;
 			extreme("Reticulum object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
@@ -35,7 +35,7 @@ namespace RNS {
 		inline operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const Reticulum &reticulum) const {
+		inline bool operator < (const Reticulum& reticulum) const {
 			return _object.get() < reticulum._object.get();
 		}
 

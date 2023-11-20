@@ -28,7 +28,7 @@ namespace RNS { namespace Cryptography {
 		msg: bytes or buffer, Initial input for the hash or None.
 		digest: The underlying hash algorithm to use
 		*/
-		HMAC(const Bytes &key, const Bytes &msg = {Bytes::NONE}, Digest digest = DIGEST_SHA256) {
+		HMAC(const Bytes& key, const Bytes& msg = {Bytes::NONE}, Digest digest = DIGEST_SHA256) {
 
 			if (digest == DIGEST_NONE) {
 				throw std::invalid_argument("Cannot derive key from empty input material");
@@ -56,7 +56,7 @@ namespace RNS { namespace Cryptography {
 		/*
 		Feed data from msg into this hashing object.
 		*/
-		void update(const Bytes &msg) {
+		void update(const Bytes& msg) {
 			assert(_hash);
 			_hash->update(msg.data(), msg.size());
 		}
@@ -83,7 +83,7 @@ namespace RNS { namespace Cryptography {
 		method, and can ask for the hash value at any time by calling its digest()
 		method.
 		*/
-		static inline Ptr generate(const Bytes &key, const Bytes &msg = {Bytes::NONE}, Digest digest = DIGEST_SHA256) {
+		static inline Ptr generate(const Bytes& key, const Bytes& msg = {Bytes::NONE}, Digest digest = DIGEST_SHA256) {
 			return Ptr(new HMAC(key, msg, digest));
 		}
 
@@ -99,7 +99,7 @@ namespace RNS { namespace Cryptography {
 	msg: bytes or buffer, Input message.
 	digest: The underlying hash algorithm to use.
 	*/
-	inline const Bytes digest(const Bytes &key, const Bytes &msg, HMAC::Digest digest = HMAC::DIGEST_SHA256) {
+	inline const Bytes digest(const Bytes& key, const Bytes& msg, HMAC::Digest digest = HMAC::DIGEST_SHA256) {
 		HMAC hmac(key, msg, digest);
 		hmac.update(msg);
 		return hmac.digest();

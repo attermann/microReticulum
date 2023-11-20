@@ -31,8 +31,8 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			using delivery = void(*)(const PacketReceipt &packet_receipt);
-			using timeout = void(*)(const PacketReceipt &packet_receipt);
+			using delivery = void(*)(const PacketReceipt& packet_receipt);
+			using timeout = void(*)(const PacketReceipt& packet_receipt);
 		public:
 			delivery _delivery = nullptr;
 			timeout _timeout = nullptr;
@@ -41,18 +41,18 @@ namespace RNS {
 
 	public:
 		PacketReceipt(Type::NoneConstructor none) {}
-		PacketReceipt(const PacketReceipt &packet_receipt) : _object(packet_receipt._object) {}
+		PacketReceipt(const PacketReceipt& packet_receipt) : _object(packet_receipt._object) {}
 		PacketReceipt() : _object(new Object()) {}
-		PacketReceipt(const Packet &packet) {}
+		PacketReceipt(const Packet& packet) {}
 
-		inline PacketReceipt& operator = (const PacketReceipt &packet_receipt) {
+		inline PacketReceipt& operator = (const PacketReceipt& packet_receipt) {
 			_object = packet_receipt._object;
 			return *this;
 		}
 		inline operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const PacketReceipt &packet_receipt) const {
+		inline bool operator < (const PacketReceipt& packet_receipt) const {
 			return _object.get() < packet_receipt._object.get();
 		}
 
@@ -126,14 +126,14 @@ namespace RNS {
 		Packet(Type::NoneConstructor none) {
 			extreme("Packet NONE object created");
 		}
-		Packet(const Packet &packet) : _object(packet._object) {
+		Packet(const Packet& packet) : _object(packet._object) {
 			extreme("Packet object copy created");
 		}
-		Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, Type::Packet::types packet_type = Type::Packet::DATA, Type::Packet::context_types context = Type::Packet::CONTEXT_NONE, Type::Transport::types transport_type = Type::Transport::BROADCAST, Type::Packet::header_types header_type = Type::Packet::HEADER_1, const Bytes &transport_id = {Bytes::NONE}, bool create_receipt = true);
-		Packet(const Destination &destination, const Bytes &data, Type::Packet::types packet_type = Type::Packet::DATA, Type::Packet::context_types context = Type::Packet::CONTEXT_NONE, Type::Transport::types transport_type = Type::Transport::BROADCAST, Type::Packet::header_types header_type = Type::Packet::HEADER_1, const Bytes &transport_id = {Bytes::NONE}, bool create_receipt = true) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
+		Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, Type::Packet::types packet_type = Type::Packet::DATA, Type::Packet::context_types context = Type::Packet::CONTEXT_NONE, Type::Transport::types transport_type = Type::Transport::BROADCAST, Type::Packet::header_types header_type = Type::Packet::HEADER_1, const Bytes& transport_id = {Bytes::NONE}, bool create_receipt = true);
+		Packet(const Destination& destination, const Bytes& data, Type::Packet::types packet_type = Type::Packet::DATA, Type::Packet::context_types context = Type::Packet::CONTEXT_NONE, Type::Transport::types transport_type = Type::Transport::BROADCAST, Type::Packet::header_types header_type = Type::Packet::HEADER_1, const Bytes& transport_id = {Bytes::NONE}, bool create_receipt = true) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
 		virtual ~Packet();
 
-		inline Packet& operator = (const Packet &packet) {
+		inline Packet& operator = (const Packet& packet) {
 			_object = packet._object;
 			extreme("Packet object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
@@ -141,7 +141,7 @@ namespace RNS {
 		inline operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const Packet &packet) const {
+		inline bool operator < (const Packet& packet) const {
 			return _object.get() < packet._object.get();
 		}
 
@@ -160,21 +160,21 @@ namespace RNS {
 		bool unpack();
 		bool send();
 		bool resend();
-		void prove(const Destination &destination = {Type::NONE});
+		void prove(const Destination& destination = {Type::NONE});
 		void update_hash();
 		const Bytes get_hash() const;
 		const Bytes getTruncatedHash() const;
 		const Bytes get_hashable_part() const;
-		//zProofDestination &generate_proof_destination();
+		//zProofDestination& generate_proof_destination();
 
 		// getters/setters
-		inline const Destination &destination() const { assert(_object); return _object->_destination; }
-		inline void destination(const Destination &destination) { assert(_object); _object->_destination = destination; }
-		inline const Link &link() const { assert(_object); return _object->_link; }
-		inline void link(const Link &link) { assert(_object); _object->_link = link; }
-		inline const Interface &attached_interface() const { assert(_object); return _object->_attached_interface; }
-		inline const Interface &receiving_interface() const { assert(_object); return _object->_receiving_interface; }
-		inline void receiving_interface(const Interface &receiving_interface) { assert(_object); _object->_receiving_interface = receiving_interface; }
+		inline const Destination& destination() const { assert(_object); return _object->_destination; }
+		inline void destination(const Destination& destination) { assert(_object); _object->_destination = destination; }
+		inline const Link& link() const { assert(_object); return _object->_link; }
+		inline void link(const Link& link) { assert(_object); _object->_link = link; }
+		inline const Interface& attached_interface() const { assert(_object); return _object->_attached_interface; }
+		inline const Interface& receiving_interface() const { assert(_object); return _object->_receiving_interface; }
+		inline void receiving_interface(const Interface& receiving_interface) { assert(_object); _object->_receiving_interface = receiving_interface; }
 		inline Type::Packet::header_types header_type() const { assert(_object); return _object->_header_type; }
 		inline Type::Transport::types transport_type() const { assert(_object); return _object->_transport_type; }
 		inline Type::Destination::types destination_type() const { assert(_object); return _object->_destination_type; }
@@ -185,17 +185,17 @@ namespace RNS {
 		inline time_t sent_at() const { assert(_object); return _object->_sent_at; }
 		inline void sent_at(time_t sent_at) { assert(_object); _object->_sent_at = sent_at; }
 		inline bool create_receipt() const { assert(_object); return _object->_create_receipt; }
-		inline const PacketReceipt &receipt() const { assert(_object); return _object->_receipt; }
-		inline void receipt(const PacketReceipt &receipt) { assert(_object); _object->_receipt = receipt; }
+		inline const PacketReceipt& receipt() const { assert(_object); return _object->_receipt; }
+		inline void receipt(const PacketReceipt& receipt) { assert(_object); _object->_receipt = receipt; }
 		inline uint8_t flags() const { assert(_object); return _object->_flags; }
 		inline uint8_t hops() const { assert(_object); return _object->_hops; }
 		inline void hops(uint8_t hops) { assert(_object); _object->_hops = hops; }
-		inline const Bytes &packet_hash() const { assert(_object); return _object->_packet_hash; }
-		inline const Bytes &destination_hash() const { assert(_object); return _object->_destination_hash; }
-		inline const Bytes &transport_id() const { assert(_object); return _object->_transport_id; }
-		inline void transport_id(const Bytes &transport_id) { assert(_object); _object->_transport_id = transport_id; }
-		inline const Bytes &raw() const { assert(_object); return _object->_raw; }
-		inline const Bytes &data() const { assert(_object); return _object->_data; }
+		inline const Bytes& packet_hash() const { assert(_object); return _object->_packet_hash; }
+		inline const Bytes& destination_hash() const { assert(_object); return _object->_destination_hash; }
+		inline const Bytes& transport_id() const { assert(_object); return _object->_transport_id; }
+		inline void transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; }
+		inline const Bytes& raw() const { assert(_object); return _object->_raw; }
+		inline const Bytes& data() const { assert(_object); return _object->_data; }
 
 		inline std::string toString() const { assert(_object); return "{Packet:" + _object->_packet_hash.toHex() + "}"; }
 
@@ -204,7 +204,7 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(const Destination &destination, const Interface &attached_interface) : _destination(destination), _attached_interface(attached_interface) {}
+			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) {}
 			virtual ~Object() {}
 		private:
 			Destination _destination = {Type::NONE};

@@ -16,7 +16,7 @@ namespace RNS {
 	class AnnounceEntry {
 	public:
 		AnnounceEntry() {}
-		AnnounceEntry(const Bytes &destination, uint64_t time, uint8_t hops, uint64_t emitted, const Bytes &raw) :
+		AnnounceEntry(const Bytes& destination, uint64_t time, uint8_t hops, uint64_t emitted, const Bytes& raw) :
 			_destination(destination),
 			_time(time),
 			_hops(hops),
@@ -39,7 +39,7 @@ namespace RNS {
 		Interface(Type::NoneConstructor none) {
 			extreme("Interface object NONE created");
 		}
-		Interface(const Interface &interface) : _object(interface._object) {
+		Interface(const Interface& interface) : _object(interface._object) {
 			extreme("Interface object copy created");
 		}
 		Interface() : _object(new Object()) {
@@ -52,7 +52,7 @@ namespace RNS {
 			extreme("Interface object destroyed");
 		}
 
-		inline Interface& operator = (const Interface &interface) {
+		inline Interface& operator = (const Interface& interface) {
 			_object = interface._object;
 			extreme("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
@@ -60,7 +60,7 @@ namespace RNS {
 		inline operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const Interface &interface) const {
+		inline bool operator < (const Interface& interface) const {
 			return _object.get() < interface._object.get();
 		}
 
@@ -69,10 +69,10 @@ namespace RNS {
 		void process_announce_queue();
 		inline void detach() {}
 
-	    virtual void processIncoming(const Bytes &data);
-		virtual void processOutgoing(const Bytes &data);
+	    virtual void processIncoming(const Bytes& data);
+		virtual void processOutgoing(const Bytes& data);
 
-		inline void add_announce(AnnounceEntry &entry) { assert(_object); _object->_announce_queue.push_back(entry); }
+		inline void add_announce(AnnounceEntry& entry) { assert(_object); _object->_announce_queue.push_back(entry); }
 
 		// getters/setters
 	protected:
@@ -87,13 +87,13 @@ namespace RNS {
 		inline bool FWD() const { assert(_object); return _object->_FWD; }
 		inline bool RPT() const { assert(_object); return _object->_RPT; }
 		inline std::string name() const { assert(_object); return _object->_name; }
-		inline const Bytes &ifac_identity() const { assert(_object); return _object->_ifac_identity; }
+		inline const Bytes& ifac_identity() const { assert(_object); return _object->_ifac_identity; }
 		inline Type::Interface::modes mode() const { assert(_object); return _object->_mode; }
 		inline uint32_t bitrate() const { assert(_object); return _object->_bitrate; }
 		inline uint64_t announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
 		inline void announce_allowed_at(uint64_t announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
 		inline float announce_cap() const { assert(_object); return _object->_announce_cap; }
-		inline std::list<AnnounceEntry> &announce_queue() const { assert(_object); return _object->_announce_queue; }
+		inline std::list<AnnounceEntry>& announce_queue() const { assert(_object); return _object->_announce_queue; }
 
 		virtual inline std::string toString() const { assert(_object); return "Interface[" + _object->_name + "]"; }
 
@@ -118,7 +118,7 @@ namespace RNS {
 			uint64_t _announce_allowed_at = 0;
 			float _announce_cap = 0.0;
 			std::list<AnnounceEntry> _announce_queue;
-			//Transport &_owner;
+			//Transport& _owner;
 		friend class Interface;
 		};
 		std::shared_ptr<Object> _object;

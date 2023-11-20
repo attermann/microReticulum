@@ -13,11 +13,11 @@ Link::Link() : _object(new Object()) {
 }
 
 
-void Link::set_link_id(const Packet &packet) {
+void Link::set_link_id(const Packet& packet) {
 	assert(_object);
 	_object->_link_id = packet.getTruncatedHash();
 	_object->_hash = _object->_link_id;
 }
 
-void Link::receive(const Packet &packet) {
+void Link::receive(const Packet& packet) {
 }

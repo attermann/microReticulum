@@ -46,10 +46,10 @@ public:
 	virtual ~TestInterface() {
 		name("deleted");
 	}
-	virtual void processIncoming(const RNS::Bytes &data) {
+	virtual void processIncoming(const RNS::Bytes& data) {
 		RNS::extreme("TestInterface.processIncoming: data: " + data.toHex());
 	}
-	virtual void processOutgoing(const RNS::Bytes &data) {
+	virtual void processOutgoing(const RNS::Bytes& data) {
 		RNS::extreme("TestInterface.processOutgoing: data: " + data.toHex());
 	}
 	virtual inline std::string toString() const { return "TestInterface[" + name() + "]"; }
@@ -57,28 +57,28 @@ public:
 
 class TestLoopbackInterface : public RNS::Interface {
 public:
-	TestLoopbackInterface(RNS::Interface &loopback_interface) : RNS::Interface("TestLoopbackInterface"), _loopback_interface(loopback_interface) {
+	TestLoopbackInterface(RNS::Interface& loopback_interface) : RNS::Interface("TestLoopbackInterface"), _loopback_interface(loopback_interface) {
 		IN(true);
 		OUT(true);
 	}
-	TestLoopbackInterface(RNS::Interface &loopback_interface, const char *name) : RNS::Interface(name), _loopback_interface(loopback_interface) {
+	TestLoopbackInterface(RNS::Interface& loopback_interface, const char *name) : RNS::Interface(name), _loopback_interface(loopback_interface) {
 		IN(true);
 		OUT(true);
 	}
 	virtual ~TestLoopbackInterface() {
 		name("deleted");
 	}
-	virtual void processIncoming(const RNS::Bytes &data) {
+	virtual void processIncoming(const RNS::Bytes& data) {
 		RNS::extreme("TestLoopbackInterface.processIncoming: data: " + data.toHex());
 		_loopback_interface.processOutgoing(data);
 	}
-	virtual void processOutgoing(const RNS::Bytes &data) {
+	virtual void processOutgoing(const RNS::Bytes& data) {
 		RNS::extreme("TestLoopbackInterface.processOutgoing: data: " + data.toHex());
 		_loopback_interface.processIncoming(data);
 	}
 	virtual inline std::string toString() const { return "TestLoopbackInterface[" + name() + "]"; }
 private:
-	RNS::Interface &_loopback_interface;
+	RNS::Interface& _loopback_interface;
 };
 
 class TestOutInterface : public RNS::Interface {
@@ -94,7 +94,7 @@ public:
 	virtual ~TestOutInterface() {
 		name("(deleted)");
 	}
-	virtual void processOutgoing(const RNS::Bytes &data) {
+	virtual void processOutgoing(const RNS::Bytes& data) {
 		RNS::head("TestOutInterface.processOutgoing: data: " + data.toHex(), RNS::LOG_EXTREME);
 		RNS::Interface::processOutgoing(data);
 	}
@@ -114,14 +114,14 @@ public:
 	virtual ~TestInInterface() {
 		name("(deleted)");
 	}
-	virtual void processIncoming(const RNS::Bytes &data) {
+	virtual void processIncoming(const RNS::Bytes& data) {
 		RNS::head("TestInInterface.processIncoming: data: " + data.toHex(), RNS::LOG_EXTREME);
 		RNS::Interface::processIncoming(data);
 	}
 	virtual inline std::string toString() const { return "TestInInterface[" + name() + "]"; }
 };
 
-void onPacket(const RNS::Bytes &data, const RNS::Packet &packet) {
+void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	RNS::head("onPacket: data: " + data.toHex(), RNS::LOG_EXTREME);
 	RNS::head("onPacket: data string: \"" + data.toString() + "\"", RNS::LOG_EXTREME);
 	//RNS::head("onPacket: " + packet.debugString(), RNS::LOG_EXTREME);
@@ -186,14 +186,14 @@ void setup() {
 		{
 			std::map<RNS::Bytes, RNS::Destination&> destinations;
 			destinations.insert({destination.hash(), destination});
-			//for (RNS::Destination &destination : destinations) {
-			for (auto &[hash, destination] : destinations) {
+			//for (RNS::Destination& destination : destinations) {
+			for (auto& [hash, destination] : destinations) {
 				RNS::extreme("Iterated destination: " + destination.toString());
 			}
 			RNS::Bytes hash = destination.hash();
 			auto iter = destinations.find(hash);
 			if (iter != destinations.end()) {
-				RNS::Destination &destination = (*iter).second;
+				RNS::Destination& destination = (*iter).second;
 				RNS::extreme("Found destination: " + destination.toString());
 			}
 			return;
@@ -261,7 +261,7 @@ int main(void) {
 	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
 	interfaces.insert(testinterface);
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-		RNS::Interface &interface = (*iter);
+		RNS::Interface& interface = (*iter);
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).processOutgoing(data);
@@ -274,7 +274,7 @@ int main(void) {
 
 	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
 	interfaces.insert(testinterface);
-	for (auto &interface : interfaces) {
+	for (auto& interface : interfaces) {
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).processOutgoing(data);
@@ -288,7 +288,7 @@ int main(void) {
 	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
 	interfaces.push_back(testinterface);
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-		RNS::Interface &interface = (*iter);
+		RNS::Interface& interface = (*iter);
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).processOutgoing(data);
@@ -301,8 +301,8 @@ int main(void) {
 
 	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
 	interfaces.push_back(testinterface);
-	//for (auto &interface : interfaces) {
-	for (RNS::Interface &interface : interfaces) {
+	//for (auto& interface : interfaces) {
+	for (RNS::Interface& interface : interfaces) {
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).processOutgoing(data);
@@ -316,14 +316,14 @@ int main(void) {
 		TestInterface testinterface;
 		interfaces.push_back(testinterface);
 		for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-			RNS::Interface &interface = (*iter);
+			RNS::Interface& interface = (*iter);
 			RNS::extreme("1 Found interface: " + interface.toString());
 			RNS::Bytes data;
 			const_cast<RNS::Interface&>(interface).processOutgoing(data);
 		}
 	}
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-		RNS::Interface &interface = (*iter);
+		RNS::Interface& interface = (*iter);
 		RNS::extreme("2 Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).processOutgoing(data);

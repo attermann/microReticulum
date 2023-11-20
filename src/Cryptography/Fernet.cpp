@@ -11,7 +11,7 @@
 using namespace RNS;
 using namespace RNS::Cryptography;
 
-Fernet::Fernet(const Bytes &key) {
+Fernet::Fernet(const Bytes& key) {
 
 	if (!key) {
 		throw std::invalid_argument("Fernet key cannot be None");
@@ -33,7 +33,7 @@ Fernet::~Fernet() {
 	extreme("Fernet object destroyed");
 }
 
-bool Fernet::verify_hmac(const Bytes &token) {
+bool Fernet::verify_hmac(const Bytes& token) {
 
 	if (token.size() <= 32) {
 		throw std::invalid_argument("Cannot verify HMAC on token of only " + std::to_string(token.size()) + " bytes");
@@ -49,7 +49,7 @@ bool Fernet::verify_hmac(const Bytes &token) {
 	return (received_hmac == expected_hmac);
 }
 
-const Bytes Fernet::encrypt(const Bytes &data) {
+const Bytes Fernet::encrypt(const Bytes& data) {
 
 	debug("Fernet::encrypt: plaintext length: " + std::to_string(data.size()));
 	Bytes iv = random(16);
@@ -76,7 +76,7 @@ const Bytes Fernet::encrypt(const Bytes &data) {
 }
 
 
-const Bytes Fernet::decrypt(const Bytes &token) {
+const Bytes Fernet::decrypt(const Bytes& token) {
 
 	debug("Fernet::decrypt: token length: " + std::to_string(token.size()));
 	if (token.size() < 48) {
@@ -109,7 +109,7 @@ const Bytes Fernet::decrypt(const Bytes &token) {
 		debug("Fernet::decrypt: plaintext length: " + std::to_string(plaintext.size()));
 		return plaintext;
 	}
-	catch (std::exception &e) {
+	catch (std::exception& e) {
 		warning("Could not decrypt Fernet token");
 		throw std::runtime_error("Could not decrypt Fernet token");
 	}

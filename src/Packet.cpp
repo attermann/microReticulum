@@ -11,7 +11,7 @@ using namespace RNS;
 using namespace RNS::Type::PacketReceipt;
 using namespace RNS::Type::Packet;
 
-Packet::Packet(const Destination &destination, const Interface &attached_interface, const Bytes &data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes &transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
+Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
 
 	if (_object->_destination) {
 		extreme("Creating packet with destination...");
@@ -444,7 +444,7 @@ bool Packet::resend() {
 	}
 }
 
-void Packet::prove(const Destination &destination /*= {Type::NONE}*/) {
+void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
 /*
 	assert(_object);
 	if (_object->_fromPacked && _object->_destination) {
@@ -495,7 +495,7 @@ const Bytes Packet::get_hashable_part() const {
 
 // Generates a special destination that allows Reticulum
 // to direct the proof back to the proved packet's sender
-//ProofDestination &Packet::generate_proof_destination() {
+//ProofDestination& Packet::generate_proof_destination() {
 //	return ProofDestination();
 //}
 

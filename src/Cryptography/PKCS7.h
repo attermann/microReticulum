@@ -13,20 +13,20 @@ namespace RNS { namespace Cryptography {
 
 		static const size_t BLOCKSIZE = 16;
 
-		static inline const Bytes pad(const Bytes &data, size_t bs = BLOCKSIZE) {
+		static inline const Bytes pad(const Bytes& data, size_t bs = BLOCKSIZE) {
 			Bytes padded(data);
 			inplace_pad(padded, bs);
 			return padded;
 		}
 
-		static inline const Bytes unpad(const Bytes &data, size_t bs = BLOCKSIZE) {
+		static inline const Bytes unpad(const Bytes& data, size_t bs = BLOCKSIZE) {
 			Bytes unpadded(data);
 			inplace_unpad(unpadded, bs);
 			return unpadded;
 		}
 
 		// updates passed buffer
-		static inline void inplace_pad(Bytes &data, size_t bs = BLOCKSIZE) {
+		static inline void inplace_pad(Bytes& data, size_t bs = BLOCKSIZE) {
 			size_t len = data.size();
 			//debug("PKCS7::pad: len: " + std::to_string(len));
 			size_t padlen = bs - (len % bs);
@@ -45,7 +45,7 @@ namespace RNS { namespace Cryptography {
 		}
 
 		// updates passed buffer
-		static inline void inplace_unpad(Bytes &data, size_t bs = BLOCKSIZE) {
+		static inline void inplace_unpad(Bytes& data, size_t bs = BLOCKSIZE) {
 			size_t len = data.size();
 			//debug("PKCS7::unpad: len: " + std::to_string(len));
 			// read last byte which is pad length

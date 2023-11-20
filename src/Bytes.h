@@ -34,7 +34,7 @@ namespace RNS {
 		Bytes(NoneConstructor none) {
 			//extreme("Bytes object created from NONE, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
-		Bytes(const Bytes &bytes) {
+		Bytes(const Bytes& bytes) {
 			//extreme("Bytes is using shared data");
 			assign(bytes);
 			//extreme("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
@@ -47,7 +47,7 @@ namespace RNS {
 			assign(string);
 			//extreme(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
-		Bytes(const std::string &string) {
+		Bytes(const std::string& string) {
 			assign(string);
 			//extreme(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
@@ -55,30 +55,30 @@ namespace RNS {
 			//extreme(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 
-		inline Bytes& operator = (const Bytes &bytes) {
+		inline Bytes& operator = (const Bytes& bytes) {
 			assign(bytes);
 			return *this;
 		}
-		inline Bytes& operator += (const Bytes &bytes) {
+		inline Bytes& operator += (const Bytes& bytes) {
 			append(bytes);
 			return *this;
 		}
 
-		inline Bytes operator + (const Bytes &bytes) const {
+		inline Bytes operator + (const Bytes& bytes) const {
 			Bytes newbytes(*this);
 			newbytes.append(bytes);
 			return newbytes;
 		}
-		inline bool operator == (const Bytes &bytes) const {
+		inline bool operator == (const Bytes& bytes) const {
 			return compare(bytes) == 0;
 		}
-		inline bool operator != (const Bytes &bytes) const {
+		inline bool operator != (const Bytes& bytes) const {
 			return compare(bytes) != 0;
 		}
-		inline bool operator < (const Bytes &bytes) const {
+		inline bool operator < (const Bytes& bytes) const {
 			return compare(bytes) < 0;
 		}
-		inline bool operator > (const Bytes &bytes) const {
+		inline bool operator > (const Bytes& bytes) const {
 			return compare(bytes) > 0;
 		}
 		inline operator bool() const {
@@ -144,7 +144,7 @@ namespace RNS {
 			newData();
 			_data->insert(_data->begin(), (uint8_t *)string, (uint8_t *)string + strlen(string));
 		}
-		inline void assign(const std::string &string) { assign(string.c_str()); }
+		inline void assign(const std::string& string) { assign(string.c_str()); }
 		void assignHex(const char* hex);
 
 		inline void append(const Bytes& bytes) {
@@ -171,7 +171,7 @@ namespace RNS {
 			ownData();
 			_data->insert(_data->end(), (uint8_t *)string, (uint8_t *)string + strlen(string));
 		}
-		inline void append(const std::string &string) { append(string.c_str()); }
+		inline void append(const std::string& string) { append(string.c_str()); }
 		inline void append(uint8_t byte) {
 			ownData();
 			_data->push_back(byte);
@@ -193,7 +193,7 @@ namespace RNS {
 		}
 
 	public:
-		int8_t compare(const Bytes &bytes) const;
+		int8_t compare(const Bytes& bytes) const;
 		inline size_t size() const { if (!_data) return 0; return _data->size(); }
 		inline bool empty() const { if (!_data) return true; return _data->empty(); }
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
@@ -248,12 +248,12 @@ namespace RNS {
 
 }
 
-inline RNS::Bytes& operator << (RNS::Bytes &lhbytes, const RNS::Bytes &rhbytes) {
+inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const RNS::Bytes& rhbytes) {
 	lhbytes.append(rhbytes);
 	return lhbytes;
 }
 
-inline RNS::Bytes& operator << (RNS::Bytes &lhbytes, uint8_t rhbyte) {
+inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, uint8_t rhbyte) {
 	lhbytes.append(rhbyte);
 	return lhbytes;
 }

@@ -21,7 +21,7 @@ void Bytes::ownData() {
 	}
 }
 
-int8_t Bytes::compare(const Bytes &bytes) const {
+int8_t Bytes::compare(const Bytes& bytes) const {
 	if (_data == bytes._data) {
 		return 0;
 	}
@@ -76,12 +76,12 @@ const char hex_lower_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', 
 std::string RNS::hexFromByte(uint8_t byte, bool upper /*= true*/) {
 	std::string hex;
 	if (upper) {
-		hex += hex_upper_chars[ (byte & 0xF0) >> 4];
-		hex += hex_upper_chars[ (byte & 0x0F) >> 0];
+		hex += hex_upper_chars[ (byte&  0xF0) >> 4];
+		hex += hex_upper_chars[ (byte&  0x0F) >> 0];
 	}
 	else {
-		hex += hex_lower_chars[ (byte & 0xF0) >> 4];
-		hex += hex_lower_chars[ (byte & 0x0F) >> 0];
+		hex += hex_lower_chars[ (byte&  0xF0) >> 4];
+		hex += hex_lower_chars[ (byte&  0x0F) >> 0];
 	}
 	return hex;
 }
@@ -93,12 +93,12 @@ std::string Bytes::toHex(bool upper /*= true*/) const {
 	std::string hex;
 	for (uint8_t byte : *_data) {
 		if (upper) {
-			hex += hex_upper_chars[ (byte & 0xF0) >> 4];
-			hex += hex_upper_chars[ (byte & 0x0F) >> 0];
+			hex += hex_upper_chars[ (byte&  0xF0) >> 4];
+			hex += hex_upper_chars[ (byte&  0x0F) >> 0];
 		}
 		else {
-			hex += hex_lower_chars[ (byte & 0xF0) >> 4];
-			hex += hex_lower_chars[ (byte & 0x0F) >> 0];
+			hex += hex_lower_chars[ (byte&  0xF0) >> 4];
+			hex += hex_lower_chars[ (byte&  0x0F) >> 0];
 		}
 	}
 	return hex;

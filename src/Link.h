@@ -22,7 +22,7 @@ namespace RNS {
 		Link(Type::NoneConstructor none) {
 			extreme("Link NONE object created");
 		}
-		Link(const Link &link) : _object(link._object) {
+		Link(const Link& link) : _object(link._object) {
 			extreme("Link object copy created");
 		}
 		Link();
@@ -30,24 +30,24 @@ namespace RNS {
 			extreme("Link object destroyed");
 		}
 
-		inline Link& operator = (const Link &link) {
+		inline Link& operator = (const Link& link) {
 			_object = link._object;
 			return *this;
 		}
 		inline operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const Link &link) const {
+		inline bool operator < (const Link& link) const {
 			return _object.get() < link._object.get();
 		}
 
 	public:
-		void set_link_id(const Packet &packet);
-		void receive(const Packet &packet);
+		void set_link_id(const Packet& packet);
+		void receive(const Packet& packet);
 
 		// getters/setters
-		inline const Bytes &link_id() const { assert(_object); return _object->_link_id; }
-		inline const Bytes &hash() const { assert(_object); return _object->_hash; }
+		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
+		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
 
 		inline std::string toString() const { assert(_object); return "{Link: unknown}"; }
 

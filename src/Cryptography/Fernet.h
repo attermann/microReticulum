@@ -25,13 +25,13 @@ namespace RNS { namespace Cryptography {
 		static inline const Bytes generate_key() { return random(32); }
 
 	public:
-		Fernet(const Bytes &key);
+		Fernet(const Bytes& key);
 		~Fernet();
 
 	public:
-		bool verify_hmac(const Bytes &token);
-		const Bytes encrypt(const Bytes &data);
-		const Bytes decrypt(const Bytes &token);
+		bool verify_hmac(const Bytes& token);
+		const Bytes encrypt(const Bytes& data);
+		const Bytes decrypt(const Bytes& token);
 
 	private:
 		Bytes _signing_key;

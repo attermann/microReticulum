@@ -15,11 +15,11 @@ namespace RNS { namespace Cryptography {
 
 	public:
 /*
-		X25519PublicKey(const Bytes &x) {
+		X25519PublicKey(const Bytes& x) {
 			_x = x;
 		}
 */
-		X25519PublicKey(const Bytes &publicKey) {
+		X25519PublicKey(const Bytes& publicKey) {
 			_publicKey = publicKey;
 		}
 		~X25519PublicKey() {}
@@ -29,11 +29,11 @@ namespace RNS { namespace Cryptography {
 	public:
 		// creates a new instance with specified seed
 /*
-		static inline Ptr from_public_bytes(const Bytes &data) {
+		static inline Ptr from_public_bytes(const Bytes& data) {
 			return Ptr(new X25519PublicKey(_unpack_number(data)));
 		}
 */
-		static inline Ptr from_public_bytes(const Bytes &publicKey) {
+		static inline Ptr from_public_bytes(const Bytes& publicKey) {
 			return Ptr(new X25519PublicKey(publicKey));
 		}
 
@@ -64,11 +64,11 @@ namespace RNS { namespace Cryptography {
 
 	public:
 /*
-		X25519PrivateKey(const Bytes &a) {
+		X25519PrivateKey(const Bytes& a) {
 			_a = a;
 		}
 */
-		X25519PrivateKey(const Bytes &privateKey) {
+		X25519PrivateKey(const Bytes& privateKey) {
 			if (privateKey) {
 				// use specified private key
 				_privateKey = privateKey;
@@ -102,11 +102,11 @@ namespace RNS { namespace Cryptography {
 
 		// creates a new instance with specified seed
 /*
-		static inline Ptr from_private_bytes(const Bytes &data) {
+		static inline Ptr from_private_bytes(const Bytes& data) {
 			return Ptr(new X25519PrivateKey(_fix_secret(_unpack_number(data))));
 		}
 */
-		static inline Ptr from_private_bytes(const Bytes &privateKey) {
+		static inline Ptr from_private_bytes(const Bytes& privateKey) {
 			return Ptr(new X25519PrivateKey(privateKey));
 		}
 
@@ -115,7 +115,7 @@ namespace RNS { namespace Cryptography {
 			return _pack_number(_a);
 		}
 */
-		inline const Bytes &private_bytes() {
+		inline const Bytes& private_bytes() {
 			return _privateKey;
 		}
 
@@ -130,7 +130,7 @@ namespace RNS { namespace Cryptography {
 		}
 
 /*
-		inline const Bytes exchange(const Bytes &peer_public_key) {
+		inline const Bytes exchange(const Bytes& peer_public_key) {
 			if isinstance(peer_public_key, bytes):
 				peer_public_key = X25519PublicKey.from_public_bytes(peer_public_key)
 
@@ -168,7 +168,7 @@ namespace RNS { namespace Cryptography {
 			return shared
 		}
 */
-		inline const Bytes exchange(const Bytes &peer_public_key) {
+		inline const Bytes exchange(const Bytes& peer_public_key) {
 			debug("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
 			debug("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
 			debug("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());
@@ -181,7 +181,7 @@ namespace RNS { namespace Cryptography {
 			return sharedKey;
 		}
 
-		inline bool verify(const Bytes &peer_public_key) {
+		inline bool verify(const Bytes& peer_public_key) {
 			debug("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
 			debug("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
 			debug("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());
