@@ -111,11 +111,11 @@ namespace RNS { namespace Cryptography {
 		}
 
 /*
-		inline Bytes private_bytes() {
+		inline const Bytes private_bytes() {
 			return _pack_number(_a);
 		}
 */
-		inline Bytes private_bytes() {
+		inline const Bytes &private_bytes() {
 			return _privateKey;
 		}
 
@@ -130,7 +130,7 @@ namespace RNS { namespace Cryptography {
 		}
 
 /*
-		inline Bytes exchange(const Bytes &peer_public_key) {
+		inline const Bytes exchange(const Bytes &peer_public_key) {
 			if isinstance(peer_public_key, bytes):
 				peer_public_key = X25519PublicKey.from_public_bytes(peer_public_key)
 
@@ -168,7 +168,7 @@ namespace RNS { namespace Cryptography {
 			return shared
 		}
 */
-		inline Bytes exchange(const Bytes &peer_public_key) {
+		inline const Bytes exchange(const Bytes &peer_public_key) {
 			debug("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
 			debug("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
 			debug("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());

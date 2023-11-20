@@ -190,9 +190,9 @@ namespace RNS {
 		inline uint8_t flags() const { assert(_object); return _object->_flags; }
 		inline uint8_t hops() const { assert(_object); return _object->_hops; }
 		inline void hops(uint8_t hops) { assert(_object); _object->_hops = hops; }
-		inline Bytes packet_hash() const { assert(_object); return _object->_packet_hash; }
-		inline Bytes destination_hash() const { assert(_object); return _object->_destination_hash; }
-		inline Bytes transport_id() const { assert(_object); return _object->_transport_id; }
+		inline const Bytes &packet_hash() const { assert(_object); return _object->_packet_hash; }
+		inline const Bytes &destination_hash() const { assert(_object); return _object->_destination_hash; }
+		inline const Bytes &transport_id() const { assert(_object); return _object->_transport_id; }
 		inline void transport_id(const Bytes &transport_id) { assert(_object); _object->_transport_id = transport_id; }
 		inline const Bytes &raw() const { assert(_object); return _object->_raw; }
 		inline const Bytes &data() const { assert(_object); return _object->_data; }

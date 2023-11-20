@@ -6,6 +6,21 @@
 #include <map>
 #include <assert.h>
 
+//void testBytesDefault(const RNS::Bytes &bytes = {RNS::Bytes::NONE}) {
+void testBytesDefault(const RNS::Bytes &bytes = {}) {
+	assert(!bytes);
+	assert(bytes.size() == 0);
+	assert(bytes.data() == nullptr);
+}
+
+RNS::Bytes ref("Test");
+const RNS::Bytes &testBytesReference() {
+	// NOTE: Can NOT return local instance as reference!!!
+	//RNS::Bytes ref("Test");
+	RNS::extreme("returning...");
+	return ref;
+}
+
 void testBytes() {
 
 	RNS::Bytes bytes;
@@ -50,13 +65,22 @@ void testBytes() {
 	RNS::extreme("assign prebuf: " + prebuf.toString());
 	RNS::extreme("assign postbuf: " + postbuf.toString());
 
+	// test string assignment
 	bytes = "Foo";
 	assert(bytes.size() == 3);
 	assert(memcmp(bytes.data(), "Foo", bytes.size()) == 0);
 
+	// test string addition
 	bytes = prebuf + postbuf;
 	assert(bytes.size() == 11);
 	assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
+
+	// test string constructor
+	{
+		RNS::Bytes str("Foo");
+		assert(str.size() == 3);
+		assert(memcmp(str.data(), "Foo", str.size()) == 0);
+	}
 
 	// test left in range
 	{
@@ -203,6 +227,20 @@ void testBytes() {
 		assert(!bytes);
 		assert(bytes.size() == 0);
 		assert(bytes.data() == nullptr);
+	}
+
+	// function default argument
+	RNS::head("TestBytes: function default argument", RNS::LOG_EXTREME);
+	testBytesDefault();
+
+	// function reference return
+	RNS::head("TestBytes: function reference return", RNS::LOG_EXTREME);
+	{
+		RNS::Bytes test = testBytesReference();
+		RNS::extreme("returned");
+		assert(test);
+		assert(test.size() == 4);
+		assert(memcmp(test.data(), "Test", test.size()) == 0);
 	}
 
 	// TODO test comparison

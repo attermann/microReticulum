@@ -15,10 +15,10 @@ Packet::Packet(const Destination &destination, const Interface &attached_interfa
 
 	if (_object->_destination) {
 		extreme("Creating packet with destination...");
-		// CBA TODO handle NONE
-		if (transport_type == -1) {
-			transport_type = Type::Transport::BROADCAST;
-		}
+		// CBA Should never see empty transport_type
+		//if (transport_type == NONE) {
+		//	transport_type = Type::Transport::BROADCAST;
+		//}
 		// following moved to object constructor to avoid extra NONE object
 		//_destination = destination;
 		_object->_header_type = header_type;

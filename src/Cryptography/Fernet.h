@@ -22,7 +22,7 @@ namespace RNS { namespace Cryptography {
 		static const uint8_t FERNET_OVERHEAD  = 48; // Bytes
 
 	public:
-		static inline Bytes generate_key() { return random(32); }
+		static inline const Bytes generate_key() { return random(32); }
 
 	public:
 		Fernet(const Bytes &key);
@@ -30,8 +30,8 @@ namespace RNS { namespace Cryptography {
 
 	public:
 		bool verify_hmac(const Bytes &token);
-		Bytes encrypt(const Bytes &data);
-		Bytes decrypt(const Bytes &token);
+		const Bytes encrypt(const Bytes &data);
+		const Bytes decrypt(const Bytes &token);
 
 	private:
 		Bytes _signing_key;

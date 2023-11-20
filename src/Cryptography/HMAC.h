@@ -99,7 +99,7 @@ namespace RNS { namespace Cryptography {
 	msg: bytes or buffer, Input message.
 	digest: The underlying hash algorithm to use.
 	*/
-	inline Bytes digest(const Bytes &key, const Bytes &msg, HMAC::Digest digest = HMAC::DIGEST_SHA256) {
+	inline const Bytes digest(const Bytes &key, const Bytes &msg, HMAC::Digest digest = HMAC::DIGEST_SHA256) {
 		HMAC hmac(key, msg, digest);
 		hmac.update(msg);
 		return hmac.digest();

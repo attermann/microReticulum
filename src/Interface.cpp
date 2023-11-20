@@ -1,5 +1,6 @@
 #include "Interface.h"
 
+#include "Identity.h"
 #include "Transport.h"
 
 using namespace RNS;
@@ -18,6 +19,10 @@ using namespace RNS::Type::Interface;
 	extreme("Interface::processOutgoing: data: " + data.toHex());
 	assert(_object);
 	_object->_txb += data.size();
+}
+
+const Bytes Interface::get_hash() const {
+	return Identity::full_hash({toString()});
 }
 
 void Interface::process_announce_queue() {

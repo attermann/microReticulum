@@ -224,6 +224,7 @@ namespace RNS {
 		static void exit_handler();
 
 	private:
+		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
 		//static std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> _interfaces;           // All active interfaces
 		static std::list<std::reference_wrapper<Interface>> _interfaces;           // All active interfaces
 		static std::set<Destination> _destinations;           // All active destinations

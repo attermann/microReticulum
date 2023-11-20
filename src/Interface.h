@@ -65,7 +65,7 @@ namespace RNS {
 		}
 
 	public:
-		inline Bytes get_hash() const { /*return Identity::full_hash();*/ return {}; }
+		const Bytes get_hash() const;
 		void process_announce_queue();
 		inline void detach() {}
 
@@ -87,13 +87,13 @@ namespace RNS {
 		inline bool FWD() const { assert(_object); return _object->_FWD; }
 		inline bool RPT() const { assert(_object); return _object->_RPT; }
 		inline std::string name() const { assert(_object); return _object->_name; }
-		inline Bytes ifac_identity() const { assert(_object); return _object->_ifac_identity; }
+		inline const Bytes &ifac_identity() const { assert(_object); return _object->_ifac_identity; }
 		inline Type::Interface::modes mode() const { assert(_object); return _object->_mode; }
 		inline uint32_t bitrate() const { assert(_object); return _object->_bitrate; }
 		inline uint64_t announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
 		inline void announce_allowed_at(uint64_t announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
 		inline float announce_cap() const { assert(_object); return _object->_announce_cap; }
-		inline std::list<AnnounceEntry> announce_queue() const { assert(_object); return _object->_announce_queue; }
+		inline std::list<AnnounceEntry> &announce_queue() const { assert(_object); return _object->_announce_queue; }
 
 		virtual inline std::string toString() const { assert(_object); return "Interface[" + _object->_name + "]"; }
 

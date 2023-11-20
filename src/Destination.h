@@ -144,16 +144,16 @@ namespace RNS {
 		void receive(const Packet &packet);
 		void incoming_link_request(const Bytes &data, const Packet &packet);
 
-		Bytes encrypt(const Bytes &data);
-		Bytes decrypt(const Bytes &data);
-		Bytes sign(const Bytes &message);
+		const Bytes encrypt(const Bytes &data);
+		const Bytes decrypt(const Bytes &data);
+		const Bytes sign(const Bytes &message);
 
 		// getters/setters
 		inline Type::Destination::types type() const { assert(_object); return _object->_type; }
 		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
 		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
-		inline Bytes hash() const { assert(_object); return _object->_hash; }
-		inline Bytes link_id() const { assert(_object); return _object->_link_id; }
+		inline const Bytes &hash() const { assert(_object); return _object->_hash; }
+		inline const Bytes &link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
 		inline Type::Link::status status() const { assert(_object); return _object->_status; }

@@ -132,7 +132,7 @@ Encrypts information for the identity.
 :returns: Ciphertext token as *bytes*.
 :raises: *KeyError* if the instance does not hold a public key.
 */
-Bytes Identity::encrypt(const Bytes &plaintext) {
+const Bytes Identity::encrypt(const Bytes &plaintext) {
 	assert(_object);
 	debug("Identity::encrypt: encrypting data...");
 	if (!_object->_pub) {
@@ -172,7 +172,7 @@ Decrypts information for the identity.
 :returns: Plaintext as *bytes*, or *None* if decryption fails.
 :raises: *KeyError* if the instance does not hold a private key.
 */
-Bytes Identity::decrypt(const Bytes &ciphertext_token) {
+const Bytes Identity::decrypt(const Bytes &ciphertext_token) {
 	assert(_object);
 	debug("Identity::decrypt: decrypting data...");
 	if (!_object->_prv) {
@@ -226,7 +226,7 @@ Signs information by the identity.
 :returns: Signature as *bytes*.
 :raises: *KeyError* if the instance does not hold a private key.
 */
-Bytes Identity::sign(const Bytes &message) {
+const Bytes Identity::sign(const Bytes &message) {
 	assert(_object);
 	if (!_object->_sig_prv) {
 		throw std::runtime_error("Signing failed because identity does not hold a private key");

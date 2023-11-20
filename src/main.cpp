@@ -144,6 +144,7 @@ void setup() {
 		//testReference();
 		//testCrypto();
 		RNS::extreme("Finished running tests");
+		//return;
 #endif
 
 		//std::stringstream test;

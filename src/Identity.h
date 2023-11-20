@@ -48,7 +48,7 @@ namespace RNS {
 		/*
 		:returns: The public key as *bytes*
 		*/
-		inline Bytes get_public_key() {
+		inline const Bytes get_public_key() {
 			assert(_object);
 			return _object->_pub_bytes + _object->_sig_pub_bytes;
 		}
@@ -65,7 +65,7 @@ namespace RNS {
 		:param data: Data to be hashed as *bytes*.
 		:returns: SHA-256 hash as *bytes*
 		*/
-		static inline Bytes full_hash(const Bytes &data) {
+		static inline const Bytes full_hash(const Bytes &data) {
 			return Cryptography::sha256(data);
 		}
 		/*
@@ -74,7 +74,7 @@ namespace RNS {
 		:param data: Data to be hashed as *bytes*.
 		:returns: Truncated SHA-256 hash as *bytes*
 		*/
-		static inline Bytes truncated_hash(const Bytes &data) {
+		static inline const Bytes truncated_hash(const Bytes &data) {
 			//return Identity.full_hash(data)[:(Identity.TRUNCATED_HASHLENGTH//8)]
 			return full_hash(data).left(Type::Identity::TRUNCATED_HASHLENGTH/8);
 		}
@@ -84,18 +84,18 @@ namespace RNS {
 		:param data: Data to be hashed as *bytes*.
 		:returns: Truncated SHA-256 hash of random data as *bytes*
 		*/
-		static inline Bytes get_random_hash() {
+		static inline const Bytes get_random_hash() {
 			return truncated_hash(Cryptography::random(Type::Identity::TRUNCATED_HASHLENGTH/8));
 		}
 
 		static bool validate_announce(const Packet &packet);
 
-		inline Bytes get_salt() { assert(_object); return _object->_hash; }
-		inline Bytes get_context() { return {Bytes::NONE}; }
+		inline const Bytes get_salt() { assert(_object); return _object->_hash; }
+		inline const Bytes get_context() { return {Bytes::NONE}; }
 
-		Bytes encrypt(const Bytes &plaintext);
-		Bytes decrypt(const Bytes &ciphertext_token);
-		Bytes sign(const Bytes &message);
+		const Bytes encrypt(const Bytes &plaintext);
+		const Bytes decrypt(const Bytes &ciphertext_token);
+		const Bytes sign(const Bytes &message);
 		bool validate(const Bytes &signature, const Bytes &message);
 		// CBA following default for reference value requires inclusiion of header
 		//void prove(const Packet &packet, const Destination &destination = {Type::NONE});
@@ -103,11 +103,11 @@ namespace RNS {
 		void prove(const Packet &packet);
 
 		// getters/setters
-		inline Bytes encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }
-		inline Bytes signingPrivateKey() const { assert(_object); return _object->_sig_prv_bytes; }
-		inline Bytes encryptionPublicKey() const { assert(_object); return _object->_prv_bytes; }
-		inline Bytes signingPublicKey() const { assert(_object); return _object->_sig_prv_bytes; }
-		inline Bytes hash() const { assert(_object); return _object->_hash; }
+		inline const Bytes &encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }
+		inline const Bytes &signingPrivateKey() const { assert(_object); return _object->_sig_prv_bytes; }
+		inline const Bytes &encryptionPublicKey() const { assert(_object); return _object->_prv_bytes; }
+		inline const Bytes &signingPublicKey() const { assert(_object); return _object->_sig_prv_bytes; }
+		inline const Bytes &hash() const { assert(_object); return _object->_hash; }
 		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
 
 		inline std::string toString() const { assert(_object); return "{Identity:" + _object->_hash.toHex() + "}"; }

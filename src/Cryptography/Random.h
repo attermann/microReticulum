@@ -8,7 +8,7 @@
 namespace RNS { namespace Cryptography {
 
     // return vector specified length of random bytes
-	inline Bytes random(size_t length) {
+	inline const Bytes random(size_t length) {
         Bytes rand;
         RNG.rand(rand.writable(length), length);
         return rand;

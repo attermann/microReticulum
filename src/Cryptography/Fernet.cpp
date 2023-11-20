@@ -49,7 +49,7 @@ bool Fernet::verify_hmac(const Bytes &token) {
 	return (received_hmac == expected_hmac);
 }
 
-Bytes Fernet::encrypt(const Bytes &data) {
+const Bytes Fernet::encrypt(const Bytes &data) {
 
 	debug("Fernet::encrypt: plaintext length: " + std::to_string(data.size()));
 	Bytes iv = random(16);
@@ -76,7 +76,7 @@ Bytes Fernet::encrypt(const Bytes &data) {
 }
 
 
-Bytes Fernet::decrypt(const Bytes &token) {
+const Bytes Fernet::decrypt(const Bytes &token) {
 
 	debug("Fernet::decrypt: token length: " + std::to_string(token.size()));
 	if (token.size() < 48) {

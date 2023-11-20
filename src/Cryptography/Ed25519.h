@@ -30,7 +30,7 @@ namespace RNS { namespace Cryptography {
 			return Ptr(new Ed25519PublicKey(publicKey));
 		}
 
-		inline Bytes public_bytes() {
+		inline const Bytes &public_bytes() {
 			return _publicKey;
 		}
 
@@ -75,7 +75,7 @@ namespace RNS { namespace Cryptography {
 			return Ptr(new Ed25519PrivateKey(privateKey));
 		}
 
-		inline Bytes private_bytes() {
+		inline const Bytes &private_bytes() {
 			return _privateKey;
 		}
 
@@ -84,7 +84,7 @@ namespace RNS { namespace Cryptography {
 			return Ed25519PublicKey::from_public_bytes(_publicKey);
 		}
 
-		inline Bytes sign(const Bytes &message) {
+		inline const Bytes sign(const Bytes &message) {
 			//zreturn _sk.sign(message);
 			Bytes signature;
 			Ed25519::sign(signature.writable(64), _privateKey.data(), _publicKey.data(), message.data(), message.size());

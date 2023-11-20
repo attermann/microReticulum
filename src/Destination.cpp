@@ -314,7 +314,7 @@ Encrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 :param plaintext: A *bytes-like* containing the plaintext to be encrypted.
 :raises: ``ValueError`` if destination does not hold a necessary key for encryption.
 */
-Bytes Destination::encrypt(const Bytes &data) {
+const Bytes Destination::encrypt(const Bytes &data) {
 	assert(_object);
 	debug("Destination::encrypt: encrypting data...");
 
@@ -348,7 +348,7 @@ Decrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 :param ciphertext: *Bytes* containing the ciphertext to be decrypted.
 :raises: ``ValueError`` if destination does not hold a necessary key for decryption.
 */
-Bytes Destination::decrypt(const Bytes &data) {
+const Bytes Destination::decrypt(const Bytes &data) {
 	assert(_object);
 	debug("Destination::decrypt: decrypting data...");
 
@@ -382,7 +382,7 @@ Signs information for ``RNS.Destination.SINGLE`` type destination.
 :param message: *Bytes* containing the message to be signed.
 :returns: A *bytes-like* containing the message signature, or *None* if the destination could not sign the message.
 */
-Bytes Destination::sign(const Bytes &message) {
+const Bytes Destination::sign(const Bytes &message) {
 	assert(_object);
 	if (_object->_type == SINGLE && _object->_identity) {
 		return _object->_identity.sign(message);

@@ -14,7 +14,7 @@ uses Python's internal SHA-256 implementation. All SHA-256
 calls in RNS end up here.
 */
 
-Bytes RNS::Cryptography::sha256(const Bytes &data) {
+const Bytes RNS::Cryptography::sha256(const Bytes &data) {
 	//extreme("Cryptography::sha256: data: " + data.toHex() );
 	SHA256 digest;
 	digest.reset();
@@ -25,7 +25,7 @@ Bytes RNS::Cryptography::sha256(const Bytes &data) {
 	return hash;
 }
 
-Bytes RNS::Cryptography::sha512(const Bytes &data) {
+const Bytes RNS::Cryptography::sha512(const Bytes &data) {
 	SHA512 digest;
 	digest.reset();
 	digest.update(data.data(), data.size());

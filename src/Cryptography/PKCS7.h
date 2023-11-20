@@ -13,13 +13,13 @@ namespace RNS { namespace Cryptography {
 
 		static const size_t BLOCKSIZE = 16;
 
-		static inline Bytes pad(const Bytes &data, size_t bs = BLOCKSIZE) {
+		static inline const Bytes pad(const Bytes &data, size_t bs = BLOCKSIZE) {
 			Bytes padded(data);
 			inplace_pad(padded, bs);
 			return padded;
 		}
 
-		static inline Bytes unpad(const Bytes &data, size_t bs = BLOCKSIZE) {
+		static inline const Bytes unpad(const Bytes &data, size_t bs = BLOCKSIZE) {
 			Bytes unpadded(data);
 			inplace_unpad(unpadded, bs);
 			return unpadded;
