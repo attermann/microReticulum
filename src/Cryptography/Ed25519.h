@@ -85,7 +85,7 @@ namespace RNS { namespace Cryptography {
 		}
 
 		inline const Bytes sign(const Bytes& message) {
-			//zreturn _sk.sign(message);
+			//z return _sk.sign(message);
 			Bytes signature;
 			Ed25519::sign(signature.writable(64), _privateKey.data(), _publicKey.data(), message.data(), message.size());
 			return signature;

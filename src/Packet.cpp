@@ -403,14 +403,14 @@ bool Packet::send() {
 
 	if (Transport::outbound(*this)) {
 		debug("Packet::send: successfully sent packet!!!");
-		//zreturn self.receipt
+		//z return self.receipt
 		// MOCK
 		return true;
 	}
 	else {
 		error("No interfaces could process the outbound packet");
 		_object->_sent = false;
-		//z_receipt = None;
+		//z _receipt = None;
 		return false;
 	}
 }
@@ -432,14 +432,14 @@ bool Packet::resend() {
 
 	if (Transport::outbound(*this)) {
 		debug("Packet::resend: successfully sent packet!!!");
-		//zreturn self.receipt
+		//z return self.receipt
 		// MOCK
 		return true;
 	}
 	else {
 		error("No interfaces could process the outbound packet");
 		_object->_sent = false;
-		//zself.receipt = None;
+		//z self.receipt = None;
 		return false;
 	}
 }
@@ -552,9 +552,9 @@ void PacketReceipt::check_timeout() {
 		_object->_concluded_at = Utilities::OS::time();
 
 		if (_object->_callbacks._timeout) {
-			//zthread = threading.Thread(target=self.callbacks.timeout, args=(self,))
-			//zthread.daemon = True
-			//zthread.start();
+			//z thread = threading.Thread(target=self.callbacks.timeout, args=(self,))
+			//z thread.daemon = True
+			//z thread.start();
 		}
 	}
 }

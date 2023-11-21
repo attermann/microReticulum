@@ -11,6 +11,13 @@
 #include <functional>
 #include <stdint.h>
 
+//#define INTERFACES_SET
+//#define INTERFACES_LIST
+#define INTERFACES_MAP
+
+//#define DESTINATIONS_SET
+#define DESTINATIONS_MAP
+
 namespace RNS {
 
 	class Reticulum;
@@ -23,10 +30,18 @@ namespace RNS {
 
 	class AnnounceHandler {
 	public:
-		AnnounceHandler(const std::string& aspect_filter) {
-			_aspect_filter = aspect_filter;
-		}
+		// The initialisation method takes the optional
+		// aspect_filter argument. If aspect_filter is set to
+		// None, all announces will be passed to the instance.
+		// If only some announces are wanted, it can be set to
+		// an aspect string.
+		AnnounceHandler(const char* aspect_filter) { _aspect_filter = aspect_filter; }
+		// This method will be called by Reticulums Transport
+		// system when an announce arrives that matches the
+		// configured aspect filter. Filters must be specific,
+		// and cannot use wildcards.
 		virtual void received_announce(const Bytes& destination_hash, const Identity& announced_identity, const Bytes& app_data) = 0;
+		std::string& aspect_filter() { return _aspect_filter; }
 	private:
 		std::string _aspect_filter;
 	};
@@ -39,9 +54,11 @@ namespace RNS {
 	class Transport {
 
 	private:
+		// CBA TODO Analyze safety of using Inrerface references here
+		// CBA TODO Analyze safety of using Packet references here
 		class DestinationEntry {
 		public:
-			DestinationEntry(uint64_t time, Bytes received_from, uint8_t announce_hops, uint64_t expires, std::set<Bytes> random_blobs, Interface& receiving_interface, const Packet& packet) :
+			DestinationEntry(uint64_t time, const Bytes& received_from, uint8_t announce_hops, uint64_t expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
 				_timestamp(time),
 				_received_from(received_from),
 				_hops(announce_hops),
@@ -61,9 +78,11 @@ namespace RNS {
 			const Packet& _packet;
 		};
 
+		// CBA TODO Analyze safety of using Inrerface references here
+		// CBA TODO Analyze safety of using Packet references here
 		class AnnounceEntry {
 		public:
-			AnnounceEntry(uint64_t timestamp, uint16_t retransmit_timeout, uint8_t retries, Bytes received_from, uint8_t hops, const Packet& packet, uint8_t local_rebroadcasts, bool block_rebroadcasts, const Interface& attached_interface) : 
+			AnnounceEntry(uint64_t timestamp, uint16_t retransmit_timeout, uint8_t retries, const Bytes& received_from, uint8_t hops, const Packet& packet, uint8_t local_rebroadcasts, bool block_rebroadcasts, const Interface& attached_interface) :
 				_timestamp(timestamp),
 				_retransmit_timeout(retransmit_timeout),
 				_retries(retries),
@@ -87,9 +106,10 @@ namespace RNS {
 			const Interface& _attached_interface;
 		};
 
+		// CBA TODO Analyze safety of using Inrerface references here
 		class LinkEntry {
 		public:
-			LinkEntry(uint64_t timestamp, const Bytes& next_hop, const Interface& outbound_interface, uint8_t remaining_hops, const Interface& receiving_interface, uint8_t hops, const Bytes& destination_hash, bool validated, uint64_t proof_timeout) : 
+			LinkEntry(uint64_t timestamp, const Bytes& next_hop, const Interface& outbound_interface, uint8_t remaining_hops, const Interface& receiving_interface, uint8_t hops, const Bytes& destination_hash, bool validated, uint64_t proof_timeout) :
 				_timestamp(timestamp),
 				_next_hop(next_hop),
 				_outbound_interface(outbound_interface),
@@ -113,9 +133,10 @@ namespace RNS {
 			uint64_t _proof_timeout = 0;
 		};
 
+		// CBA TODO Analyze safety of using Inrerface references here
 		class ReverseEntry {
 		public:
-			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, uint64_t timestamp) : 
+			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, uint64_t timestamp) :
 				_receiving_interface(receiving_interface),
 				_outbound_interface(outbound_interface),
 				_timestamp(timestamp)
@@ -127,50 +148,20 @@ namespace RNS {
 			uint64_t _timestamp = 0;
 		};
 
-	public:
-		// Constants
-/*
-		enum types {
-			BROADCAST    = 0x00,
-			TRANSPORT    = 0x01,
-			RELAY        = 0x02,
-			TUNNEL       = 0x03,
-			NONE         = 0xFF,
+		// CBA TODO Analyze safety of using Inrerface references here
+		class PathRequestEntry {
+		public:
+			PathRequestEntry(const Bytes& destination_hash, uint64_t timeout, const Interface& requesting_interface) :
+				_destination_hash(destination_hash),
+				_timeout(timeout),
+				_requesting_interface(requesting_interface)
+			{
+			}
+		public:
+			Bytes _destination_hash;
+			uint64_t _timeout = 0;
+			const Interface& _requesting_interface;
 		};
-*/
-
-		enum reachabilities {
-			REACHABILITY_UNREACHABLE = 0x00,
-			REACHABILITY_DIRECT      = 0x01,
-			REACHABILITY_TRANSPORT   = 0x02,
-		};
-
-		static constexpr const char* APP_NAME = "rnstransport";
-
-		static const uint8_t PATHFINDER_M    = 128;       // Max hops
-		// Maximum amount of hops that Reticulum will transport a packet.
-
-		static const uint8_t PATHFINDER_R      = 1;          // Retransmit retries
-		static const uint8_t PATHFINDER_G      = 5;          // Retry grace period
-		static constexpr const float PATHFINDER_RW       = 0.5;        // Random window for announce rebroadcast
-		static const uint32_t PATHFINDER_E      = 60*60*24*7; // Path expiration of one week
-		static const uint32_t AP_PATH_TIME      = 60*60*24;   // Path expiration of one day for Access Point paths
-		static const uint32_t ROAMING_PATH_TIME = 60*60*6;    // Path expiration of 6 hours for Roaming paths
-
-		// TODO: Calculate an optimal number for this in
-		// various situations
-		static const uint8_t LOCAL_REBROADCASTS_MAX = 2;          // How many local rebroadcasts of an announce is allowed
-
-		static const uint8_t PATH_REQUEST_TIMEOUT = 15;           // Default timuout for client path requests in seconds
-		static constexpr const float PATH_REQUEST_GRACE     = 0.35;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
-		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
-		static const uint8_t PATH_REQUEST_MI      = 5;            // Minimum interval in seconds for automated path requests
-
-		static constexpr const float LINK_TIMEOUT            = Type::Link::STALE_TIME * 1.25;
-		static const uint16_t REVERSE_TIMEOUT      = 30*60;        // Reverse table entries are removed after 30 minutes
-		static const uint32_t DESTINATION_TIMEOUT  = 60*60*24*7;   // Destination table entries are removed if unused for one week
-		static const uint16_t MAX_RECEIPTS         = 1024;         // Maximum number of receipts to keep track of
-		static const uint8_t MAX_RATE_TIMESTAMPS   = 16;           // Maximum number of announce timestamps to keep per destination
 
 	public:
 		static void start(const Reticulum& reticulum_instance);
@@ -223,12 +214,26 @@ namespace RNS {
 		static void persist_data();
 		static void exit_handler();
 
+		static Destination find_destination_from_hash(const Bytes& destination_hash);
+
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
+#if defined(INTERFACES_SET)
+		// set sorted, can use find
 		//static std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> _interfaces;           // All active interfaces
+		static std::set<std::reference_wrapper<Interface>, std::less<Interface>> _interfaces;           // All active interfaces
+#elif defined(INTERFACES_LIST)
+		// list is unsorted, can't use find
 		static std::list<std::reference_wrapper<Interface>> _interfaces;           // All active interfaces
+#elif defined(INTERFACES_MAP)
+		// map is sorted, can use find
+		static std::map<Bytes, Interface&> _interfaces;           // All active interfaces
+#endif
+#if defined(DESTINATIONS_SET)
 		static std::set<Destination> _destinations;           // All active destinations
-		//static std::map<Bytes, Destination> _destinations;           // All active destinations
+#elif defined(DESTINATIONS_MAP)
+		static std::map<Bytes, Destination> _destinations;           // All active destinations
+#endif
 		static std::set<Link> _pending_links;           // Links that are being established
 		static std::set<Link> _active_links;           // Links that are active
 		static std::set<Bytes> _packet_hashlist;           // A list of packet hashes for duplicate detection
@@ -244,12 +249,12 @@ namespace RNS {
 		static std::map<Bytes, LinkEntry> _link_table;           // A lookup table containing hops for links
 		static std::map<Bytes, AnnounceEntry> _held_announces;           // A table containing temporarily held announce-table entries
 		static std::set<HAnnounceHandler> _announce_handlers;           // A table storing externally registered announce handlers
-		//z_tunnels              = {}           // A table storing tunnels to other transport instances
-		//z_announce_rate_table  = {}           // A table for keeping track of announce rates
+		//z _tunnels              = {}           // A table storing tunnels to other transport instances
+		//z _announce_rate_table  = {}           // A table for keeping track of announce rates
 		static std::set<Bytes> _path_requests;           // A table for storing path request timestamps
 
-		//z_discovery_path_requests  = {}       // A table for keeping track of path requests on behalf of other nodes
-		//z_discovery_pr_tags        = []       // A table for keeping track of tagged path requests
+		static std::map<Bytes, PathRequestEntry> _discovery_path_requests;       // A table for keeping track of path requests on behalf of other nodes
+		//z _discovery_pr_tags        = []       // A table for keeping track of tagged path requests
 		static uint16_t _max_pr_taXgxs;    // Maximum amount of unique path request tags to remember
 
 		// Transport control destinations are used
@@ -260,13 +265,14 @@ namespace RNS {
 		// Interfaces for communicating with
 		// local clients connected to a shared
 		// Reticulum instance
-		static std::set<Interface> _local_client_interfaces;
+		//static std::set<Interface> _local_client_interfaces;
+		static std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> _local_client_interfaces;
 
-		//z_local_client_rssi_cache    = []
-		//z_local_client_snr_cache     = []
+		static std::map<Bytes, const Interface&> _pending_local_path_requests;
+
+		//z _local_client_rssi_cache    = []
+		//z _local_client_snr_cache     = []
 		static uint16_t _LOCAL_CLIENT_CACHE_MAXSIZE;
-
-		std::map<Bytes, Interface> _pending_local_path_requests;
 
 		static uint64_t _start_time;
 		static bool _jobs_locked;

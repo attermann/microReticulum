@@ -1,8 +1,10 @@
 #include "Identity.h"
 
 #include "Reticulum.h"
+#include "Transport.h"
 #include "Packet.h"
 #include "Log.h"
+#include "Utilities/OS.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/HKDF.h"
 #include "Cryptography/Fernet.h"
@@ -12,6 +14,9 @@
 
 using namespace RNS;
 using namespace RNS::Type::Identity;
+using namespace RNS::Utilities;
+
+/*static*/ std::map<Bytes, Identity::IdentityEntry> Identity::_known_destinations;
 
 Identity::Identity(bool create_keys) : _object(new Object()) {
 	if (create_keys) {
@@ -19,7 +24,6 @@ Identity::Identity(bool create_keys) : _object(new Object()) {
 	}
 	extreme("Identity object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
-
 
 void Identity::createKeys() {
 	assert(_object);
@@ -49,6 +53,215 @@ void Identity::createKeys() {
 	verbose("Identity keys created for " + _object->_hash.toHex());
 }
 
+/*
+Load a private key into the instance.
+
+:param prv_bytes: The private key as *bytes*.
+:returns: True if the key was loaded, otherwise False.
+*/
+bool Identity::load_private_key(const Bytes& prv_bytes) {
+/*
+	assert(_object);
+	try {
+		//p self.prv_bytes     = prv_bytes[:Identity.KEYSIZE//8//2]
+		_object->_prv_bytes     = prv_bytes.left(Type::Identity::KEYSIZE/8/2);
+		_object->_prv           = X25519PrivateKey::from_private_bytes(_object->_prv_bytes);
+		//p self.sig_prv_bytes = prv_bytes[Identity.KEYSIZE//8//2:]
+		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
+		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
+
+		_object->_pub           = _object->_prv.public_key();
+		_object->_pub_bytes     = _object->_pub.public_bytes();
+
+		_object->_sig_pub       = _object->_sig_prv.public_key();
+		_object->_sig_pub_bytes = _object->_sig_pub.public_bytes();
+
+		update_hashes();
+
+		return true;
+	}
+	catch (std::exception& e) {
+		//p raise e
+		error("Failed to load identity key";
+		error("The contained exception was: " + e.what());
+		return false;
+	}
+*/
+	// MOCK
+	return true;
+}
+
+/*
+Load a public key into the instance.
+
+:param pub_bytes: The public key as *bytes*.
+:returns: True if the key was loaded, otherwise False.
+*/
+void Identity::load_public_key(const Bytes& pub_bytes) {
+/*
+	assert(_object);
+	try {
+		//_pub_bytes     = pub_bytes[:Identity.KEYSIZE//8//2]
+		_object->_pub_bytes     = pub_bytes.left(Type::Identity::KEYSIZE/8/2);
+		//_sig_pub_bytes = pub_bytes[Identity.KEYSIZE//8//2:]
+		_object->_sig_pub_bytes = pub_bytes.mid(Type::Identity::KEYSIZE/8/2);
+
+		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes)
+		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes)
+
+		update_hashes();
+	}
+	catch (std::exception& e) {
+		error("Error while loading public key, the contained exception was: " + e.what());
+	}
+*/
+}
+
+bool Identity::load(const char* path) {
+/*
+	try:
+		with open(path, "rb") as key_file:
+			prv_bytes = key_file.read()
+			return self.load_private_key(prv_bytes)
+		return False
+	except Exception as e:
+		RNS.log("Error while loading identity from "+str(path), RNS.LOG_ERROR)
+		RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+*/
+	// MOCK
+	return true;
+}
+
+
+/*static*/ void Identity::remember(const Bytes& packet_hash, const Bytes& destination_hash, const Bytes& public_key, const Bytes& app_data /*= {Bytes::NONE}*/) {
+	if (public_key.size() != Type::Identity::KEYSIZE/8) {
+		throw std::invalid_argument("Can't remember " + destination_hash.toHex() + ", the public key size of " + std::to_string(public_key.size()) + " is not valid.");
+	}
+	else {
+		//_known_destinations[destination_hash] = {OS::time(), packet_hash, public_key, app_data};
+		_known_destinations.insert({destination_hash, {OS::time(), packet_hash, public_key, app_data}});
+	}
+}
+
+/*
+Recall identity for a destination hash.
+
+:param destination_hash: Destination hash as *bytes*.
+:returns: An :ref:`RNS.Identity<api-identity>` instance that can be used to create an outgoing :ref:`RNS.Destination<api-destination>`, or *None* if the destination is unknown.
+*/
+/*static*/ Identity Identity::recall(const Bytes& destination_hash) {
+	auto iter = _known_destinations.find(destination_hash);
+	if (iter != _known_destinations.end()) {
+		const IdentityEntry& identity_data = (*iter).second;
+		Identity identity(false);
+		identity.load_public_key(identity_data._public_key);
+		identity.app_data(identity_data._app_data);
+		return identity;
+	}
+	else {
+		Destination registered_destination(Transport::find_destination_from_hash(destination_hash));
+		if (registered_destination) {
+			Identity identity(false);
+			identity.load_public_key(registered_destination.identity().get_public_key());
+			identity.app_data({Bytes::NONE});
+			return identity;
+		}
+		return {Type::NONE};
+	}
+}
+
+/*
+Recall last heard app_data for a destination hash.
+
+:param destination_hash: Destination hash as *bytes*.
+:returns: *Bytes* containing app_data, or *None* if the destination is unknown.
+*/
+/*static*/ Bytes Identity::recall_app_data(const Bytes& destination_hash) {
+	auto iter = _known_destinations.find(destination_hash);
+	if (iter != _known_destinations.end()) {
+		const IdentityEntry& identity_data = (*iter).second;
+		return identity_data._app_data;
+	}
+	else {
+		return {Bytes::NONE};
+	}
+}
+
+/*static*/ void Identity::save_known_destinations() {
+/*
+	// TODO: Improve the storage method so we don't have to
+	// deserialize and serialize the entire table on every
+	// save, but the only changes. It might be possible to
+	// simply overwrite on exit now that every local client
+	// disconnect triggers a data persist.
+
+	try:
+		if hasattr(Identity, "saving_known_destinations"):
+			wait_interval = 0.2
+			wait_timeout = 5
+			wait_start = time.time()
+			while Identity.saving_known_destinations:
+				time.sleep(wait_interval)
+				if time.time() > wait_start+wait_timeout:
+					RNS.log("Could not save known destinations to storage, waiting for previous save operation timed out.", RNS.LOG_ERROR)
+					return False
+
+		Identity.saving_known_destinations = True
+		save_start = time.time()
+
+		storage_known_destinations = {}
+		if os.path.isfile(RNS.Reticulum.storagepath+"/known_destinations"):
+			try:
+				file = open(RNS.Reticulum.storagepath+"/known_destinations","rb")
+				storage_known_destinations = umsgpack.load(file)
+				file.close()
+			except:
+				pass
+
+		for destination_hash in storage_known_destinations:
+			if not destination_hash in Identity.known_destinations:
+				Identity.known_destinations[destination_hash] = storage_known_destinations[destination_hash]
+
+		RNS.log("Saving "+str(len(Identity.known_destinations))+" known destinations to storage...", RNS.LOG_DEBUG)
+		file = open(RNS.Reticulum.storagepath+"/known_destinations","wb")
+		umsgpack.dump(Identity.known_destinations, file)
+		file.close()
+
+		save_time = time.time() - save_start
+		if save_time < 1:
+			time_str = str(round(save_time*1000,2))+"ms"
+		else:
+			time_str = str(round(save_time,2))+"s"
+
+		RNS.log("Saved known destinations to storage in "+time_str, RNS.LOG_DEBUG)
+
+	except Exception as e:
+		RNS.log("Error while saving known destinations to disk, the contained exception was: "+str(e), RNS.LOG_ERROR)
+
+	Identity.saving_known_destinations = False
+*/
+}
+
+/*static*/ void Identity::load_known_destinations() {
+/*
+	if os.path.isfile(RNS.Reticulum.storagepath+"/known_destinations"):
+		try:
+			file = open(RNS.Reticulum.storagepath+"/known_destinations","rb")
+			loaded_known_destinations = umsgpack.load(file)
+			file.close()
+
+			Identity.known_destinations = {}
+			for known_destination in loaded_known_destinations:
+				if len(known_destination) == RNS.Reticulum.TRUNCATED_HASHLENGTH//8:
+					Identity.known_destinations[known_destination] = loaded_known_destinations[known_destination]
+
+			RNS.log("Loaded "+str(len(Identity.known_destinations))+" known destination from storage", RNS.LOG_VERBOSE)
+		except:
+			RNS.log("Error loading known destinations from disk, file will be recreated on exit", RNS.LOG_ERROR)
+	else:
+		RNS.log("Destinations file does not exist, no known destinations loaded", RNS.LOG_VERBOSE)
+*/
+}
 
 /*static*/ bool Identity::validate_announce(const Packet& packet) {
 /*
@@ -132,7 +345,7 @@ Encrypts information for the identity.
 :returns: Ciphertext token as *bytes*.
 :raises: *KeyError* if the instance does not hold a public key.
 */
-const Bytes Identity::encrypt(const Bytes& plaintext) {
+const Bytes Identity::encrypt(const Bytes& plaintext) const {
 	assert(_object);
 	debug("Identity::encrypt: encrypting data...");
 	if (!_object->_pub) {
@@ -172,7 +385,7 @@ Decrypts information for the identity.
 :returns: Plaintext as *bytes*, or *None* if decryption fails.
 :raises: *KeyError* if the instance does not hold a private key.
 */
-const Bytes Identity::decrypt(const Bytes& ciphertext_token) {
+const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 	assert(_object);
 	debug("Identity::decrypt: decrypting data...");
 	if (!_object->_prv) {
@@ -226,7 +439,7 @@ Signs information by the identity.
 :returns: Signature as *bytes*.
 :raises: *KeyError* if the instance does not hold a private key.
 */
-const Bytes Identity::sign(const Bytes& message) {
+const Bytes Identity::sign(const Bytes& message) const {
 	assert(_object);
 	if (!_object->_sig_prv) {
 		throw std::runtime_error("Signing failed because identity does not hold a private key");
@@ -248,7 +461,7 @@ Validates the signature of a signed message.
 :returns: True if the signature is valid, otherwise False.
 :raises: *KeyError* if the instance does not hold a public key.
 */
-bool Identity::validate(const Bytes& signature, const Bytes& message) {
+bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	if (_object->_pub) {
 		try {
@@ -264,7 +477,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) {
 	}
 }
 
-void Identity::prove(const Packet& packet, const Destination& destination /*= {Type::NONE}*/) {
+void Identity::prove(const Packet& packet, const Destination& destination /*= {Type::NONE}*/) const {
 	assert(_object);
 	Bytes signature(sign(packet.packet_hash()));
 	Bytes proof_data;
@@ -283,6 +496,6 @@ void Identity::prove(const Packet& packet, const Destination& destination /*= {T
 	proof.send();
 }
 
-void Identity::prove(const Packet& packet) {
+void Identity::prove(const Packet& packet) const {
 	prove(packet, {Type::NONE});
 }

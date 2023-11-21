@@ -65,7 +65,7 @@ namespace RNS { namespace Type {
 		static const uint16_t HEADER_MINSIZE   = 2+1+(TRUNCATED_HASHLENGTH/8)*1;	// In bytes
 		static const uint16_t HEADER_MAXSIZE   = 2+1+(TRUNCATED_HASHLENGTH/8)*2;	// In bytes
 		static const uint16_t IFAC_MIN_SIZE    = 1;
-		//zIFAC_SALT        = bytes.fromhex("adf54d882c9a9b80771eb4995d702d4a3e733391b2a0f53f416d9f907e55cff8")
+		//z IFAC_SALT        = bytes.fromhex("adf54d882c9a9b80771eb4995d702d4a3e733391b2a0f53f416d9f907e55cff8")
 
 		static const uint16_t MDU              = MTU - HEADER_MAXSIZE - IFAC_MIN_SIZE;
 

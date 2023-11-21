@@ -129,8 +129,27 @@ namespace RNS {
 		Packet(const Packet& packet) : _object(packet._object) {
 			extreme("Packet object copy created");
 		}
-		Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, Type::Packet::types packet_type = Type::Packet::DATA, Type::Packet::context_types context = Type::Packet::CONTEXT_NONE, Type::Transport::types transport_type = Type::Transport::BROADCAST, Type::Packet::header_types header_type = Type::Packet::HEADER_1, const Bytes& transport_id = {Bytes::NONE}, bool create_receipt = true);
-		Packet(const Destination& destination, const Bytes& data, Type::Packet::types packet_type = Type::Packet::DATA, Type::Packet::context_types context = Type::Packet::CONTEXT_NONE, Type::Transport::types transport_type = Type::Transport::BROADCAST, Type::Packet::header_types header_type = Type::Packet::HEADER_1, const Bytes& transport_id = {Bytes::NONE}, bool create_receipt = true) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
+		Packet(
+			const Destination& destination,
+			const Interface& attached_interface,
+			const Bytes& data,
+			Type::Packet::types packet_type = Type::Packet::DATA,
+			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
+			Type::Transport::types transport_type = Type::Transport::BROADCAST,
+			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
+			const Bytes& transport_id = {Bytes::NONE},
+			bool create_receipt = true
+		);
+		Packet(
+			const Destination& destination,
+			const Bytes& data,
+			Type::Packet::types packet_type = Type::Packet::DATA,
+			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
+			Type::Transport::types transport_type = Type::Transport::BROADCAST,
+			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
+			const Bytes& transport_id = {Bytes::NONE},
+			bool create_receipt = true
+		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
 		virtual ~Packet();
 
 		inline Packet& operator = (const Packet& packet) {
@@ -165,7 +184,7 @@ namespace RNS {
 		const Bytes get_hash() const;
 		const Bytes getTruncatedHash() const;
 		const Bytes get_hashable_part() const;
-		//zProofDestination& generate_proof_destination();
+		//z ProofDestination& generate_proof_destination();
 
 		// getters/setters
 		inline const Destination& destination() const { assert(_object); return _object->_destination; }

@@ -14,11 +14,22 @@
 #include <time.h>
 
 using namespace RNS;
+using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
 
+#if defined(INTERFACES_SET)
 ///*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_interfaces;
+/*static*/ std::set<std::reference_wrapper<Interface>, std::less<Interface>> Transport::_interfaces;
+#elif defined(INTERFACES_LIST)
 /*static*/ std::list<std::reference_wrapper<Interface>> Transport::_interfaces;
+#elif defined(INTERFACES_MAP)
+/*static*/ std::map<Bytes, Interface&> Transport::_interfaces;
+#endif
+#if defined(DESTINATIONS_SET)
 /*static*/ std::set<Destination> Transport::_destinations;
+#elif defined(DESTINATIONS_MAP)
+/*static*/ std::map<Bytes, Destination> Transport::_destinations;
+#endif
 /*static*/ std::set<Link> Transport::_pending_links;
 /*static*/ std::set<Link> Transport::_active_links;
 /*static*/ std::set<Bytes> Transport::_packet_hashlist;
@@ -31,12 +42,16 @@ using namespace RNS::Utilities;
 /*static*/ std::set<HAnnounceHandler> Transport::_announce_handlers;
 /*static*/ std::set<Bytes> Transport::_path_requests;
 
+/*static*/ std::map<Bytes, Transport::PathRequestEntry> Transport::_discovery_path_requests;
 /*static*/ uint16_t Transport::_max_pr_taXgxs			= 32000;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
 
-/*static*/ std::set<Interface> Transport::_local_client_interfaces;
+///*static*/ std::set<Interface> Transport::_local_client_interfaces;
+/*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_local_client_interfaces;
+
+/*static*/ std::map<Bytes, const Interface&> Transport::_pending_local_path_requests;
 
 /*static*/ uint16_t Transport::_LOCAL_CLIENT_CACHE_MAXSIZE = 512;
 
@@ -62,15 +77,15 @@ using namespace RNS::Utilities;
 	_owner = reticulum_instance;
 
 	if (!_identity) {
-		//ztransport_identity_path = Reticulum::storagepath+"/transport_identity"
-		//zif (os.path.isfile(transport_identity_path)) {
-		//z	identity = Identity.from_file(transport_identity_path);
-		//z}
+		//z transport_identity_path = Reticulum::storagepath+"/transport_identity"
+		//z if (os.path.isfile(transport_identity_path)) {
+		//z 	identity = Identity.from_file(transport_identity_path);
+		//z }
 
 		if (!_identity) {
 			verbose("No valid Transport Identity in storage, creating...");
 			_identity = new Identity();
-			//z_identity.to_file(transport_identity_path);
+			//z _identity.to_file(transport_identity_path);
 		}
 		else {
 			verbose("Loaded Transport Identity from storage");
@@ -714,7 +729,13 @@ using namespace RNS::Utilities;
 	else {
 		extreme("Transport::outbound: Path to destination is unknown");
 		bool stored_hash = false;
+#if defined(INTERFACES_SET)
 		for (const Interface& interface : _interfaces) {
+#elif defined(INTERFACES_LIST)
+		for (Interface& interface : _interfaces) {
+#elif defined(INTERFACES_MAP)
+		for (auto& [hash, interface] : _interfaces) {
+#endif
 			extreme("Transport::outbound: Checking interface " + interface.toString());
 			if (interface.OUT()) {
 				bool should_transmit = true;
@@ -724,9 +745,9 @@ using namespace RNS::Utilities;
 						should_transmit = false;
 					}
 					// CBA Destination has no member attached_interface
-					//zif (interface != packet.destination().attached_interface()) {
-					//z	should_transmit = false;
-					//z}
+					//z if (interface != packet.destination().attached_interface()) {
+					//z 	should_transmit = false;
+					//z }
 				}
 				
 				if (packet.attached_interface() && interface != packet.attached_interface()) {
@@ -743,6 +764,7 @@ using namespace RNS::Utilities;
 						else if (interface.mode() == Type::Interface::MODE_ROAMING) {
 							//local_destination = next((d for d in Transport.destinations if d.hash == packet.destination_hash), None)
 							//Destination local_destination({Type::NONE});
+#if defined(DESTINATIONS_SET)
 							bool found_local = false;
 							for (auto& destination : _destinations) {
 								if (destination.hash() == packet.destination_hash()) {
@@ -754,6 +776,13 @@ using namespace RNS::Utilities;
                             //if local_destination != None:
 							//if (local_destination) {
 							if (found_local) {
+#elif defined(DESTINATIONS_MAP)
+							auto iter = _destinations.find(packet.destination_hash());
+							//if (iter != _destinations.end()) {
+							//	local_destination = (*iter).second;
+							//}
+							if (iter != _destinations.end()) {
+#endif
 								//extreme("Allowing announce broadcast on roaming-mode interface from instance-local destination");
 							}
 							else {
@@ -786,6 +815,7 @@ using namespace RNS::Utilities;
 							// next(iterable, default)
 							// list comprehension: [x for x in xyz if x in a]
 							// CBA TODO confirm that above pattern just selects the first matching destination
+#if defined(DESTINATIONS_SET)
 							//Destination local_destination({Typeestination::NONE});
 							bool found_local = false;
 							for (auto& destination : _destinations) {
@@ -798,6 +828,10 @@ using namespace RNS::Utilities;
                             //if local_destination != None:
 							//if (local_destination) {
 							if (found_local) {
+#elif defined(DESTINATIONS_MAP)
+							auto iter = _destinations.find(packet.destination_hash());
+							if (iter != _destinations.end()) {
+#endif
 								//extreme("Allowing announce broadcast on boundary-mode interface from instance-local destination");
 							}
 							else {
@@ -840,7 +874,11 @@ using namespace RNS::Utilities;
 								if (!queued_announces && outbound_time > interface.announce_allowed_at()) {
 									uint16_t tx_time = (packet.raw().size() * 8) / interface.bitrate();
 									uint16_t wait_time = (tx_time / interface.announce_cap());
+#if defined(INTERFACES_SET)
 									const_cast<Interface&>(interface).announce_allowed_at(outbound_time + wait_time);
+#else
+									interface.announce_allowed_at(outbound_time + wait_time);
+#endif
 								}
 								else {
 									should_transmit = false;
@@ -869,13 +907,17 @@ using namespace RNS::Utilities;
 											);
 
 											queued_announces = (interface.announce_queue().size() > 0);
+#if defined(INTERFACES_SET)
 											const_cast<Interface&>(interface).add_announce(entry);
+#else
+											interface.add_announce(entry);
+#endif
 
 											if (!queued_announces) {
 												uint64_t wait_time = std::max(interface.announce_allowed_at() - OS::time(), (uint64_t)0);
 												// CBA TODO THREAD?
-												//ztimer = threading.Timer(wait_time, interface.process_announce_queue)
-												//ztimer.start()
+												//z timer = threading.Timer(wait_time, interface.process_announce_queue)
+												//z timer.start()
 
 												std::string wait_time_str;
 												if (wait_time < 1000) {
@@ -925,12 +967,16 @@ using namespace RNS::Utilities;
 
 					// TODO: Re-evaluate potential for blocking
 					// def send_packet():
-					//     Transport.transmit(const_cast<Interface&>(interface), packet.raw)
+					//     Transport.transmit(interface, packet.raw)
 					// thread = threading.Thread(target=send_packet)
 					// thread.daemon = True
 					// thread.start()
 
+#if defined(INTERFACES_SET)
 					transmit(const_cast<Interface&>(interface), packet.raw());
+#else
+					transmit(interface, packet.raw());
+#endif
 					sent = true;
 				}
 				else {
@@ -1197,7 +1243,7 @@ using namespace RNS::Utilities;
 				}
 			}
 		}
-		//proof_for_local_client    = (packet.destination_hash in Transport.reverse_table) and (Transport.reverse_table[packet.destination_hash][0] in Transport.local_client_interfaces)
+		//p roof_for_local_client    = (packet.destination_hash in Transport.reverse_table) and (Transport.reverse_table[packet.destination_hash][0] in Transport.local_client_interfaces)
 		bool proof_for_local_client = false;
 		auto reverse_iter = _reverse_table.find(packet.destination_hash());
 		if (reverse_iter != _reverse_table.end()) {
@@ -1214,17 +1260,27 @@ using namespace RNS::Utilities;
 			if (packet.destination_type() == Type::Destination::PLAIN && packet.transport_type() == Type::Transport::BROADCAST) {
 				// Send to all interfaces except the originator
 				if (from_local_client) {
+#if defined(INTERFACES_SET)
 					for (const Interface& interface : _interfaces) {
+#elif defined(INTERFACES_LIST)
+					for (Interface& interface : _interfaces) {
+#elif defined(INTERFACES_MAP)
+					for (auto& [hash, interface] : _interfaces) {
+#endif
 						if (interface != packet.receiving_interface()) {
 							extreme("Transport::inbound: Broadcasting packet on " + interface.toString());
+#if defined(INTERFACES_SET)
 							transmit(const_cast<Interface&>(interface), packet.raw());
+#else
+							transmit(interface, packet.raw());
+#endif
 						}
 					}
 				}
 				// If the packet was not from a local client, send
 				// it directly to all local clients
 				else {
-					for (auto& interface : _local_client_interfaces) {
+					for (const Interface& interface : _local_client_interfaces) {
 						extreme("Transport::inbound: Broadcasting packet on " + interface.toString());
 						transmit(const_cast<Interface&>(interface), packet.raw());
 					}
@@ -1329,7 +1385,11 @@ using namespace RNS::Utilities;
 							);
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
 						}
+#if defined(INTERFACES_SET)
 						transmit(const_cast<Interface&>(outbound_interface), new_raw);
+#else
+						transmit(outbound_interface, new_raw);
+#endif
 						destination_entry._timestamp = OS::time();
 					}
 					else {
@@ -1401,6 +1461,7 @@ using namespace RNS::Utilities;
 			extreme("Transport::inbound: Packet is ANNOUNCE");
 			Bytes received_from;
 			//p local_destination = next((d for d in Transport.destinations if d.hash == packet.destination_hash), None)
+#if defined(DESTINATIONS_SET)
 			//Destination local_destination({Type::NONE});
 			bool found_local = false;
 			for (auto& destination : _destinations) {
@@ -1413,6 +1474,10 @@ using namespace RNS::Utilities;
             //if local_destination == None and RNS.Identity.validate_announce(packet): 
 			//if (!local_destination && Identity::validate_announce(packet)) {
 			if (!found_local && Identity::validate_announce(packet)) {
+#elif defined(DESTINATIONS_MAP)
+			auto iter = _destinations.find(packet.destination_hash());
+			if (iter == _destinations.end() && Identity::validate_announce(packet)) {
+#endif
 				extreme("Transport::inbound: Packet is announce for non-local destination, processing...");
 				if (packet.transport_id()) {
 					received_from = packet.transport_id();
@@ -1427,7 +1492,7 @@ using namespace RNS::Utilities;
 						if ((packet.hops() - 1) == announce_entry._hops) {
 							debug("Heard a local rebroadcast of announce for " + packet.destination_hash().toHex());
 							announce_entry._local_rebroadcasts += 1;
-							if (announce_entry._local_rebroadcasts >= Transport::LOCAL_REBROADCASTS_MAX) {
+							if (announce_entry._local_rebroadcasts >= LOCAL_REBROADCASTS_MAX) {
 								debug("Max local rebroadcasts of announce for " + packet.destination_hash().toHex() + " reached, dropping announce from our table");
 								_announce_table.erase(packet.destination_hash());
 							}
@@ -1453,6 +1518,7 @@ using namespace RNS::Utilities;
 				// First, check that the announce is not for a destination
 				// local to this system, and that hops are less than the max
 				//if (not any(packet.destination_hash == d.hash for d in Transport.destinations) and packet.hops < Transport.PATHFINDER_M+1):
+#if defined(DESTINATIONS_SET)
 				bool found_local = false;
 				for (auto& destination : _destinations) {
 					if (destination.hash() == packet.destination_hash()) {
@@ -1460,18 +1526,24 @@ using namespace RNS::Utilities;
 						break;
 					}
 				}
-				if (!found_local && packet.hops() < (Transport::PATHFINDER_M+1)) {
+				if (!found_local && packet.hops() < (PATHFINDER_M+1)) {
+#elif defined(DESTINATIONS_MAP)
+				auto iter = _destinations.find(packet.destination_hash());
+				if (iter == _destinations.end() && packet.hops() < (PATHFINDER_M+1)) {
+#endif
 					extreme("Transport::inbound: Packet is announce for non-local destination, processing...");
-/*
 					uint64_t announce_emitted = Transport::announce_emitted(packet);
-					
-					//prandom_blob = packet.data[RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8:RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8+10]
-					Bytes random_blob = packet.data().mid(Identity::KEYSIZE/8 + Identity::NAME_HASH_LENGTH/8, 10);
-					//prandom_blobs = []
+
+					//p random_blob = packet.data[RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8:RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8+10]
+					Bytes random_blob = packet.data().mid(Type::Identity::KEYSIZE/8 + Type::Identity::NAME_HASH_LENGTH/8, 10);
+					//p random_blobs = []
+					std::set<Bytes> empty_random_blobs;
+					std::set<Bytes>& random_blobs = empty_random_blobs;
 					auto iter = _destination_table.find(packet.destination_hash());
 					if (iter != _destination_table.end()) {
 						DestinationEntry destination_entry = (*iter).second;
-						//prandom_blobs = Transport.destination_table[packet.destination_hash][4]
+						//p random_blobs = Transport.destination_table[packet.destination_hash][4]
+						random_blobs = destination_entry._random_blobs;
 
 						// If we already have a path to the announced
 						// destination, but the hop count is equal or
@@ -1482,8 +1554,8 @@ using namespace RNS::Utilities;
 							// replayed to forge paths.
 							// TODO: Check whether this approach works
 							// under all circumstances
-							//pif not random_blob in random_blobs:
-							if (destination_entry._random_blobs.find(random_blob) == destination_entry._random_blobs.end()) {
+							//p if not random_blob in random_blobs:
+							if (random_blobs.find(random_blob) == random_blobs.end()) {
 								should_add = true;
 							}
 							else {
@@ -1499,9 +1571,9 @@ using namespace RNS::Utilities;
 							uint64_t path_expires = destination_entry._expires;
 							
 							uint64_t path_announce_emitted = 0;
-							for (const Bytes& path_random_blob : destination_entry._random_blobs) {
-								//path_announce_emitted = std::max(path_announce_emitted, int.from_bytes(path_random_blob[5:10], "big"))
-								//zpath_announce_emitted = std::max(path_announce_emitted, int.from_bytes(path_random_blob[5:10], "big"))
+							for (const Bytes& path_random_blob : random_blobs) {
+								//p path_announce_emitted = max(path_announce_emitted, int.from_bytes(path_random_blob[5:10], "big"))
+								//z path_announce_emitted = std::max(path_announce_emitted, int.from_bytes(path_random_blob[5:10], "big"));
 								if (path_announce_emitted >= announce_emitted) {
 									break;
 								}
@@ -1511,7 +1583,7 @@ using namespace RNS::Utilities;
 								// We also check that the announce is
 								// different from ones we've already heard,
 								// to avoid loops in the network
-								if (destination_entry._random_blobs.find(random_blob) == destination_entry._random_blobs.end()) {
+								if (random_blobs.find(random_blob) == random_blobs.end()) {
 									// TODO: Check that this ^ approach actually
 									// works under all circumstances
 									debug("Replacing destination table entry for " + packet.destination_hash().toHex() + " with new announce due to expired path");
@@ -1523,7 +1595,7 @@ using namespace RNS::Utilities;
 							}
 							else {
 								if (announce_emitted > path_announce_emitted) {
-									if (destination_entry._random_blobs.find(random_blob) == destination_entry._random_blobs.end()) {
+									if (random_blobs.find(random_blob) == random_blobs.end()) {
 										debug("Replacing destination table entry for " + packet.destination_hash().toHex() + " with new announce, since it was more recently emitted");
 										should_add = true;
 									}
@@ -1534,7 +1606,6 @@ using namespace RNS::Utilities;
 							}
 						}
 					}
-
 					else {
 						// If this destination is unknown in our table
 						// we should add it
@@ -1546,7 +1617,7 @@ using namespace RNS::Utilities;
 
 						bool rate_blocked = false;
 
-
+/*
 						if packet.context != RNS.Packet.PATH_RESPONSE and packet.receiving_interface.announce_rate_target != None:
 							if not packet.destination_hash in Transport.announce_rate_table:
 								rate_entry = { "last": now, "rate_violations": 0, "blocked_until": 0, "timestamps": [now]}
@@ -1579,7 +1650,7 @@ using namespace RNS::Utilities;
 
 								else:
 									rate_blocked = True
-
+*/
 
 						uint8_t retries = 0;
 						uint8_t announce_hops = packet.hops();
@@ -1587,36 +1658,35 @@ using namespace RNS::Utilities;
 						bool block_rebroadcasts = false;
 						Interface attached_interface = {Type::NONE};
 						
-						uint64_t retransmit_timeout = now + (RNS::Cryptography::random() * Transport::PATHFINDER_RW);
+						uint64_t retransmit_timeout = now + (RNS::Cryptography::random() * PATHFINDER_RW);
 
 						uint64_t expires;
 						if (packet.receiving_interface().mode() == Type::Interface::MODE_ACCESS_POINT) {
-							expires = now + Transport::AP_PATH_TIME;
+							expires = now + AP_PATH_TIME;
 						}
 						else if (packet.receiving_interface().mode() == Type::Interface::MODE_ROAMING) {
-							expires = now + Transport::ROAMING_PATH_TIME;
+							expires = now + ROAMING_PATH_TIME;
 						}
 						else {
-							expires = now + Transport::PATHFINDER_E;
+							expires = now + PATHFINDER_E;
 						}
 
-						std::set<Bytes> random_blobs;
 						random_blobs.insert(random_blob);
 
-						if (Reticulum::transport_enabled() || from_local_client(packet) && packet.context() != Type::Packet::PATH_RESPONSE) {
+						if ((Reticulum::transport_enabled() || Transport::from_local_client(packet)) && packet.context() != Type::Packet::PATH_RESPONSE) {
 							// Insert announce into announce table for retransmission
 
 							if (rate_blocked) {
 								debug("Blocking rebroadcast of announce from " + packet.destination_hash().toHex() + " due to excessive announce rate");
 							}
 							else {
-								if (from_local_client(packet)) {
+								if (Transport::from_local_client(packet)) {
 									// If the announce is from a local client,
 									// it is announced immediately, but only one time.
 									retransmit_timeout = now;
-									retries = Transport::PATHFINDER_R;
+									retries = PATHFINDER_R;
 								}
-								_announce_table[packet.destination_hash] = [
+								AnnounceEntry announce_entry(
 									now,
 									retransmit_timeout,
 									retries,
@@ -1626,23 +1696,24 @@ using namespace RNS::Utilities;
 									local_rebroadcasts,
 									block_rebroadcasts,
 									attached_interface
-								];
+								);
+								_announce_table.insert({packet.destination_hash(), announce_entry});
 							}
 						}
 						// TODO: Check from_local_client once and store result
-						else if (from_local_client(packet) && packet.context() == Type::Packet::PATH_RESPONSE) {
+						else if (Transport::from_local_client(packet) && packet.context() == Type::Packet::PATH_RESPONSE) {
 							// If this is a path response from a local client,
 							// check if any external interfaces have pending
 							// path requests.
-							//pif packet.destination_hash in Transport.pending_local_path_requests:
-							auto iter = pending_local_path_requests.find(packet.destination_hash());
-							if (iter != _destination_table.end()) {
-								DestinationEntry destination_entry = (*iter).second;
-								desiring_interface = _pending_local_path_requests.pop(packet.destination_hash());
+							//p if packet.destination_hash in Transport.pending_local_path_requests:
+							auto iter = _pending_local_path_requests.find(packet.destination_hash());
+							if (iter != _pending_local_path_requests.end()) {
+								//p desiring_interface = Transport.pending_local_path_requests.pop(packet.destination_hash)
+								//const Interface& desiring_interface = (*iter).second;
 								retransmit_timeout = now;
-								retries = Transport::PATHFINDER_R;
+								retries = PATHFINDER_R;
 
-								Transport.announce_table[packet.destination_hash] = [
+								AnnounceEntry announce_entry(
 									now,
 									retransmit_timeout,
 									retries,
@@ -1652,50 +1723,53 @@ using namespace RNS::Utilities;
 									local_rebroadcasts,
 									block_rebroadcasts,
 									attached_interface
-								];
+								);
+								_announce_table.insert({packet.destination_hash(), announce_entry});
+							}
+						}
 
 						// If we have any local clients connected, we re-
 						// transmit the announce to them immediately
 						if (_local_client_interfaces.size() > 0) {
-							announce_identity = Identity::recall(packet.destination_hash());
-							announce_destination = Destination(announce_identity, Destination.OUT, Destination.SINGLE, "unknown", "unknown");
+							Identity announce_identity(Identity::recall(packet.destination_hash()));
+							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
 							announce_destination.hash(packet.destination_hash());
-							announce_destination.hexhash = announce_destination.hash().toHex();
-							announce_context = {Type::NONE};
-							announce_data = packet.data();
+							//announce_destination.hexhash(announce_destination.hash().toHex());
+							Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
+							Bytes announce_data = packet.data();
 
 							// TODO: Shouldn't the context be PATH_RESPONSE in the first case here?
-							if (from_local_client(packet) && packet.context() == Packet.PATH_RESPONSE) {
-								for (auto& local_interface : _local_client_interfaces) {
-									if packet.receiving_interface() != local_interface) {
+							if (Transport::from_local_client(packet) && packet.context() == Type::Packet::PATH_RESPONSE) {
+								for (const Interface& local_interface : _local_client_interfaces) {
+									if (packet.receiving_interface() != local_interface) {
 										Packet new_announce(
 											announce_destination,
+											local_interface,
 											announce_data,
 											Type::Packet::ANNOUNCE,
-											context = announce_context,
-											header_type = RNS.Packet.HEADER_2,
-											transport_type = Transport.TRANSPORT,
-											transport_id = Transport.identity.hash,
-											attached_interface = local_interface
+											announce_context,
+											Type::Transport::TRANSPORT,
+											Type::Packet::HEADER_2,
+											_identity.hash()
 										);
-										
-										new_announce.hops(packet.hops);
+
+										new_announce.hops(packet.hops());
 										new_announce.send();
 									}
 								}
 							}
 							else {
-								for (auto& local_interface : _local_client_interfaces) {
+								for (const Interface& local_interface : _local_client_interfaces) {
 									if (packet.receiving_interface() != local_interface) {
 										Packet new_announce(
 											announce_destination,
+											local_interface,
 											announce_data,
 											Type::Packet::ANNOUNCE,
-											context = announce_context,
-											header_type = RNS.Packet.HEADER_2,
-											transport_type = Transport.TRANSPORT,
-											transport_id = Transport.identity.hash,
-											attached_interface = local_interface
+											announce_context,
+											Type::Transport::TRANSPORT,
+											Type::Packet::HEADER_2,
+											_identity.hash()
 										);
 
 										new_announce.hops(packet.hops());
@@ -1710,28 +1784,26 @@ using namespace RNS::Utilities;
 						// interface immediately
 						auto iter = _discovery_path_requests.find(packet.destination_hash());
 						if (iter != _discovery_path_requests.end()) {
-							PathRequestEntry pr_entry = (*iter).second;
+							PathRequestEntry& pr_entry = (*iter).second;
 							attached_interface = pr_entry._requesting_interface;
 
-							interface_str = " on " + attached_interface.toString();
-
-							debug("Got matching announce, answering waiting discovery path request for " + packet.destination_hash().toHex() + interface_str);
-							announce_identity = Identity::recall(packet.destination_hash());
-							Destination announce_destination(announce_identity, RNS.Destination.OUT, RNS.Destination.SINGLE, "unknown", "unknown");
+							debug("Got matching announce, answering waiting discovery path request for " + packet.destination_hash().toHex() + " on " + attached_interface.toString());
+							Identity announce_identity(Identity::recall(packet.destination_hash()));
+							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
 							announce_destination.hash(packet.destination_hash());
-							announce_destination.hexhash = announce_destination.hash().toHex();
-							announce_context = {Type::NONE};
-							announce_data = packet.data();
+							//announce_destination.hexhash(announce_destination.hash().toHex());
+							Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
+							Bytes announce_data = packet.data();
 
 							Packet new_announce(
 								announce_destination,
+								attached_interface,
 								announce_data,
 								Type::Packet::ANNOUNCE,
-								context = Type::Packet::PATH_RESPONSE,
-								header_type = Type::Packet::HEADER_2,
-								transport_type = Type::Transport::TRANSPORT,
-								transport_id = _identity.hash(),
-								attached_interface = attached_interface
+								Type::Packet::PATH_RESPONSE,
+								Type::Transport::TRANSPORT,
+								Type::Packet::HEADER_2,
+								_identity.hash()
 							);
 
 							new_announce.hops(packet.hops());
@@ -1744,59 +1816,62 @@ using namespace RNS::Utilities;
 							announce_hops,
 							expires,
 							random_blobs,
-							packet.receiving_interface(),
+							//packet.receiving_interface(),
+							const_cast<Interface&>(packet.receiving_interface()),
 							packet
 						);
 						_destination_table.insert({packet.destination_hash(), destination_table_entry});
+
 						debug("Destination " + packet.destination_hash().toHex() + " is now " + std::to_string(announce_hops) + " hops away via " + received_from.toHex() + " on " + packet.receiving_interface().toString());
 
+/*
 						// If the receiving interface is a tunnel, we add the
 						// announce to the tunnels table
 						if (packet.receiving_interface().tunnel_id()) {
 							tunnel_entry = Transport.tunnels[packet.receiving_interface.tunnel_id];
-							paths = tunnel_entry[2]
-							paths[packet.destination_hash] = destination_table_entry
+							paths = tunnel_entry[2];
+							paths[packet.destination_hash] = destination_table_entry;
 							expires = OS::time() + Transport::DESTINATION_TIMEOUT;
-							tunnel_entry[3] = expires
+							tunnel_entry[3] = expires;
 							debug("Path to " + packet.destination_hash().toHex() + " associated with tunnel " + packet.receiving_interface().tunnel_id().toHex());
 						}
+*/
 
 						// Call externally registered callbacks from apps
 						// wanting to know when an announce arrives
 						if (packet.context() != Type::Packet::PATH_RESPONSE) {
-							for (auto& handler : Transport.announce_handlers) {
+							for (auto& handler : _announce_handlers) {
 								try {
 									// Check that the announced destination matches
 									// the handlers aspect filter
-									execute_callback = false;
-									announce_identity = Identity::recall(packet.destination_hash());
-									if (handler.aspect_filter == None) {
+									bool execute_callback = false;
+									Identity announce_identity(Identity::recall(packet.destination_hash()));
+									if (handler->aspect_filter().empty()) {
 										// If the handlers aspect filter is set to
 										// None, we execute the callback in all cases
 										execute_callback = true;
 									}
 									else {
-										handler_expected_hash = RNS.Destination.hash_from_name_and_identity(handler.aspect_filter, announce_identity)
-										if (packet.destination_hash() == handler_expected_hash() ) {
+										Bytes handler_expected_hash = Destination::hash_from_name_and_identity(handler->aspect_filter().c_str(), announce_identity);
+										if (packet.destination_hash() == handler_expected_hash) {
 											execute_callback = true;
 										}
 									}
 									if (execute_callback) {
-										handler.received_announce(
-											destination_hash=packet.destination_hash(),
-											announced_identity=announce_identity,
-											app_data=Identity::recall_app_data(packet.destination_hash())
+										handler->received_announce(
+											packet.destination_hash(),
+											announce_identity,
+											Identity::recall_app_data(packet.destination_hash())
 										);
 									}
 								}
 								catch (std::exception& e) {
 									error("Error while processing external announce callback.");
-									error("The contained exception was: " + e.what();
+									error("The contained exception was: " + std::string(e.what()));
 								}
 							}
 						}
 					}
-*/
 				}
 				else {
 					extreme("Transport::inbound: Packet is announce for local destination, not processing");
@@ -1811,12 +1886,23 @@ using namespace RNS::Utilities;
 		else if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 			extreme("Transport::inbound: Packet is LINKREQUEST");
 			if (!packet.transport_id() || packet.transport_id() == _identity.hash()) {
+#if defined(DESTINATIONS_SET)
 				for (auto& destination : _destinations) {
 					if (destination.hash() == packet.destination_hash() && destination.type() == packet.destination_type()) {
+#elif defined(DESTINATIONS_MAP)
+				auto iter = _destinations.find(packet.destination_hash());
+				if (iter != _destinations.end()) {
+					auto& destination = (*iter).second;
+					if (destination.type() == packet.destination_type()) {
+#endif
 						packet.destination(destination);
 						// CBA iterator over std::set is always const so need to make temporarily mutable
 						//destination.receive(packet);
+#if defined(DESTINATIONS_SET)
 						const_cast<Destination&>(destination).receive(packet);
+#else
+						destination.receive(packet);
+#endif
 					}
 				}
 			}
@@ -1834,10 +1920,21 @@ using namespace RNS::Utilities;
 				}
 			}
 			else {
+#if defined(DESTINATIONS_SET)
 				for (auto& destination : _destinations) {
 					if (destination.hash() == packet.destination_hash() && destination.type() == packet.destination_type()) {
+#elif defined(DESTINATIONS_MAP)
+				auto iter = _destinations.find(packet.destination_hash());
+				if (iter != _destinations.end()) {
+					auto& destination = (*iter).second;
+					if (destination.type() == packet.destination_type()) {
+#endif
 						packet.destination(destination);
+#if defined(DESTINATIONS_SET)
 						const_cast<Destination&>(destination).receive(packet);
+#else
+						destination.receive(packet);
+#endif
 
 						if (destination.proof_strategy() == Type::Destination::PROVE_ALL) {
 							packet.prove();
@@ -2057,39 +2154,71 @@ using namespace RNS::Utilities;
 
 /*static*/ void Transport::register_interface(Interface& interface) {
 	extreme("Transport: Registering interface " + interface.toString());
+#if defined(INTERFACES_SET)
+	_interfaces.insert(interface);
+#elif defined(INTERFACES_LIST)
 	_interfaces.push_back(interface);
-	extreme("Transport: Listing all registered interfaces...");
-	for (Interface& found_interface : _interfaces) {
-		extreme("Transport: Found interface " + found_interface.toString());
-	}
+#elif defined(INTERFACES_MAP)
+	_interfaces.insert({interface.get_hash(), interface});
+#endif
 	// CBA TODO set or add transport as listener on interface to receive incoming packets
 }
 
 /*static*/ void Transport::deregister_interface(const Interface& interface) {
 	extreme("Transport: Deregistering interface " + interface.toString());
-	//if (_interfaces.find(interface) != _interfaces.end()) {
-	//	_interfaces.erase(interface);
+#if defined(INTERFACES_SET)
+	//for (auto iter = _interfaces.begin(); iter != _interfaces.end(); ++iter) {
+	//	if ((*iter).get() == interface) {
+	//		_interfaces.erase(iter);
+	//		extreme("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
+	//		break;
+	//	}
 	//}
+	//auto iter = _interfaces.find(interface);
+	auto iter = _interfaces.find(const_cast<Interface&>(interface));
+	if (iter != _interfaces.end()) {
+		_interfaces.erase(iter);
+		extreme("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
+	}
+#elif defined(INTERFACES_LIST)
 	for (auto iter = _interfaces.begin(); iter != _interfaces.end(); ++iter) {
 		if ((*iter).get() == interface) {
 			_interfaces.erase(iter);
+			extreme("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 			break;
 		}
 	}
+#elif defined(INTERFACES_MAP)
+	auto iter = _interfaces.find(interface.get_hash());
+	if (iter != _interfaces.end()) {
+		extreme("Transport::deregister_interface: Found and removing interface " + (*iter).second.toString());
+		_interfaces.erase(iter);
+	}
+#endif
 }
 
 /*static*/ void Transport::register_destination(Destination& destination) {
 	extreme("Transport: Registering destination " + destination.toString());
 	destination.mtu(Type::Reticulum::MTU);
 	if (destination.direction() == Type::Destination::IN) {
+#if defined(DESTINATIONS_SET)
 		for (auto& registered_destination : _destinations) {
 			if (destination.hash() == registered_destination.hash()) {
 				//raise KeyError("Attempt to register an already registered destination.")
 				throw std::runtime_error("Attempt to register an already registered destination.");
 			}
 		}
-		
+
 		_destinations.insert(destination);
+#elif defined(DESTINATIONS_MAP)
+		auto iter = _destinations.find(destination.hash());
+		if (iter != _destinations.end()) {
+			//raise KeyError("Attempt to register an already registered destination.")
+			throw std::runtime_error("Attempt to register an already registered destination.");
+		}
+
+		_destinations.insert({destination.hash(), destination});
+#endif
 
 		if (_owner.is_connected_to_shared_instance()) {
 			if (destination.type() == Type::Destination::SINGLE) {
@@ -2101,9 +2230,16 @@ using namespace RNS::Utilities;
 
 /*static*/ void Transport::deregister_destination(const Destination& destination) {
 	extreme("Transport: Deregistering destination " + destination.toString());
+#if defined(DESTINATIONS_SET)
 	if (_destinations.find(destination) != _destinations.end()) {
 		_destinations.erase(destination);
 	}
+#elif defined(DESTINATIONS_MAP)
+	auto iter = _destinations.find(destination.hash());
+	if (iter != _destinations.end()) {
+		_destinations.erase(iter);
+	}
+#endif
 }
 
 /*static*/ void Transport::register_link(const Link& link) {
@@ -2141,10 +2277,8 @@ Registers an announce handler.
 :param handler: Must be an object with an *aspect_filter* attribute and a *received_announce(destination_hash, announced_identity, app_data)* callable. See the :ref:`Announce Example<example-announce>` for more info.
 */
 /*static*/ void Transport::register_announce_handler(HAnnounceHandler handler) {
-	extreme("Transport: Transport::register_announce_handler()");
-	//if hasattr(handler, "received_announce") and callable(handler.received_announce):
-		//if hasattr(handler, "aspect_filter"):
-			_announce_handlers.insert(handler);
+	extreme("Transport: Registering announce handler " + handler->aspect_filter());
+	_announce_handlers.insert(handler);
 }
 
 /*
@@ -2153,18 +2287,32 @@ Deregisters an announce handler.
 :param handler: The announce handler to be deregistered.
 */
 /*static*/ void Transport::deregister_announce_handler(HAnnounceHandler handler) {
-	extreme("Transport: Transport::deregister_announce_handler()");
+	extreme("Transport: Deregistering announce handler " + handler->aspect_filter());
 	if (_announce_handlers.find(handler) != _announce_handlers.end()) {
 		_announce_handlers.erase(handler);
+		extreme("Transport::deregister_announce_handler: Found and removed handler" + handler->aspect_filter());
 	}
 }
 
 /*static*/ Interface Transport::find_interface_from_hash(const Bytes& interface_hash) {
+#if defined(INTERFACES_SET)
 	for (const Interface& interface : _interfaces) {
 		if (interface.get_hash() == interface_hash) {
 			return interface;
 		}
 	}
+#elif defined(INTERFACES_LIST)
+	for (Interface& interface : _interfaces) {
+		if (interface.get_hash() == interface_hash) {
+			return interface;
+		}
+	}
+#elif defined(INTERFACES_MAP)
+	auto iter = _interfaces.find(interface_hash);
+	if (iter != _interfaces.end()) {
+		return (*iter).second;
+	}
+#endif
 
 	return {Type::NONE};
 }
@@ -2299,7 +2447,7 @@ Deregisters an announce handler.
 		return destination_entry._hops;
 	}
 	else {
-		return Transport::PATHFINDER_M;
+		return PATHFINDER_M;
 	}
 }
 
@@ -2479,6 +2627,7 @@ will announce it.
 				Transport.pending_local_path_requests[destination_hash] = attached_interface
 	
 	//local_destination = next((d for d in Transport.destinations if d.hash == destination_hash), None)
+#if defined(DESTINATIONS_SET)
 	Destination local_destination({Type::NONE});
 	for (auto& destination : _destinations) {
 		if (destination.hash() == destination_hash) {
@@ -2488,11 +2637,15 @@ will announce it.
 	}
     //if local_destination != None:
 	if (local_destination) {
+#elif defined(DESTINATIONS_MAP)
+	auto iter = _destinations.find(destination_hash);
+	if (iter != _destinations.end()) {
+		auto& local_destination = (*iter).second;
+#endif
 		local_destination.announce(path_response=True, tag=tag, attached_interface=attached_interface);
 		debug("Answering path request for " + destination_hash.toHex() + interface_str + ", destination is local to this system");
 	}
-
-	elif (RNS.Reticulum.transport_enabled() or is_from_local_client) and (destination_hash in Transport.destination_table):
+	else if ((RNS.Reticulum.transport_enabled() || is_from_local_client) && destination_table.find(destination_hash) != _destination_table.ends()) {
 		packet = Transport.destination_table[destination_hash][6]
 		next_hop = Transport.destination_table[destination_hash][1]
 		received_from = Transport.destination_table[destination_hash][5]
@@ -2891,4 +3044,21 @@ will announce it.
 	if (!_owner.is_connected_to_shared_instance()) {
 		persist_data();
 	}
+}
+
+/*static*/ Destination Transport::find_destination_from_hash(const Bytes& destination_hash) {
+#if defined(DESTINATIONS_SET)
+	for (const Destination& destination : _destinations) {
+		if (destination.get_hash() == destination_hash) {
+			return destination;
+		}
+	}
+#elif defined(DESTINATIONS_MAP)
+	auto iter = _destinations.find(destination_hash);
+	if (iter != _destinations.end()) {
+		return (*iter).second;
+	}
+#endif
+
+	return {Type::NONE};
 }

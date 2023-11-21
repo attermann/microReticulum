@@ -75,6 +75,26 @@ Destination::Destination(const Identity& identity, const directions direction, c
 }
 
 /*
+:returns: A tuple containing the app name and a list of aspects, for a full-name string.
+*/
+/*static*/ Bytes Destination::app_and_aspects_from_name(const char* full_name) {
+	//z components = full_name.split(".")
+	//z return (components[0], components[1:])
+	// MOCK
+	return {Bytes::NONE};
+}
+
+/*
+:returns: A destination name in adressable hash form, for a full name string and Identity instance.
+*/
+/*static*/ Bytes Destination::hash_from_name_and_identity(const char* full_name, const Identity& identity) {
+	//z app_name, aspects = Destination.app_and_aspects_from_name(full_name)
+	//z return Destination.hash(identity, app_name, *aspects)
+	// MOCK
+	return {Bytes::NONE};
+}
+
+/*
 :returns: A string containing the full human-readable name of the destination, for an app_name and a number of aspects.
 */
 /*static*/ std::string Destination::expand_name(const Identity& identity, const char *app_name, const char *aspects) {
@@ -169,7 +189,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		// received via multiple paths. The difference in reception time will
 		// potentially also be useful in determining characteristics of the
 		// multiple available paths, and to choose the best one.
-		//zextreme("Using cached announce data for answering path request with tag "+RNS.prettyhexrep(tag));
+		//z extreme("Using cached announce data for answering path request with tag "+RNS.prettyhexrep(tag));
 		announce_data << _object->_path_responses[tag].second;
 	}
 	else {

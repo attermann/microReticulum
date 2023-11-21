@@ -240,7 +240,7 @@ namespace RNS {
 	inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return {ptr, len}; }
 	//inline Bytes bytesFromString(const char *str) { return Bytes((uint8_t*)str, strlen(str)); }
 	inline Bytes bytesFromString(const char *str) { return {(uint8_t*)str, strlen(str)}; }
-	//zinline Bytes bytesFromInt(const int) { return {(uint8_t*)str, strlen(str)}; }
+	//z inline Bytes bytesFromInt(const int) { return {(uint8_t*)str, strlen(str)}; }
 
 	inline std::string stringFromBytes(const Bytes& bytes) { return bytes.toString(); }
 	inline std::string hexFromBytes(const Bytes& bytes) { return bytes.toHex(); }

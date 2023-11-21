@@ -115,16 +115,34 @@ public:
 		name("(deleted)");
 	}
 	virtual void processIncoming(const RNS::Bytes& data) {
-		RNS::head("TestInInterface.processIncoming: data: " + data.toHex(), RNS::LOG_EXTREME);
+		RNS::head("TestInInterface.processIncoming: data: " + data.toHex(), RNS::LOG_INFO);
 		RNS::Interface::processIncoming(data);
 	}
 	virtual inline std::string toString() const { return "TestInInterface[" + name() + "]"; }
 };
 
+// Test AnnounceHandler
+class ExampleAnnounceHandler : public RNS::AnnounceHandler {
+public:
+	ExampleAnnounceHandler(const char* aspect_filter) : AnnounceHandler(aspect_filter) {}
+	virtual void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) {
+		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		RNS::info("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
+		RNS::info("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
+        if (app_data) {
+			RNS::info("ExampleAnnounceHandler: app data: " + app_data.toString());
+		}
+		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	}
+};
+
+// Test packet receive callback
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
-	RNS::head("onPacket: data: " + data.toHex(), RNS::LOG_EXTREME);
-	RNS::head("onPacket: data string: \"" + data.toString() + "\"", RNS::LOG_EXTREME);
+	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	RNS::head("onPacket: data: " + data.toHex(), RNS::LOG_INFO);
+	RNS::head("onPacket: data string: \"" + data.toString() + "\"", RNS::LOG_INFO);
 	//RNS::head("onPacket: " + packet.debugString(), RNS::LOG_EXTREME);
+	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 void setup() {
@@ -202,11 +220,10 @@ void setup() {
 
 		destination.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
-		//zRNS::head("Registering announce handler with Transport...", RNS::LOG_EXTREME);
-		//zannounce_handler = ExampleAnnounceHandler(
-		//z    aspect_filter="example_utilities.announcesample.fruits";
-		//z)
-		//zRNS::Transport.register_announce_handler(announce_handler);
+		RNS::head("Registering announce handler with Transport...", RNS::LOG_EXTREME);
+		RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
+		//ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
+		RNS::Transport::register_announce_handler(announce_handler);
 
 		RNS::head("Announcing destination...", RNS::LOG_EXTREME);
 		//destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
@@ -216,7 +233,7 @@ void setup() {
 		destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// 23.9% (+0.8%)
 
-/**/
+/*
 		// test data send packet
 		RNS::head("Creating send packet...", RNS::LOG_EXTREME);
 		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
@@ -236,7 +253,16 @@ void setup() {
 
 		RNS::head("Spoofing recv packet to destination...", RNS::LOG_EXTREME);
 		destination.receive(recv_packet);
-/**/
+*/
+
+		RNS::head("Deregistering announce handler with Transport...", RNS::LOG_EXTREME);
+		RNS::Transport::deregister_announce_handler(announce_handler);
+
+		RNS::head("Deregistering Interface instances with Transport...", RNS::LOG_EXTREME);
+		RNS::Transport::deregister_interface(loopinterface);
+		RNS::Transport::deregister_interface(ininterface);
+		RNS::Transport::deregister_interface(outinterface);
+		//RNS::Transport::deregister_interface(interface);
 
 	}
 	catch (std::exception& e) {

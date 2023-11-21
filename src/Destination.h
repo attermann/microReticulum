@@ -79,8 +79,10 @@ namespace RNS {
 		}
 
 	public:
-		static Bytes hash(const Identity& identity, const char *app_name, const char *aspects);
 		static std::string expand_name(const Identity& identity, const char *app_name, const char *aspects);
+		static Bytes hash(const Identity& identity, const char *app_name, const char *aspects);
+		static Bytes app_and_aspects_from_name(const char* full_name);
+		static Bytes hash_from_name_and_identity(const char* full_name, const Identity& identity);
 
 	public:
 		//Packet announce(const Bytes& app_data = {}, bool path_response = false, const Interface& attached_interface = {Type::NONE}, const Bytes& tag = {}, bool send = true);
@@ -153,6 +155,7 @@ namespace RNS {
 		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
 		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
+		inline void hash(const Bytes& hash) { assert(_object); _object->_hash = hash; _object->_hexhash = _object->_hash.toHex(); }
 		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
@@ -170,7 +173,7 @@ namespace RNS {
 		private:
 			bool _accept_link_requests = true;
 			Callbacks _callbacks;
-			//z_request_handlers = {}
+			//z _request_handlers = {}
 			Type::Destination::types _type;
 			Type::Destination::directions _direction;
 			Type::Destination::proof_strategies _proof_strategy = Type::Destination::PROVE_NONE;
@@ -178,7 +181,7 @@ namespace RNS {
 
 			//std::vector<PathResponse> _path_responses;
 			std::map<Bytes, PathResponse> _path_responses;
-			//z_links = []
+			//z _links = []
 
 			Identity _identity;
 			std::string _name;
@@ -190,8 +193,8 @@ namespace RNS {
 
 			// CBA TODO when is _default_app_data a "callable"?
 			Bytes _default_app_data;
-			//z_callback = None
-			//z_proofcallback = None
+			//z _callback = None
+			//z _proofcallback = None
 
 			// CBA _link_id is expected by packet but only present in Link
 			// CBA TODO determine if Link needs to inherit from Destination or vice-versa
