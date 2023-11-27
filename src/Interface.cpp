@@ -6,6 +6,8 @@
 using namespace RNS;
 using namespace RNS::Type::Interface;
 
+/*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
+
 /*virtual*/ inline void Interface::processIncoming(const Bytes& data) {
 	extreme("Interface::processIncoming: data: " + data.toHex());
 	assert(_object);

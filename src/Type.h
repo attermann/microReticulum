@@ -95,6 +95,7 @@ namespace RNS { namespace Type {
 		static const uint16_t SIGLENGTH                 = KEYSIZE;     // In bits
 
 		static const uint8_t NAME_HASH_LENGTH     = 80;
+		static const uint8_t RANDOM_HASH_LENGTH     = 80;
 		static const uint16_t TRUNCATED_HASHLENGTH = Reticulum::TRUNCATED_HASHLENGTH;	// In bits
 		// Constant specifying the truncated hash length (in bits) used by Reticulum
 		// for addressable hashes and other purposes. Non-configurable.

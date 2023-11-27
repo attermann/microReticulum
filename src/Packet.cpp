@@ -41,11 +41,11 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_fromPacked = true;
 		_object->_create_receipt = false;
 	}
-	extreme("Packet object created");
+	mem("Packet object created");
 }
 
 Packet::~Packet() {
-	extreme("Packet object destroyed");
+	mem("Packet object destroyed");
 }
 
 
@@ -328,7 +328,7 @@ bool Packet::unpack() {
 			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MINSIZE) +" bytes");
 		}
 
-		const uint8_t *raw = _object->_raw.data();
+		const uint8_t* raw = _object->_raw.data();
 
 		// read header
 		_object->_flags = raw[0];

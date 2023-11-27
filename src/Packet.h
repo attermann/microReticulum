@@ -3,6 +3,7 @@
 #include "Destination.h"
 #include "Link.h"
 #include "Interface.h"
+#include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
 
@@ -124,10 +125,10 @@ namespace RNS {
 
 	public:
 		Packet(Type::NoneConstructor none) {
-			extreme("Packet NONE object created");
+			mem("Packet NONE object created");
 		}
 		Packet(const Packet& packet) : _object(packet._object) {
-			extreme("Packet object copy created");
+			mem("Packet object copy created");
 		}
 		Packet(
 			const Destination& destination,
@@ -154,7 +155,7 @@ namespace RNS {
 
 		inline Packet& operator = (const Packet& packet) {
 			_object = packet._object;
-			extreme("Packet object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Packet object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {

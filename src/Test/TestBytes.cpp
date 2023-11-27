@@ -3,7 +3,6 @@
 #include "Bytes.h"
 #include "Log.h"
 
-#include <map>
 #include <assert.h>
 
 //void testBytesDefault(const RNS::Bytes& bytes = {RNS::Bytes::NONE}) {
@@ -21,7 +20,7 @@ const RNS::Bytes& testBytesReference() {
 	return ref;
 }
 
-void testBytes() {
+void testBytesMain() {
 
 	RNS::Bytes bytes;
 	assert(!bytes);
@@ -32,7 +31,7 @@ void testBytes() {
 	const uint8_t prestr[] = "Hello";
 	const uint8_t poststr[] = " World";
 
-	RNS::Bytes prebuf(prestr, 5);
+	const RNS::Bytes prebuf(prestr, 5);
 	assert(prebuf);
 	assert(prebuf.size() == 5);
 	assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
@@ -40,7 +39,7 @@ void testBytes() {
 	assert(bytes != prebuf);
 	assert(bytes < prebuf);
 
-	RNS::Bytes postbuf(poststr, 6);
+	const RNS::Bytes postbuf(poststr, 6);
 	assert(postbuf);
 	assert(postbuf.size() == 6);
 	assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
@@ -152,9 +151,9 @@ void testBytes() {
 	{
 		RNS::Bytes strmbuf;
 		strmbuf << prebuf << postbuf;
-		RNS::extreme("stream strmbuf: " + strmbuf.toString());
 		RNS::extreme("stream prebuf: " + prebuf.toString());
 		RNS::extreme("stream postbuf: " + postbuf.toString());
+		RNS::extreme("stream strmbuf: " + strmbuf.toString());
 		assert(strmbuf.size() == 11);
 		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
 		assert(prebuf.size() == 5);
@@ -171,9 +170,9 @@ void testBytes() {
 		assert(memcmp(strmbuf.data(), "Stream ", strmbuf.size()) == 0);
 
 		strmbuf << prebuf << postbuf;
-		RNS::extreme("stream strmbuf: " + strmbuf.toString());
 		RNS::extreme("stream prebuf: " + prebuf.toString());
 		RNS::extreme("stream postbuf: " + postbuf.toString());
+		RNS::extreme("stream strmbuf: " + strmbuf.toString());
 		assert(strmbuf.size() == 18);
 		assert(memcmp(strmbuf.data(), "Stream Hello World", strmbuf.size()) == 0);
 		assert(prebuf.size() == 5);
@@ -183,18 +182,23 @@ void testBytes() {
 	}
 
 	// stream with assignment
-	// (this is a known and correct but perhaps unexpected and non-intuitive side-effect of assignment with stream)
+	// (side effect of also updating pre - this is a known and correct but perhaps unexpected and non-intuitive side-effect of assignment with stream)
 	{
-		RNS::Bytes strmbuf = prebuf << postbuf;
+		// NOTE pre must be volatile in order for below stream with assignment to work (since it gets modified)
+		RNS::Bytes pre("Hello");
+		assert(pre.size() == 5);
+		const RNS::Bytes post(" World");
+		assert(post.size() == 6);
+		RNS::Bytes strmbuf = pre << post;
+		RNS::extreme("stream pre: " + prebuf.toString());
+		RNS::extreme("stream post: " + postbuf.toString());
 		RNS::extreme("stream strmbuf: " + strmbuf.toString());
-		RNS::extreme("stream prebuf: " + prebuf.toString());
-		RNS::extreme("stream postbuf: " + postbuf.toString());
 		assert(strmbuf.size() == 11);
 		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
-		assert(prebuf.size() == 11);
-		assert(memcmp(prebuf.data(), "Hello World", prebuf.size()) == 0);
-		assert(postbuf.size() == 6);
-		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
+		assert(pre.size() == 11);
+		assert(memcmp(pre.data(), "Hello World", pre.size()) == 0);
+		assert(post.size() == 6);
+		assert(memcmp(post.data(), " World", post.size()) == 0);
 	}
 
 	// test creating bytes from default
@@ -230,11 +234,11 @@ void testBytes() {
 	}
 
 	// function default argument
-	RNS::head("TestBytes: function default argument", RNS::LOG_EXTREME);
+	RNS::extreme("TestBytes: function default argument");
 	testBytesDefault();
 
 	// function reference return
-	RNS::head("TestBytes: function reference return", RNS::LOG_EXTREME);
+	RNS::extreme("TestBytes: function reference return");
 	{
 		RNS::Bytes test = testBytesReference();
 		RNS::extreme("returned");
@@ -336,52 +340,11 @@ void testBytesConversion() {
 
 }
 
-void testMap()
-{
-	const uint8_t prestr[] = "Hello";
-	const uint8_t poststr[] = "World";
-
-	RNS::Bytes prebuf(prestr, 5);
-	assert(prebuf.size() == 5);
-	assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
-
-	RNS::Bytes postbuf(poststr, 5);
-	assert(postbuf.size() == 5);
-	assert(memcmp(postbuf.data(), "World", postbuf.size()) == 0);
-
-	std::map<RNS::Bytes, std::string> map;
-	map.insert({prebuf, "hello"});
-	map.insert({postbuf, "world"});
-	assert(map.size() == 2);
-
-	auto preit = map.find(prebuf);
-	assert(preit != map.end());
-	assert((*preit).second.compare("hello") == 0);
-	if (preit != map.end()) {
-		RNS::extreme(std::string("found prebuf: ") + (*preit).second);
-	}
-
-	auto postit = map.find(postbuf);
-	assert(postit != map.end());
-	assert((*postit).second.compare("world") == 0);
-	if (postit != map.end()) {
-		RNS::extreme(std::string("found postbuf: ") + (*postit).second);
-	}
-
-	const uint8_t newstr[] = "World";
-	RNS::Bytes newbuf(newstr, 5);
-	assert(newbuf.size() == 5);
-	assert(memcmp(newbuf.data(), "World", newbuf.size()) == 0);
-	auto newit = map.find(newbuf);
-	assert(newit != map.end());
-	assert((*newit).second.compare("world") == 0);
-	if (newit != map.end()) {
-		RNS::extreme(std::string("found newbuf: ") + (*newit).second);
-	}
-
-	std::string str = map["World"];
-	assert(str.size() == 5);
-	assert(str.compare("world") == 0);
+void testBytes() {
+	RNS::head("Running testBytes...", RNS::LOG_EXTREME);
+	testBytesMain();
+	testCowBytes();
+	testBytesConversion();
 }
 
 /*

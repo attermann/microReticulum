@@ -34,11 +34,11 @@ public:
     size_t keySize() const;
     size_t ivSize() const;
 
-    bool setKey(const uint8_t *key, size_t len);
-    bool setIV(const uint8_t *iv, size_t len);
+    bool setKey(const uint8_t* key, size_t len);
+    bool setIV(const uint8_t* iv, size_t len);
 
-    void encrypt(uint8_t *output, const uint8_t *input, size_t len);
-    void decrypt(uint8_t *output, const uint8_t *input, size_t len);
+    void encrypt(uint8_t* output, const uint8_t* input, size_t len);
+    void decrypt(uint8_t* output, const uint8_t* input, size_t len);
 
     void clear();
 

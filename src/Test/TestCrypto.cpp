@@ -12,11 +12,13 @@
 
 #include <assert.h>
 
-void testCrypto() {
+void testCryptoMain() {
 
-	RNS::Reticulum reticulum;
+	RNS::Reticulum reticulum_crypto;
+	assert(reticulum_crypto);
 
 	RNS::Identity identity;
+	assert(identity);
 
 	RNS::Destination destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "appname", "aspects");
 	//assert(encryptionPrivateKey().toHex().compare("") == );
@@ -124,6 +126,13 @@ void testPKCS7() {
 		assert(bytes.size() == len);
 		assert(memcmp(bytes.data(), str, len) == 0);
 	}
+}
+
+void testCrypto() {
+	RNS::head("Running testCrypto...", RNS::LOG_EXTREME);
+	testCryptoMain();
+	testHMAC();
+	testPKCS7();
 }
 
 /*

@@ -22,12 +22,15 @@ const char* getLevelName(LogLevel level) {
 		return "DEBUG";
 	case LOG_EXTREME:
 		return "EXTRA";
+	case LOG_MEM:
+		return "MEM";
 	default:
 		return "";
 	}
 }
 
-LogLevel _level = LOG_VERBOSE;
+//LogLevel _level = LOG_VERBOSE;
+LogLevel _level = LOG_EXTREME;
 
 void RNS::loglevel(LogLevel level) {
 	_level = level;
@@ -37,11 +40,11 @@ LogLevel RNS::loglevel() {
 	return _level;
 }
 
-void RNS::doLog(const char *msg, LogLevel level) {
+void RNS::doLog(const char* msg, LogLevel level) {
 	if (level > _level) {
 		return;
 	}
-#ifndef NATIVE
+#ifdef ARDUINO
 	Serial.print(getLevelName(level));
 	Serial.print(" ");
 	Serial.println(msg);
@@ -51,11 +54,11 @@ void RNS::doLog(const char *msg, LogLevel level) {
 #endif
 }
 
-void RNS::head(const char *msg, LogLevel level) {
+void RNS::head(const char* msg, LogLevel level) {
 	if (level > _level) {
 		return;
 	}
-#ifndef NATIVE
+#ifdef ARDUINO
 	Serial.println("");
 #else
 	printf("\n");

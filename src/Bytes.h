@@ -29,37 +29,37 @@ namespace RNS {
 
 	public:
 		Bytes() {
-			//extreme("Bytes object created from default, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			//mem("Bytes object created from default, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
-		Bytes(NoneConstructor none) {
-			//extreme("Bytes object created from NONE, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+		Bytes(const NoneConstructor none) {
+			//mem("Bytes object created from NONE, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const Bytes& bytes) {
-			//extreme("Bytes is using shared data");
+			//mem("Bytes is using shared data");
 			assign(bytes);
-			//extreme("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			//mem("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
-		Bytes(const uint8_t *chunk, size_t size) {
+		Bytes(const uint8_t* chunk, size_t size) {
 			assign(chunk, size);
-			//extreme(std::string("Bytes object created from chunk \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			//mem(std::string("Bytes object created from chunk \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
-		Bytes(const char *string) {
+		Bytes(const char* string) {
 			assign(string);
-			//extreme(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			//mem(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const std::string& string) {
 			assign(string);
-			//extreme(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			//mem(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		virtual ~Bytes() {
-			//extreme(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			//mem(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 
-		inline Bytes& operator = (const Bytes& bytes) {
+		inline const Bytes& operator = (const Bytes& bytes) {
 			assign(bytes);
 			return *this;
 		}
-		inline Bytes& operator += (const Bytes& bytes) {
+		inline const Bytes& operator += (const Bytes& bytes) {
 			append(bytes);
 			return *this;
 		}
@@ -87,12 +87,12 @@ namespace RNS {
 
 	private:
 		inline SharedData shareData() const {
-			//extreme("Bytes is sharing its own data");
+			//mem("Bytes is sharing its own data");
 			_owner = false;
 			return _data;
 		}
 		inline void newData(size_t size = 0) {
-			//extreme("Bytes is creating its own data");
+			//mem("Bytes is creating its own data");
 			if (size > 0) {
 				_data = SharedData(new Data(size));
 			}
@@ -124,7 +124,7 @@ namespace RNS {
 			_data->insert(_data->begin(), bytes._data->begin(), bytes._data->end());
 #endif
 		}
-		inline void assign(const uint8_t *chunk, size_t size) {
+		inline void assign(const uint8_t* chunk, size_t size) {
 			// if assignment is empty then clear data and don't bother creating new
 			if (chunk == nullptr || size <= 0) {
 				_data = nullptr;
@@ -142,7 +142,7 @@ namespace RNS {
 				return;
 			}
 			newData();
-			_data->insert(_data->begin(), (uint8_t *)string, (uint8_t *)string + strlen(string));
+			_data->insert(_data->begin(), (uint8_t* )string, (uint8_t* )string + strlen(string));
 		}
 		inline void assign(const std::string& string) { assign(string.c_str()); }
 		void assignHex(const char* hex);
@@ -155,7 +155,7 @@ namespace RNS {
 			ownData();
 			_data->insert(_data->end(), bytes._data->begin(), bytes._data->end());
 		}
-		inline void append(const uint8_t *chunk, size_t size) {
+		inline void append(const uint8_t* chunk, size_t size) {
 			// if append is empty then do nothing
 			if (chunk == nullptr || size <= 0) {
 				return;
@@ -169,7 +169,7 @@ namespace RNS {
 				return;
 			}
 			ownData();
-			_data->insert(_data->end(), (uint8_t *)string, (uint8_t *)string + strlen(string));
+			_data->insert(_data->end(), (uint8_t* )string, (uint8_t* )string + strlen(string));
 		}
 		inline void append(const std::string& string) { append(string.c_str()); }
 		inline void append(uint8_t byte) {
@@ -187,7 +187,7 @@ namespace RNS {
 			_data->resize(newsize);
 		}
 
-		inline uint8_t *writable(size_t size) {
+		inline uint8_t* writable(size_t size) {
 			newData(size);
 			return _data->data();
 		}
@@ -197,7 +197,7 @@ namespace RNS {
 		inline size_t size() const { if (!_data) return 0; return _data->size(); }
 		inline bool empty() const { if (!_data) return true; return _data->empty(); }
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
-		inline const uint8_t *data() const { if (!_data) return nullptr; return _data->data(); }
+		inline const uint8_t* data() const { if (!_data) return nullptr; return _data->data(); }
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = true) const;
@@ -236,10 +236,10 @@ namespace RNS {
 
 	// following array function doesn't work without size since it's past as a pointer to the array sizeof() is of the pointer
 	//inline Bytes bytesFromArray(const uint8_t arr[]) { return Bytes(arr, sizeof(arr)); }
-	//inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return Bytes(ptr, len); }
-	inline Bytes bytesFromChunk(const uint8_t *ptr, size_t len) { return {ptr, len}; }
-	//inline Bytes bytesFromString(const char *str) { return Bytes((uint8_t*)str, strlen(str)); }
-	inline Bytes bytesFromString(const char *str) { return {(uint8_t*)str, strlen(str)}; }
+	//inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return Bytes(ptr, len); }
+	inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return {ptr, len}; }
+	//inline Bytes bytesFromString(const char* str) { return Bytes((uint8_t*)str, strlen(str)); }
+	inline Bytes bytesFromString(const char* str) { return {(uint8_t*)str, strlen(str)}; }
 	//z inline Bytes bytesFromInt(const int) { return {(uint8_t*)str, strlen(str)}; }
 
 	inline std::string stringFromBytes(const Bytes& bytes) { return bytes.toString(); }

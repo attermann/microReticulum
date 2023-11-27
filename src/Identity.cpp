@@ -5,6 +5,7 @@
 #include "Packet.h"
 #include "Log.h"
 #include "Utilities/OS.h"
+#include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/HKDF.h"
 #include "Cryptography/Fernet.h"
@@ -14,15 +15,17 @@
 
 using namespace RNS;
 using namespace RNS::Type::Identity;
+using namespace RNS::Cryptography;
 using namespace RNS::Utilities;
 
 /*static*/ std::map<Bytes, Identity::IdentityEntry> Identity::_known_destinations;
+/*static*/ bool Identity::_saving_known_destinations = false;
 
-Identity::Identity(bool create_keys) : _object(new Object()) {
+Identity::Identity(bool create_keys /*= true*/) : _object(new Object()) {
 	if (create_keys) {
 		createKeys();
 	}
-	extreme("Identity object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	mem("Identity object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 void Identity::createKeys() {
@@ -60,7 +63,6 @@ Load a private key into the instance.
 :returns: True if the key was loaded, otherwise False.
 */
 bool Identity::load_private_key(const Bytes& prv_bytes) {
-/*
 	assert(_object);
 	try {
 		//p self.prv_bytes     = prv_bytes[:Identity.KEYSIZE//8//2]
@@ -70,11 +72,11 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
 		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
 
-		_object->_pub           = _object->_prv.public_key();
-		_object->_pub_bytes     = _object->_pub.public_bytes();
+		_object->_pub           = _object->_prv->public_key();
+		_object->_pub_bytes     = _object->_pub->public_bytes();
 
-		_object->_sig_pub       = _object->_sig_prv.public_key();
-		_object->_sig_pub_bytes = _object->_sig_pub.public_bytes();
+		_object->_sig_pub       = _object->_sig_prv->public_key();
+		_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
 
 		update_hashes();
 
@@ -82,13 +84,10 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 	}
 	catch (std::exception& e) {
 		//p raise e
-		error("Failed to load identity key";
-		error("The contained exception was: " + e.what());
+		error("Failed to load identity key");
+		error("The contained exception was: " + std::string(e.what()));
 		return false;
 	}
-*/
-	// MOCK
-	return true;
 }
 
 /*
@@ -98,7 +97,6 @@ Load a public key into the instance.
 :returns: True if the key was loaded, otherwise False.
 */
 void Identity::load_public_key(const Bytes& pub_bytes) {
-/*
 	assert(_object);
 	try {
 		//_pub_bytes     = pub_bytes[:Identity.KEYSIZE//8//2]
@@ -106,15 +104,14 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 		//_sig_pub_bytes = pub_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_pub_bytes = pub_bytes.mid(Type::Identity::KEYSIZE/8/2);
 
-		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes)
-		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes)
+		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes);
+		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes);
 
 		update_hashes();
 	}
 	catch (std::exception& e) {
-		error("Error while loading public key, the contained exception was: " + e.what());
+		error("Error while loading public key, the contained exception was: " + std::string(e.what()));
 	}
-*/
 }
 
 bool Identity::load(const char* path) {
@@ -150,8 +147,10 @@ Recall identity for a destination hash.
 :returns: An :ref:`RNS.Identity<api-identity>` instance that can be used to create an outgoing :ref:`RNS.Destination<api-destination>`, or *None* if the destination is unknown.
 */
 /*static*/ Identity Identity::recall(const Bytes& destination_hash) {
+	extreme("Identity::recall...");
 	auto iter = _known_destinations.find(destination_hash);
 	if (iter != _known_destinations.end()) {
+		extreme("Identity::recall: Found identity entry for destination " + destination_hash.toHex());
 		const IdentityEntry& identity_data = (*iter).second;
 		Identity identity(false);
 		identity.load_public_key(identity_data._public_key);
@@ -159,13 +158,16 @@ Recall identity for a destination hash.
 		return identity;
 	}
 	else {
+		extreme("Identity::recall: Unable to find identity entry for destination " + destination_hash.toHex() + ", performing destination lookup...");
 		Destination registered_destination(Transport::find_destination_from_hash(destination_hash));
 		if (registered_destination) {
+			extreme("Identity::recall: Found destination " + destination_hash.toHex());
 			Identity identity(false);
 			identity.load_public_key(registered_destination.identity().get_public_key());
 			identity.app_data({Bytes::NONE});
 			return identity;
 		}
+		extreme("Identity::recall: Unable to find destination " + destination_hash.toHex());
 		return {Type::NONE};
 	}
 }
@@ -177,39 +179,46 @@ Recall last heard app_data for a destination hash.
 :returns: *Bytes* containing app_data, or *None* if the destination is unknown.
 */
 /*static*/ Bytes Identity::recall_app_data(const Bytes& destination_hash) {
+	extreme("Identity::recall_app_data...");
 	auto iter = _known_destinations.find(destination_hash);
 	if (iter != _known_destinations.end()) {
+		extreme("Identity::recall_app_data: Found identity entry for destination " + destination_hash.toHex());
 		const IdentityEntry& identity_data = (*iter).second;
 		return identity_data._app_data;
 	}
 	else {
+		extreme("Identity::recall_app_data: Unable to find identity entry for destination " + destination_hash.toHex());
 		return {Bytes::NONE};
 	}
 }
 
-/*static*/ void Identity::save_known_destinations() {
-/*
+/*static*/ bool Identity::save_known_destinations() {
 	// TODO: Improve the storage method so we don't have to
 	// deserialize and serialize the entire table on every
 	// save, but the only changes. It might be possible to
 	// simply overwrite on exit now that every local client
 	// disconnect triggers a data persist.
 
-	try:
-		if hasattr(Identity, "saving_known_destinations"):
-			wait_interval = 0.2
-			wait_timeout = 5
-			wait_start = time.time()
-			while Identity.saving_known_destinations:
-				time.sleep(wait_interval)
-				if time.time() > wait_start+wait_timeout:
-					RNS.log("Could not save known destinations to storage, waiting for previous save operation timed out.", RNS.LOG_ERROR)
-					return False
+	try {
+		if (_saving_known_destinations) {
+			double wait_interval = 0.2;
+			double wait_timeout = 5;
+			double wait_start = OS::dtime();
+			while (_saving_known_destinations) {
+				OS::sleep(wait_interval);
+				if (OS::dtime() > (wait_start + wait_timeout)) {
+					error("Could not save known destinations to storage, waiting for previous save operation timed out.");
+					return false;
+				}
+			}
+		}
 
-		Identity.saving_known_destinations = True
-		save_start = time.time()
+		_saving_known_destinations = true;
+		double save_start = OS::dtime();
 
-		storage_known_destinations = {}
+		std::map<Bytes, IdentityEntry> storage_known_destinations;
+// TODO
+/*
 		if os.path.isfile(RNS.Reticulum.storagepath+"/known_destinations"):
 			try:
 				file = open(RNS.Reticulum.storagepath+"/known_destinations","rb")
@@ -217,32 +226,44 @@ Recall last heard app_data for a destination hash.
 				file.close()
 			except:
 				pass
+*/
 
-		for destination_hash in storage_known_destinations:
-			if not destination_hash in Identity.known_destinations:
-				Identity.known_destinations[destination_hash] = storage_known_destinations[destination_hash]
+		for (auto& [destination_hash, identity_entry] : storage_known_destinations) {
+			if (_known_destinations.find(destination_hash) == _known_destinations.end()) {
+				//_known_destinations[destination_hash] = storage_known_destinations[destination_hash];
+				//_known_destinations[destination_hash] = identity_entry;
+				_known_destinations.insert({destination_hash, identity_entry});
+			}
+		}
 
-		RNS.log("Saving "+str(len(Identity.known_destinations))+" known destinations to storage...", RNS.LOG_DEBUG)
+// TODO
+/*
+		debug("Saving " + std::to_string(_known_destinations.size()) + " known destinations to storage...");
 		file = open(RNS.Reticulum.storagepath+"/known_destinations","wb")
 		umsgpack.dump(Identity.known_destinations, file)
 		file.close()
-
-		save_time = time.time() - save_start
-		if save_time < 1:
-			time_str = str(round(save_time*1000,2))+"ms"
-		else:
-			time_str = str(round(save_time,2))+"s"
-
-		RNS.log("Saved known destinations to storage in "+time_str, RNS.LOG_DEBUG)
-
-	except Exception as e:
-		RNS.log("Error while saving known destinations to disk, the contained exception was: "+str(e), RNS.LOG_ERROR)
-
-	Identity.saving_known_destinations = False
 */
+
+		std::string time_str;
+		double save_time = OS::dtime() - save_start;
+		if (save_time < 1) {
+			time_str = std::to_string(OS::round(save_time*1000, 2)) + "ms";
+		}
+		else {
+			time_str = std::to_string(OS::round(save_time, 2)) + "s";
+		}
+
+		debug("Saved known destinations to storage in " + time_str);
+	}
+	catch (std::exception& e) {
+		error("Error while saving known destinations to disk, the contained exception was: " + std::string(e.what()));
+	}
+
+	_saving_known_destinations = false;
 }
 
 /*static*/ void Identity::load_known_destinations() {
+// TODO
 /*
 	if os.path.isfile(RNS.Reticulum.storagepath+"/known_destinations"):
 		try:
@@ -264,44 +285,62 @@ Recall last heard app_data for a destination hash.
 }
 
 /*static*/ bool Identity::validate_announce(const Packet& packet) {
+	try {
+		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
+			Bytes destination_hash = packet.destination_hash();
+			extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
+			Bytes public_key = packet.data().left(KEYSIZE/8);
+			extreme("Identity::validate_announce: public_key:       " + public_key.toHex());
+			Bytes name_hash = packet.data().mid(KEYSIZE/8, NAME_HASH_LENGTH/8);
+			extreme("Identity::validate_announce: name_hash:        " + name_hash.toHex());
+			Bytes random_hash = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8, RANDOM_HASH_LENGTH/8);
+			extreme("Identity::validate_announce: random_hash:      " + random_hash.toHex());
+			Bytes signature = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8, SIGLENGTH/8);
+			extreme("Identity::validate_announce: signature:        " + signature.toHex());
+			Bytes app_data;
+			if (packet.data().size() > (KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8)) {
+				app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8);
+			}
+			extreme("Identity::validate_announce: app_data:         " + app_data.toHex());
+
+			Bytes signed_data;
+			signed_data << packet.destination_hash() << public_key << name_hash << random_hash+app_data;
+			extreme("Identity::validate_announce: signed_data:      " + signed_data.toHex());
+
+			if (packet.data().size() <= KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8) {
+				app_data.clear();
+			}
+
+			Identity announced_identity(false);
+			announced_identity.load_public_key(public_key);
+
+			if (announced_identity.pub() && announced_identity.validate(signature, signed_data)) {
+				Bytes hash_material = name_hash << announced_identity.hash();
+				Bytes expected_hash = full_hash(hash_material).left(Type::Reticulum::TRUNCATED_HASHLENGTH/8);
+				extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
+				extreme("Identity::validate_announce: expected_hash:    " + expected_hash.toHex());
+
+				if (packet.destination_hash() == expected_hash) {
+					// Check if we already have a public key for this destination
+					// and make sure the public key is not different.
+					auto iter = _known_destinations.find(packet.destination_hash());
+					if (iter != _known_destinations.end()) {
+						IdentityEntry& identity_entry = (*iter).second;
+						if (public_key != identity_entry._public_key) {
+							// In reality, this should never occur, but in the odd case
+							// that someone manages a hash collision, we reject the announce.
+							critical("Received announce with valid signature and destination hash, but announced public key does not match already known public key.");
+							critical("This may indicate an attempt to modify network paths, or a random hash collision. The announce was rejected.");
+							return false;
+						}
+					}
+
+					remember(packet.get_hash(), packet.destination_hash(), public_key, app_data);
+					//p del announced_identity
+
+					std::string signal_str;
+// TODO
 /*
-	try:
-		if packet.packet_type == RNS.Packet.ANNOUNCE:
-			destination_hash = packet.destination_hash
-			public_key = packet.data[:Identity.KEYSIZE//8]
-			name_hash = packet.data[Identity.KEYSIZE//8:Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8]
-			random_hash = packet.data[Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8:Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10]
-			signature = packet.data[Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10:Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8]
-			app_data = b""
-			if len(packet.data) > Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8:
-				app_data = packet.data[Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8:]
-
-			signed_data = destination_hash+public_key+name_hash+random_hash+app_data
-
-			if not len(packet.data) > Identity.KEYSIZE//8+Identity.NAME_HASH_LENGTH//8+10+Identity.SIGLENGTH//8:
-				app_data = None
-
-			announced_identity = Identity(create_keys=False)
-			announced_identity.load_public_key(public_key)
-
-			if announced_identity.pub != None and announced_identity.validate(signature, signed_data):
-				hash_material = name_hash+announced_identity.hash
-				expected_hash = RNS.Identity.full_hash(hash_material)[:RNS.Reticulum.TRUNCATED_HASHLENGTH//8]
-
-				if destination_hash == expected_hash:
-					# Check if we already have a public key for this destination
-					# and make sure the public key is not different.
-					if destination_hash in Identity.known_destinations:
-						if public_key != Identity.known_destinations[destination_hash][2]:
-							# In reality, this should never occur, but in the odd case
-							# that someone manages a hash collision, we reject the announce.
-							RNS.log("Received announce with valid signature and destination hash, but announced public key does not match already known public key.", RNS.LOG_CRITICAL)
-							RNS.log("This may indicate an attempt to modify network paths, or a random hash collision. The announce was rejected.", RNS.LOG_CRITICAL)
-							return False
-
-					RNS.Identity.remember(packet.get_hash(), destination_hash, public_key, app_data)
-					del announced_identity
-
 					if packet.rssi != None or packet.snr != None:
 						signal_str = " ["
 						if packet.rssi != None:
@@ -313,29 +352,34 @@ Recall last heard app_data for a destination hash.
 						signal_str += "]"
 					else:
 						signal_str = ""
-
-					if hasattr(packet, "transport_id") and packet.transport_id != None:
-						RNS.log("Valid announce for "+RNS.prettyhexrep(destination_hash)+" "+str(packet.hops)+" hops away, received via "+RNS.prettyhexrep(packet.transport_id)+" on "+str(packet.receiving_interface)+signal_str, RNS.LOG_EXTREME)
-					else:
-						RNS.log("Valid announce for "+RNS.prettyhexrep(destination_hash)+" "+str(packet.hops)+" hops away, received on "+str(packet.receiving_interface)+signal_str, RNS.LOG_EXTREME)
-
-					return True
-
-				else:
-					RNS.log("Received invalid announce for "+RNS.prettyhexrep(destination_hash)+": Destination mismatch.", RNS.LOG_DEBUG)
-					return False
-
-			else:
-				RNS.log("Received invalid announce for "+RNS.prettyhexrep(destination_hash)+": Invalid signature.", RNS.LOG_DEBUG)
-				del announced_identity
-				return False
-	
-	except Exception as e:
-		RNS.log("Error occurred while validating announce. The contained exception was: "+str(e), RNS.LOG_ERROR)
-		return False
 */
-	// MOCK
-	return true;
+
+					if (packet.transport_id()) {
+						extreme("Valid announce for " + packet.destination_hash().toHex() + " " + std::to_string(packet.hops()) + " hops away, received via " + packet.transport_id().toHex() + " on " + packet.receiving_interface().toString() + signal_str);
+					}
+					else {
+						extreme("Valid announce for " + packet.destination_hash().toHex() + " " + std::to_string(packet.hops()) + " hops away, received on " + packet.receiving_interface().toString() + signal_str);
+					}
+
+					return true;
+				}
+				else {
+					debug("Received invalid announce for " + packet.destination_hash().toHex() + ": Destination mismatch.");
+					return false;
+				}
+			}
+			else {
+				debug("Received invalid announce for " + packet.destination_hash().toHex() + ": Invalid signature.");
+				//p del announced_identity
+				return false;
+			}
+		}
+	}
+	catch (std::exception& e) {
+		error("Error occurred while validating announce. The contained exception was: " + std::string(e.what()));
+		return false;
+	}
+	return false;
 }
 
 /*
@@ -465,6 +509,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	if (_object->_pub) {
 		try {
+			extreme("Identity::validate: Attempting to verify signature: " + signature.toHex() + " and message: " + message.toHex());
 			_object->_sig_pub->verify(signature, message);
 			return true;
 		}

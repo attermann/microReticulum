@@ -30,31 +30,34 @@ namespace RNS {
 		Bytes _raw;
 	};
 
+	protected:
+		using HInterface = std::shared_ptr<Interface>;
+
 	public:
 		// Which interface modes a Transport Node
 		// should actively discover paths for.
-		uint8_t DISCOVER_PATHS_FOR = Type::Interface::MODE_ACCESS_POINT | Type::Interface::MODE_GATEWAY;
+		static uint8_t DISCOVER_PATHS_FOR;
 
 	public:
 		Interface(Type::NoneConstructor none) {
-			extreme("Interface object NONE created");
+			mem("Interface object NONE created");
 		}
 		Interface(const Interface& interface) : _object(interface._object) {
-			extreme("Interface object copy created");
+			mem("Interface object copy created");
 		}
 		Interface() : _object(new Object()) {
-			extreme("Interface object created");
+			mem("Interface object created");
 		}
-		Interface(const char *name) : _object(new Object(name)) {
-			extreme("Interface object created");
+		Interface(const char* name) : _object(new Object(name)) {
+			mem("Interface object created");
 		}
 		virtual ~Interface() {
-			extreme("Interface object destroyed");
+			mem("Interface object destroyed");
 		}
 
 		inline Interface& operator = (const Interface& interface) {
 			_object = interface._object;
-			extreme("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -80,20 +83,26 @@ namespace RNS {
 		inline void OUT(bool OUT) { assert(_object); _object->_OUT = OUT; }
 		inline void FWD(bool FWD) { assert(_object); _object->_FWD = FWD; }
 		inline void RPT(bool RPT) { assert(_object); _object->_RPT = RPT; }
-		inline void name(const char *name) { assert(_object); _object->_name = name; }
+		inline void name(const char* name) { assert(_object); _object->_name = name; }
+		inline void bitrate(uint32_t bitrate) { assert(_object); _object->_bitrate = bitrate; }
+		inline void online(bool online) { assert(_object); _object->_online = online; }
+		inline void announce_allowed_at(uint64_t announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
 	public:
 		inline bool IN() const { assert(_object); return _object->_IN; }
 		inline bool OUT() const { assert(_object); return _object->_OUT; }
 		inline bool FWD() const { assert(_object); return _object->_FWD; }
 		inline bool RPT() const { assert(_object); return _object->_RPT; }
+		inline bool online() const { assert(_object); return _object->_online; }
 		inline std::string name() const { assert(_object); return _object->_name; }
 		inline const Bytes& ifac_identity() const { assert(_object); return _object->_ifac_identity; }
 		inline Type::Interface::modes mode() const { assert(_object); return _object->_mode; }
 		inline uint32_t bitrate() const { assert(_object); return _object->_bitrate; }
 		inline uint64_t announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
-		inline void announce_allowed_at(uint64_t announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
 		inline float announce_cap() const { assert(_object); return _object->_announce_cap; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_object); return _object->_announce_queue; }
+		inline bool is_connected_to_shared_instance() const { assert(_object); return _object->_is_connected_to_shared_instance; }
+		inline bool is_local_shared_instance() const { assert(_object); return _object->_is_local_shared_instance; }
+		inline HInterface parent_interface() const { assert(_object); return _object->_parent_interface; }
 
 		virtual inline std::string toString() const { assert(_object); return "Interface[" + _object->_name + "]"; }
 
@@ -101,7 +110,7 @@ namespace RNS {
 		class Object {
 		public:
 			Object() {}
-			Object(const char *name) : _name(name) {}
+			Object(const char* name) : _name(name) {}
 			virtual ~Object() {}
 		private:
 			bool _IN  = false;
@@ -111,18 +120,22 @@ namespace RNS {
 			std::string _name;
 			size_t _rxb = 0;
 			size_t _txb = 0;
-			bool online = false;
+			bool _online = false;
 			Bytes _ifac_identity;
 			Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 			uint32_t _bitrate = 0;
 			uint64_t _announce_allowed_at = 0;
 			float _announce_cap = 0.0;
 			std::list<AnnounceEntry> _announce_queue;
+			bool _is_connected_to_shared_instance = false;
+			bool _is_local_shared_instance = false;
+			HInterface _parent_interface;
 			//Transport& _owner;
 		friend class Interface;
 		};
 		std::shared_ptr<Object> _object;
 
+	friend class Transport;
 	};
 
 }

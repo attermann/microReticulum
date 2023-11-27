@@ -35,7 +35,7 @@ namespace RNS {
 		// None, all announces will be passed to the instance.
 		// If only some announces are wanted, it can be set to
 		// an aspect string.
-		AnnounceHandler(const char* aspect_filter) { _aspect_filter = aspect_filter; }
+		AnnounceHandler(const char* aspect_filter = nullptr) { if (aspect_filter != nullptr) _aspect_filter = aspect_filter; }
 		// This method will be called by Reticulums Transport
 		// system when an announce arrives that matches the
 		// configured aspect filter. Filters must be specific,
@@ -65,7 +65,7 @@ namespace RNS {
 				_expires(expires),
 				_random_blobs(random_blobs),
 				_receiving_interface(receiving_interface),
-				_packet(packet)
+				_announce_packet(packet)
 			{
 			}
 		public:
@@ -75,14 +75,14 @@ namespace RNS {
 			uint64_t _expires = 0;
 			std::set<Bytes> _random_blobs;
 			Interface& _receiving_interface;
-			const Packet& _packet;
+			const Packet& _announce_packet;
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
 		class AnnounceEntry {
 		public:
-			AnnounceEntry(uint64_t timestamp, uint16_t retransmit_timeout, uint8_t retries, const Bytes& received_from, uint8_t hops, const Packet& packet, uint8_t local_rebroadcasts, bool block_rebroadcasts, const Interface& attached_interface) :
+			AnnounceEntry(uint64_t timestamp, uint64_t retransmit_timeout, uint8_t retries, const Bytes& received_from, uint8_t hops, const Packet& packet, uint8_t local_rebroadcasts, bool block_rebroadcasts, const Interface& attached_interface) :
 				_timestamp(timestamp),
 				_retransmit_timeout(retransmit_timeout),
 				_retries(retries),
@@ -96,7 +96,7 @@ namespace RNS {
 			}
 		public:
 			uint64_t _timestamp = 0;
-			uint16_t _retransmit_timeout = 0;
+			uint64_t _retransmit_timeout = 0;
 			uint8_t _retries = 0;
 			Bytes _received_from;
 			uint8_t _hops = 0;
@@ -251,10 +251,10 @@ namespace RNS {
 		static std::set<HAnnounceHandler> _announce_handlers;           // A table storing externally registered announce handlers
 		//z _tunnels              = {}           // A table storing tunnels to other transport instances
 		//z _announce_rate_table  = {}           // A table for keeping track of announce rates
-		static std::set<Bytes> _path_requests;           // A table for storing path request timestamps
+		static std::map<Bytes, uint64_t> _path_requests;           // A table for storing path request timestamps
 
 		static std::map<Bytes, PathRequestEntry> _discovery_path_requests;       // A table for keeping track of path requests on behalf of other nodes
-		//z _discovery_pr_tags        = []       // A table for keeping track of tagged path requests
+		static std::set<Bytes> _discovery_pr_tags;       // A table for keeping track of tagged path requests
 		static uint16_t _max_pr_taXgxs;    // Maximum amount of unique path request tags to remember
 
 		// Transport control destinations are used

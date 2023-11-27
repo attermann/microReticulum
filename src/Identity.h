@@ -37,20 +37,24 @@ namespace RNS {
 		};
 
 	public:
+		static std::map<Bytes, IdentityEntry> _known_destinations;
+		static bool _saving_known_destinations;
+
+	public:
 		Identity(Type::NoneConstructor none) {
-			extreme("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(const Identity& identity) : _object(identity._object) {
-			extreme("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(bool create_keys = true);
 		virtual ~Identity() {
-			extreme("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Identity& operator = (const Identity& identity) {
 			_object = identity._object;
-			extreme("Identity object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Identity object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -102,7 +106,7 @@ namespace RNS {
 		static void remember(const Bytes& packet_hash, const Bytes& destination_hash, const Bytes& public_key, const Bytes& app_data = {Bytes::NONE});
 		static Identity recall(const Bytes& destination_hash);
 		static Bytes recall_app_data(const Bytes& destination_hash);
-		static void save_known_destinations();
+		static bool save_known_destinations();
 		static void load_known_destinations();
 		/*
 		Get a SHA-256 hash of passed data.
@@ -141,29 +145,31 @@ namespace RNS {
 		inline const Bytes& encryptionPublicKey() const { assert(_object); return _object->_prv_bytes; }
 		inline const Bytes& signingPublicKey() const { assert(_object); return _object->_sig_prv_bytes; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
+		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
 		inline const Bytes& app_data() const { assert(_object); return _object->_app_data; }
 		inline void app_data(const Bytes& app_data) { assert(_object); _object->_app_data = app_data; }
-		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
+		//inline const Cryptography::X25519PrivateKey::Ptr prv() const { assert(_object); return _object->_prv; }
+		inline const Cryptography::X25519PublicKey::Ptr pub() const { assert(_object); return _object->_pub; }
 
 		inline std::string toString() const { assert(_object); return "{Identity:" + _object->_hash.toHex() + "}"; }
 
 	private:
 		class Object {
 		public:
-			Object() { extreme("Identity::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { extreme("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object() { mem("Identity::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { mem("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 
-			RNS::Cryptography::X25519PrivateKey::Ptr _prv;
+			Cryptography::X25519PrivateKey::Ptr _prv;
 			Bytes _prv_bytes;
 
-			RNS::Cryptography::Ed25519PrivateKey::Ptr _sig_prv;
+			Cryptography::Ed25519PrivateKey::Ptr _sig_prv;
 			Bytes _sig_prv_bytes;
 
-			RNS::Cryptography::X25519PublicKey::Ptr _pub;
+			Cryptography::X25519PublicKey::Ptr _pub;
 			Bytes _pub_bytes;
 
-			RNS::Cryptography::Ed25519PublicKey::Ptr _sig_pub;
+			Cryptography::Ed25519PublicKey::Ptr _sig_pub;
 			Bytes _sig_pub_bytes;
 
 			Bytes _hash;
@@ -174,8 +180,6 @@ namespace RNS {
 		friend class Identity;
 		};
 		std::shared_ptr<Object> _object;
-
-		static std::map<Bytes, IdentityEntry> _known_destinations;
 
 	};
 

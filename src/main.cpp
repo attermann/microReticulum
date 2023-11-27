@@ -8,10 +8,13 @@
 #include "Packet.h"
 #include "Transport.h"
 #include "Interface.h"
+#include "Log.h"
 #include "Bytes.h"
 #include "Type.h"
+#include "Interfaces/UDPInterface.h"
+#include "Utilities/OS.h"
 
-#ifndef NATIVE
+#ifdef ARDUINO
 #include <Arduino.h>
 #endif
 
@@ -22,6 +25,13 @@
 #include <map>
 #include <functional>
 //#include <sstream>
+
+
+#ifndef NDEBUG
+//#define RUN_TESTS
+#endif
+#define RUN_RETICULUM
+//#define RETICULUM_PACKET_TEST
 
 // Let's define an app name. We'll use this for all
 // destinations we create. Since this basic example
@@ -39,7 +49,7 @@ public:
 		IN(true);
 		OUT(true);
 	}
-	TestInterface(const char *name) : RNS::Interface(name) {
+	TestInterface(const char* name) : RNS::Interface(name) {
 		IN(true);
 		OUT(true);
 	}
@@ -61,7 +71,7 @@ public:
 		IN(true);
 		OUT(true);
 	}
-	TestLoopbackInterface(RNS::Interface& loopback_interface, const char *name) : RNS::Interface(name), _loopback_interface(loopback_interface) {
+	TestLoopbackInterface(RNS::Interface& loopback_interface, const char* name) : RNS::Interface(name), _loopback_interface(loopback_interface) {
 		IN(true);
 		OUT(true);
 	}
@@ -87,7 +97,7 @@ public:
 		OUT(true);
 		IN(false);
 	}
-	TestOutInterface(const char *name) : RNS::Interface(name) {
+	TestOutInterface(const char* name) : RNS::Interface(name) {
 		OUT(true);
 		IN(false);
 	}
@@ -107,7 +117,7 @@ public:
 		OUT(false);
 		IN(true);
 	}
-	TestInInterface(const char *name) : RNS::Interface(name) {
+	TestInInterface(const char* name) : RNS::Interface(name) {
 		OUT(false);
 		IN(true);
 	}
@@ -124,105 +134,111 @@ public:
 // Test AnnounceHandler
 class ExampleAnnounceHandler : public RNS::AnnounceHandler {
 public:
-	ExampleAnnounceHandler(const char* aspect_filter) : AnnounceHandler(aspect_filter) {}
+	ExampleAnnounceHandler(const char* aspect_filter = nullptr) : AnnounceHandler(aspect_filter) {}
+	virtual ~ExampleAnnounceHandler() {}
 	virtual void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) {
-		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 		RNS::info("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
-		RNS::info("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
-        if (app_data) {
-			RNS::info("ExampleAnnounceHandler: app data: " + app_data.toString());
+		if (announced_identity) {
+			RNS::info("ExampleAnnounceHandler: announced identity hash: " + announced_identity.hash().toHex());
+			RNS::info("ExampleAnnounceHandler: announced identity app data: " + announced_identity.app_data().toHex());
 		}
-		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        if (app_data) {
+			RNS::info("ExampleAnnounceHandler: app data text: \"" + app_data.toString() + "\"");
+		}
+		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}
 };
 
 // Test packet receive callback
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
-	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	RNS::head("onPacket: data: " + data.toHex(), RNS::LOG_INFO);
 	RNS::head("onPacket: data string: \"" + data.toString() + "\"", RNS::LOG_INFO);
 	//RNS::head("onPacket: " + packet.debugString(), RNS::LOG_EXTREME);
 	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
-void setup() {
 
-#ifndef NATIVE
-	Serial.begin(115200);
-	Serial.print("Hello from T-Beam on PlatformIO!\n");
+#if defined(RUN_RETICULUM)
+RNS::Reticulum reticulum({RNS::Type::NONE});
+
+//TestInterface interface;
+TestOutInterface outinterface;
+TestInInterface ininterface;
+TestLoopbackInterface loopinterface(ininterface);
+RNS::Interfaces::UDPInterface udpinterface;
+
+//ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
+//RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
+RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler());
 #endif
+
+#if defined(RUN_TESTS)
+void run_tests() {
 
 	try {
 
-#ifndef NDEBUG
-		RNS::loglevel(RNS::LOG_WARNING);
-		//RNS::loglevel(RNS::LOG_EXTREME);
 		RNS::extreme("Running tests...");
+		RNS::LogLevel loglevel = RNS::loglevel();
+		//RNS::loglevel(RNS::LOG_WARNING);
+		RNS::loglevel(RNS::LOG_EXTREME);
 		test();
 		//testReference();
 		//testCrypto();
+		RNS::loglevel(loglevel);
 		RNS::extreme("Finished running tests");
 		//return;
+	}
+	catch (std::exception& e) {
+		RNS::error(std::string("!!! Exception in test: ") + e.what() + " !!!");
+	}
+
+}
 #endif
+
+#if defined(RUN_RETICULUM)
+void setup_reticulum() {
+	RNS::info("Setting up Reticulum...");
+
+	try {
 
 		//std::stringstream test;
 		// !!! just adding this single stringstream alone (not even using it) adds a whopping 17.1% !!!
 		// !!! JUST SAY NO TO STRINGSTREAM !!!
-
-		RNS::loglevel(RNS::LOG_EXTREME);
 
 		// 18.5% completely empty program
 
 		// 21.8% baseline here with serial
 
 		RNS::head("Creating Reticulum instance...", RNS::LOG_EXTREME);
-		RNS::Reticulum reticulum;
+		//RNS::Reticulum reticulum;
+		reticulum = RNS::Reticulum();
+		//return;
 		// 21.9% (+0.1%)
-
-		RNS::head("Creating Interface instances...", RNS::LOG_EXTREME);
-		//TestInterface interface;
-		TestOutInterface outinterface;
-		TestInInterface ininterface;
-		TestLoopbackInterface loopinterface(ininterface);
 
 		RNS::head("Registering Interface instances with Transport...", RNS::LOG_EXTREME);
 		//RNS::Transport::register_interface(interface);
 		RNS::Transport::register_interface(outinterface);
 		RNS::Transport::register_interface(ininterface);
 		RNS::Transport::register_interface(loopinterface);
+		RNS::Transport::register_interface(udpinterface);
+
+		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
+		udpinterface.start();
 
 		RNS::head("Creating Identity instance...", RNS::LOG_EXTREME);
 		RNS::Identity identity;
 		// 22.6% (+0.7%)
 
 		RNS::head("Creating Destination instance...", RNS::LOG_EXTREME);
-		RNS::Destination destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "test", "context");
+		RNS::Destination destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "app", "aspects");
 		// 23.0% (+0.4%)
 
-/*
-		RNS::head("Testing map...", RNS::LOG_EXTREME);
-		{
-			std::map<RNS::Bytes, RNS::Destination&> destinations;
-			destinations.insert({destination.hash(), destination});
-			//for (RNS::Destination& destination : destinations) {
-			for (auto& [hash, destination] : destinations) {
-				RNS::extreme("Iterated destination: " + destination.toString());
-			}
-			RNS::Bytes hash = destination.hash();
-			auto iter = destinations.find(hash);
-			if (iter != destinations.end()) {
-				RNS::Destination& destination = (*iter).second;
-				RNS::extreme("Found destination: " + destination.toString());
-			}
-			return;
-		}
-*/
 
 		destination.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
 		RNS::head("Registering announce handler with Transport...", RNS::LOG_EXTREME);
-		RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
-		//ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
 		RNS::Transport::register_announce_handler(announce_handler);
 
 		RNS::head("Announcing destination...", RNS::LOG_EXTREME);
@@ -233,7 +249,7 @@ void setup() {
 		destination.announce(RNS::bytesFromString(fruits[rand() % 7]));
 		// 23.9% (+0.8%)
 
-/*
+#if defined (RETICULUM_PACKET_TEST)
 		// test data send packet
 		RNS::head("Creating send packet...", RNS::LOG_EXTREME);
 		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
@@ -253,12 +269,24 @@ void setup() {
 
 		RNS::head("Spoofing recv packet to destination...", RNS::LOG_EXTREME);
 		destination.receive(recv_packet);
-*/
+#endif
+
+	}
+	catch (std::exception& e) {
+		RNS::error(std::string("!!! Exception in setup_reticulum: ") + e.what() + " !!!");
+	}
+}
+
+void teardown_reticulum() {
+	RNS::info("Tearing down Reticulum...");
+
+	try {
 
 		RNS::head("Deregistering announce handler with Transport...", RNS::LOG_EXTREME);
 		RNS::Transport::deregister_announce_handler(announce_handler);
 
 		RNS::head("Deregistering Interface instances with Transport...", RNS::LOG_EXTREME);
+		RNS::Transport::deregister_interface(udpinterface);
 		RNS::Transport::deregister_interface(loopinterface);
 		RNS::Transport::deregister_interface(ininterface);
 		RNS::Transport::deregister_interface(outinterface);
@@ -266,96 +294,51 @@ void setup() {
 
 	}
 	catch (std::exception& e) {
-		RNS::error(std::string("!!! Exception in main: ") + e.what() + " !!!");
+		RNS::error(std::string("!!! Exception in teardown_reticulum: ") + e.what() + " !!!");
 	}
+}
+#endif
 
-#ifndef NATIVE
+void setup() {
+
+#ifdef ARDUINO
+	Serial.begin(115200);
+	Serial.print("Hello from T-Beam on PlatformIO!\n");
+#endif
+
+	RNS::loglevel(RNS::LOG_EXTREME);
+
+/*
+	{
+		//RNS::Reticulum reticulum_test;
+		RNS::Destination destination_test({RNS::Type::NONE}, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "test", "test");
+	}
+*/
+
+#if defined(RUN_TESTS)
+	run_tests();
+#endif
+
+#if defined(RUN_RETICULUM)
+	setup_reticulum();
+#endif
+
+#ifdef ARDUINO
 	Serial.print("Goodbye from T-Beam on PlatformIO!\n");
 #endif
 }
 
 void loop() {
+
+#if defined(RUN_RETICULUM)
+	reticulum.loop();
+	udpinterface.loop();
+#endif
+
 }
 
 int main(void) {
 	printf("Hello from Native on PlatformIO!\n");
-
-/*
-	RNS::loglevel(RNS::LOG_EXTREME);
-	TestInterface testinterface;
-
-	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
-	interfaces.insert(testinterface);
-	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-		RNS::Interface& interface = (*iter);
-		RNS::extreme("Found interface: " + interface.toString());
-		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
-	}
-	return 0;
-*/
-/*
-	RNS::loglevel(RNS::LOG_EXTREME);
-	TestInterface testinterface;
-
-	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
-	interfaces.insert(testinterface);
-	for (auto& interface : interfaces) {
-		RNS::extreme("Found interface: " + interface.toString());
-		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
-	}
-	return 0;
-*/
-/*
-	RNS::loglevel(RNS::LOG_EXTREME);
-	TestInterface testinterface;
-
-	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
-	interfaces.push_back(testinterface);
-	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-		RNS::Interface& interface = (*iter);
-		RNS::extreme("Found interface: " + interface.toString());
-		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
-	}
-	return 0;
-*/
-/*
-	RNS::loglevel(RNS::LOG_EXTREME);
-	TestInterface testinterface;
-
-	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
-	interfaces.push_back(testinterface);
-	//for (auto& interface : interfaces) {
-	for (RNS::Interface& interface : interfaces) {
-		RNS::extreme("Found interface: " + interface.toString());
-		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
-	}
-	return 0;
-*/
-/*
-	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
-	{
-		RNS::loglevel(RNS::LOG_EXTREME);
-		TestInterface testinterface;
-		interfaces.push_back(testinterface);
-		for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-			RNS::Interface& interface = (*iter);
-			RNS::extreme("1 Found interface: " + interface.toString());
-			RNS::Bytes data;
-			const_cast<RNS::Interface&>(interface).processOutgoing(data);
-		}
-	}
-	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
-		RNS::Interface& interface = (*iter);
-		RNS::extreme("2 Found interface: " + interface.toString());
-		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
-	}
-	return 0;
-*/
 
 	setup();
 

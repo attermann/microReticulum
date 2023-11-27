@@ -64,7 +64,7 @@ size_t CBCCommon::ivSize() const
     return 16;
 }
 
-bool CBCCommon::setKey(const uint8_t *key, size_t len)
+bool CBCCommon::setKey(const uint8_t* key, size_t len)
 {
     // Verify the cipher's block size, just in case.
     if (blockCipher->blockSize() != 16)
@@ -74,7 +74,7 @@ bool CBCCommon::setKey(const uint8_t *key, size_t len)
     return blockCipher->setKey(key, len);
 }
 
-bool CBCCommon::setIV(const uint8_t *iv, size_t len)
+bool CBCCommon::setIV(const uint8_t* iv, size_t len)
 {
     if (len != 16)
         return false;
@@ -83,7 +83,7 @@ bool CBCCommon::setIV(const uint8_t *iv, size_t len)
     return true;
 }
 
-void CBCCommon::encrypt(uint8_t *output, const uint8_t *input, size_t len)
+void CBCCommon::encrypt(uint8_t* output, const uint8_t* input, size_t len)
 {
     uint8_t posn;
     while (len >= 16) {
@@ -96,7 +96,7 @@ void CBCCommon::encrypt(uint8_t *output, const uint8_t *input, size_t len)
     }
 }
 
-void CBCCommon::decrypt(uint8_t *output, const uint8_t *input, size_t len)
+void CBCCommon::decrypt(uint8_t* output, const uint8_t* input, size_t len)
 {
     uint8_t posn;
     while (len >= 16) {

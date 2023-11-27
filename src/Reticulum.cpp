@@ -5,6 +5,11 @@
 
 #include <RNG.h>
 
+#ifdef ARDUINO
+//#include <TransistorNoiseSource.h>
+//#include <Ethernet.h>
+#endif
+
 using namespace RNS;
 using namespace RNS::Type::Reticulum;
 
@@ -12,6 +17,11 @@ using namespace RNS::Type::Reticulum;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
 /*static*/ bool Reticulum::panic_on_interface_error = false;
+
+#ifdef ARDUINO
+// Noise source to seed the random number generator.
+//TransistorNoiseSource noise(A1);
+#endif
 
 /*
 Initialises and starts a Reticulum instance. This must be
@@ -22,10 +32,21 @@ pass any traffic before being instantiated.
 */
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
+	mem("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
 	// Initialkize random number generator
 	RNG.begin("Reticulum");
-	//RNG.stir(mac_address, sizeof(mac_address));
+
+#ifdef ARDUINO
+	// Stir in the Ethernet MAC address.
+	//byte mac[6];
+	//Ethernet.begin(mac);
+	// WiFi.macAddress(mac);
+	//RNG.stir(mac, sizeof(mac));
+ 
+	// Add the noise source to the list of sources known to RNG.
+	//RNG.addNoiseSource(noise);
+ #endif
 
 /*
 	RNS.vendor.platformutils.platform_checks()
@@ -128,11 +149,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	signal.signal(signal.SIGTERM, Reticulum.sigterm_handler)
 */
 
-	extreme("Reticulum object created");
-}
-
-Reticulum::~Reticulum() {
-	extreme("Reticulum object destroyed");
+	mem("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 

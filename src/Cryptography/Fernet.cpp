@@ -26,11 +26,11 @@ Fernet::Fernet(const Bytes& key) {
 	//self._encryption_key = key[16:]
 	_encryption_key = key.mid(16);
 
-	extreme("Fernet object created");
+	mem("Fernet object created");
 }
 
 Fernet::~Fernet() {
-	extreme("Fernet object destroyed");
+	mem("Fernet object destroyed");
 }
 
 bool Fernet::verify_hmac(const Bytes& token) {

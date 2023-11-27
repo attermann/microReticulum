@@ -12,8 +12,9 @@
 using namespace RNS;
 using namespace RNS::Type::Destination;
 
-Destination::Destination(const Identity& identity, const directions direction, const types type, const char* app_name, const char *aspects) : _object(new Object(identity)) {
+Destination::Destination(const Identity& identity, const directions direction, const types type, const char* app_name, const char* aspects) : _object(new Object(identity)) {
 	assert(_object);
+	mem("Destination object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
 	// Check input values and build name string
 	if (strchr(app_name, '.') != nullptr) {
@@ -27,8 +28,8 @@ Destination::Destination(const Identity& identity, const directions direction, c
 	if (!identity && direction == IN && _object->_type != PLAIN) {
 		debug("Destination::Destination: identity not provided, creating new one");
 		_object->_identity = Identity();
-		// CBA TODO should following include a "." delimiter?
-		fullaspects += _object->_identity.hexhash();
+		// CBA TODO determine why identity.hexhash is added both here and by expand_name called below
+		fullaspects += "." + _object->_identity.hexhash();
 	}
 	debug("Destination::Destination: full aspects: " + fullaspects);
 
@@ -46,32 +47,51 @@ Destination::Destination(const Identity& identity, const directions direction, c
 	debug("Destination::Destination: hash:      " + _object->_hash.toHex());
 	// CBA TEST CRASH
 	debug("Destination::Destination: creating name hash...");
-	_object->_name_hash = Identity::truncated_hash(expand_name({Type::NONE}, app_name, fullaspects.c_str()));
+    //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
+	_object->_name_hash = name_hash(app_name, aspects);
 	debug("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
 	debug("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
 
-	extreme("Destination object created");
+	mem("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+}
+
+/*virtual*/ Destination::~Destination() {
+	mem("Destination object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	if (_object && _object.use_count() == 1) {
+		extreme("Destination object has last data reference");
+
+		// CBA Can't call deregister_destination here because it's possible (likely even) that Destination
+		//  is being destructed from that same collection which will result in a llop and memory errors.
+		//debug("Destination::~Destination: calling deregister_destination");
+		//Transport::deregister_destination(*this);
+	}
 }
 
 /*
 :returns: A destination name in adressable hash form, for an app_name and a number of aspects.
 */
-/*static*/ Bytes Destination::hash(const Identity& identity, const char *app_name, const char *aspects) {
-	//name_hash = Identity::full_hash(Destination.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
-	//addr_hash_material = name_hash
-	Bytes addr_hash_material = Identity::truncated_hash(expand_name({Type::NONE}, app_name, aspects));
-	//if identity != None:
-	//	if isinstance(identity, RNS.Identity):
-	//		addr_hash_material += identity.hash
-	//	elif isinstance(identity, bytes) and len(identity) == RNS.Reticulum.TRUNCATED_HASHLENGTH//8:
-	//		addr_hash_material += identity
-	//	else:
-	//		raise TypeError("Invalid material supplied for destination hash calculation")
-	addr_hash_material << identity.hash();
+/*static*/ Bytes Destination::hash(const Identity& identity, const char* app_name, const char* aspects) {
+	//p name_hash = Identity::full_hash(Destination.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
+	//p addr_hash_material = name_hash
+	Bytes addr_hash_material = name_hash(app_name, aspects);
+	if (identity) {
+		addr_hash_material << identity.hash();
+	}
 
+    //p return RNS.Identity.full_hash(addr_hash_material)[:RNS.Reticulum.TRUNCATED_HASHLENGTH//8]
+	// CBA TODO valid alternative?
+	//return Identity::full_hash(addr_hash_material).left(Type::Reticulum::TRUNCATED_HASHLENGTH/8);
 	return Identity::truncated_hash(addr_hash_material);
+}
+
+/*
+:returns: A name in hash form, for an app_name and a number of aspects.
+*/
+/*static*/ Bytes Destination::name_hash(const char* app_name, const char* aspects) {
+	//p name_hash = Identity::full_hash(Destination.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
+	return Identity::full_hash(expand_name({Type::NONE}, app_name, aspects)).left(Type::Identity::NAME_HASH_LENGTH/8);
 }
 
 /*
@@ -97,7 +117,7 @@ Destination::Destination(const Identity& identity, const directions direction, c
 /*
 :returns: A string containing the full human-readable name of the destination, for an app_name and a number of aspects.
 */
-/*static*/ std::string Destination::expand_name(const Identity& identity, const char *app_name, const char *aspects) {
+/*static*/ std::string Destination::expand_name(const Identity& identity, const char* app_name, const char* aspects) {
 
 	if (strchr(app_name, '.') != nullptr) {
 		throw std::invalid_argument("Dots can't be used in app names");
@@ -194,8 +214,9 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 	}
 	else {
 		Bytes destination_hash = _object->_hash;
-		//random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
-		Bytes random_hash;
+		//p random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
+		// CBA TODO add in time to random hash
+		Bytes random_hash = Cryptography::random(Type::Identity::RANDOM_HASH_LENGTH/8);
 
 		Bytes new_app_data(app_data);
         if (new_app_data.empty() && !_object->_default_app_data.empty()) {

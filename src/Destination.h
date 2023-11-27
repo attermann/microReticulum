@@ -40,7 +40,7 @@ namespace RNS {
 		class Callbacks {
 		public:
 			using link_established = void(*)(const Link& link);
-			//using packet = void(*)(uint8_t *data, uint16_t data_len, Packet *packet);
+			//using packet = void(*)(uint8_t* data, uint16_t data_len, Packet *packet);
 			using packet = void(*)(const Bytes& data, const Packet& packet);
 			using proof_requested = bool(*)(const Packet& packet);
 		public:
@@ -56,19 +56,23 @@ namespace RNS {
 
 	public:
 		Destination(Type::NoneConstructor none) {
-			extreme("Destination NONE object created");
+			mem("Destination NONE object created, this: " + std::to_string((uintptr_t)this));
 		}
 		Destination(const Destination& destination) : _object(destination._object) {
-			extreme("Destination object copy created");
+			mem("Destination object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Destination(const Identity& identity, const Type::Destination::directions direction, const Type::Destination::types type, const char* app_name, const char *aspects);
-		virtual ~Destination() {
-			extreme("Destination object destroyed");
-		}
+		Destination(
+			const Identity& identity,
+			const Type::Destination::directions direction,
+			const Type::Destination::types type,
+			const char* app_name,
+			const char* aspects
+		);
+		virtual ~Destination();
 
 		inline Destination& operator = (const Destination& destination) {
 			_object = destination._object;
-			extreme("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -79,8 +83,9 @@ namespace RNS {
 		}
 
 	public:
-		static std::string expand_name(const Identity& identity, const char *app_name, const char *aspects);
-		static Bytes hash(const Identity& identity, const char *app_name, const char *aspects);
+		static std::string expand_name(const Identity& identity, const char* app_name, const char* aspects);
+		static Bytes hash(const Identity& identity, const char* app_name, const char* aspects);
+		static Bytes name_hash(const char* app_name, const char* aspects);
 		static Bytes app_and_aspects_from_name(const char* full_name);
 		static Bytes hash_from_name_and_identity(const char* full_name, const Identity& identity);
 
@@ -168,8 +173,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(const Identity& identity) : _identity(identity) {}
-			virtual ~Object() {}
+			Object(const Identity& identity) : _identity(identity) { mem("Destination::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { mem("Destination::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			bool _accept_link_requests = true;
 			Callbacks _callbacks;
