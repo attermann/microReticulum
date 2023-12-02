@@ -259,15 +259,17 @@ void setup_reticulum() {
 		RNS::Transport::register_interface(ininterface);
 		RNS::Transport::register_interface(loopinterface);
 #ifdef UDP_INTERFACE
+		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(udp_interface);
 #endif
 #ifdef LORA_INTERFACE
+		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(lora_interface);
 #endif
 
 #ifdef UDP_INTERFACE
 		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
-		udp_interface.start("some_ssid", "some_password");
+		udp_interface.start("some_ssid", "some_password", 2424);
 #endif
 
 #ifdef LORA_INTERFACE

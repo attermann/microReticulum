@@ -96,6 +96,7 @@ namespace RNS {
 		inline std::string name() const { assert(_object); return _object->_name; }
 		inline const Bytes& ifac_identity() const { assert(_object); return _object->_ifac_identity; }
 		inline Type::Interface::modes mode() const { assert(_object); return _object->_mode; }
+		inline void mode(Type::Interface::modes mode) { assert(_object); _object->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_object); return _object->_bitrate; }
 		inline double announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
 		inline float announce_cap() const { assert(_object); return _object->_announce_cap; }

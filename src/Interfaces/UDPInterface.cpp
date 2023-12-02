@@ -60,8 +60,8 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	extreme("UDPInterface: wifi ssid: " + _wifi_ssid);
 	extreme("UDPInterface: wifi password: " + _wifi_password);
 	extreme("UDPInterface: local host: " + _local_host);
-	extreme("UDPInterface: local port: " + std::to_string(_remote_port));
-	extreme("UDPInterface: remote host: " + _local_host);
+	extreme("UDPInterface: local port: " + std::to_string(_local_port));
+	extreme("UDPInterface: remote host: " + _remote_host);
 	extreme("UDPInterface: remote port: " + std::to_string(_remote_port));
  
 #ifdef ARDUINO
