@@ -95,6 +95,9 @@ namespace RNS {
 			_object->_callbacks._timeout = callback;
 		}
 
+		// getters/setters
+		inline Type::PacketReceipt::Status status() const { assert(_object); return _object->_status; }
+
 	private:
 		class Object {
 		public:
@@ -102,12 +105,12 @@ namespace RNS {
 			virtual ~Object() {}
 		private:
 			bool _sent = true;
-			uint64_t _sent_at = Utilities::OS::time();
+			double _sent_at = Utilities::OS::time();
 			bool _proved = false;
 			Type::PacketReceipt::Status _status = Type::PacketReceipt::SENT;
 			Destination _destination = {Type::NONE};
 			Callbacks _callbacks;
-			uint64_t _concluded_at = 0;
+			double _concluded_at = 0;
 			//z Packet _proof_packet;
 			int16_t _timeout = 0;
 		friend class PacketReceipt;
@@ -125,10 +128,10 @@ namespace RNS {
 
 	public:
 		Packet(Type::NoneConstructor none) {
-			mem("Packet NONE object created");
+			mem("Packet NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Packet(const Packet& packet) : _object(packet._object) {
-			mem("Packet object copy created");
+			mem("Packet object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Packet(
 			const Destination& destination,
@@ -151,7 +154,9 @@ namespace RNS {
 			const Bytes& transport_id = {Bytes::NONE},
 			bool create_receipt = true
 		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
-		virtual ~Packet();
+		virtual ~Packet() {
+			mem("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+		}			
 
 		inline Packet& operator = (const Packet& packet) {
 			_object = packet._object;
@@ -202,8 +207,8 @@ namespace RNS {
 		inline Type::Packet::context_types context() const { assert(_object); return _object->_context; }
 		inline bool sent() const { assert(_object); return _object->_sent; }
 		inline void sent(bool sent) { assert(_object); _object->_sent = sent; }
-		inline time_t sent_at() const { assert(_object); return _object->_sent_at; }
-		inline void sent_at(time_t sent_at) { assert(_object); _object->_sent_at = sent_at; }
+		inline double sent_at() const { assert(_object); return _object->_sent_at; }
+		inline void sent_at(double sent_at) { assert(_object); _object->_sent_at = sent_at; }
 		inline bool create_receipt() const { assert(_object); return _object->_create_receipt; }
 		inline const PacketReceipt& receipt() const { assert(_object); return _object->_receipt; }
 		inline void receipt(const PacketReceipt& receipt) { assert(_object); _object->_receipt = receipt; }
@@ -224,8 +229,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) {}
-			virtual ~Object() {}
+			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { mem("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { mem("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			Destination _destination = {Type::NONE};
 			Link _link = {Type::NONE};
@@ -251,7 +256,7 @@ namespace RNS {
 			PacketReceipt _receipt;
 
 			uint16_t _mtu = Type::Reticulum::MTU;
-			time_t _sent_at = 0;
+			double _sent_at = 0;
 
 			float _rssi = 0.0;
 			float _snr = 0.0;

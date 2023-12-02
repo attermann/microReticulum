@@ -50,9 +50,7 @@ namespace RNS {
 		friend class Detination;
 		};
 
-		//typedef std::pair<time_t, std::string> Response;
-		using PathResponse = std::pair<time_t, Bytes>;
-		//using PathResponse = std::pair<time_t, std::vector<uint8_t>>;
+		using PathResponse = std::pair<double, Bytes>;
 
 	public:
 		Destination(Type::NoneConstructor none) {
@@ -184,7 +182,6 @@ namespace RNS {
 			Type::Destination::proof_strategies _proof_strategy = Type::Destination::PROVE_NONE;
 			uint16_t _mtu = 0;
 
-			//std::vector<PathResponse> _path_responses;
 			std::map<Bytes, PathResponse> _path_responses;
 			//z _links = []
 

@@ -11,6 +11,7 @@
 
 using namespace RNS;
 using namespace RNS::Type::Destination;
+using namespace RNS::Utilities;
 
 Destination::Destination(const Identity& identity, const directions direction, const types type, const char* app_name, const char* aspects) : _object(new Object(identity)) {
 	assert(_object);
@@ -20,6 +21,7 @@ Destination::Destination(const Identity& identity, const directions direction, c
 	if (strchr(app_name, '.') != nullptr) {
 		throw std::invalid_argument("Dots can't be used in app names");
 	}
+	debug("Destination::Destination: app name: " + std::string(app_name));
 
 	_object->_type = type;
 	_object->_direction = direction;
@@ -156,7 +158,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		throw std::invalid_argument("Only IN destination types can be announced");
 	}
 
-	time_t now = time(nullptr);
+	double now = OS::time();
     auto it = _object->_path_responses.begin();
     while (it != _object->_path_responses.end()) {
 		// vector
@@ -228,7 +230,8 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		debug("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
 		debug("Destination::announce: name hash:    " + _object->_name_hash.toHex());
 		debug("Destination::announce: random hash:  " + random_hash.toHex());
-		debug("Destination::announce: new app data: " + new_app_data.toHex());
+		debug("Destination::announce: app data:     " + new_app_data.toHex());
+		debug("Destination::announce: app data text:" + new_app_data.toString());
 		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
 		if (new_app_data) {
 			signed_data << new_app_data;
@@ -244,7 +247,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 			announce_data << new_app_data;
 		}
 
-		_object->_path_responses.insert({tag, {time(nullptr), announce_data}});
+		_object->_path_responses.insert({tag, {OS::time(), announce_data}});
 	}
 	debug("Destination::announce: announce_data:" + announce_data.toHex());
 

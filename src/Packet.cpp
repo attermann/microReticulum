@@ -41,11 +41,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_fromPacked = true;
 		_object->_create_receipt = false;
 	}
-	mem("Packet object created");
-}
-
-Packet::~Packet() {
-	mem("Packet object destroyed");
+	mem("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 

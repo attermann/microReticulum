@@ -6,7 +6,7 @@
 using namespace RNS;
 using namespace RNS::Type::Link;
 
-Link::Link() : _object(new Object()) {
+Link::Link(const Destination& destination) : _object(new Object(destination)) {
 	assert(_object);
 
 	mem("Link object created");

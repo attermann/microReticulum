@@ -53,7 +53,7 @@ const Bytes Fernet::encrypt(const Bytes& data) {
 
 	debug("Fernet::encrypt: plaintext length: " + std::to_string(data.size()));
 	Bytes iv = random(16);
-	//time_t current_time = time(nullptr);
+	//double current_time = OS::time();
 	extreme("Fernet::encrypt: iv:         " + iv.toHex());
 
 	extreme("Fernet::encrypt: plaintext:  " + data.toHex());

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Packet.h"
 #include "Bytes.h"
 #include "Type.h"
 
@@ -58,7 +59,7 @@ namespace RNS {
 		// CBA TODO Analyze safety of using Packet references here
 		class DestinationEntry {
 		public:
-			DestinationEntry(uint64_t time, const Bytes& received_from, uint8_t announce_hops, uint64_t expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
+			DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
 				_timestamp(time),
 				_received_from(received_from),
 				_hops(announce_hops),
@@ -69,20 +70,22 @@ namespace RNS {
 			{
 			}
 		public:
-			uint64_t _timestamp = 0;
+			double _timestamp = 0;
 			Bytes _received_from;
 			uint8_t _hops = 0;
-			uint64_t _expires = 0;
+			double _expires = 0;
 			std::set<Bytes> _random_blobs;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			Interface& _receiving_interface;
-			const Packet& _announce_packet;
+			//const Packet& _announce_packet;
+			Packet _announce_packet;
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
 		class AnnounceEntry {
 		public:
-			AnnounceEntry(uint64_t timestamp, uint64_t retransmit_timeout, uint8_t retries, const Bytes& received_from, uint8_t hops, const Packet& packet, uint8_t local_rebroadcasts, bool block_rebroadcasts, const Interface& attached_interface) :
+			AnnounceEntry(double timestamp, double retransmit_timeout, uint8_t retries, const Bytes& received_from, uint8_t hops, const Packet& packet, uint8_t local_rebroadcasts, bool block_rebroadcasts, const Interface& attached_interface) :
 				_timestamp(timestamp),
 				_retransmit_timeout(retransmit_timeout),
 				_retries(retries),
@@ -95,21 +98,26 @@ namespace RNS {
 			{
 			}
 		public:
-			uint64_t _timestamp = 0;
-			uint64_t _retransmit_timeout = 0;
+			double _timestamp = 0;
+			double _retransmit_timeout = 0;
 			uint8_t _retries = 0;
 			Bytes _received_from;
 			uint8_t _hops = 0;
-			const Packet& _packet;
+			// CBA Storing packet reference causes memory issues, presumably because orignal packet is being destroyed
+			//  MUST use instance instad of reference!!!
+			//const Packet& _packet;
+			Packet _packet;
 			uint8_t _local_rebroadcasts = 0;
 			bool _block_rebroadcasts = false;
-			const Interface& _attached_interface;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
+			//const Interface& _attached_interface;
+			Interface _attached_interface;
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class LinkEntry {
 		public:
-			LinkEntry(uint64_t timestamp, const Bytes& next_hop, const Interface& outbound_interface, uint8_t remaining_hops, const Interface& receiving_interface, uint8_t hops, const Bytes& destination_hash, bool validated, uint64_t proof_timeout) :
+			LinkEntry(double timestamp, const Bytes& next_hop, const Interface& outbound_interface, uint8_t remaining_hops, const Interface& receiving_interface, uint8_t hops, const Bytes& destination_hash, bool validated, double proof_timeout) :
 				_timestamp(timestamp),
 				_next_hop(next_hop),
 				_outbound_interface(outbound_interface),
@@ -122,36 +130,44 @@ namespace RNS {
 			{
 			}
 		public:
-			uint64_t _timestamp = 0;
+			double _timestamp = 0;
 			Bytes _next_hop;
-			const Interface& _outbound_interface;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
+			//const Interface& _outbound_interface;
+			Interface _outbound_interface;
 			uint8_t _remaining_hops = 0;
-			const Interface& _receiving_interface;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
+			//const Interface& _receiving_interface;
+			Interface _receiving_interface;
 			uint8_t _hops = 0;
 			Bytes _destination_hash;
 			bool _validated = false;
-			uint64_t _proof_timeout = 0;
+			double _proof_timeout = 0;
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class ReverseEntry {
 		public:
-			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, uint64_t timestamp) :
+			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp) :
 				_receiving_interface(receiving_interface),
 				_outbound_interface(outbound_interface),
 				_timestamp(timestamp)
 			{
 			}
 		public:
-			const Interface& _receiving_interface;
-			const Interface& _outbound_interface;
-			uint64_t _timestamp = 0;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
+			//const Interface& _receiving_interface;
+			Interface _receiving_interface;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
+			//const Interface& _outbound_interface;
+			Interface _outbound_interface;
+			double _timestamp = 0;
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class PathRequestEntry {
 		public:
-			PathRequestEntry(const Bytes& destination_hash, uint64_t timeout, const Interface& requesting_interface) :
+			PathRequestEntry(const Bytes& destination_hash, double timeout, const Interface& requesting_interface) :
 				_destination_hash(destination_hash),
 				_timeout(timeout),
 				_requesting_interface(requesting_interface)
@@ -159,12 +175,15 @@ namespace RNS {
 			}
 		public:
 			Bytes _destination_hash;
-			uint64_t _timeout = 0;
-			const Interface& _requesting_interface;
+			double _timeout = 0;
+			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
+			//const Interface& _requesting_interface;
+			Interface _requesting_interface;
 		};
 
 	public:
 		static void start(const Reticulum& reticulum_instance);
+		static void loop();
 		static void jobloop();
 		static void jobs();
 		static void transmit(Interface& interface, const Bytes& raw);
@@ -237,7 +256,7 @@ namespace RNS {
 		static std::set<Link> _pending_links;           // Links that are being established
 		static std::set<Link> _active_links;           // Links that are active
 		static std::set<Bytes> _packet_hashlist;           // A list of packet hashes for duplicate detection
-		static std::set<PacketReceipt> _receipts;           // Receipts of all outgoing packets for proof processing
+		static std::list<PacketReceipt> _receipts;           // Receipts of all outgoing packets for proof processing
 
 		// TODO: "destination_table" should really be renamed to "path_table"
 		// Notes on memory usage: 1 megabyte of memory can store approximately
@@ -251,11 +270,11 @@ namespace RNS {
 		static std::set<HAnnounceHandler> _announce_handlers;           // A table storing externally registered announce handlers
 		//z _tunnels              = {}           // A table storing tunnels to other transport instances
 		//z _announce_rate_table  = {}           // A table for keeping track of announce rates
-		static std::map<Bytes, uint64_t> _path_requests;           // A table for storing path request timestamps
+		static std::map<Bytes, double> _path_requests;           // A table for storing path request timestamps
 
 		static std::map<Bytes, PathRequestEntry> _discovery_path_requests;       // A table for keeping track of path requests on behalf of other nodes
 		static std::set<Bytes> _discovery_pr_tags;       // A table for keeping track of tagged path requests
-		static uint16_t _max_pr_taXgxs;    // Maximum amount of unique path request tags to remember
+		static uint16_t _max_pr_tags;    // Maximum amount of unique path request tags to remember
 
 		// Transport control destinations are used
 		// for control purposes like path requests
@@ -274,18 +293,19 @@ namespace RNS {
 		//z _local_client_snr_cache     = []
 		static uint16_t _LOCAL_CLIENT_CACHE_MAXSIZE;
 
-		static uint64_t _start_time;
+		static double _start_time;
 		static bool _jobs_locked;
 		static bool _jobs_running;
 		static uint32_t _job_interval;
-		static uint64_t _links_last_checked;
+		static double _jobs_last_run;
+		static double _links_last_checked;
 		static uint32_t _links_check_interval;
-		static uint64_t _receipts_last_checked;
+		static double _receipts_last_checked;
 		static uint32_t _receipts_check_interval;
-		static uint64_t _announces_last_checked;
+		static double _announces_last_checked;
 		static uint32_t _announces_check_interval;
 		static uint32_t _hashlist_maxsize;
-		static uint64_t _tables_last_culled;
+		static double _tables_last_culled;
 		static uint32_t _tables_cull_interval;
 
 		static Reticulum _owner;

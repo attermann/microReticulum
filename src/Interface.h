@@ -16,7 +16,7 @@ namespace RNS {
 	class AnnounceEntry {
 	public:
 		AnnounceEntry() {}
-		AnnounceEntry(const Bytes& destination, uint64_t time, uint8_t hops, uint64_t emitted, const Bytes& raw) :
+		AnnounceEntry(const Bytes& destination, double time, uint8_t hops, double emitted, const Bytes& raw) :
 			_destination(destination),
 			_time(time),
 			_hops(hops),
@@ -24,9 +24,9 @@ namespace RNS {
 			_raw(raw) {}
 	public:
 		Bytes _destination;
-		uint64_t _time = 0;
+		double _time = 0;
 		uint8_t _hops = 0;
-		uint64_t _emitted = 0;
+		double _emitted = 0;
 		Bytes _raw;
 	};
 
@@ -40,19 +40,19 @@ namespace RNS {
 
 	public:
 		Interface(Type::NoneConstructor none) {
-			mem("Interface object NONE created");
+			mem("Interface object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Interface(const Interface& interface) : _object(interface._object) {
-			mem("Interface object copy created");
+			mem("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Interface() : _object(new Object()) {
-			mem("Interface object created");
+			mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Interface(const char* name) : _object(new Object(name)) {
-			mem("Interface object created");
+			mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		virtual ~Interface() {
-			mem("Interface object destroyed");
+			mem("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Interface& operator = (const Interface& interface) {
@@ -86,7 +86,7 @@ namespace RNS {
 		inline void name(const char* name) { assert(_object); _object->_name = name; }
 		inline void bitrate(uint32_t bitrate) { assert(_object); _object->_bitrate = bitrate; }
 		inline void online(bool online) { assert(_object); _object->_online = online; }
-		inline void announce_allowed_at(uint64_t announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
+		inline void announce_allowed_at(double announce_allowed_at) { assert(_object); _object->_announce_allowed_at = announce_allowed_at; }
 	public:
 		inline bool IN() const { assert(_object); return _object->_IN; }
 		inline bool OUT() const { assert(_object); return _object->_OUT; }
@@ -97,7 +97,7 @@ namespace RNS {
 		inline const Bytes& ifac_identity() const { assert(_object); return _object->_ifac_identity; }
 		inline Type::Interface::modes mode() const { assert(_object); return _object->_mode; }
 		inline uint32_t bitrate() const { assert(_object); return _object->_bitrate; }
-		inline uint64_t announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
+		inline double announce_allowed_at() const { assert(_object); return _object->_announce_allowed_at; }
 		inline float announce_cap() const { assert(_object); return _object->_announce_cap; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_object); return _object->_announce_queue; }
 		inline bool is_connected_to_shared_instance() const { assert(_object); return _object->_is_connected_to_shared_instance; }
@@ -106,12 +106,18 @@ namespace RNS {
 
 		virtual inline std::string toString() const { assert(_object); return "Interface[" + _object->_name + "]"; }
 
+		inline std::string debugString() const {
+			std::string dump;
+			dump = "Interface object, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get());
+			return dump;
+		}
+
 	private:
 		class Object {
 		public:
-			Object() {}
-			Object(const char* name) : _name(name) {}
-			virtual ~Object() {}
+			Object() { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(const char* name) : _name(name) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { mem("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			bool _IN  = false;
 			bool _OUT = false;
@@ -124,7 +130,7 @@ namespace RNS {
 			Bytes _ifac_identity;
 			Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 			uint32_t _bitrate = 0;
-			uint64_t _announce_allowed_at = 0;
+			double _announce_allowed_at = 0;
 			float _announce_cap = 0.0;
 			std::list<AnnounceEntry> _announce_queue;
 			bool _is_connected_to_shared_instance = false;

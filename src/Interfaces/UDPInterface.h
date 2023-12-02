@@ -8,6 +8,8 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 //#include <AsyncUDP.h>
+#else
+#include <netinet/in.h>
 #endif
 
 #include <stdint.h>
@@ -25,8 +27,11 @@ namespace RNS { namespace Interfaces {
 	public:
 		//p def __init__(self, owner, name, device=None, bindip=None, bindport=None, forwardip=None, forwardport=None):
 		UDPInterface(const char* name = "UDPInterface");
+		UDPInterface(const char* wifi_ssid, const char* wifi_password, int local_port, const char* local_host = nullptr, const char* name = "UDPInterface");
+		virtual ~UDPInterface();
 
-		void start();
+		bool start();
+		void stop();
 		void loop();
 
 	    virtual void processIncoming(const Bytes& data);
@@ -38,22 +43,28 @@ namespace RNS { namespace Interfaces {
 	private:
 		const uint16_t HW_MTU = 1064;
 		//uint8_t buffer[Type::Reticulum::MTU] = {0};
-		Bytes buffer;
+		Bytes _buffer;
 
 		// WiFi network name and password
-		const char* ssid = "some-ssid";
-		const char* pwd = "some-pass";
+		std::string _wifi_ssid = "";
+		std::string _wifi_password = "";
 
 		// IP address to send UDP data to.
 		// it can be ip address of the server or 
 		// broadcast
-		const char* udpAddress = "255.255.255.255";
-		const int udpPort = 4242;
+		std::string _local_host = "0.0.0.0";
+		int _local_port = 4242;
+		std::string _remote_host = "255.255.255.255";
+		int _remote_port = 4242;
 
 		// create UDP instance
 #ifdef ARDUINO
 		WiFiUDP udp;
 		//AsyncUDP udp;
+#else
+		int _socket = -1;
+		in_addr_t _local_address = INADDR_ANY;
+		in_addr_t _remote_address = INADDR_NONE;
 #endif
 
 	};

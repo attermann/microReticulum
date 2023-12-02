@@ -50,10 +50,13 @@ void Interface::process_announce_queue() {
 				entries.sort(key=lambda e: e["time"])
 				selected = entries[0]
 
-				now       = time.time()
-				tx_time   = (len(selected["raw"])*8) / self.bitrate
-				wait_time = (tx_time / self.announce_cap)
-				self.announce_allowed_at = now + wait_time
+				double now = OS::time();
+				uint32_t wait_time = 0;
+				if (_object->_bitrate > 0 && _object->_announce_cap > 0) {
+					uint32_t tx_time = (len(selected["raw"])*8) / _object->_bitrate;
+					wait_time = (tx_time / _object->_announce_cap);
+				}
+				_object->_announce_allowed_at = now + wait_time;
 
 				self.processOutgoing(selected["raw"])
 

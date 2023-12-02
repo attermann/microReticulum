@@ -64,19 +64,26 @@ Load a private key into the instance.
 */
 bool Identity::load_private_key(const Bytes& prv_bytes) {
 	assert(_object);
+
 	try {
+
 		//p self.prv_bytes     = prv_bytes[:Identity.KEYSIZE//8//2]
 		_object->_prv_bytes     = prv_bytes.left(Type::Identity::KEYSIZE/8/2);
 		_object->_prv           = X25519PrivateKey::from_private_bytes(_object->_prv_bytes);
+		debug("Identity::load_private_key: prv bytes:     " + _object->_prv_bytes.toHex());
+
 		//p self.sig_prv_bytes = prv_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
 		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
+		debug("Identity::load_private_key: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
 
 		_object->_pub           = _object->_prv->public_key();
 		_object->_pub_bytes     = _object->_pub->public_bytes();
+		debug("Identity::load_private_key: pub bytes:     " + _object->_pub_bytes.toHex());
 
 		_object->_sig_pub       = _object->_sig_prv->public_key();
 		_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
+		debug("Identity::load_private_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 		update_hashes();
 
@@ -98,11 +105,16 @@ Load a public key into the instance.
 */
 void Identity::load_public_key(const Bytes& pub_bytes) {
 	assert(_object);
+
 	try {
+
 		//_pub_bytes     = pub_bytes[:Identity.KEYSIZE//8//2]
 		_object->_pub_bytes     = pub_bytes.left(Type::Identity::KEYSIZE/8/2);
+		debug("Identity::load_public_key: pub bytes:     " + _object->_pub_bytes.toHex());
+
 		//_sig_pub_bytes = pub_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_pub_bytes = pub_bytes.mid(Type::Identity::KEYSIZE/8/2);
+		debug("Identity::load_public_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes);
 		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes);
@@ -203,10 +215,10 @@ Recall last heard app_data for a destination hash.
 		if (_saving_known_destinations) {
 			double wait_interval = 0.2;
 			double wait_timeout = 5;
-			double wait_start = OS::dtime();
+			double wait_start = OS::time();
 			while (_saving_known_destinations) {
 				OS::sleep(wait_interval);
-				if (OS::dtime() > (wait_start + wait_timeout)) {
+				if (OS::time() > (wait_start + wait_timeout)) {
 					error("Could not save known destinations to storage, waiting for previous save operation timed out.");
 					return false;
 				}
@@ -214,7 +226,7 @@ Recall last heard app_data for a destination hash.
 		}
 
 		_saving_known_destinations = true;
-		double save_start = OS::dtime();
+		double save_start = OS::time();
 
 		std::map<Bytes, IdentityEntry> storage_known_destinations;
 // TODO
@@ -245,7 +257,7 @@ Recall last heard app_data for a destination hash.
 */
 
 		std::string time_str;
-		double save_time = OS::dtime() - save_start;
+		double save_time = OS::time() - save_start;
 		if (save_time < 1) {
 			time_str = std::to_string(OS::round(save_time*1000, 2)) + "ms";
 		}
@@ -302,6 +314,7 @@ Recall last heard app_data for a destination hash.
 				app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8);
 			}
 			extreme("Identity::validate_announce: app_data:         " + app_data.toHex());
+			extreme("Identity::validate_announce: app_data text:    " + app_data.toString());
 
 			Bytes signed_data;
 			signed_data << packet.destination_hash() << public_key << name_hash << random_hash+app_data;

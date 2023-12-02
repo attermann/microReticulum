@@ -62,6 +62,7 @@ namespace RNS {
 		:returns: True if Transport is enabled, False if not.
 		*/
 		inline static bool transport_enabled() { return __transport_enabled; }
+		inline static void transport_enabled(bool transport_enabled) { __transport_enabled = transport_enabled; }
 
 		inline static bool probe_destination_enabled() { return __allow_probes; }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Destination.h"
 #include "Bytes.h"
 #include "Type.h"
 
@@ -25,7 +26,7 @@ namespace RNS {
 		Link(const Link& link) : _object(link._object) {
 			mem("Link object copy created");
 		}
-		Link();
+		Link(const Destination& destination);
 		virtual ~Link(){
 			mem("Link object destroyed");
 		}
@@ -46,19 +47,23 @@ namespace RNS {
 		void receive(const Packet& packet);
 
 		// getters/setters
+		inline const Destination& destination() const { assert(_object); return _object->_destination; }
 		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
+		inline Type::Link::status status() const { assert(_object); return _object->_status; }
 
 		inline std::string toString() const { assert(_object); return "{Link: unknown}"; }
 
 	private:
 		class Object {
 		public:
-			Object() {}
+			Object(const Destination& destination) : _destination(destination) {}
 			virtual ~Object() {}
 		private:
+			Destination _destination = {Type::NONE};
 			Bytes _link_id;
 			Bytes _hash;
+			Type::Link::status _status = Type::Link::PENDING;
 		friend class Link;
 		};
 		std::shared_ptr<Object> _object;

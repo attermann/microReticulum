@@ -4,6 +4,7 @@
 
 void test() {
 
+	testOS();
 	testBytes();
 	testCollections();
 	testReference();

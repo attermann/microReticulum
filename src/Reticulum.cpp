@@ -37,6 +37,9 @@ Reticulum::Reticulum() : _object(new Object()) {
 	// Initialkize random number generator
 	RNG.begin("Reticulum");
 
+	// CBA TEST Transport
+	__transport_enabled = true;
+
 #ifdef ARDUINO
 	// Stir in the Ethernet MAC address.
 	//byte mac[6];
@@ -154,6 +157,10 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 
 void Reticulum::loop() {
+	assert(_object);
+	if (!_object->_is_connected_to_shared_instance) {
+		RNS::Transport::loop();
+	}
 	// Perform random number gnerator housekeeping
 	RNG.loop();
 }

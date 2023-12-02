@@ -31,6 +31,7 @@ const char* getLevelName(LogLevel level) {
 
 //LogLevel _level = LOG_VERBOSE;
 LogLevel _level = LOG_EXTREME;
+//LogLevel _level = LOG_MEM;
 
 void RNS::loglevel(LogLevel level) {
 	_level = level;

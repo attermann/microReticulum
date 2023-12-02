@@ -65,6 +65,34 @@ class Entry {
     RNS::Bytes _hash;
 };
 
+void testOldMap() {
+
+	std::map<RNS::Bytes, Entry> entries;
+	std::map<RNS::Bytes, Entry> other_entries;
+
+	{
+		Entry some_entry("some hash");
+		entries.insert({some_entry._hash, some_entry});
+		Entry some_other_entry("some other hash");
+		other_entries.insert({some_entry._hash, some_entry});
+		other_entries.insert({some_other_entry._hash, some_other_entry});
+	}
+
+	assert(entries.size() == 1);
+	assert(other_entries.size() == 2);
+	for (auto& pair : other_entries) {
+		if (entries.find(pair.first) == entries.end()) {
+			entries[pair.first] = other_entries[pair.first];
+		}
+	}
+	for (auto& pair : entries) {
+		RNS::extreme("entries: " + pair.second._hash.toString());
+	}
+	assert(entries.size() == 2);
+	assert(other_entries.size() == 2);
+
+}
+
 void testNewMap() {
 
 	std::map<RNS::Bytes, Entry> entries;
@@ -96,6 +124,7 @@ void testNewMap() {
 void testCollections() {
 	RNS::head("Running testCollections...", RNS::LOG_EXTREME);
 	testBytesMap();
+	testOldMap();
 	testNewMap();
 }
 
