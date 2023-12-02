@@ -14,6 +14,10 @@
 
 #include <stdint.h>
 
+#define DEFAULT_UDP_PORT		4242
+#define DEFAULT_UDP_LOCAL_HOST	"0.0.0.0"
+#define DEFAULT_UDP_REMOTE_HOST	"255.255.255.255"
+
 namespace RNS { namespace Interfaces {
 
     class UDPInterface : public Interface {
@@ -27,10 +31,9 @@ namespace RNS { namespace Interfaces {
 	public:
 		//p def __init__(self, owner, name, device=None, bindip=None, bindport=None, forwardip=None, forwardport=None):
 		UDPInterface(const char* name = "UDPInterface");
-		UDPInterface(const char* wifi_ssid, const char* wifi_password, int local_port, const char* local_host = nullptr, const char* name = "UDPInterface");
 		virtual ~UDPInterface();
 
-		bool start();
+		bool start(const char* wifi_ssid, const char* wifi_password, int local_port = DEFAULT_UDP_PORT, const char* local_host = nullptr);
 		void stop();
 		void loop();
 
@@ -46,16 +49,16 @@ namespace RNS { namespace Interfaces {
 		Bytes _buffer;
 
 		// WiFi network name and password
-		std::string _wifi_ssid = "";
-		std::string _wifi_password = "";
+		std::string _wifi_ssid;
+		std::string _wifi_password;
 
 		// IP address to send UDP data to.
 		// it can be ip address of the server or 
 		// broadcast
-		std::string _local_host = "0.0.0.0";
-		int _local_port = 4242;
-		std::string _remote_host = "255.255.255.255";
-		int _remote_port = 4242;
+		std::string _local_host = DEFAULT_UDP_LOCAL_HOST;
+		int _local_port = DEFAULT_UDP_PORT;
+		std::string _remote_host = DEFAULT_UDP_LOCAL_HOST;
+		int _remote_port = DEFAULT_UDP_PORT;
 
 		// create UDP instance
 #ifdef ARDUINO

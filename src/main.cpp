@@ -267,7 +267,7 @@ void setup_reticulum() {
 
 #ifdef UDP_INTERFACE
 		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
-		udp_interface.start();
+		udp_interface.start("some_ssid", "some_password");
 #endif
 
 #ifdef LORA_INTERFACE

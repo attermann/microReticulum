@@ -39,14 +39,13 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : Interface(na
 
 }
 
-UDPInterface::UDPInterface(const char* wifi_ssid, const char* wifi_password, int local_port, const char* local_host /*=nullptr*/, const char* name /*= "UDPInterface"*/) : Interface(name),
-	_local_port(local_port)
-{
+/*virtual*/ UDPInterface::~UDPInterface() {
+	stop();
+}
 
-	IN(true);
-	OUT(true);
-	bitrate(BITRATE_GUESS);
-
+bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int local_port /*= DEFAULT_UDP_PORT*/, const char* local_host /*=nullptr*/) {
+	online(false);
+ 
 	if (wifi_ssid != nullptr) {
 		_wifi_ssid = wifi_ssid;
 	}
@@ -56,16 +55,13 @@ UDPInterface::UDPInterface(const char* wifi_ssid, const char* wifi_password, int
 	if (local_host != nullptr) {
 		_local_host = local_host;
 	}
-}
-
-
-/*virtual*/ UDPInterface::~UDPInterface() {
-	stop();
-}
-
-bool UDPInterface::start() {
-	online(false);
-  
+	extreme("UDPInterface: wifi ssid: " + _wifi_ssid);
+	extreme("UDPInterface: wifi password: " + _wifi_password);
+	extreme("UDPInterface: local host: " + _local_host);
+	extreme("UDPInterface: local port: " + std::to_string(_remote_port));
+	extreme("UDPInterface: remote host: " + _local_host);
+	extreme("UDPInterface: remote port: " + std::to_string(_remote_port));
+ 
 #ifdef ARDUINO
 	// Connect to the WiFi network
 	WiFi.begin(_wifi_ssid.c_str(), _wifi_password.c_str());
