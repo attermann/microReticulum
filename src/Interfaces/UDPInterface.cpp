@@ -43,7 +43,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : Interface(na
 	stop();
 }
 
-bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int local_port /*= DEFAULT_UDP_PORT*/, const char* local_host /*=nullptr*/) {
+bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int port /*= DEFAULT_UDP_PORT*/, const char* local_host /*=nullptr*/) {
 	online(false);
  
 	if (wifi_ssid != nullptr) {
@@ -55,6 +55,8 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int l
 	if (local_host != nullptr) {
 		_local_host = local_host;
 	}
+	_local_port = port;
+	_remote_port = port;
 	extreme("UDPInterface: wifi ssid: " + _wifi_ssid);
 	extreme("UDPInterface: wifi password: " + _wifi_password);
 	extreme("UDPInterface: local host: " + _local_host);

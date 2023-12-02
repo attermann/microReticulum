@@ -33,7 +33,7 @@ namespace RNS { namespace Interfaces {
 		UDPInterface(const char* name = "UDPInterface");
 		virtual ~UDPInterface();
 
-		bool start(const char* wifi_ssid, const char* wifi_password, int local_port = DEFAULT_UDP_PORT, const char* local_host = nullptr);
+		bool start(const char* wifi_ssid, const char* wifi_password, int port = DEFAULT_UDP_PORT, const char* local_host = nullptr);
 		void stop();
 		void loop();
 
@@ -57,7 +57,7 @@ namespace RNS { namespace Interfaces {
 		// broadcast
 		std::string _local_host = DEFAULT_UDP_LOCAL_HOST;
 		int _local_port = DEFAULT_UDP_PORT;
-		std::string _remote_host = DEFAULT_UDP_LOCAL_HOST;
+		std::string _remote_host = DEFAULT_UDP_REMOTE_HOST;
 		int _remote_port = DEFAULT_UDP_PORT;
 
 		// create UDP instance
