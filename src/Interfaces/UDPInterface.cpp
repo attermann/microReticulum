@@ -200,7 +200,7 @@ void UDPInterface::loop() {
 		size_t len = udp.read(_buffer.writable(Type::Reticulum::MTU), Type::Reticulum::MTU);
 		if (len > 0) {
 			_buffer.resize(len);
-			processIncoming(_buffer);
+			on_incoming(_buffer);
 		}
 #else
 		size_t available = 0;
@@ -211,20 +211,20 @@ void UDPInterface::loop() {
 				if (len < available) {
 					_buffer.resize(len);
 				}
-				processIncoming(_buffer);
+				on_incoming(_buffer);
 			}
 		}
 #endif
 	}
 }
 
-/*virtual*/ void UDPInterface::processIncoming(const Bytes& data) {
-	debug("UDPInterface.processIncoming: data: " + data.toHex());
-	Interface::processIncoming(data);
+/*virtual*/ void UDPInterface::on_incoming(const Bytes& data) {
+	debug("UDPInterface.on_incoming: data: " + data.toHex());
+	Interface::on_incoming(data);
 }
 
-/*virtual*/ void UDPInterface::processOutgoing(const Bytes& data) {
-	debug("UDPInterface.processOutgoing: data: " + data.toHex());
+/*virtual*/ void UDPInterface::on_outgoing(const Bytes& data) {
+	debug("UDPInterface.on_outgoing: data: " + data.toHex());
 	try {
 		if (online()) {
 			// Send packet
@@ -243,7 +243,7 @@ void UDPInterface::loop() {
 #endif
 		}
 
-		Interface::processOutgoing(data);
+		Interface::on_outgoing(data);
 	}
 	catch (std::exception& e) {
 		error("Could not transmit on " + toString() + ". The contained exception was: " + e.what());

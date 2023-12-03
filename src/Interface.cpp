@@ -8,8 +8,8 @@ using namespace RNS::Type::Interface;
 
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
-/*virtual*/ inline void Interface::processIncoming(const Bytes& data) {
-	extreme("Interface::processIncoming: data: " + data.toHex());
+/*virtual*/ inline void Interface::on_incoming(const Bytes& data) {
+	extreme("Interface::on_incoming: data: " + data.toHex());
 	assert(_object);
 	_object->_rxb += data.size();
 	// CBA TODO implement concept of owner or a callback mechanism for incoming data
@@ -17,8 +17,8 @@ using namespace RNS::Type::Interface;
 	Transport::inbound(data, *this);
 }
 
-/*virtual*/ inline void Interface::processOutgoing(const Bytes& data) {
-	extreme("Interface::processOutgoing: data: " + data.toHex());
+/*virtual*/ inline void Interface::on_outgoing(const Bytes& data) {
+	extreme("Interface::on_outgoing: data: " + data.toHex());
 	assert(_object);
 	_object->_txb += data.size();
 }
@@ -58,7 +58,7 @@ void Interface::process_announce_queue() {
 				}
 				_object->_announce_allowed_at = now + wait_time;
 
-				self.processOutgoing(selected["raw"])
+				self.on_outgoing(selected["raw"])
 
 				if selected in self.announce_queue:
 					self.announce_queue.remove(selected)

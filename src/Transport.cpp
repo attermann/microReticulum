@@ -368,8 +368,9 @@ using namespace RNS::Utilities;
 							}
 							//p announce_data = packet.data
 							Identity announce_identity(Identity::recall(announce_entry._packet.destination_hash()));
-							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
-							announce_destination.hash(announce_entry._packet.destination_hash());
+							//Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
+							//announce_destination.hash(announce_entry._packet.destination_hash());
+							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, announce_entry._packet.destination_hash());
 							//P announce_destination.hexhash = announce_destination.hash.hex()
 
 //if (announce_entry._attached_interface) {
@@ -686,11 +687,12 @@ using namespace RNS::Utilities;
 				i += 1
 
 			// Send it
-			interface.processOutgoing(masked_raw)
+			interface.on_outgoing(masked_raw)
 */
 		}
 		else {
-			interface.processOutgoing(raw);
+			//interface.on_outgoing(raw);
+			interface.process_outgoing(raw);
 		}
 	}
 	catch (std::exception& e) {
@@ -1463,6 +1465,7 @@ using namespace RNS::Utilities;
 							);
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
 						}
+						extreme("Transport::outbound: Sending packet to next hop...");
 #if defined(INTERFACES_SET)
 						transmit(const_cast<Interface&>(outbound_interface), new_raw);
 #else
@@ -1812,8 +1815,9 @@ using namespace RNS::Utilities;
 						// transmit the announce to them immediately
 						if (_local_client_interfaces.size() > 0) {
 							Identity announce_identity(Identity::recall(packet.destination_hash()));
-							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
-							announce_destination.hash(packet.destination_hash());
+							//Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
+							//announce_destination.hash(packet.destination_hash());
+							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, packet.destination_hash());
 							//announce_destination.hexhash(announce_destination.hash().toHex());
 							Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 							Bytes announce_data = packet.data();
@@ -1869,8 +1873,9 @@ using namespace RNS::Utilities;
 
 							debug("Got matching announce, answering waiting discovery path request for " + packet.destination_hash().toHex() + " on " + attached_interface.toString());
 							Identity announce_identity(Identity::recall(packet.destination_hash()));
-							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
-							announce_destination.hash(packet.destination_hash());
+							//Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
+							//announce_destination.hash(packet.destination_hash());
+							Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, packet.destination_hash());
 							//announce_destination.hexhash(announce_destination.hash().toHex());
 							Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 							Bytes announce_data = packet.data();
@@ -2326,6 +2331,9 @@ using namespace RNS::Utilities;
 				destination.announce({}, true);
 			}
 		}
+	}
+	else {
+		extreme("Transport:register_destination: Skipping registraion (not direction IN) of destination " + destination.toString());
 	}
 
 /*
@@ -2901,12 +2909,12 @@ will announce it.
 	}
 	else if (should_search_for_unknown) {
 		if (_discovery_path_requests.find(destination_hash) != _discovery_path_requests.end()) {
-			debug("There is already a waiting path request for destination " + destination_hash.toHex() + " on behalf of path request " + interface_str);
+			debug("There is already a waiting path request for destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
 		}
 		else {
 			// Forward path request on all interfaces
 			// except the requestor interface
-			debug("Attempting to discover unknown path to destination " + destination_hash.toHex() + " on behalf of path request " + interface_str);
+			debug("Attempting to discover unknown path to destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
 			//p pr_entry = { "destination_hash": destination_hash, "timeout": time.time()+Transport.PATH_REQUEST_TIMEOUT, "requesting_interface": attached_interface }
 			//p _discovery_path_requests[destination_hash] = pr_entry;
 			_discovery_path_requests.insert({destination_hash, {
@@ -2923,6 +2931,7 @@ will announce it.
 			for (auto& [hash, interface] : _interfaces) {
 #endif
 				if (interface != attached_interface) {
+					extreme("Transport::path_request: requesting path on interface " + interface.toString());
 					// Use the previously extracted tag from this path request
 					// on the new path requests as well, to avoid potential loops
 					request_path(destination_hash, interface, tag, true);

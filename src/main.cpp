@@ -17,6 +17,10 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#else
+#include <termios.h>
+#include <fcntl.h>
+#include <stdio.h>
 #endif
 
 #include <stdlib.h>
@@ -51,94 +55,6 @@ const char* noble_gases[] = {"Helium", "Neon", "Argon", "Krypton", "Xenon", "Rad
 
 double last_announce = 0.0;
 bool send_announce = false;
-
-class TestInterface : public RNS::Interface {
-public:
-	TestInterface() : RNS::Interface("TestInterface") {
-		IN(true);
-		OUT(true);
-	}
-	TestInterface(const char* name) : RNS::Interface(name) {
-		IN(true);
-		OUT(true);
-	}
-	virtual ~TestInterface() {
-		name("deleted");
-	}
-	virtual void processIncoming(const RNS::Bytes& data) {
-		RNS::extreme("TestInterface.processIncoming: data: " + data.toHex());
-	}
-	virtual void processOutgoing(const RNS::Bytes& data) {
-		RNS::extreme("TestInterface.processOutgoing: data: " + data.toHex());
-	}
-	virtual inline std::string toString() const { return "TestInterface[" + name() + "]"; }
-};
-
-class TestLoopbackInterface : public RNS::Interface {
-public:
-	TestLoopbackInterface(RNS::Interface& loopback_interface) : RNS::Interface("TestLoopbackInterface"), _loopback_interface(loopback_interface) {
-		IN(true);
-		OUT(true);
-	}
-	TestLoopbackInterface(RNS::Interface& loopback_interface, const char* name) : RNS::Interface(name), _loopback_interface(loopback_interface) {
-		IN(true);
-		OUT(true);
-	}
-	virtual ~TestLoopbackInterface() {
-		name("deleted");
-	}
-	virtual void processIncoming(const RNS::Bytes& data) {
-		RNS::extreme("TestLoopbackInterface.processIncoming: data: " + data.toHex());
-		_loopback_interface.processOutgoing(data);
-	}
-	virtual void processOutgoing(const RNS::Bytes& data) {
-		RNS::extreme("TestLoopbackInterface.processOutgoing: data: " + data.toHex());
-		_loopback_interface.processIncoming(data);
-	}
-	virtual inline std::string toString() const { return "TestLoopbackInterface[" + name() + "]"; }
-private:
-	RNS::Interface& _loopback_interface;
-};
-
-class TestOutInterface : public RNS::Interface {
-public:
-	TestOutInterface() : RNS::Interface("TestOutInterface") {
-		OUT(true);
-		IN(false);
-	}
-	TestOutInterface(const char* name) : RNS::Interface(name) {
-		OUT(true);
-		IN(false);
-	}
-	virtual ~TestOutInterface() {
-		name("(deleted)");
-	}
-	virtual void processOutgoing(const RNS::Bytes& data) {
-		RNS::head("TestOutInterface.processOutgoing: data: " + data.toHex(), RNS::LOG_EXTREME);
-		RNS::Interface::processOutgoing(data);
-	}
-	virtual inline std::string toString() const { return "TestOutInterface[" + name() + "]"; }
-};
-
-class TestInInterface : public RNS::Interface {
-public:
-	TestInInterface() : RNS::Interface("TestInInterface") {
-		OUT(false);
-		IN(true);
-	}
-	TestInInterface(const char* name) : RNS::Interface(name) {
-		OUT(false);
-		IN(true);
-	}
-	virtual ~TestInInterface() {
-		name("(deleted)");
-	}
-	virtual void processIncoming(const RNS::Bytes& data) {
-		RNS::head("TestInInterface.processIncoming: data: " + data.toHex(), RNS::LOG_INFO);
-		RNS::Interface::processIncoming(data);
-	}
-	virtual inline std::string toString() const { return "TestInInterface[" + name() + "]"; }
-};
 
 // Test AnnounceHandler
 class ExampleAnnounceHandler : public RNS::AnnounceHandler {
@@ -183,10 +99,6 @@ RNS::Reticulum reticulum({RNS::Type::NONE});
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
 
-//TestInterface interface;
-TestOutInterface outinterface;
-TestInInterface ininterface;
-TestLoopbackInterface loopinterface(ininterface);
 #ifdef UDP_INTERFACE
 RNS::Interfaces::UDPInterface udp_interface;
 #endif
@@ -254,10 +166,6 @@ void setup_reticulum() {
 		// 21.9% (+0.1%)
 
 		RNS::head("Registering Interface instances with Transport...", RNS::LOG_EXTREME);
-		//RNS::Transport::register_interface(interface);
-		RNS::Transport::register_interface(outinterface);
-		RNS::Transport::register_interface(ininterface);
-		RNS::Transport::register_interface(loopinterface);
 #ifdef UDP_INTERFACE
 		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(udp_interface);
@@ -324,7 +232,6 @@ void setup_reticulum() {
 		destination.announce(RNS::bytesFromString(fruits[RNS::Cryptography::randomnum() % 7]));
 		// 23.9% (+0.8%)
 */
-		reticulum_announce();
 
 #if defined (RETICULUM_PACKET_TEST)
 		// test data send packet
@@ -365,10 +272,6 @@ void teardown_reticulum() {
 #ifdef LORA_INTERFACE
 		RNS::Transport::deregister_interface(lora_interface);
 #endif
-		RNS::Transport::deregister_interface(loopinterface);
-		RNS::Transport::deregister_interface(ininterface);
-		RNS::Transport::deregister_interface(outinterface);
-		//RNS::Transport::deregister_interface(interface);
 
 	}
 	catch (std::exception& e) {
@@ -451,15 +354,42 @@ void loop() {
 
 }
 
+#ifndef ARDUINO
+int getch( ) {
+	termios oldt;
+	termios newt;
+	tcgetattr( STDIN_FILENO, &oldt );
+	newt = oldt;
+	newt.c_lflag &= ~( ICANON | ECHO );
+	tcsetattr( STDIN_FILENO, TCSANOW, &newt );
+    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);
+	int ch = getchar();
+	tcsetattr( STDIN_FILENO, TCSANOW, &oldt );
+	return ch;
+}
+
 int main(void) {
 	printf("Hello from Native on PlatformIO!\n");
 
 	setup();
 
-	while (true) {
+	bool run = true;
+	while (run) {
 		loop();
+		int ch = getch();
+		if (ch > 0) {
+			switch (ch) {
+			case 'a':
+				reticulum_announce();
+				break;
+			case 'q':
+				run = false;
+				break;
+			}
+		}
 		RNS::Utilities::OS::sleep(0.01);
 	}
 
 	printf("Goodbye from Native on PlatformIO!\n");
 }
+#endif

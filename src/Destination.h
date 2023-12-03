@@ -66,6 +66,12 @@ namespace RNS {
 			const char* app_name,
 			const char* aspects
 		);
+		Destination(
+			const Identity& identity,
+			const Type::Destination::directions direction,
+			const Type::Destination::types type,
+			const Bytes& hash
+		);
 		virtual ~Destination();
 
 		inline Destination& operator = (const Destination& destination) {
@@ -158,7 +164,8 @@ namespace RNS {
 		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
 		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
-		inline void hash(const Bytes& hash) { assert(_object); _object->_hash = hash; _object->_hexhash = _object->_hash.toHex(); }
+		// CBA Don't allow changing destination after construction since it's used as key in collections
+		//inline void hash(const Bytes& hash) { assert(_object); _object->_hash = hash; _object->_hexhash = _object->_hash.toHex(); }
 		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }

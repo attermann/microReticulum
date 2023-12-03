@@ -37,11 +37,12 @@ namespace RNS { namespace Interfaces {
 		void stop();
 		void loop();
 
-	    virtual void processIncoming(const Bytes& data);
-		virtual void processOutgoing(const Bytes& data);
-
 		//virtual inline std::string toString() const { return "UDPInterface[" + name() + "/" + bind_ip + ":" + bind_port + "]"; }
 		virtual inline std::string toString() const { return "UDPInterface[" + name() + "]"; }
+
+	private:
+	    virtual void on_incoming(const Bytes& data);
+		virtual void on_outgoing(const Bytes& data);
 
 	private:
 		const uint16_t HW_MTU = 1064;

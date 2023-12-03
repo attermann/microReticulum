@@ -47,10 +47,34 @@ Destination::Destination(const Identity& identity, const directions direction, c
 	_object->_hash = hash(_object->_identity, app_name, fullaspects.c_str());
 	_object->_hexhash = _object->_hash.toHex();
 	debug("Destination::Destination: hash:      " + _object->_hash.toHex());
-	// CBA TEST CRASH
 	debug("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash(app_name, aspects);
+	debug("Destination::Destination: name hash: " + _object->_name_hash.toHex());
+
+	debug("Destination::Destination: calling register_destination");
+	Transport::register_destination(*this);
+
+	mem("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+}
+
+Destination::Destination(const Identity& identity, const Type::Destination::directions direction, const Type::Destination::types type, const Bytes& hash) : _object(new Object(identity)) {
+	assert(_object);
+	mem("Destination object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+
+	_object->_type = type;
+	_object->_direction = direction;
+
+	if (_object->_identity && _object->_type == PLAIN) {
+		throw std::invalid_argument("Selected destination type PLAIN cannot hold an identity");
+	}
+
+	_object->_hash = hash;
+	_object->_hexhash = _object->_hash.toHex();
+	debug("Destination::Destination: hash:      " + _object->_hash.toHex());
+	debug("Destination::Destination: creating name hash...");
+    //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
+	_object->_name_hash = name_hash("unknown", "unknown");
 	debug("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
 	debug("Destination::Destination: calling register_destination");

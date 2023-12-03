@@ -30,7 +30,7 @@ void testReference() {
 		RNS::Interface& interface = (*iter);
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
+		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
 	return 0;
 */
@@ -43,7 +43,7 @@ void testReference() {
 	for (auto& interface : interfaces) {
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
+		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
 	return 0;
 */
@@ -57,7 +57,7 @@ void testReference() {
 		RNS::Interface& interface = (*iter);
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
+		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
 	return 0;
 */
@@ -71,7 +71,7 @@ void testReference() {
 	for (RNS::Interface& interface : interfaces) {
 		RNS::extreme("Found interface: " + interface.toString());
 		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
+		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
 	return 0;
 */
@@ -85,14 +85,14 @@ void testReference() {
 			RNS::Interface& interface = (*iter);
 			RNS::extreme("1 Found interface: " + interface.toString());
 			RNS::Bytes data;
-			const_cast<RNS::Interface&>(interface).processOutgoing(data);
+			const_cast<RNS::Interface&>(interface).on_outgoing(data);
 		}
 	}
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
 		RNS::Interface& interface = (*iter);
 		RNS::extreme("2 Found interface: " + interface.toString());
 		RNS::Bytes data;
-		const_cast<RNS::Interface&>(interface).processOutgoing(data);
+		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
 	return 0;
 */

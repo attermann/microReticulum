@@ -92,19 +92,19 @@ Serial.println(available);
 			Serial.println("RSSI: " + String(LoRa.packetRssi()));
 			Serial.println("Snr: " + String(LoRa.packetSnr()));
 
-			processIncoming(buffer);
+			on_incoming(buffer);
 		}
 #endif
 	}
 }
 
-/*virtual*/ void LoRaInterface::processIncoming(const Bytes& data) {
-	debug("LoRaInterface.processIncoming: data: " + data.toHex());
-	Interface::processIncoming(data);
+/*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
+	debug("LoRaInterface.on_incoming: data: " + data.toHex());
+	Interface::on_incoming(data);
 }
 
-/*virtual*/ void LoRaInterface::processOutgoing(const Bytes& data) {
-	debug("LoRaInterface.processOutgoing: data: " + data.toHex());
+/*virtual*/ void LoRaInterface::on_outgoing(const Bytes& data) {
+	debug("LoRaInterface.on_outgoing: data: " + data.toHex());
 	try {
 		if (online()) {
 			extreme("LoRaInterface: sending " + std::to_string(data.size()) + " bytes...");
@@ -124,7 +124,7 @@ Serial.println(available);
 #endif
 			extreme("LoRaInterface: sent bytes");
 		}
-		Interface::processOutgoing(data);
+		Interface::on_outgoing(data);
 	}
 	catch (std::exception& e) {
 		error("Could not transmit on " + toString() + ". The contained exception was: " + e.what());

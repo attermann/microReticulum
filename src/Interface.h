@@ -45,13 +45,18 @@ namespace RNS {
 		Interface(const Interface& interface) : _object(interface._object) {
 			mem("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Interface() : _object(new Object()) {
+		Interface() : _object(new Object(*this)) {
 			mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Interface(const char* name) : _object(new Object(name)) {
+		Interface(const char* name) : _object(new Object(*this, name)), _creator(true) {
 			mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		virtual ~Interface() {
+			if (_creator) {
+				// clear reference to parent in object foir safety
+				assert(_object);
+				_object->_parent = {Type::NONE};
+			}
 			mem("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
@@ -61,10 +66,24 @@ namespace RNS {
 			return *this;
 		}
 		inline operator bool() const {
+			extreme("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Interface& interface) const {
+			extreme("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() < interface._object.get();
+		}
+		inline bool operator > (const Interface& interface) const {
+			extreme("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			return _object.get() > interface._object.get();
+		}
+		inline bool operator == (const Interface& interface) const {
+			extreme("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			return _object.get() == interface._object.get();
+		}
+		inline bool operator != (const Interface& interface) const {
+			extreme("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			return _object.get() != interface._object.get();
 		}
 
 	public:
@@ -72,10 +91,16 @@ namespace RNS {
 		void process_announce_queue();
 		inline void detach() {}
 
-	    virtual void processIncoming(const Bytes& data);
-		virtual void processOutgoing(const Bytes& data);
-
 		inline void add_announce(AnnounceEntry& entry) { assert(_object); _object->_announce_queue.push_back(entry); }
+
+	protected:
+		// CBA TODO these should NOT called internally, and should likely be protected (only to be overridden and called by Object)
+	    virtual void on_incoming(const Bytes& data);
+		virtual void on_outgoing(const Bytes& data);
+
+	private:
+	    //inline void process_incoming(const Bytes& data) { assert(_object); _object->process_incoming(data); }
+		inline void process_outgoing(const Bytes& data) { assert(_object); _object->process_outgoing(data); }
 
 		// getters/setters
 	protected:
@@ -116,10 +141,14 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object() { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			Object(const char* name) : _name(name) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(Interface& parent) : _parent(parent) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(Interface& parent, const char* name) : _parent(parent), _name(name) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
 			virtual ~Object() { mem("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
+			//virtual inline void process_incoming(const Bytes& data) { if (_parent) { _parent.on_incoming(data); } }
+			virtual inline void process_outgoing(const Bytes& data) { if (_parent) { _parent.on_outgoing(data); } }
+		private:
+			Interface& _parent;
 			bool _IN  = false;
 			bool _OUT = false;
 			bool _FWD = false;
@@ -141,6 +170,7 @@ namespace RNS {
 		friend class Interface;
 		};
 		std::shared_ptr<Object> _object;
+		bool _creator = false;
 
 	friend class Transport;
 	};
