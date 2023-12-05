@@ -2,6 +2,7 @@
 
 #include "Transport.h"
 #include "Log.h"
+#include "Utilities/OS.h"
 
 #include <RNG.h>
 
@@ -12,6 +13,8 @@
 
 using namespace RNS;
 using namespace RNS::Type::Reticulum;
+
+/*static*/ std::string Reticulum::storagepath;
 
 /*static*/ bool Reticulum::__transport_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
@@ -40,6 +43,8 @@ Reticulum::Reticulum() : _object(new Object()) {
 	// CBA TEST Transport
 	__transport_enabled = true;
 
+	Utilities::OS::setup();
+
 #ifdef ARDUINO
 	// Stir in the Ethernet MAC address.
 	//byte mac[6];
@@ -51,9 +56,9 @@ Reticulum::Reticulum() : _object(new Object()) {
 	//RNG.addNoiseSource(noise);
  #endif
 
-/*
-	RNS.vendor.platformutils.platform_checks()
+	//z RNS.vendor.platformutils.platform_checks()
 
+/* TODO
 	if configdir != None:
 		Reticulum.configdir = configdir
 	else:
@@ -73,7 +78,15 @@ Reticulum::Reticulum() : _object(new Object()) {
 	Reticulum.cachepath     = Reticulum.configdir+"/storage/cache"
 	Reticulum.resourcepath  = Reticulum.configdir+"/storage/resources"
 	Reticulum.identitypath  = Reticulum.configdir+"/storage/identities"
+*/
+// CBA MOCK
+#ifdef ARDUINO
+	storagepath = "";
+#else
+	storagepath = ".";
+#endif
 
+/* TODO
 	Reticulum.__transport_enabled = False
 	Reticulum.__use_implicit_proof = True
 	Reticulum.__allow_probes = False

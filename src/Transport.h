@@ -4,6 +4,8 @@
 #include "Bytes.h"
 #include "Type.h"
 
+#include <ArduinoJson.h>
+
 #include <memory>
 #include <vector>
 #include <list>
@@ -54,11 +56,12 @@ namespace RNS {
     */
 	class Transport {
 
-	private:
+	public:
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
 		class DestinationEntry {
 		public:
+			DestinationEntry() {}
 			DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
 				_timestamp(time),
 				_received_from(received_from),
@@ -74,11 +77,11 @@ namespace RNS {
 			Bytes _received_from;
 			uint8_t _hops = 0;
 			double _expires = 0;
-			std::set<Bytes> _random_blobs;
+			const std::set<Bytes> _random_blobs;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			Interface& _receiving_interface;
+			Interface _receiving_interface = {Type::NONE};
 			//const Packet& _announce_packet;
-			Packet _announce_packet;
+			const Packet _announce_packet = {Type::NONE};
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
@@ -101,17 +104,17 @@ namespace RNS {
 			double _timestamp = 0;
 			double _retransmit_timeout = 0;
 			uint8_t _retries = 0;
-			Bytes _received_from;
+			const Bytes _received_from;
 			uint8_t _hops = 0;
 			// CBA Storing packet reference causes memory issues, presumably because orignal packet is being destroyed
 			//  MUST use instance instad of reference!!!
 			//const Packet& _packet;
-			Packet _packet;
+			const Packet _packet = {Type::NONE};
 			uint8_t _local_rebroadcasts = 0;
 			bool _block_rebroadcasts = false;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _attached_interface;
-			Interface _attached_interface;
+			const Interface _attached_interface = {Type::NONE};
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
@@ -131,16 +134,16 @@ namespace RNS {
 			}
 		public:
 			double _timestamp = 0;
-			Bytes _next_hop;
+			const Bytes _next_hop;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _outbound_interface;
-			Interface _outbound_interface;
+			const Interface _outbound_interface = {Type::NONE};
 			uint8_t _remaining_hops = 0;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _receiving_interface;
-			Interface _receiving_interface;
+			const Interface _receiving_interface = {Type::NONE};
 			uint8_t _hops = 0;
-			Bytes _destination_hash;
+			const Bytes _destination_hash;
 			bool _validated = false;
 			double _proof_timeout = 0;
 		};
@@ -157,10 +160,10 @@ namespace RNS {
 		public:
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _receiving_interface;
-			Interface _receiving_interface;
+			const Interface _receiving_interface = {Type::NONE};
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _outbound_interface;
-			Interface _outbound_interface;
+			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
 		};
 
@@ -174,11 +177,11 @@ namespace RNS {
 			{
 			}
 		public:
-			Bytes _destination_hash;
+			const Bytes _destination_hash;
 			double _timeout = 0;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _requesting_interface;
-			Interface _requesting_interface;
+			const Interface _requesting_interface = {Type::NONE};
 		};
 
 	public:
@@ -310,6 +313,57 @@ namespace RNS {
 
 		static Reticulum _owner;
 		static Identity _identity;
+	};
+
+}
+
+namespace ArduinoJson {
+
+	// ArduinoJSON serialization support for RNS::Transport::DestinationEntry
+	template <>
+	struct Converter<RNS::Transport::DestinationEntry> {
+		static bool toJson(const RNS::Transport::DestinationEntry& src, JsonVariant dst) {
+			dst["timestamp"] = src._timestamp;
+			dst["received_from"] = src._received_from;
+			dst["announce_hops"] = src._hops;
+			dst["expires"] = src._expires;
+			//dst["random_blobs"] = src._random_blobs;
+			dst["receiving_interface"] = src._receiving_interface;
+			dst["packet"] = src._announce_packet;
+			return true;
+		}
+		static RNS::Transport::DestinationEntry fromJson(JsonVariantConst src) {
+/**/
+			RNS::Transport::DestinationEntry dst;
+			dst._timestamp = src["timestamp"];
+			dst._received_from = src["received_from"];
+			dst._hops = src["announce_hops"];
+			dst._expires = src["expires"];
+			//dst._random_blobs = src["random_blobs"];
+			dst._receiving_interface = src["receiving_interface"];
+			//dst._announce_packet = src["packet"];
+/**/
+/*
+			//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
+			RNS::Transport::DestinationEntry dst(
+				src["timestamp"].as<double>(),
+				src["received_from"].as<RNS::Bytes>(),
+				src["announce_hops"].as<int>(),
+				src["expires"].as<double>(),
+				src["random_blobs"].as<std::set<RNS::Bytes>>(),
+				src["receiving_interface"].as<RNS::Interface>(),
+				src["packet"].as<RNS::Packet>()
+			);
+*/
+			return dst;
+		}
+		static bool checkJson(JsonVariantConst src) {
+			return
+				src["timestamp"].is<double>() &&
+				src["received_from"].is<RNS::Bytes>() &&
+				src["announce_hops"].is<int>() &&
+				src["expires"].is<double>();
+		}
 	};
 
 }

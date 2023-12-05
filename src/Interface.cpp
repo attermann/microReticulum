@@ -73,3 +73,15 @@ void Interface::process_announce_queue() {
 			RNS.log("The announce queue for this interface has been cleared.", RNS.LOG_ERROR)
 */
 }
+
+void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Interface& dst) {
+	if (!src.isNull()) {
+		RNS::Bytes hash;
+		hash.assignHex(src.as<const char*>());
+		// Query transport for matching interface
+		dst = Transport::find_interface_from_hash(hash);
+	}
+	else {
+		dst = {RNS::Type::NONE};
+	}
+}

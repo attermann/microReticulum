@@ -1,0 +1,34 @@
+{
+	"name": "reticulum-cpp",
+	"version": "0.1.1",
+	"description": "Port of Reticulum Network Stack to C++ specifically but not exclusively targeting 32-bit and better MCUs",
+	"keywords": "reticulum, mcu, esp32",
+	"repository":
+	{
+		"type": "git",
+		"url": "https://github.com/attermann/reticulum-cpp.git"
+	},
+	"authors":
+	[
+		{
+			"name": "Chad Attermann",
+			"email": "attermann@gmail.com",
+			"maintainer": true
+		}
+	],
+	"license": "Apache-2.0",
+	"homepage": "https://reticulum.network/",
+	"dependencies": {
+		"ArduinoJson": "~6.21.3",
+		"rweather/Crypto": "~0.4.0",
+		"sandeepmistry/LoRa": "~0.8.0",
+		"WiFi": "~2.0.0"
+	},
+	"frameworks": "*",
+	"platforms": "*",
+	"export": {},
+	"exclude": [
+		".github",
+		"src/main.cpp"
+	]
+}

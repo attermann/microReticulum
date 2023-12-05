@@ -274,3 +274,16 @@ namespace RNS {
 	};
 
 }
+
+namespace ArduinoJson {
+	inline bool convertToJson(const RNS::Packet& src, JsonVariant dst) {
+		if (!src) {
+			return dst.set(nullptr);
+		}
+		return dst.set(src.get_hash().toHex());
+	}
+	void convertFromJson(JsonVariantConst src, RNS::Packet& dst);
+	inline bool canConvertFromJson(JsonVariantConst src, const RNS::Packet&) {
+		return src.is<const char*>() && strlen(src.as<const char*>()) == 64;
+	}
+}

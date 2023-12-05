@@ -90,6 +90,7 @@ namespace RNS {
 			_object->_hexhash = _object->_hash.toHex();
 		};
 		bool load(const char* path);
+		bool to_file(const char* path);
 
 		inline const Bytes get_salt() const { assert(_object); return _object->_hash; }
 		inline const Bytes get_context() const { return {Bytes::NONE}; }
@@ -103,6 +104,7 @@ namespace RNS {
 		void prove(const Packet& packet, const Destination& destination) const;
 		void prove(const Packet& packet) const;
 
+		static const Identity from_file(const char* path);
 		static void remember(const Bytes& packet_hash, const Bytes& destination_hash, const Bytes& public_key, const Bytes& app_data = {Bytes::NONE});
 		static Identity recall(const Bytes& destination_hash);
 		static Bytes recall_app_data(const Bytes& destination_hash);

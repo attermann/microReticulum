@@ -1,16 +1,24 @@
 #pragma once
 
+#include "../Bytes.h"
+
 #include <cmath>
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>
 #include <sys/time.h>
 
+#ifdef ARDUINO
+#include "Arduino.h"
+#endif
+
 namespace RNS { namespace Utilities {
 
 	class OS {
 
 	public:
+		static void setup();
+
         // sleep for specified milliseconds
 		//static inline void sleep(float seconds) { ::sleep(seconds); }
 #ifdef ARDUINO
@@ -29,6 +37,13 @@ namespace RNS { namespace Utilities {
 		// round decimal number to specified precision
         //static inline float round(float value, uint8_t precision) { return std::round(value / precision) * precision; }
         static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
+
+		static bool file_exists(const char* file_path);
+		static const RNS::Bytes read_file(const char* file_path);
+		static bool write_file(const RNS::Bytes& data, const char* file_path);
+		static bool remove_file(const char* file_path);
+		static bool rename_file(const char* from_file_path, const char* to_file_path);
+		static bool create_directory(const char* directory_path);
 
     };
 

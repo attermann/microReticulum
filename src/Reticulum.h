@@ -4,6 +4,7 @@
 #include "Type.h"
 
 #include <vector>
+#include <string>
 #include <memory>
 #include <stdint.h>
 
@@ -12,6 +13,19 @@ namespace RNS {
 	class Reticulum {
 
 	public:
+
+		//z router           = None
+		//z config           = None
+
+		// The default configuration path will be expanded to a directory
+		// named ".reticulum" inside the current users home directory
+		//z userdir          = os.path.expanduser("~")
+		//z configdir        = None
+		//z configpath       = ""
+		//p storagepath      = ""
+		static std::string storagepath;
+		//z cachepath        = ""
+
 		static bool __transport_enabled;
 		static bool __use_implicit_proof;
 		static bool __allow_probes;

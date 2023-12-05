@@ -554,3 +554,15 @@ void PacketReceipt::check_timeout() {
 		}
 	}
 }
+
+void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Packet& dst) {
+	if (!src.isNull()) {
+		RNS::Bytes hash;
+		hash.assignHex(src.as<const char*>());
+		// Query transport for matching interface
+		dst = Transport::get_cached_packet(hash);
+	}
+	else {
+		dst = {RNS::Type::NONE};
+	}
+}

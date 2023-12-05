@@ -81,15 +81,17 @@ using namespace RNS::Utilities;
 	_owner = reticulum_instance;
 
 	if (!_identity) {
-		//z transport_identity_path = Reticulum::storagepath+"/transport_identity"
-		//z if (os.path.isfile(transport_identity_path)) {
-		//z 	identity = Identity.from_file(transport_identity_path);
-		//z }
+		std::string transport_identity_path = Reticulum::storagepath + "/transport_identity";
+// CBA TEST
+//OS::remove_file(transport_identity_path.c_str());
+		if (OS::file_exists(transport_identity_path.c_str())) {
+			_identity = Identity::from_file(transport_identity_path.c_str());
+		}
 
 		if (!_identity) {
 			verbose("No valid Transport Identity in storage, creating...");
-			_identity = new Identity();
-			//z _identity.to_file(transport_identity_path);
+			_identity = Identity();
+			_identity.to_file(transport_identity_path.c_str());
 		}
 		else {
 			verbose("Loaded Transport Identity from storage");
@@ -135,9 +137,8 @@ using namespace RNS::Utilities;
 // TODO
 /*
 	if RNS.Reticulum.transport_enabled():
-		destination_table_path = RNS.Reticulum.storagepath+"/destination_table"
-		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
 
+		destination_table_path = RNS.Reticulum.storagepath+"/destination_table"
 		if os.path.isfile(destination_table_path) and not Transport.owner.is_connected_to_shared_instance:
 			serialised_destinations = []
 			try:
@@ -183,6 +184,7 @@ using namespace RNS::Utilities;
 			except Exception as e:
 				RNS.log("Could not load destination table from storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
 
+		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
 		if os.path.isfile(tunnel_table_path) and not Transport.owner.is_connected_to_shared_instance:
 			serialised_tunnels = []
 			try:

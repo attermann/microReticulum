@@ -1,7 +1,5 @@
 #include "Test.h"
 
-#include "Log.h"
-
 void test() {
 
 	testOS();
@@ -9,5 +7,6 @@ void test() {
 	testCollections();
 	testReference();
 	testCrypto();
+	testPersistence();
 
 }

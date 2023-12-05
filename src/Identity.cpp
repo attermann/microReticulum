@@ -36,15 +36,15 @@ void Identity::createKeys() {
 	_object->_prv_bytes     = _object->_prv->private_bytes();
 	debug("Identity::createKeys: prv bytes:     " + _object->_prv_bytes.toHex());
 
-	// CRYPTO: create encryption public keys
-	_object->_pub           = _object->_prv->public_key();
-	_object->_pub_bytes     = _object->_pub->public_bytes();
-	debug("Identity::createKeys: pub bytes:     " + _object->_pub_bytes.toHex());
-
 	// CRYPTO: create signature private keys
 	_object->_sig_prv       = Cryptography::Ed25519PrivateKey::generate();
 	_object->_sig_prv_bytes = _object->_sig_prv->private_bytes();
 	debug("Identity::createKeys: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
+
+	// CRYPTO: create encryption public keys
+	_object->_pub           = _object->_prv->public_key();
+	_object->_pub_bytes     = _object->_pub->public_bytes();
+	debug("Identity::createKeys: pub bytes:     " + _object->_pub_bytes.toHex());
 
 	// CRYPTO: create signature public keys
 	_object->_sig_pub       = _object->_sig_prv->public_key();
@@ -127,20 +127,58 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 }
 
 bool Identity::load(const char* path) {
-/*
-	try:
-		with open(path, "rb") as key_file:
-			prv_bytes = key_file.read()
-			return self.load_private_key(prv_bytes)
-		return False
-	except Exception as e:
-		RNS.log("Error while loading identity from "+str(path), RNS.LOG_ERROR)
-		RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
-*/
-	// MOCK
-	return true;
+	extreme("Reading identity key from storage...");
+	try {
+		Bytes prv_bytes = OS::read_file(path);
+		if (prv_bytes) {
+			return load_private_key(prv_bytes);
+		}
+		else {
+			return false;
+		}
+	}
+	catch (std::exception& e) {
+		error("Error while loading identity from " + std::string(path));
+		error("The contained exception was: " + std::string(e.what()));
+	}
+	return false;
 }
 
+/*
+Saves the identity to a file. This will write the private key to disk,
+and anyone with access to this file will be able to decrypt all
+communication for the identity. Be very careful with this method.
+
+:param path: The full path specifying where to save the identity.
+:returns: True if the file was saved, otherwise False.
+*/
+bool Identity::to_file(const char* path) {
+	extreme("Writing identity key to storage...");
+	try {
+		return OS::write_file(get_private_key(), path);
+	}
+	catch (std::exception& e) {
+		error("Error while saving identity to " + std::string(path));
+		error("The contained exception was: " + std::string(e.what()));
+	}
+	return false;
+}
+
+
+/*
+Create a new :ref:`RNS.Identity<api-identity>` instance from a file.
+Can be used to load previously created and saved identities into Reticulum.
+
+:param path: The full path to the saved :ref:`RNS.Identity<api-identity>` data
+:returns: A :ref:`RNS.Identity<api-identity>` instance, or *None* if the loaded data was invalid.
+*/
+/*static*/ const Identity Identity::from_file(const char* path) {
+	Identity identity(false);
+	if (identity.load(path)) {
+		return identity;
+	}
+	return {Type::NONE};
+}
 
 /*static*/ void Identity::remember(const Bytes& packet_hash, const Bytes& destination_hash, const Bytes& public_key, const Bytes& app_data /*= {Bytes::NONE}*/) {
 	if (public_key.size() != Type::Identity::KEYSIZE/8) {

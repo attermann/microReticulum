@@ -2,6 +2,8 @@
 
 #include "Log.h"
 
+#include <ArduinoJson.h>
+
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -256,4 +258,16 @@ inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const RNS::Bytes& rhbytes) 
 inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, uint8_t rhbyte) {
 	lhbytes.append(rhbyte);
 	return lhbytes;
+}
+
+namespace ArduinoJson {
+	inline bool convertToJson(const RNS::Bytes& src, JsonVariant dst) {
+		return dst.set(src.toHex());
+	}
+	inline void convertFromJson(JsonVariantConst src, RNS::Bytes& dst) {
+		dst.assignHex(src.as<const char*>());
+	}
+	inline bool canConvertFromJson(JsonVariantConst src, const RNS::Bytes&) {
+		return src.is<const char*>();
+	}
 }

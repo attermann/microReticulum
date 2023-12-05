@@ -120,9 +120,10 @@ void run_tests() {
 		RNS::LogLevel loglevel = RNS::loglevel();
 		//RNS::loglevel(RNS::LOG_WARNING);
 		RNS::loglevel(RNS::LOG_EXTREME);
-		test();
+		//test();
 		//testReference();
 		//testCrypto();
+		testPersistence();
 		RNS::loglevel(loglevel);
 		RNS::extreme("Finished running tests");
 		//return;
@@ -134,6 +135,7 @@ void run_tests() {
 }
 #endif
 
+#if defined(RUN_RETICULUM)
 void reticulum_announce() {
 	if (destination) {
 		RNS::head("Announcing destination...", RNS::LOG_EXTREME);
@@ -145,8 +147,7 @@ void reticulum_announce() {
 	}
 }
 
-#if defined(RUN_RETICULUM)
-void setup_reticulum() {
+void reticulum_setup() {
 	RNS::info("Setting up Reticulum...");
 
 	try {
@@ -177,7 +178,7 @@ void setup_reticulum() {
 
 #ifdef UDP_INTERFACE
 		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
-		udp_interface.start("some_ssid", "some_password", 2424);
+		udp_interface.start("some_ssid", "some_password");
 #endif
 
 #ifdef LORA_INTERFACE
@@ -251,13 +252,14 @@ void setup_reticulum() {
 		destination.receive(recv_packet);
 #endif
 
+		RNS::head("Ready!", RNS::LOG_EXTREME);
 	}
 	catch (std::exception& e) {
-		RNS::error(std::string("!!! Exception in setup_reticulum: ") + e.what() + " !!!");
+		RNS::error(std::string("!!! Exception in reticulum_setup: ") + e.what() + " !!!");
 	}
 }
 
-void teardown_reticulum() {
+void reticulum_teardown() {
 	RNS::info("Tearing down Reticulum...");
 
 	try {
@@ -275,7 +277,7 @@ void teardown_reticulum() {
 
 	}
 	catch (std::exception& e) {
-		RNS::error(std::string("!!! Exception in teardown_reticulum: ") + e.what() + " !!!");
+		RNS::error(std::string("!!! Exception in reticulum_teardown: ") + e.what() + " !!!");
 	}
 }
 #endif
@@ -317,11 +319,11 @@ void setup() {
 #endif
 
 #if defined(RUN_RETICULUM)
-	setup_reticulum();
+	reticulum_setup();
 #endif
 
 #ifdef ARDUINO
-	Serial.print("Goodbye from T-Beam on PlatformIO!\n");
+	//Serial.print("Goodbye from T-Beam on PlatformIO!\n");
 #endif
 }
 
@@ -380,7 +382,9 @@ int main(void) {
 		if (ch > 0) {
 			switch (ch) {
 			case 'a':
+#if defined(RUN_RETICULUM)
 				reticulum_announce();
+#endif
 				break;
 			case 'q':
 				run = false;

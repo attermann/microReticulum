@@ -6,3 +6,4 @@ void testBytes();
 void testCollections();
 void testReference();
 void testCrypto();
+void testPersistence();
