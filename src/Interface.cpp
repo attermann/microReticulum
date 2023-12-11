@@ -8,6 +8,16 @@ using namespace RNS::Type::Interface;
 
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
+Interface::Interface() : _object(new Object(this)), _creator(true) {
+	_object->_hash = Identity::full_hash({toString()});
+	mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+}
+
+Interface::Interface(const char* name) : _object(new Object(this, name)), _creator(true) {
+	_object->_hash = Identity::full_hash({toString()});
+	mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+}
+
 /*virtual*/ inline void Interface::on_incoming(const Bytes& data) {
 	extreme("Interface::on_incoming: data: " + data.toHex());
 	assert(_object);
@@ -24,7 +34,9 @@ using namespace RNS::Type::Interface;
 }
 
 const Bytes Interface::get_hash() const {
-	return Identity::full_hash({toString()});
+	assert(_object);
+	//return Identity::full_hash({toString()});
+	return _object->_hash;
 }
 
 void Interface::process_announce_queue() {
@@ -74,14 +86,21 @@ void Interface::process_announce_queue() {
 */
 }
 
+/*
 void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Interface& dst) {
+	RNS::extreme(">>> Deserializing Interface");
+RNS::extreme(">>> Interface pre: " + dst.debugString());
 	if (!src.isNull()) {
 		RNS::Bytes hash;
 		hash.assignHex(src.as<const char*>());
+		RNS::extreme(">>> Querying Transport for Interface hash " + hash.toHex());
 		// Query transport for matching interface
 		dst = Transport::find_interface_from_hash(hash);
+RNS::extreme(">>> Interface post: " + dst.debugString());
 	}
 	else {
 		dst = {RNS::Type::NONE};
+RNS::extreme(">>> Interface post: " + dst.debugString());
 	}
 }
+*/

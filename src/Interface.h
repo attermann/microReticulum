@@ -4,6 +4,8 @@
 #include "Bytes.h"
 #include "Type.h"
 
+#include <ArduinoJson.h>
+
 #include <list>
 #include <memory>
 #include <stdint.h>
@@ -45,17 +47,14 @@ namespace RNS {
 		Interface(const Interface& interface) : _object(interface._object) {
 			mem("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Interface() : _object(new Object(*this)) {
-			mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
-		}
-		Interface(const char* name) : _object(new Object(*this, name)), _creator(true) {
-			mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
-		}
+		Interface();
+		Interface(const char* name);
 		virtual ~Interface() {
 			if (_creator) {
+				mem("Interface object clearing parent reference, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 				// clear reference to parent in object foir safety
 				assert(_object);
-				_object->_parent = {Type::NONE};
+				_object->_parent = nullptr;
 			}
 			mem("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
@@ -63,26 +62,30 @@ namespace RNS {
 		inline Interface& operator = (const Interface& interface) {
 			_object = interface._object;
 			mem("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			if (_creator) {
+				mem("Interface object clearing creator flag, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+				_creator = false;
+			}
 			return *this;
 		}
 		inline operator bool() const {
-			extreme("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Interface& interface) const {
-			extreme("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() < interface._object.get();
 		}
 		inline bool operator > (const Interface& interface) const {
-			extreme("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() > interface._object.get();
 		}
 		inline bool operator == (const Interface& interface) const {
-			extreme("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() == interface._object.get();
 		}
 		inline bool operator != (const Interface& interface) const {
-			extreme("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			mem("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != interface._object.get();
 		}
 
@@ -130,25 +133,27 @@ namespace RNS {
 		inline bool is_local_shared_instance() const { assert(_object); return _object->_is_local_shared_instance; }
 		inline HInterface parent_interface() const { assert(_object); return _object->_parent_interface; }
 
-		virtual inline std::string toString() const { assert(_object); return "Interface[" + _object->_name + "]"; }
+		virtual inline std::string toString() const { if (!_object) return ""; return "Interface[" + _object->_name + "]"; }
 
+#ifndef NDEBUG
 		inline std::string debugString() const {
 			std::string dump;
 			dump = "Interface object, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get());
 			return dump;
 		}
+#endif
 
 	private:
 		class Object {
 		public:
-			Object(Interface& parent) : _parent(parent) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			Object(Interface& parent, const char* name) : _parent(parent), _name(name) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(Interface* parent) : _parent(parent) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(Interface* parent, const char* name) : _parent(parent), _name(name) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
 			virtual ~Object() { mem("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
-			//virtual inline void process_incoming(const Bytes& data) { if (_parent) { _parent.on_incoming(data); } }
-			virtual inline void process_outgoing(const Bytes& data) { if (_parent) { _parent.on_outgoing(data); } }
+			//virtual inline void process_incoming(const Bytes& data) { if (_parent != nullptr) { _parent->on_incoming(data); } }
+			virtual inline void process_outgoing(const Bytes& data) { if (_parent != nullptr) { _parent->on_outgoing(data); } }
 		private:
-			Interface& _parent;
+			Interface* _parent = nullptr;
 			bool _IN  = false;
 			bool _OUT = false;
 			bool _FWD = false;
@@ -165,6 +170,7 @@ namespace RNS {
 			std::list<AnnounceEntry> _announce_queue;
 			bool _is_connected_to_shared_instance = false;
 			bool _is_local_shared_instance = false;
+			Bytes _hash;
 			HInterface _parent_interface;
 			//Transport& _owner;
 		friend class Interface;
@@ -177,11 +183,14 @@ namespace RNS {
 
 }
 
+/*
 namespace ArduinoJson {
 	inline bool convertToJson(const RNS::Interface& src, JsonVariant dst) {
+		RNS::extreme("<<< Serializing Interface");
 		if (!src) {
 			return dst.set(nullptr);
 		}
+		RNS::extreme("<<< Interface hash " + src.get_hash().toHex());
 		return dst.set(src.get_hash().toHex());
 	}
 	void convertFromJson(JsonVariantConst src, RNS::Interface& dst);
@@ -189,3 +198,34 @@ namespace ArduinoJson {
 		return src.is<const char*>() && strlen(src.as<const char*>()) == 64;
 	}
 }
+*/
+/*
+namespace ArduinoJson {
+	template <>
+	struct Converter<RNS::Interface> {
+		static bool toJson(const RNS::Interface& src, JsonVariant dst) {
+			if (!src) {
+				return dst.set(nullptr);
+			}
+			RNS::extreme("<<< Serializing interface hash " + src.get_hash().toHex());
+			return dst.set(src.get_hash().toHex());
+		}
+		static RNS::Interface fromJson(JsonVariantConst src) {
+			if (!src.isNull()) {
+				RNS::Bytes hash;
+				hash.assignHex(src.as<const char*>());
+				RNS::extreme(">>> Deserialized interface hash " + hash.toHex());
+				RNS::extreme(">>> Querying transport for interface");
+				// Query transport for matching interface
+				return RNS::Interface::find_interface_from_hash(hash);
+			}
+			else {
+				return {RNS::Type::NONE};
+			}
+		}
+		static bool checkJson(JsonVariantConst src) {
+			return src.is<const char*>() && strlen(src.as<const char*>()) == 64;
+		}
+	};
+}
+*/

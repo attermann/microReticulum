@@ -52,7 +52,8 @@ namespace RNS {
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
 		inline Type::Link::status status() const { assert(_object); return _object->_status; }
 
-		inline std::string toString() const { assert(_object); return "{Link: unknown}"; }
+		inline std::string toString() const { if (!_object) return "";
+		 return "{Link: unknown}"; }
 
 	private:
 		class Object {

@@ -1,45 +1,50 @@
 //#include <unity.h>
 
 #include "Transport.h"
-#include "Interfaces/LoRaInterface.h"
-#include "Utilities/Persistence.h"
-#include "Utilities/OS.h"
 #include "Log.h"
 #include "Bytes.h"
+#include "Interfaces/LoRaInterface.h"
+#include "Utilities/OS.h"
 
-#include <ArduinoJson.h>
+#include "Utilities/Persistence.h"
+
+//#include <ArduinoJson.h>
 
 #include <map>
 #include <vector>
+#include <set>
 #include <string>
 #include <assert.h>
 #include <stdio.h>
 
 
-class Test {
+class TestObject {
 public:
-    Test() {}
-    Test(const char* foo, const char* fee) : _foo(foo), _fee(fee) {}
-	const std::string toString() { return std::string("Test(") + _foo + "," + _fee + ")"; }
-    std::string _foo;
-    std::string _fee;
+    TestObject() {}
+    TestObject(const char* str, std::vector<std::string>& vec) : _str(str), _vec(vec) {}
+	inline bool operator < (const TestObject& test) const { return _str < test._str; }
+	inline const std::string toString() const { return std::string("TestObject(") + _str + "," + std::to_string(_vec.size()) + ")"; }
+    std::string _str;
+    std::vector<std::string> _vec;
 };
 
 namespace ArduinoJson {
+	// ArduinoJSON serialization support for TestObject
 	template <>
-	struct Converter<Test> {
-		static bool toJson(const Test& src, JsonVariant dst) {
-			dst["foo"] = src._foo;
-			dst["fee"] = src._fee;
+	struct Converter<TestObject> {
+		static bool toJson(const TestObject& src, JsonVariant dst) {
+			dst["str"] = src._str;
+			dst["vec"] = src._vec;
 			return true;
 		}
-
-		static Test fromJson(JsonVariantConst src) {
-			return Test(src["foo"], src["fee"]);
+		static TestObject fromJson(JsonVariantConst src) {
+			TestObject dst;
+			dst._str = src["str"].as<std::string>();
+			dst._vec = src["vec"].as<std::vector<std::string>>();
+			return dst;
 		}
-
 		static bool checkJson(JsonVariantConst src) {
-			return src["foo"].is<std::string>() && src["fee"].is<std::string>();
+			return src["str"].is<std::string>() && src["vec"].is<std::vector<std::string>>();
 		}
 	};
 }
@@ -85,18 +90,18 @@ const char test_object_path[] = "/test_object";
 const char test_object_path[] = "test_object";
 #endif
 
+/*
 void testSerializeObject() {
 
 	Test test("bar", "fum");
 
 	StaticJsonDocument<1024> doc;
-	doc["foo"] = test._foo;
-	doc["fee"] = test._fee;
+	doc = test;
 
 	RNS::Bytes data;
 	size_t size = 1024;
-	//size_t length = serializeJson(doc, data.writable(size), size);
-	size_t length = serializeMsgPack(doc, data.writable(size), size);
+	size_t length = serializeJson(doc, data.writable(size), size);
+	//size_t length = serializeMsgPack(doc, data.writable(size), size);
 	if (length < size) {
 		data.resize(length);
 	}
@@ -126,13 +131,78 @@ void testDeserializeObject() {
 	if (data) {
 		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("data: " + data.toString());
-		//DeserializationError error = deserializeJson(doc, data.data());
-		DeserializationError error = deserializeMsgPack(doc, data.data());
+		DeserializationError error = deserializeJson(doc, data.data());
+		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
 			JsonObject root = doc.as<JsonObject>();
 			for (JsonPair kv : root) {
 				RNS::extreme("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
 			}
+		}
+		else {
+			RNS::extreme("failed to deserialize");
+			assert(false);
+		}
+		//assert(RNS::Utilities::OS::remove_file(test_object_path));
+	}
+	else {
+		RNS::extreme("read failed");
+		assert(false);
+	}
+
+}
+*/
+void testSerializeObject() {
+
+	std::vector<std::string> vec({"one", "two"});
+	TestObject test("test", vec);
+	RNS::extreme("serializeObject: test: " + test.toString());
+
+	StaticJsonDocument<1024> doc;
+	doc = test;
+
+	RNS::Bytes data;
+	size_t size = 1024;
+	size_t length = serializeJson(doc, data.writable(size), size);
+	//size_t length = serializeMsgPack(doc, data.writable(size), size);
+	if (length < size) {
+		data.resize(length);
+	}
+	RNS::extreme("serialized " + std::to_string(length) + " bytes");
+	if (length > 0) {
+		if (RNS::Utilities::OS::write_file(data, test_object_path)) {
+			RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			RNS::extreme("write failed");
+			assert(false);
+		}
+	}
+	else {
+		RNS::extreme("failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testDeserializeObject() {
+
+	//StaticJsonDocument<8192> doc;
+	DynamicJsonDocument doc(8192);
+
+	RNS::Bytes data = RNS::Utilities::OS::read_file(test_object_path);
+	if (data) {
+		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
+		//RNS::extreme("data: " + data.toString());
+		DeserializationError error = deserializeJson(doc, data.data());
+		//DeserializationError error = deserializeMsgPack(doc, data.data());
+		if (!error) {
+			//JsonObject root = doc.as<JsonObject>();
+			//for (JsonPair kv : root) {
+			//	RNS::extreme("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
+			//}
+			TestObject test = doc.as<TestObject>();
+			RNS::extreme("testDeserializeObject: test: " + test.toString());
 		}
 		else {
 			RNS::extreme("failed to deserialize");
@@ -156,18 +226,21 @@ const char test_vector_path[] = "test_vector";
 
 void testSerializeVector() {
 
-	//std::vector<std::string> vector;
-	//vector.push_back("foo");
-	//vector.push_back("bar");
-	std::vector<Test> vector;
-	vector.push_back({"bar1", "fum1"});
-	vector.push_back({"bar2", "fum2"});
+	std::vector<std::string> tvec;
+	tvec.push_back("foo");
+	tvec.push_back("bar");
+	std::vector<TestObject> vector;
+	vector.push_back({"two", tvec});
+	vector.push_back({"one", tvec});
 
 	StaticJsonDocument<4096> doc;
 	//copyArray(vector, doc.createNestedArray("vector"));
 	//doc["vector"] = vector;
 	//copyArray(vector, doc);
 	doc = vector;
+
+	//JsonVariant dst;
+	//dst = vector;
 
 /*
 	DynamicJsonBuffer jsonBuffer;
@@ -230,14 +303,14 @@ void testDeserializeVector() {
 		if (!error) {
 			RNS::extreme("testDeserializeVector: successfully deserialized");
 
-			std::vector<Test> vector = doc.as<std::vector<Test>>();
+			std::vector<TestObject> vector = doc.as<std::vector<TestObject>>();
 			for (auto& test : vector) {
 				RNS::extreme("testDeserializeVector: entry: " + test.toString());
 			}
 
 			//JsonArray arr = doc.as<JsonArray>();
 			//for (JsonVariant elem : arr) {
-			//	RNS::extreme("testDeserializeVector: entry: " + elem.as<Test>().toString());
+			//	RNS::extreme("testDeserializeVector: entry: " + elem.as<TestObject>().toString());
 			//}
 		}
 		else {
@@ -255,6 +328,103 @@ void testDeserializeVector() {
 
 
 #ifdef ARDUINO
+const char test_set_path[] = "/test_set";
+#else
+const char test_set_path[] = "test_set";
+#endif
+
+void testSerializeSet() {
+
+	std::vector<std::string> tvec;
+	tvec.push_back("foo");
+	tvec.push_back("bar");
+	std::set<TestObject> set;
+	set.insert({"two", tvec});
+	set.insert({"one", tvec});
+
+	StaticJsonDocument<4096> doc;
+	//copyArray(set, doc.createNestedArray("set"));
+	//doc["set"] = set;
+	//copyArray(set, doc);
+	//doc = set;
+
+	//std::string test;
+	//RNS::Bytes test;
+	//std::set<int> test;
+	std::set<RNS::Bytes> test;
+	//std::map<std::string, std::string> test;
+	JsonVariant dst;
+	dst["test"] = test;
+
+	RNS::Bytes data;
+	size_t size = 4096;
+	size_t length = serializeJson(doc, data.writable(size), size);
+	//size_t length = serializeMsgPack(doc, data.writable(size), size);
+	if (length < size) {
+		data.resize(length);
+	}
+	RNS::extreme("testSerializeSet: serialized " + std::to_string(length) + " bytes");
+	if (length > 0) {
+		if (RNS::Utilities::OS::write_file(data, test_set_path)) {
+			RNS::extreme("testSerializeSet: wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			RNS::extreme("testSerializeSet: write failed");
+			assert(false);
+		}
+	}
+	else {
+		RNS::extreme("testSerializeSet: failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testDeserializeSet() {
+
+	// Compute the required size
+	const int capacity =
+		JSON_ARRAY_SIZE(2) +
+		2*JSON_OBJECT_SIZE(3) +
+		4*JSON_OBJECT_SIZE(1);
+
+	//StaticJsonDocument<8192> doc;
+	DynamicJsonDocument doc(8192);
+
+	RNS::Bytes data = RNS::Utilities::OS::read_file(test_set_path);
+	if (data) {
+		RNS::extreme("testDeserializeSet: read: " + std::to_string(data.size()) + " bytes");
+		//RNS::extreme("testDeserializeSet: data: " + data.toString());
+		DeserializationError error = deserializeJson(doc, data.data());
+		//DeserializationError error = deserializeMsgPack(doc, data.data());
+		if (!error) {
+			RNS::extreme("testDeserializeSet: successfully deserialized");
+
+			std::set<TestObject> set = doc.as<std::set<TestObject>>();
+			for (auto& test : set) {
+				RNS::extreme("testDeserializeSet: entry: " + test.toString());
+			}
+
+			//JsonArray arr = doc.as<JsonArray>();
+			//for (JsonVariant elem : arr) {
+			//	RNS::extreme("testDeserializeSet: entry: " + elem.as<TestObject>().toString());
+			//}
+		}
+		else {
+			RNS::extreme("testDeserializeSet: failed to deserialize");
+			assert(false);
+		}
+		//assert(RNS::Utilities::OS::remove_file(test_set_path));
+	}
+	else {
+		RNS::extreme("testDeserializeSet: read failed");
+		assert(false);
+	}
+
+}
+
+
+#ifdef ARDUINO
 const char test_map_path[] = "/test_map";
 #else
 const char test_map_path[] = "test_map";
@@ -262,12 +432,12 @@ const char test_map_path[] = "test_map";
 
 void testSerializeMap() {
 
-	//std::map<std::string, std::string> map;
-	//map.insert({"foo", "bar"});
-	//map.insert({"fee", "fum"});
-	std::map<std::string, Test> map;
-	map.insert({"one", {"bar1", "fum1"}});
-	map.insert({"two", {"bar2", "fum2"}});
+	std::vector<std::string> tvec;
+	tvec.push_back("foo");
+	tvec.push_back("bar");
+	std::map<std::string, TestObject> map;
+	map.insert({"two", {"two", tvec}});
+	map.insert({"one", {"one", tvec}});
 
 	StaticJsonDocument<4096> doc;
 	//copyArray(map, doc.createNestedArray("map"));
@@ -319,14 +489,14 @@ void testDeserializeMap() {
 		if (!error) {
 			RNS::extreme("testDeserializeMap: successfully deserialized");
 
-			std::map<std::string, Test> map(doc.as<std::map<std::string, Test>>());
+			std::map<std::string, TestObject> map(doc.as<std::map<std::string, TestObject>>());
 			for (auto& [str, test] : map) {
 				RNS::extreme("testDeserializeMap: entry: " + str + " = " + test.toString());
 			}
 
 			//JsonObject root = doc.as<JsonObject>();
 			//for (JsonPair kv : root) {
-			//	RNS::extreme("testDeserializeMap: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<Test>().toString());
+			//	RNS::extreme("testDeserializeMap: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<TestObject>().toString());
 			//}
 		}
 		else {
@@ -336,7 +506,7 @@ void testDeserializeMap() {
 		//assert(RNS::Utilities::OS::remove_file(test_map_path));
 	}
 	else {
-		RNS::extreme("testDeserializeMap: testDeserializeVector: read failed");
+		RNS::extreme("testDeserializeMap: read failed");
 		assert(false);
 	}
 
@@ -360,10 +530,14 @@ void testSerializeDestinationTable() {
 	//RNS::Transport::DestinationEntry entry_one(1.0, empty, 1, 0.0, blobs, interface, packet);
 	RNS::Bytes received;
 	received.assignHex("deadbeef");
+	RNS::Bytes blob;
+	blob.assignHex("b10bb10b");
+	std::set<RNS::Bytes> blobs({received, blob});
 	RNS::Transport::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;
 	entry_one._receiving_interface = lora_interface;
+	entry_one._random_blobs = blobs;
 	RNS::Bytes one;
 	one.assignHex("1111111111111111");
 	map.insert({one, entry_one});
@@ -372,12 +546,13 @@ void testSerializeDestinationTable() {
 	entry_two._timestamp = 2.0;
 	entry_two._received_from = received;
 	entry_two._receiving_interface = lora_interface;
+	entry_two._random_blobs = blobs;
 	RNS::Bytes two;
 	two.assignHex("2222222222222222");
 	map.insert({two, entry_two});
 
 	for (auto& [hash, test] : map) {
-		RNS::extreme("testSerializeDestinationTable: entry: " + hash.toHex() + " = (" + std::to_string(test._timestamp) + "," + test._received_from.toHex() + ")");
+		RNS::extreme("testSerializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
 	}
 
 	StaticJsonDocument<4096> doc;
@@ -429,12 +604,12 @@ void testDeserializeDestinationTable() {
 
 			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
 			for (auto& [hash, test] : map) {
-				RNS::extreme("testDeserializeDestinationTable: entry: " + hash.toHex() + " = (" + std::to_string(test._timestamp) + "," + test._received_from.toHex() + ")");
+				RNS::extreme("testDeserializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
 			}
 
 			//JsonObject root = doc.as<JsonObject>();
 			//for (JsonPair kv : root) {
-			//	RNS::extreme("testDeserializeDestinationTable: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<Test>().toString());
+			//	RNS::extreme("testDeserializeDestinationTable: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<TestObject>().toString());
 			//}
 		}
 		else {
@@ -459,6 +634,8 @@ void testPersistence() {
 	testDeserializeObject();
 	testSerializeVector();
 	testDeserializeVector();
+	testSerializeSet();
+	testDeserializeSet();
 	testSerializeMap();
 	testDeserializeMap();
 	testSerializeDestinationTable();

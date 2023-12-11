@@ -173,7 +173,7 @@ namespace RNS {
 		inline const Callbacks& callbacks() const { assert(_object); return _object->_callbacks; }
 		inline const Identity& identity() const { assert(_object); return _object->_identity; }
 
-		inline std::string toString() const { assert(_object); return "{Destination:" + _object->_hash.toHex() + "}"; }
+		inline std::string toString() const { if (!_object) return ""; return "{Destination:" + _object->_hash.toHex() + "}"; }
 
 	private:
 		class Object {

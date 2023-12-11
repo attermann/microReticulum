@@ -23,8 +23,8 @@
 #ifndef CRYPTO_CBC_h
 #define CRYPTO_CBC_h
 
-#include "Cipher.h"
-#include "BlockCipher.h"
+#include <Cipher.h>
+#include <BlockCipher.h>
 
 class CBCCommon : public Cipher
 {

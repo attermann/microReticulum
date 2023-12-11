@@ -4,13 +4,12 @@
 #include "Bytes.h"
 #include "Type.h"
 
-#include <ArduinoJson.h>
-
-#include <memory>
+#include <map>
 #include <vector>
 #include <list>
 #include <set>
-#include <map>
+#include <array>
+#include <memory>
 #include <functional>
 #include <stdint.h>
 
@@ -62,8 +61,8 @@ namespace RNS {
 		class DestinationEntry {
 		public:
 			DestinationEntry() {}
-			DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
-				_timestamp(time),
+			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
+				_timestamp(timestamp),
 				_received_from(received_from),
 				_hops(announce_hops),
 				_expires(expires),
@@ -77,11 +76,29 @@ namespace RNS {
 			Bytes _received_from;
 			uint8_t _hops = 0;
 			double _expires = 0;
-			const std::set<Bytes> _random_blobs;
+			std::set<Bytes> _random_blobs;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			Interface _receiving_interface = {Type::NONE};
 			//const Packet& _announce_packet;
-			const Packet _announce_packet = {Type::NONE};
+			Packet _announce_packet = {Type::NONE};
+#ifndef NDEBUG
+			inline std::string debugString() const {
+				std::string dump;
+				dump = "DestinationEntry: timestamp=" + std::to_string(_timestamp) +
+					" received_from=" + _received_from.toHex() +
+					" hops=" + std::to_string(_hops) +
+					" expires=" + std::to_string(_expires) +
+					//" random_blobs=" + _random_blobs +
+					" receiving_interface=" + _receiving_interface.toString() +
+					" announce_packet=" + _announce_packet.toString();
+				dump += " random_blobs=(";
+				for (auto& blob : _random_blobs) {
+					dump += blob.toHex() + ",";
+				}
+				dump += ")";
+				return dump;
+			}
+#endif
 		};
 
 		// CBA TODO Analyze safety of using Inrerface references here
@@ -208,7 +225,7 @@ namespace RNS {
 		static void deregister_announce_handler(HAnnounceHandler handler);
 		static Interface find_interface_from_hash(const Bytes& interface_hash);
 		static bool should_cache(const Packet& packet);
-		static void cache(const Packet& packet, bool force_cache = false);
+		static bool cache(const Packet& packet, bool force_cache = false);
 		static Packet get_cached_packet(const Bytes& packet_hash);
 		static bool cache_request_packet(const Packet& packet);
 		static void cache_request(const Bytes& packet_hash, const Destination& destination);
@@ -231,7 +248,7 @@ namespace RNS {
 		static void drop_announce_queues();
 		static bool announce_emitted(const Packet& packet);
 		static void save_packet_hashlist();
-		static void save_path_table();
+		static bool save_path_table();
 		static void save_tunnel_table();
 		static void persist_data();
 		static void exit_handler();
@@ -299,71 +316,25 @@ namespace RNS {
 		static double _start_time;
 		static bool _jobs_locked;
 		static bool _jobs_running;
-		static uint32_t _job_interval;
+		static float _job_interval;
 		static double _jobs_last_run;
 		static double _links_last_checked;
-		static uint32_t _links_check_interval;
+		static float _links_check_interval;
 		static double _receipts_last_checked;
-		static uint32_t _receipts_check_interval;
+		static float _receipts_check_interval;
 		static double _announces_last_checked;
-		static uint32_t _announces_check_interval;
-		static uint32_t _hashlist_maxsize;
+		static float _announces_check_interval;
 		static double _tables_last_culled;
-		static uint32_t _tables_cull_interval;
+		static float _tables_cull_interval;
+		static bool _saving_path_table;
+		static uint32_t _hashlist_maxsize;
+
+		// CBA
+		static double _last_saved;
+		static float _save_interval;
 
 		static Reticulum _owner;
 		static Identity _identity;
-	};
-
-}
-
-namespace ArduinoJson {
-
-	// ArduinoJSON serialization support for RNS::Transport::DestinationEntry
-	template <>
-	struct Converter<RNS::Transport::DestinationEntry> {
-		static bool toJson(const RNS::Transport::DestinationEntry& src, JsonVariant dst) {
-			dst["timestamp"] = src._timestamp;
-			dst["received_from"] = src._received_from;
-			dst["announce_hops"] = src._hops;
-			dst["expires"] = src._expires;
-			//dst["random_blobs"] = src._random_blobs;
-			dst["receiving_interface"] = src._receiving_interface;
-			dst["packet"] = src._announce_packet;
-			return true;
-		}
-		static RNS::Transport::DestinationEntry fromJson(JsonVariantConst src) {
-/**/
-			RNS::Transport::DestinationEntry dst;
-			dst._timestamp = src["timestamp"];
-			dst._received_from = src["received_from"];
-			dst._hops = src["announce_hops"];
-			dst._expires = src["expires"];
-			//dst._random_blobs = src["random_blobs"];
-			dst._receiving_interface = src["receiving_interface"];
-			//dst._announce_packet = src["packet"];
-/**/
-/*
-			//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
-			RNS::Transport::DestinationEntry dst(
-				src["timestamp"].as<double>(),
-				src["received_from"].as<RNS::Bytes>(),
-				src["announce_hops"].as<int>(),
-				src["expires"].as<double>(),
-				src["random_blobs"].as<std::set<RNS::Bytes>>(),
-				src["receiving_interface"].as<RNS::Interface>(),
-				src["packet"].as<RNS::Packet>()
-			);
-*/
-			return dst;
-		}
-		static bool checkJson(JsonVariantConst src) {
-			return
-				src["timestamp"].is<double>() &&
-				src["received_from"].is<RNS::Bytes>() &&
-				src["announce_hops"].is<int>() &&
-				src["expires"].is<double>();
-		}
 	};
 
 }

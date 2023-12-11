@@ -25,7 +25,7 @@ namespace RNS { namespace Cryptography {
         return randnum;
     }
 
-    // return 32 bit random unigned int between 0 and specified value
+    // return 32 bit random unsigned int between 0 and specified value
     inline uint32_t randomnum(uint32_t max) {
         return randomnum() % max;
     }

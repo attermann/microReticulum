@@ -83,6 +83,11 @@ void LoRaInterface::loop() {
 Serial.println(available);
 			extreme("LoRaInterface: receiving bytes...");
 
+			// read header (for detecting split packets)
+		    uint8_t header  = LoRa.read();
+
+			// CBA TODO add support for split packets
+
 			// read packet
 			buffer.clear();
 			while (LoRa.available()) {
@@ -112,6 +117,12 @@ Serial.println(available);
 #ifdef ARDUINO
 
 			LoRa.beginPacket();                   // start packet
+
+			// write header (for detecting split packets)
+		    uint8_t header  = Cryptography::randomnum(256) & 0xF0;
+			LoRa.write(header);
+
+			// CBA TODO add support for split packets
 
 			// add payload
 			//LoRa.print((const char*)data.data());

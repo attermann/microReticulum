@@ -8,6 +8,7 @@
 #include "Log.h"
 #include "Cryptography/Random.h"
 #include "Utilities/OS.h"
+#include "Utilities/Persistence.h"
 
 #include <algorithm>
 #include <unistd.h>
@@ -60,17 +61,22 @@ using namespace RNS::Utilities;
 /*static*/ double Transport::_start_time				= 0;
 /*static*/ bool Transport::_jobs_locked					= false;
 /*static*/ bool Transport::_jobs_running				= false;
-/*static*/ uint32_t Transport::_job_interval			= 0.250;
+/*static*/ float Transport::_job_interval			= 0.250;
 /*static*/ double Transport::_jobs_last_run				= 0;
 /*static*/ double Transport::_links_last_checked		= 0;
-/*static*/ uint32_t Transport::_links_check_interval	= 1.0;
+/*static*/ float Transport::_links_check_interval	= 1.0;
 /*static*/ double Transport::_receipts_last_checked	= 0;
-/*static*/ uint32_t Transport::_receipts_check_interval	= 1.0;
+/*static*/ float Transport::_receipts_check_interval	= 1.0;
 /*static*/ double Transport::_announces_last_checked	= 0;
-/*static*/ uint32_t Transport::_announces_check_interval= 1.0;
-/*static*/ uint32_t Transport::_hashlist_maxsize		= 1000000;
+/*static*/ float Transport::_announces_check_interval= 1.0;
 /*static*/ double Transport::_tables_last_culled		= 0;
-/*static*/ uint32_t Transport::_tables_cull_interval	= 5.0;
+/*static*/ float Transport::_tables_cull_interval	= 5.0;
+/*static*/ bool Transport::_saving_path_table			= false;
+/*static*/ uint32_t Transport::_hashlist_maxsize		= 1000000;
+
+// CBA
+/*static*/ double Transport::_last_saved = 0;
+/*static*/ float Transport::_save_interval = 3600;
 
 /*static*/ Reticulum Transport::_owner({Type::NONE});
 /*static*/ Identity Transport::_identity({Type::NONE});
@@ -81,7 +87,7 @@ using namespace RNS::Utilities;
 	_owner = reticulum_instance;
 
 	if (!_identity) {
-		std::string transport_identity_path = Reticulum::storagepath + "/transport_identity";
+		std::string transport_identity_path = Reticulum::_storagepath + "/transport_identity";
 // CBA TEST
 //OS::remove_file(transport_identity_path.c_str());
 		if (OS::file_exists(transport_identity_path.c_str())) {
@@ -134,12 +140,11 @@ using namespace RNS::Utilities;
 	//p thread = threading.Thread(target=Transport.jobloop, daemon=True)
 	//p thread.start()
 
-// TODO
-/*
-	if RNS.Reticulum.transport_enabled():
+	if (Reticulum::transport_enabled()) {
 
-		destination_table_path = RNS.Reticulum.storagepath+"/destination_table"
-		if os.path.isfile(destination_table_path) and not Transport.owner.is_connected_to_shared_instance:
+		std::string destination_table_path = Reticulum::_storagepath + "/destination_table";
+		if (!_owner.is_connected_to_shared_instance() && OS::file_exists(destination_table_path.c_str())) {
+/*p
 			serialised_destinations = []
 			try:
 				file = open(destination_table_path, "rb")
@@ -173,17 +178,44 @@ using namespace RNS::Utilities;
 								RNS.log("The announce packet could not be loaded from cache", RNS.LOG_DEBUG)
 							if receiving_interface == None:
 								RNS.log("The interface is no longer available", RNS.LOG_DEBUG)
+*/
 
-				if len(Transport.destination_table) == 1:
-					specifier = "entry"
-				else:
-					specifier = "entries"
+			try {
+				//StaticJsonDocument<1024> doc;
+				DynamicJsonDocument doc(1024);
 
-				RNS.log("Loaded "+str(len(Transport.destination_table))+" path table "+specifier+" from storage", RNS.LOG_VERBOSE)
+				RNS::Bytes data = RNS::Utilities::OS::read_file(destination_table_path.c_str());
+				if (data) {
+					RNS::extreme("Transport::start: read: " + std::to_string(data.size()) + " bytes");
+					//RNS::extreme("testDeserializeVector: data: " + data.toString());
+					DeserializationError error = deserializeJson(doc, data.data());
+					//DeserializationError error = deserializeMsgPack(doc, data.data());
+					if (!error) {
+						_destination_table = doc.as<std::map<Bytes, DestinationEntry>>();
+						RNS::extreme("Transport::start: successfully deserialized");
+#ifndef NDEBUG
+						for (auto& [hash, entry] : _destination_table) {
+							RNS::extreme("Transport::start: entry: " + hash.toHex() + " = " + entry.debugString());
+						}
+#endif
+					}
+					else {
+						RNS::extreme("Transport::start: failed to deserialize");
+					}
+				}
+				else {
+					RNS::extreme("Transport::start: read failed");
+				}
+				verbose("Loaded " + std::to_string(_destination_table.size()) + " path table entries from storage");
 
-			except Exception as e:
-				RNS.log("Could not load destination table from storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
+			}
+			catch (std::exception& e) {
+				error("Could not load destination table from storage, the contained exception was: " + std::string(e.what()));
+			}
+		}
 
+// TODO
+/*
 		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
 		if os.path.isfile(tunnel_table_path) and not Transport.owner.is_connected_to_shared_instance:
 			serialised_tunnels = []
@@ -241,10 +273,14 @@ using namespace RNS::Utilities;
 			RNS.log("Transport Instance will respond to probe requests on "+str(Transport.probe_destination), RNS.LOG_NOTICE)
 		else:
 			Transport.probe_destination = None
+*/
 
-		RNS.log("Transport instance "+str(Transport.identity)+" started", RNS.LOG_VERBOSE)
-		Transport.start_time = time.time()
+		verbose("Transport instance " + _identity.toString() + " started");
+		_start_time = OS::time();
+	}
 
+// TODO
+/*
 	// Synthesize tunnels for any interfaces wanting it
 	for interface in Transport.interfaces:
 		interface.tunnel_id = None
@@ -628,6 +664,12 @@ using namespace RNS::Utilities;
 
 				Transport.tables_last_culled = time.time()
 */
+
+			// Periodically persist data
+			if (OS::time() > (_last_saved + _save_interval)) {
+				persist_data();
+				_last_saved = OS::time();
+			}
 		}
 		else {
 			// Transport jobs were locked, do nothing
@@ -2053,7 +2095,7 @@ using namespace RNS::Utilities;
 					}
 				}
 				else {
-					debug("Transport::inbound: Packet destination " + packet.destination_hash().toHex() + " not found, ignoring");
+					debug("Transport::inbound: Packet destination " + packet.destination_hash().toHex() + " not found, not handling locally");
 				}
 			}
 		}
@@ -2259,7 +2301,7 @@ using namespace RNS::Utilities;
 }
 
 /*static*/ void Transport::register_interface(Interface& interface) {
-	extreme("Transport: Registering interface " + interface.toString());
+	extreme("Transport: Registering interface " + interface.get_hash().toHex() + " " + interface.toString());
 #if defined(INTERFACES_SET)
 	_interfaces.insert(interface);
 #elif defined(INTERFACES_LIST)
@@ -2335,7 +2377,7 @@ using namespace RNS::Utilities;
 		}
 	}
 	else {
-		extreme("Transport:register_destination: Skipping registraion (not direction IN) of destination " + destination.toString());
+		extreme("Transport:register_destination: Skipping registration (not direction IN) of destination " + destination.toString());
 	}
 
 /*
@@ -2461,36 +2503,42 @@ Deregisters an announce handler.
 // means that they have not had their hop count
 // increased yet! Take note of this when reading from
 // the packet cache.
-/*static*/ void Transport::cache(const Packet& packet, bool force_cache /*= false*/) {
-// TODO
-/*
+/*static*/ bool Transport::cache(const Packet& packet, bool force_cache /*= false*/) {
+	extreme("Conditionally saving packet " + packet.get_hash().toHex() + " to storage");
 	if (should_cache(packet) || force_cache) {
+		extreme("Saving packet " + packet.get_hash().toHex() + " to storage");
 		try {
-			//packet_hash = RNS.hexrep(packet.get_hash(), delimit=False)
-			Bytes packet_hash = packet.get_hash().toHex();
-			//interface_reference = None
-			std::string interface_reference;
-			if (packet.receiving_interface()) {
-				interface_reference = packet.receiving_interface().toString();
-			}
+/*p
+			packet_hash = RNS.hexrep(packet.get_hash(), delimit=False)
+			interface_reference = None
+			if packet.receiving_interface != None:
+				interface_reference = str(packet.receiving_interface)
 
 			file = open(RNS.Reticulum.cachepath+"/"+packet_hash, "wb")  
 			file.write(umsgpack.packb([packet.raw, interface_reference]))
 			file.close()
+*/
+			std::string packet_cache_path = Reticulum::_cachepath + "/" + packet.get_hash().toHex();
+// CBA remporarily disabled until CachedPacket is implemented
+/*
+			DynamicJsonDocument doc(1024);
+			doc.set(packet);
+			return Persistence::serialize(doc, packet_cache_path.c_str(), 1024);
+*/
+			return Persistence::serialize(packet, packet_cache_path.c_str(), 1024);
 		}
 		catch (std::exception& e) {
-			error("Error writing packet to cache. The contained exception was: " + e.what());
+			error("Error writing packet to cache. The contained exception was: " + std::string(e.what()));
 		}
 	}
-*/
+	return false;
 }
 
 /*static*/ Packet Transport::get_cached_packet(const Bytes& packet_hash) {
-// TODO
-/*
+	extreme("Loading packet " + packet_hash.toHex() + " to storage");
 	try {
-		//packet_hash = RNS.hexrep(packet_hash, delimit=False)
-		Bytes packet_hash = packet_hash.toHex();
+/*p
+		packet_hash = RNS.hexrep(packet_hash, delimit=False)
 		path = RNS.Reticulum.cachepath+"/"+packet_hash
 
 		if os.path.isfile(path):
@@ -2508,13 +2556,25 @@ Deregisters an announce handler.
 			return packet
 		else:
 			return None
+*/
+		std::string packet_cache_path = Reticulum::_cachepath + "/" + packet_hash.toHex();
+// CBA remporarily disabled until CachedPacket is implemented since this results in recursive calls
+//  due to Packet deserializer calling get_cached_packet()
+/*
+		DynamicJsonDocument doc(1024);
+		if (Persistence::deserialize(doc, packet_cache_path.c_str())) {
+			return doc.as<Packet>();
+		}
+*/
+		//return Persistence::deserialize(packet_cache_path.c_str());
+		Packet packet({Type::NONE});
+		Persistence::deserialize(packet, packet_cache_path.c_str());
+		return packet;
 	}
 	catch (std::exception& e) {
 		error("Exception occurred while getting cached packet.");
-		error("The contained exception was: " + e.what());
+		error("The contained exception was: " + std::string(e.what()));
 	}
-*/
-	// MOCK
 	return {Type::NONE};
 }
 
@@ -3114,76 +3174,118 @@ will announce it.
 */
 }
 
-/*static*/ void Transport::save_path_table() {
-// TODO
-/*
-	if not Transport.owner.is_connected_to_shared_instance:
-		if hasattr(Transport, "saving_path_table"):
-			wait_interval = 0.2
-			wait_timeout = 5
-			wait_start = time.time()
-			while Transport.saving_path_table:
-				time.sleep(wait_interval)
-				if time.time() > wait_start+wait_timeout:
-					RNS.log("Could not save path table to storage, waiting for previous save operation timed out.", RNS.LOG_ERROR)
-					return False
+/*static*/ bool Transport::save_path_table() {
+	debug("Transport::save_path_table");
 
-		try:
-			Transport.saving_path_table = True
-			save_start = time.time()
-			RNS.log("Saving path table to storage...", RNS.LOG_DEBUG)
+	if (Transport::_owner.is_connected_to_shared_instance()) {
+		return true;
+	}
 
-			serialised_destinations = []
-			for destination_hash in Transport.destination_table:
+	bool success = false;
+	if (_saving_path_table) {
+		double wait_interval = 0.2;
+		double wait_timeout = 5;
+		double wait_start = OS::time();
+		while (_saving_path_table) {
+			OS::sleep(wait_interval);
+			if (OS::time() > (wait_start + wait_timeout)) {
+				error("Could not save path table to storage, waiting for previous save operation timed out.");
+				return false;
+			}
+		}
+	}
+
+	try {
+		_saving_path_table = true;
+		double save_start = OS::time();
+		debug("Saving " + std::to_string(_destination_table.size()) + " path table entries to storage...");
+
+/*p
+		serialised_destinations = []
+		for destination_hash in Transport.destination_table:
+			// Get the destination entry from the destination table
+			de = Transport.destination_table[destination_hash]
+			interface_hash = de[5].get_hash()
+
+			// Only store destination table entry if the associated
+			// interface is still active
+			interface = Transport.find_interface_from_hash(interface_hash)
+			if interface != None:
 				// Get the destination entry from the destination table
 				de = Transport.destination_table[destination_hash]
-				interface_hash = de[5].get_hash()
+				timestamp = de[0]
+				received_from = de[1]
+				hops = de[2]
+				expires = de[3]
+				random_blobs = de[4]
+				packet_hash = de[6].get_hash()
 
-				// Only store destination table entry if the associated
-				// interface is still active
-				interface = Transport.find_interface_from_hash(interface_hash)
-				if interface != None:
-					// Get the destination entry from the destination table
-					de = Transport.destination_table[destination_hash]
-					timestamp = de[0]
-					received_from = de[1]
-					hops = de[2]
-					expires = de[3]
-					random_blobs = de[4]
-					packet_hash = de[6].get_hash()
+				serialised_entry = [
+					destination_hash,
+					timestamp,
+					received_from,
+					hops,
+					expires,
+					random_blobs,
+					interface_hash,
+					packet_hash
+				]
 
-					serialised_entry = [
-						destination_hash,
-						timestamp,
-						received_from,
-						hops,
-						expires,
-						random_blobs,
-						interface_hash,
-						packet_hash
-					]
+				serialised_destinations.append(serialised_entry)
 
-					serialised_destinations.append(serialised_entry)
+				Transport.cache(de[6], force_cache=True)
 
-					Transport.cache(de[6], force_cache=True)
-
-			destination_table_path = RNS.Reticulum.storagepath+"/destination_table"
-			file = open(destination_table_path, "wb")
-			file.write(umsgpack.packb(serialised_destinations))
-			file.close()
-
-			save_time = time.time() - save_start
-			if save_time < 1:
-				time_str = str(round(save_time*1000,2))+"ms"
-			else:
-				time_str = str(round(save_time,2))+"s"
-			RNS.log("Saved "+str(len(serialised_destinations))+" path table entries in "+time_str, RNS.LOG_DEBUG)
-
-		except Exception as e:
-			RNS.log("Could not save path table to storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
-
-		Transport.saving_path_table = False
+		destination_table_path = RNS.Reticulum.storagepath+"/destination_table"
+		file = open(destination_table_path, "wb")
+		file.write(umsgpack.packb(serialised_destinations))
+		file.close()
 */
+
+		std::string destination_table_path = Reticulum::_storagepath + "/destination_table";
+
+		//StaticJsonDocument<1024> doc;
+		//doc = _destination_table;
+		DynamicJsonDocument doc(1024);
+		doc.set(_destination_table);
+
+		RNS::Bytes data;
+		size_t size = 4096;
+		size_t length = serializeJson(doc, data.writable(size), size);
+		//size_t length = serializeMsgPack(doc, data.writable(size), size);
+		if (length < size) {
+			data.resize(length);
+		}
+		RNS::extreme("Transport::save_path_table: serialized " + std::to_string(length) + " bytes");
+		if (length > 0) {
+			if (RNS::Utilities::OS::write_file(data, destination_table_path.c_str())) {
+				RNS::extreme("Transport::save_path_table: wrote: " + std::to_string(data.size()) + " bytes");
+			}
+			else {
+				RNS::extreme("Transport::save_path_table: write failed");
+			}
+		}
+		else {
+			RNS::extreme("Transport::save_path_table: failed to serialize");
+		}
+
+		double save_time = OS::time() - save_start;
+		std::string time_str;
+		if (save_time < 1) {
+			time_str = std::to_string(OS::round(save_time * 1000, 2)) + "ms";
+		}
+		else {
+			time_str = std::to_string(OS::round(save_time, 2)) + "s";
+		}
+		debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + time_str);
+		success = true;
+	}
+	catch (std::exception& e) {
+		error("Could not save path table to storage, the contained exception was: " + std::string(e.what()));
+	}
+
+	_saving_path_table = false;
+
+	return success;
 }
 
 /*static*/ void Transport::save_tunnel_table() {
@@ -3266,6 +3368,7 @@ will announce it.
 }
 
 /*static*/ void Transport::persist_data() {
+	extreme("Transport::persist_data()");
 	save_packet_hashlist();
 	save_path_table();
 	save_tunnel_table();

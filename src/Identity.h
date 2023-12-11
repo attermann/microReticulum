@@ -153,7 +153,7 @@ namespace RNS {
 		//inline const Cryptography::X25519PrivateKey::Ptr prv() const { assert(_object); return _object->_prv; }
 		inline const Cryptography::X25519PublicKey::Ptr pub() const { assert(_object); return _object->_pub; }
 
-		inline std::string toString() const { assert(_object); return "{Identity:" + _object->_hash.toHex() + "}"; }
+		inline std::string toString() const { if (!_object) return ""; return "{Identity:" + _object->_hash.toHex() + "}"; }
 
 	private:
 		class Object {

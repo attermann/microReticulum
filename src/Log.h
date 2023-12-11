@@ -9,15 +9,16 @@
 namespace RNS {
 
 	enum LogLevel {
-		LOG_CRITICAL = 0,
-		LOG_ERROR    = 1,
-		LOG_WARNING  = 2,
-		LOG_NOTICE   = 3,
-		LOG_INFO     = 4,
-		LOG_VERBOSE  = 5,
-		LOG_DEBUG    = 6,
-		LOG_EXTREME  = 7,
-		LOG_MEM      = 8,
+		LOG_NONE     = 0,
+		LOG_CRITICAL = 1,
+		LOG_ERROR    = 2,
+		LOG_WARNING  = 3,
+		LOG_NOTICE   = 4,
+		LOG_INFO     = 5,
+		LOG_VERBOSE  = 6,
+		LOG_DEBUG    = 7,
+		LOG_EXTREME  = 8,
+		LOG_MEM      = 9
 	};
 
 	void loglevel(LogLevel level);

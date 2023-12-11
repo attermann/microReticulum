@@ -9,7 +9,7 @@
 #include <sys/time.h>
 
 #ifdef ARDUINO
-#include "Arduino.h"
+#include <Arduino.h>
 #endif
 
 namespace RNS { namespace Utilities {

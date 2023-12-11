@@ -249,6 +249,7 @@ Recall last heard app_data for a destination hash.
 	// simply overwrite on exit now that every local client
 	// disconnect triggers a data persist.
 
+	bool success = false;
 	try {
 		if (_saving_known_destinations) {
 			double wait_interval = 0.2;
@@ -304,12 +305,16 @@ Recall last heard app_data for a destination hash.
 		}
 
 		debug("Saved known destinations to storage in " + time_str);
+
+		success = true;
 	}
 	catch (std::exception& e) {
 		error("Error while saving known destinations to disk, the contained exception was: " + std::string(e.what()));
 	}
 
 	_saving_known_destinations = false;
+
+	return success;
 }
 
 /*static*/ void Identity::load_known_destinations() {
@@ -332,6 +337,7 @@ Recall last heard app_data for a destination hash.
 	else:
 		RNS.log("Destinations file does not exist, no known destinations loaded", RNS.LOG_VERBOSE)
 */
+
 }
 
 /*static*/ bool Identity::validate_announce(const Packet& packet) {

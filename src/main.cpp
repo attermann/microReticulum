@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include "Test/Test.h"
 
@@ -17,6 +17,7 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#include <SPIFFS.h>
 #else
 #include <termios.h>
 #include <fcntl.h>
@@ -33,11 +34,11 @@
 
 
 #ifndef NDEBUG
-//#define RUN_TESTS
+#define RUN_TESTS
 #endif
 
 #define RUN_RETICULUM
-#define UDP_INTERFACE
+//#define UDP_INTERFACE
 #define LORA_INTERFACE
 //#define RETICULUM_PACKET_TEST
 
@@ -160,12 +161,6 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
-		RNS::head("Creating Reticulum instance...", RNS::LOG_EXTREME);
-		//RNS::Reticulum reticulum;
-		reticulum = RNS::Reticulum();
-		//return;
-		// 21.9% (+0.1%)
-
 		RNS::head("Registering Interface instances with Transport...", RNS::LOG_EXTREME);
 #ifdef UDP_INTERFACE
 		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
@@ -178,13 +173,22 @@ void reticulum_setup() {
 
 #ifdef UDP_INTERFACE
 		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
-		udp_interface.start("some_ssid", "some_password");
+		//udp_interface.start("wifi_ssid", "wifi_password", 4242);
+		udp_interface.start("broadmind-guest", "brcguest", 4242);
 #endif
 
 #ifdef LORA_INTERFACE
 		RNS::head("Starting LoRaInterface...", RNS::LOG_EXTREME);
 		lora_interface.start();
 #endif
+
+		RNS::head("Creating Reticulum instance...", RNS::LOG_EXTREME);
+		//RNS::Reticulum reticulum;
+		reticulum = RNS::Reticulum();
+		reticulum.transport_enabled(true);
+		reticulum.start();
+		//return;
+		// 21.9% (+0.1%)
 
 		RNS::head("Creating Identity instance...", RNS::LOG_EXTREME);
 		// new identity
@@ -207,12 +211,13 @@ void reticulum_setup() {
 		destination = RNS::Destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "app", "aspects");
 		// 23.0% (+0.4%)
 
-		// test data receive packet
+		// Register DATA packet callback
 		RNS::head("Registering packet callback with Destination...", RNS::LOG_EXTREME);
 		destination.set_packet_callback(onPacket);
 		destination.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
 		{
+			// Register PING packet callback
 			RNS::head("Creating PING Destination instance...", RNS::LOG_EXTREME);
 			RNS::Destination ping_destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "example_utilities", "echo.request");
 
@@ -241,12 +246,16 @@ void reticulum_setup() {
 
 		RNS::head("Sending send packet...", RNS::LOG_EXTREME);
 		send_packet.pack();
+#ifndef NDEBUG
 		RNS::extreme("Test send_packet: " + send_packet.debugString());
+#endif
 
 		RNS::head("Creating recv packet...", RNS::LOG_EXTREME);
 		RNS::Packet recv_packet({RNS::Type::NONE}, send_packet.raw());
 		recv_packet.unpack();
+#ifndef NDEBUG
 		RNS::extreme("Test recv_packet: " + recv_packet.debugString());
+#endif
 
 		RNS::head("Spoofing recv packet to destination...", RNS::LOG_EXTREME);
 		destination.receive(recv_packet);
@@ -261,6 +270,8 @@ void reticulum_setup() {
 
 void reticulum_teardown() {
 	RNS::info("Tearing down Reticulum...");
+
+	RNS::Transport::save_path_table();
 
 	try {
 
@@ -302,6 +313,14 @@ void setup() {
 	// Setup user button
 	pinMode(USER_BUTTON_PIN, INPUT);
 	attachInterrupt(USER_BUTTON_PIN, userKey, FALLING);  
+
+	// Setup filesystem
+	if (!SPIFFS.begin(true, "")){
+		RNS::error("SPIFFS filesystem mount failed");
+	}
+	else {
+		RNS::debug("SPIFFS filesystem is ready");
+	}
 #endif
 
 	RNS::loglevel(RNS::LOG_EXTREME);
@@ -393,6 +412,10 @@ int main(void) {
 		}
 		RNS::Utilities::OS::sleep(0.01);
 	}
+
+#if defined(RUN_RETICULUM)
+	reticulum_teardown();
+#endif
 
 	printf("Goodbye from Native on PlatformIO!\n");
 }

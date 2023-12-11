@@ -23,8 +23,9 @@ namespace RNS {
 		//z configdir        = None
 		//z configpath       = ""
 		//p storagepath      = ""
-		static std::string storagepath;
-		//z cachepath        = ""
+		static std::string _storagepath;
+		//p cachepath        = ""
+		static std::string _cachepath;
 
 		static bool __transport_enabled;
 		static bool __use_implicit_proof;
@@ -56,6 +57,7 @@ namespace RNS {
 		}
 
 	public:
+		void start();
 		void loop();
 
 		/*

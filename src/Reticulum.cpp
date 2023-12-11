@@ -14,7 +14,8 @@
 using namespace RNS;
 using namespace RNS::Type::Reticulum;
 
-/*static*/ std::string Reticulum::storagepath;
+/*static*/ std::string Reticulum::_storagepath;
+/*static*/ std::string Reticulum::_cachepath;
 
 /*static*/ bool Reticulum::__transport_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
@@ -39,9 +40,6 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 	// Initialkize random number generator
 	RNG.begin("Reticulum");
-
-	// CBA TEST Transport
-	__transport_enabled = true;
 
 	Utilities::OS::setup();
 
@@ -81,9 +79,11 @@ Reticulum::Reticulum() : _object(new Object()) {
 */
 // CBA MOCK
 #ifdef ARDUINO
-	storagepath = "";
+	_storagepath = "";
+	_cachepath = "";
 #else
-	storagepath = ".";
+	_storagepath = ".";
+	_cachepath = ".";
 #endif
 
 /* TODO
@@ -148,7 +148,8 @@ Reticulum::Reticulum() : _object(new Object()) {
 	RNS.Identity.load_known_destinations()
 */
 
-	Transport::start(*this);
+	// CBA Moved to start() so Transport is not started  until after interfaces are setup
+	//Transport::start(*this);
 
 /*
 	self.rpc_addr = ("127.0.0.1", self.local_control_port)
@@ -168,6 +169,10 @@ Reticulum::Reticulum() : _object(new Object()) {
 	mem("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
+
+void Reticulum::start() {
+	Transport::start(*this);
+}
 
 void Reticulum::loop() {
 	assert(_object);

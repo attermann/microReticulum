@@ -3,6 +3,7 @@
 #include "Destination.h"
 #include "Link.h"
 #include "Interface.h"
+#include "Bytes.h"
 #include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
@@ -222,9 +223,11 @@ namespace RNS {
 		inline const Bytes& raw() const { assert(_object); return _object->_raw; }
 		inline const Bytes& data() const { assert(_object); return _object->_data; }
 
-		inline std::string toString() const { assert(_object); return "{Packet:" + _object->_packet_hash.toHex() + "}"; }
+		inline std::string toString() const { if (!_object) return ""; return "{Packet:" + _object->_packet_hash.toHex() + "}"; }
 
+#ifndef NDEBUG
 		std::string debugString() const;
+#endif
 
 	private:
 		class Object {
@@ -271,10 +274,12 @@ namespace RNS {
 		friend class Packet;
 		};
 		std::shared_ptr<Object> _object;
+
 	};
 
 }
 
+/*
 namespace ArduinoJson {
 	inline bool convertToJson(const RNS::Packet& src, JsonVariant dst) {
 		if (!src) {
@@ -287,3 +292,34 @@ namespace ArduinoJson {
 		return src.is<const char*>() && strlen(src.as<const char*>()) == 64;
 	}
 }
+*/
+/*
+namespace ArduinoJson {
+	template <>
+	struct Converter<RNS::Packet> {
+		static bool toJson(const RNS::Packet& src, JsonVariant dst) {
+			if (!src) {
+				return dst.set(nullptr);
+			}
+			RNS::extreme("<<< Serializing packet hash " + src.get_hash().toHex());
+			return dst.set(src.get_hash().toHex());
+		}
+		static RNS::Packet fromJson(JsonVariantConst src) {
+			if (!src.isNull()) {
+				RNS::Bytes hash;
+				hash.assignHex(src.as<const char*>());
+				RNS::extreme(">>> Deserialized packet hash " + hash.toHex());
+				RNS::extreme(">>> Querying transport for cached packet");
+				// Query transport for matching interface
+				return RNS::Packet::get_cached_packet(hash);
+			}
+			else {
+				return {RNS::Type::NONE};
+			}
+		}
+		static bool checkJson(JsonVariantConst src) {
+			return src.is<const char*>() && strlen(src.as<const char*>()) == 64;
+		}
+	};
+}
+*/

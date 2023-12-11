@@ -496,7 +496,11 @@ const Bytes Packet::get_hashable_part() const {
 //}
 
 
+#ifndef NDEBUG
 std::string Packet::debugString() const {
+	if (!_object) {
+		return "";
+	}
 	if (_object->_packed) {
 		//unpack();
 	}
@@ -534,6 +538,7 @@ std::string Packet::debugString() const {
 	dump += "--------------------\n";
 	return dump;
 }
+#endif
 
 void PacketReceipt::check_timeout() {
 	assert(_object);
@@ -555,6 +560,7 @@ void PacketReceipt::check_timeout() {
 	}
 }
 
+/*
 void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Packet& dst) {
 	if (!src.isNull()) {
 		RNS::Bytes hash;
@@ -566,3 +572,4 @@ void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Packet& dst) {
 		dst = {RNS::Type::NONE};
 	}
 }
+*/

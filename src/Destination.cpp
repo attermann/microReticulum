@@ -86,7 +86,7 @@ Destination::Destination(const Identity& identity, const Type::Destination::dire
 /*virtual*/ Destination::~Destination() {
 	mem("Destination object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 	if (_object && _object.use_count() == 1) {
-		extreme("Destination object has last data reference");
+		mem("Destination object has last data reference");
 
 		// CBA Can't call deregister_destination here because it's possible (likely even) that Destination
 		//  is being destructed from that same collection which will result in a llop and memory errors.
