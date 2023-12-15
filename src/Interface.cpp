@@ -19,7 +19,8 @@ Interface::Interface(const char* name) : _object(new Object(this, name)), _creat
 }
 
 /*virtual*/ inline void Interface::on_incoming(const Bytes& data) {
-	extreme("Interface::on_incoming: data: " + data.toHex());
+	//extreme("Interface.on_incoming: data: " + data.toHex());
+	extreme("Interface.on_incoming");
 	assert(_object);
 	_object->_rxb += data.size();
 	// CBA TODO implement concept of owner or a callback mechanism for incoming data
@@ -28,7 +29,8 @@ Interface::Interface(const char* name) : _object(new Object(this, name)), _creat
 }
 
 /*virtual*/ inline void Interface::on_outgoing(const Bytes& data) {
-	extreme("Interface::on_outgoing: data: " + data.toHex());
+	//extreme("Interface.on_outgoing: data: " + data.toHex());
+	extreme("Interface.on_outgoing");
 	assert(_object);
 	_object->_txb += data.size();
 }

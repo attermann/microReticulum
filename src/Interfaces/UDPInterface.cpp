@@ -219,12 +219,12 @@ void UDPInterface::loop() {
 }
 
 /*virtual*/ void UDPInterface::on_incoming(const Bytes& data) {
-	debug("UDPInterface.on_incoming: data: " + data.toHex());
+	debug(toString() + ".on_incoming: data: " + data.toHex());
 	Interface::on_incoming(data);
 }
 
 /*virtual*/ void UDPInterface::on_outgoing(const Bytes& data) {
-	debug("UDPInterface.on_outgoing: data: " + data.toHex());
+	debug(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
 		if (online()) {
 			// Send packet

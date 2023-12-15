@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include "Test/Test.h"
 
@@ -34,11 +34,12 @@
 
 
 #ifndef NDEBUG
-#define RUN_TESTS
+//#define RUN_TESTS
 #endif
 
 #define RUN_RETICULUM
-//#define UDP_INTERFACE
+#define UDP_INTERFACE
+//#define UDP2_INTERFACE
 #define LORA_INTERFACE
 //#define RETICULUM_PACKET_TEST
 
@@ -101,7 +102,10 @@ RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
 
 #ifdef UDP_INTERFACE
-RNS::Interfaces::UDPInterface udp_interface;
+RNS::Interfaces::UDPInterface udp_interface("udp");
+#endif
+#ifdef UDP2_INTERFACE
+RNS::Interfaces::UDPInterface udp2_interface("udp2");
 #endif
 #ifdef LORA_INTERFACE
 RNS::Interfaces::LoRaInterface lora_interface;
@@ -166,6 +170,10 @@ void reticulum_setup() {
 		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(udp_interface);
 #endif
+#ifdef UDP2_INTERFACE
+		udp2_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
+		RNS::Transport::register_interface(udp2_interface);
+#endif
 #ifdef LORA_INTERFACE
 		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(lora_interface);
@@ -173,10 +181,12 @@ void reticulum_setup() {
 
 #ifdef UDP_INTERFACE
 		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
-		//udp_interface.start("wifi_ssid", "wifi_password", 4242);
-		udp_interface.start("broadmind-guest", "brcguest", 4242);
+		udp_interface.start("wifi_ssid", "wifi_password", 4242);
 #endif
-
+#ifdef UDP2_INTERFACE
+		RNS::head("Starting UDPInterface...", RNS::LOG_EXTREME);
+		udp_interface.start("wifi_ssid", "wifi_password", 2424);
+#endif
 #ifdef LORA_INTERFACE
 		RNS::head("Starting LoRaInterface...", RNS::LOG_EXTREME);
 		lora_interface.start();
@@ -282,6 +292,9 @@ void reticulum_teardown() {
 #ifdef UDP_INTERFACE
 		RNS::Transport::deregister_interface(udp_interface);
 #endif
+#ifdef UDP2_INTERFACE
+		RNS::Transport::deregister_interface(udp2_interface);
+#endif
 #ifdef LORA_INTERFACE
 		RNS::Transport::deregister_interface(lora_interface);
 #endif
@@ -353,6 +366,9 @@ void loop() {
 	reticulum.loop();
 #ifdef UDP_INTERFACE
 	udp_interface.loop();
+#endif
+#ifdef UDP2_INTERFACE
+	udp2_interface.loop();
 #endif
 #ifdef LORA_INTERFACE
 	lora_interface.loop();

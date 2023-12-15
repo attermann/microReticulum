@@ -37,8 +37,8 @@ namespace RNS { namespace Interfaces {
 		void stop();
 		void loop();
 
-		//virtual inline std::string toString() const { return "UDPInterface[" + name() + "/" + bind_ip + ":" + bind_port + "]"; }
-		virtual inline std::string toString() const { return "UDPInterface[" + name() + "]"; }
+		virtual inline std::string toString() const { return "UDPInterface[" + name() + "/" + _local_host + ":" + std::to_string(_local_port) + "]"; }
+		//virtual inline std::string toString() const { return "UDPInterface[" + name() + "]"; }
 
 	private:
 	    virtual void on_incoming(const Bytes& data);

@@ -121,12 +121,13 @@ using namespace RNS::Utilities;
 	}
 */
 
-	// Create transport-specific destinations
+	// Create transport-specific destination for path request
 	Destination path_request_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "path.request");
 	path_request_destination.set_packet_callback(path_request_handler);
 	_control_destinations.insert(path_request_destination);
 	_control_hashes.insert(path_request_destination.hash());
 
+	// Create transport-specific destination for tunnel synthesize
 	Destination tunnel_synthesize_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "tunnel.synthesize");
 	tunnel_synthesize_destination.set_packet_callback(tunnel_synthesize_handler);
 	// CBA BUG?
@@ -667,7 +668,8 @@ using namespace RNS::Utilities;
 
 			// Periodically persist data
 			if (OS::time() > (_last_saved + _save_interval)) {
-				persist_data();
+				// CBA temporarily disabled for testing with empty destination table
+				//persist_data();
 				_last_saved = OS::time();
 			}
 		}
@@ -860,15 +862,17 @@ using namespace RNS::Utilities;
 
 				if (packet.destination().type() == Type::Destination::LINK) {
 					if (packet.destination().status() == Type::Link::CLOSED) {
+						extreme("Transport::outbound: Pscket destination is link-closed, not transmitting");
 						should_transmit = false;
 					}
-					// CBA Destination has no member attached_interface
+					// CBA Bug? Destination has no member attached_interface
 					//z if (interface != packet.destination().attached_interface()) {
 					//z 	should_transmit = false;
 					//z }
 				}
 				
 				if (packet.attached_interface() && interface != packet.attached_interface()) {
+					extreme("Transport::outbound: Packet has wrong attached interface, not transmitting");
 					should_transmit = false;
 				}
 
@@ -1296,6 +1300,7 @@ using namespace RNS::Utilities;
 		warning("Transport::inbound: Packet unpack failed!");
 		return;
 	}
+	extreme("Transport::inbound: packet: " + packet.debugString());
 
 	extreme("Transport::inbound: destination=" + packet.destination_hash().toHex() + " hops=" + std::to_string(packet.hops()));
 
@@ -1348,11 +1353,14 @@ using namespace RNS::Utilities;
 		//p for_local_client_link    |= (packet.packet_type != RNS.Packet.ANNOUNCE) and (packet.destination_hash in Transport.link_table and Transport.link_table[packet.destination_hash][2] in Transport.local_client_interfaces)
 		bool for_local_client = false;
 		bool for_local_client_link = false;
+
+		// If packet is anything besides ANNOUNCE then determine if it's destinated for a local destinaiton or link
 		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
 			auto destination_iter = _destination_table.find(packet.destination_hash());
 			if (destination_iter != _destination_table.end()) {
 				DestinationEntry destination_entry = (*destination_iter).second;
 			 	if (destination_entry._hops == 0) {
+					// Destined for a local destination
 					for_local_client = true;
 				}
 			}
@@ -1360,19 +1368,24 @@ using namespace RNS::Utilities;
 			if (link_iter != _link_table.end()) {
 				LinkEntry link_entry = (*link_iter).second;
 			 	if (_local_client_interfaces.find(link_entry._receiving_interface) != _local_client_interfaces.end()) {
+					// Destined for a local link
 					for_local_client_link = true;
 				}
 			 	if (_local_client_interfaces.find(link_entry._outbound_interface) != _local_client_interfaces.end()) {
+					// Destined for a local link
 					for_local_client_link = true;
 				}
 			}
 		}
-		//p roof_for_local_client    = (packet.destination_hash in Transport.reverse_table) and (Transport.reverse_table[packet.destination_hash][0] in Transport.local_client_interfaces)
+
+		// Determine if packet is proof for local destination???
+		//p proof_for_local_client    = (packet.destination_hash in Transport.reverse_table) and (Transport.reverse_table[packet.destination_hash][0] in Transport.local_client_interfaces)
 		bool proof_for_local_client = false;
 		auto reverse_iter = _reverse_table.find(packet.destination_hash());
 		if (reverse_iter != _reverse_table.end()) {
 			ReverseEntry reverse_entry = (*reverse_iter).second;
 			if (_local_client_interfaces.find(reverse_entry._receiving_interface) != _local_client_interfaces.end()) {
+				// Proof for local destination???
 				proof_for_local_client = true;
 			}
 		}
@@ -1380,9 +1393,12 @@ using namespace RNS::Utilities;
 		// Plain broadcast packets from local clients are sent
 		// directly on all attached interfaces, since they are
 		// never injected into transport.
+
+		// If packet is not destined for a local transport-specific destination
 		if (_control_hashes.find(packet.destination_hash()) == _control_hashes.end()) {
+			// If packet is destination type PLAIN and transport type BROADCAST
 			if (packet.destination_type() == Type::Destination::PLAIN && packet.transport_type() == Type::Transport::BROADCAST) {
-				// Send to all interfaces except the originator
+				// Send to all interfaces except the one the packet was recieved on
 				if (from_local_client) {
 #if defined(INTERFACES_SET)
 					for (const Interface& interface : _interfaces) {
@@ -1444,8 +1460,10 @@ using namespace RNS::Utilities;
 			// accordingly if we are.
 			if (packet.transport_id() && packet.packet_type() != Type::Packet::ANNOUNCE) {
 				if (packet.transport_id() == _identity.hash()) {
+					extreme("Transport::inbound: We are designated next-hop");
 					auto destination_iter = _destination_table.find(packet.destination_hash());
 					if (destination_iter != _destination_table.end()) {
+						extreme("Transport::inbound: Found next-hop path to destination");
 						DestinationEntry destination_entry = (*destination_iter).second;
 						Bytes next_hop = destination_entry._received_from;
 						uint8_t remaining_hops = destination_entry._hops;
@@ -1486,8 +1504,9 @@ using namespace RNS::Utilities;
 						Interface& outbound_interface = destination_entry._receiving_interface;
 
 						if (packet.packet_type() == Type::Packet::LINKREQUEST) {
+							extreme("Transport::inbound: Packet is next-hop LINKREQUEST");
 							double now = OS::time();
-							double proof_timeout = now + Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP*1000 * std::max((uint8_t)1, remaining_hops);
+							double proof_timeout = now + Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, remaining_hops);
 							LinkEntry link_entry(
 								now,
 								next_hop,
@@ -1502,6 +1521,7 @@ using namespace RNS::Utilities;
 							_link_table.insert({packet.getTruncatedHash(), link_entry});
 						}
 						else {
+							extreme("Transport::inbound: Packet is next-hop other type");
 							ReverseEntry reverse_entry(
 								packet.receiving_interface(),
 								outbound_interface,
@@ -1528,9 +1548,10 @@ using namespace RNS::Utilities;
 
 			// Link transport handling. Directs packets according
 			// to entries in the link tables
-			if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.packet_type() != Type::Packet::LINKREQUEST && packet.context() == Type::Packet::LRPROOF) {
+			if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.packet_type() != Type::Packet::LINKREQUEST && packet.context() != Type::Packet::LRPROOF) {
 				auto link_iter = _link_table.find(packet.destination_hash());
 				if (link_iter != _link_table.end()) {
+					extreme("Transport::inbound: Handling link transport");
 					LinkEntry link_entry = (*link_iter).second;
 					// If receiving and outbound interface is
 					// the same for this link, direction doesn't
@@ -2021,6 +2042,7 @@ using namespace RNS::Utilities;
 		else if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 			extreme("Transport::inbound: Packet is LINKREQUEST");
 			if (!packet.transport_id() || packet.transport_id() == _identity.hash()) {
+				extreme("Transport::inbound: Checking if LINKREQUEST is for local destination");
 #if defined(DESTINATIONS_SET)
 				for (auto& destination : _destinations) {
 					if (destination.hash() == packet.destination_hash() && destination.type() == packet.destination_type()) {
@@ -2043,26 +2065,30 @@ using namespace RNS::Utilities;
 			}
 		}
 		
-		// Handling for local data packets
+		// Handling for data packets to local destinations
 		else if (packet.packet_type() == Type::Packet::DATA) {
 			extreme("Transport::inbound: Packet is DATA");
 			if (packet.destination_type() == Type::Destination::LINK) {
-				extreme("Transport::inbound: Packet is for LINK");
+				// Data is destined for a link
+				extreme("Transport::inbound: Packet is DATA for a LINK");
 				for (auto& link : _active_links) {
 					if (link.link_id() == packet.destination_hash()) {
+						extreme("Transport::inbound: Packet is DATA for an active LINK");
 						packet.link(link);
 						const_cast<Link&>(link).receive(packet);
 					}
 				}
 			}
 			else {
+				// Data is basic (not destined for a link)
 #if defined(DESTINATIONS_SET)
 				for (auto& destination : _destinations) {
 					if (destination.hash() == packet.destination_hash() && destination.type() == packet.destination_type()) {
 #elif defined(DESTINATIONS_MAP)
 				auto iter = _destinations.find(packet.destination_hash());
 				if (iter != _destinations.end()) {
-					debug("Transport::inbound: Packet destination " + packet.destination_hash().toHex() + " found");
+					// Data is for a local destination
+					debug("Transport::inbound: Packet destination " + packet.destination_hash().toHex() + " found, destination is local");
 					auto& destination = (*iter).second;
 					if (destination.type() == packet.destination_type()) {
 						debug("Transport::inbound: Packet destination type " + std::to_string(packet.destination_type()) + " matched, processing");
@@ -2103,91 +2129,124 @@ using namespace RNS::Utilities;
 		// Handling for proofs and link-request proofs
 		else if (packet.packet_type() == Type::Packet::PROOF) {
 			extreme("Transport::inbound: Packet is PROOF");
-// TODO
-/*
-			if packet.context == RNS.Packet.LRPROOF:
+			if (packet.context() == Type::Packet::LRPROOF) {
+				extreme("Transport::inbound: Packet is LINK PROOF");
 				// This is a link request proof, check if it
 				// needs to be transported
-				if (RNS.Reticulum.transport_enabled() or for_local_client_link or from_local_client) and packet.destination_hash in Transport.link_table:
-					link_entry = Transport.link_table[packet.destination_hash]
-					if packet.receiving_interface == link_entry[2]:
-						try:
-							if len(packet.data) == RNS.Identity.SIGLENGTH//8+RNS.Link.ECPUBSIZE//2:
-								peer_pub_bytes = packet.data[RNS.Identity.SIGLENGTH//8:RNS.Identity.SIGLENGTH//8+RNS.Link.ECPUBSIZE//2]
-								peer_identity = RNS.Identity.recall(link_entry[6])
-								peer_sig_pub_bytes = peer_identity.get_public_key()[RNS.Link.ECPUBSIZE//2:RNS.Link.ECPUBSIZE]
+				if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
+					LinkEntry link_entry = (*_link_table.find(packet.destination_hash())).second;
+					if (packet.receiving_interface() == link_entry._outbound_interface) {
+						try {
+							if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2)) {
+								Bytes peer_pub_bytes = packet.data().mid(Type::Identity::SIGLENGTH/8, Type::Link::ECPUBSIZE/2);
+								Identity peer_identity = Identity::recall(link_entry._destination_hash);
+								Bytes peer_sig_pub_bytes = peer_identity.get_public_key().mid(Type::Link::ECPUBSIZE/2, Type::Link::ECPUBSIZE/2);
 
-								signed_data = packet.destination_hash+peer_pub_bytes+peer_sig_pub_bytes
-								signature = packet.data[:RNS.Identity.SIGLENGTH//8]
+								Bytes signed_data = packet.destination_hash() + peer_pub_bytes + peer_sig_pub_bytes;
+								Bytes signature = packet.data().left(Type::Identity::SIGLENGTH/8);
 
-								if peer_identity.validate(signature, signed_data):
-									RNS.log("Link request proof validated for transport via "+str(link_entry[4]), RNS.LOG_EXTREME)
-									new_raw = packet.raw[0:1]
-									new_raw += struct.pack("!B", packet.hops)
-									new_raw += packet.raw[2:]
-									Transport.link_table[packet.destination_hash][7] = True
-									Transport.transmit(link_entry[4], new_raw)
-
-								else:
-									RNS.log("Invalid link request proof in transport for link "+RNS.prettyhexrep(packet.destination_hash)+", dropping proof.", RNS.LOG_DEBUG)
-
-						except Exception as e:
-							RNS.log("Error while transporting link request proof. The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-					else:
-						RNS.log("Link request proof received on wrong interface, not transporting it.", RNS.LOG_DEBUG)
-				else:
+								if (peer_identity.validate(signature, signed_data)) {
+									extreme("Link request proof validated for transport via " + link_entry._receiving_interface.toString());
+									//p new_raw = packet.raw[0:1]
+									Bytes new_raw = packet.raw().left(1);
+									//p new_raw += struct.pack("!B", packet.hops)
+									new_raw << packet.hops();
+									//p new_raw += packet.raw[2:]
+									new_raw << packet.raw().mid(2);
+									link_entry._validated = true;
+									transmit(link_entry._receiving_interface, new_raw);
+								}
+								else {
+									debug("Invalid link request proof in transport for link " + packet.destination_hash().toHex() + ", dropping proof.");
+								}
+							}
+						}
+						catch (std::exception& e) {
+							error("Error while transporting link request proof. The contained exception was: " + std::string(e.what()));
+						}
+					}
+					else {
+						debug("Link request proof received on wrong interface, not transporting it.");
+					}
+				}
+				else {
 					// Check if we can deliver it to a local
 					// pending link
-					for link in Transport.pending_links:
-						if link.link_id == packet.destination_hash:
-							link.validate_proof(packet)
+					for (auto& link : _pending_links) {
+						if (link.link_id() == packet.destination_hash()) {
+							// TODO
+							//z link.validate_proof(packet);
+						}
+					}
+				}
+			}
+			else if (packet.context() == Type::Packet::RESOURCE_PRF) {
+				extreme("Transport::inbound: Packet is RESOURCE PROOF");
+				for (auto& link : _active_links) {
+					if (link.link_id() == packet.destination_hash()) {
+						// TODO
+						//z link.receive(packet);
+					}
+				}
+			}
+			else {
+				extreme("Transport::inbound: Packet is regular PROOF");
+				if (packet.destination_type() == Type::Destination::LINK) {
+					for (auto& link : _active_links) {
+						if (link.link_id() == packet.destination_hash()) {
+							packet.link(link);
+						}
+					}
+				}
 
-			elif packet.context == RNS.Packet.RESOURCE_PRF:
-				for link in Transport.active_links:
-					if link.link_id == packet.destination_hash:
-						link.receive(packet)
-			else:
-				if packet.destination_type == RNS.Destination.LINK:
-					for link in Transport.active_links:
-						if link.link_id == packet.destination_hash:
-							packet.link = link
-							
-				if len(packet.data) == RNS.PacketReceipt.EXPL_LENGTH:
-					proof_hash = packet.data[:RNS.Identity.HASHLENGTH//8]
-				else:
-					proof_hash = None
+				Bytes proof_hash;
+				if (packet.data().size() == Type::PacketReceipt::EXPL_LENGTH) {
+					proof_hash = packet.data().left(Type::Identity::HASHLENGTH/8);
+				}
 
 				// Check if this proof neds to be transported
-				if (RNS.Reticulum.transport_enabled() or from_local_client or proof_for_local_client) and packet.destination_hash in Transport.reverse_table:
-					reverse_entry = Transport.reverse_table.pop(packet.destination_hash)
-					if packet.receiving_interface == reverse_entry[1]:
-						RNS.log("Proof received on correct interface, transporting it via "+str(reverse_entry[0]), RNS.LOG_EXTREME)
-						new_raw = packet.raw[0:1]
-						new_raw += struct.pack("!B", packet.hops)
-						new_raw += packet.raw[2:]
-						Transport.transmit(reverse_entry[0], new_raw)
-					else:
-						RNS.log("Proof received on wrong interface, not transporting it.", RNS.LOG_DEBUG)
+				if ((Reticulum::transport_enabled() || from_local_client || proof_for_local_client) && _reverse_table.find(packet.destination_hash()) != _reverse_table.end()) {
+					ReverseEntry reverse_entry = (*_reverse_table.find(packet.destination_hash())).second;
+					if (packet.receiving_interface() == reverse_entry._outbound_interface) {
+						extreme("Proof received on correct interface, transporting it via " + reverse_entry._receiving_interface.toString());
+						//p new_raw = packet.raw[0:1]
+						Bytes new_raw = packet.raw().left(1);
+						//p new_raw += struct.pack("!B", packet.hops)
+						new_raw << packet.hops();
+						//p new_raw += packet.raw[2:]
+						new_raw << packet.raw().mid(2);
+						transmit(reverse_entry._receiving_interface, new_raw);
+					}
+					else {
+						debug("Proof received on wrong interface, not transporting it.");
+					}
+				}
 
-				for receipt in Transport.receipts:
-					receipt_validated = False
-					if proof_hash != None:
+				for (auto& receipt : _receipts) {
+					bool receipt_validated = false;
+					if (proof_hash) {
 						// Only test validation if hash matches
-						if receipt.hash == proof_hash:
-							receipt_validated = receipt.validate_proof_packet(packet)
-					else:
+						if (receipt.hash() == proof_hash) {
+							// TODO
+							//z receipt_validated = receipt.validate_proof_packet(packet);
+						}
+					}
+					else {
 						// TODO: This looks like it should actually
 						// be rewritten when implicit proofs are added.
 
 						// In case of an implicit proof, we have
 						// to check every single outstanding receipt
-						receipt_validated = receipt.validate_proof_packet(packet)
+						// TODO
+						//z receipt_validated = receipt.validate_proof_packet(packet);
+					}
 
-					if receipt_validated:
-						if receipt in Transport.receipts:
-							Transport.receipts.remove(receipt)
-*/
+					// CBA TODO requires modifying of collection while ioterating which is forbidden
+					//z if (receipt_validated) {
+					//z 	if receipt in Transport.receipts:
+					//z 		Transport.receipts.remove(receipt)
+				}
+			}
 		}
 	}
 

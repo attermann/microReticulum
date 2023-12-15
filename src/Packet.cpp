@@ -504,6 +504,22 @@ std::string Packet::debugString() const {
 	if (_object->_packed) {
 		//unpack();
 	}
+	std::string str = "ht=" + std::to_string(_object->_header_type);
+	str += " tt=" + std::to_string(_object->_transport_type);
+	str += " dt=" + std::to_string(_object->_destination_type);
+	str += " pt=" + std::to_string(_object->_packet_type);
+	str += " hp=" + std::to_string(_object->_hops);
+	str += " ti=" + _object->_transport_id.toHex();
+	str += " dh=" + _object->_destination_hash.toHex();
+	return str;
+}
+std::string Packet::dumpString() const {
+	if (!_object) {
+		return "";
+	}
+	if (_object->_packed) {
+		//unpack();
+	}
 	std::string dump;
 	dump = "\n--------------------\n";
 	dump += "flags:        " + hexFromByte(_object->_flags) + "\n";
@@ -539,6 +555,22 @@ std::string Packet::debugString() const {
 	return dump;
 }
 #endif
+
+PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
+
+	_object->_hash           = packet.get_hash();
+	_object->_truncated_hash = packet.getTruncatedHash();
+	_object->_destination    = packet.destination();
+
+	if (packet.destination().type() == Type::Destination::LINK) {
+		// CBA BUG? Destination does not have rtt or traffic_timeout_factor memebers
+		//z _object->_timeout    = packet.destination().rtt() * packet.destination().traffic_timeout_factor();
+		_object->_timeout    = TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
+	}
+	else {
+		_object->_timeout    = TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
+	}
+}
 
 void PacketReceipt::check_timeout() {
 	assert(_object);

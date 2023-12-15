@@ -104,12 +104,12 @@ Serial.println(available);
 }
 
 /*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
-	debug("LoRaInterface.on_incoming: data: " + data.toHex());
+	debug(toString() + ".on_incoming: data: " + data.toHex());
 	Interface::on_incoming(data);
 }
 
 /*virtual*/ void LoRaInterface::on_outgoing(const Bytes& data) {
-	debug("LoRaInterface.on_outgoing: data: " + data.toHex());
+	debug(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
 		if (online()) {
 			extreme("LoRaInterface: sending " + std::to_string(data.size()) + " bytes...");

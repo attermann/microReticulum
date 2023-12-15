@@ -45,7 +45,7 @@ namespace RNS {
 		PacketReceipt(Type::NoneConstructor none) {}
 		PacketReceipt(const PacketReceipt& packet_receipt) : _object(packet_receipt._object) {}
 		PacketReceipt() : _object(new Object()) {}
-		PacketReceipt(const Packet& packet) {}
+		PacketReceipt(const Packet& packet);
 
 		inline PacketReceipt& operator = (const PacketReceipt& packet_receipt) {
 			_object = packet_receipt._object;
@@ -97,6 +97,7 @@ namespace RNS {
 		}
 
 		// getters/setters
+		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
 		inline Type::PacketReceipt::Status status() const { assert(_object); return _object->_status; }
 
 	private:
@@ -105,6 +106,8 @@ namespace RNS {
 			Object() {}
 			virtual ~Object() {}
 		private:
+			Bytes _hash;
+			Bytes _truncated_hash;
 			bool _sent = true;
 			double _sent_at = Utilities::OS::time();
 			bool _proved = false;
@@ -227,6 +230,7 @@ namespace RNS {
 
 #ifndef NDEBUG
 		std::string debugString() const;
+		std::string dumpString() const;
 #endif
 
 	private:

@@ -158,7 +158,7 @@ namespace RNS {
 			uint8_t _remaining_hops = 0;
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _receiving_interface;
-			const Interface _receiving_interface = {Type::NONE};
+			Interface _receiving_interface = {Type::NONE};
 			uint8_t _hops = 0;
 			const Bytes _destination_hash;
 			bool _validated = false;
@@ -177,7 +177,7 @@ namespace RNS {
 		public:
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _receiving_interface;
-			const Interface _receiving_interface = {Type::NONE};
+			Interface _receiving_interface = {Type::NONE};
 			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			//const Interface& _outbound_interface;
 			const Interface _outbound_interface = {Type::NONE};
