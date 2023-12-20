@@ -80,7 +80,6 @@ void LoRaInterface::loop() {
 #ifdef ARDUINO
 		int available = LoRa.parsePacket();
 		if (available > 0) {
-Serial.println(available);
 			extreme("LoRaInterface: receiving bytes...");
 
 			// read header (for detecting split packets)

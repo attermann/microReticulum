@@ -46,6 +46,9 @@ namespace RNS {
 		void set_link_id(const Packet& packet);
 		void receive(const Packet& packet);
 
+		void prove();
+		void prove_packet(const Packet& packet);
+
 		// getters/setters
 		inline const Destination& destination() const { assert(_object); return _object->_destination; }
 		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }

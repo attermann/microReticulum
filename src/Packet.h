@@ -18,9 +18,14 @@ namespace RNS {
 	class PacketReceipt;
 	class Packet;
 
-	class ProofDestination {
+	class ProofDestination : public Destination {
+	public:
+		ProofDestination(const Packet& packet);
+		// CBA Can't use virtual methods because they are lost in object copies
+		//inline virtual const Bytes encrypt(const Bytes& data) {
+		//	return data;
+		//}
 	};
-
 
     /*
     The PacketReceipt class is used to receive notifications about
@@ -59,22 +64,19 @@ namespace RNS {
 		}
 
 	public:
-		inline bool is_timed_out() {
-			assert(_object);
-			return ((_object->_sent_at + _object->_timeout) < Utilities::OS::time());
-		}
-
+		bool validate_proof_packet(const Packet& proof_packet);
+		//bool validate_link_proof(const Bytes& proof, const Link& link, const Packet& proof_packet = {Type::NONE});
+		bool validate_link_proof(const Bytes& proof, const Link& link);
+		bool validate_link_proof(const Bytes& proof, const Link& link, const Packet& proof_packet);
+		//bool validate_proof(const Bytes& proof, const Packet& proof_packet = {Type::NONE});
+		bool validate_proof(const Bytes& proof);
+		bool validate_proof(const Bytes& proof, const Packet& proof_packet);
+		inline double get_rtt() { assert(_object); return _object->_concluded_at - _object->_sent_at; }
+		inline bool is_timed_out() { assert(_object); return ((_object->_sent_at + _object->_timeout) < Utilities::OS::time()); }
 		void check_timeout();
 
-		/*
-		Sets a timeout in seconds
-		
-		:param timeout: The timeout in seconds.
-		*/
-		inline void set_timeout(int16_t timeout) {
-			assert(_object);
-			_object->_timeout = timeout;
-		}
+		// :param timeout: The timeout in seconds.
+		inline void set_timeout(int16_t timeout) { assert(_object); _object->_timeout = timeout; }
 
 		/*
 		Sets a function that gets called if a successfull delivery has been proven.
@@ -115,7 +117,8 @@ namespace RNS {
 			Destination _destination = {Type::NONE};
 			Callbacks _callbacks;
 			double _concluded_at = 0;
-			//z Packet _proof_packet;
+			// CBA TODO This shoujld almost certainly not be a reference but we have an issue with circular dependency between Packet and PacketReceipt
+			//Packet _proof_packet = {Type::NONE};
 			int16_t _timeout = 0;
 		friend class PacketReceipt;
 		};
@@ -190,11 +193,13 @@ namespace RNS {
 		bool send();
 		bool resend();
 		void prove(const Destination& destination = {Type::NONE});
+		ProofDestination generate_proof_destination() const;
+		bool validate_proof_packet(const Packet& proof_packet);
+		bool validate_proof(const Bytes& proof);
 		void update_hash();
 		const Bytes get_hash() const;
 		const Bytes getTruncatedHash() const;
 		const Bytes get_hashable_part() const;
-		//z ProofDestination& generate_proof_destination();
 
 		// getters/setters
 		inline const Destination& destination() const { assert(_object); return _object->_destination; }
@@ -260,7 +265,7 @@ namespace RNS {
 			bool _fromPacked = false;
 			bool _truncated = false;	// whether data was truncated
 			bool _encrypted = false;	// whether data is encrytpted
-			PacketReceipt _receipt;
+			PacketReceipt _receipt = {Type::NONE};
 
 			uint16_t _mtu = Type::Reticulum::MTU;
 			double _sent_at = 0;

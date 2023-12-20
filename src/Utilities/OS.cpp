@@ -37,6 +37,15 @@ void listDir(char * dir){
 		error("SPIFFS filesystem mount failed");
 	}
 	else {
+		// ensure filesystem is writable and format if not
+		Bytes test;
+		if (!OS::write_file(test, "/test")) {
+			info("SPIFFS filesystem is being formatted, please wait...");
+			SPIFFS.format();
+		}
+		else {
+			OS::remove_file("test");
+		}
 		listDir("/");
 		debug("SPIFFS filesystem is ready");
 	}

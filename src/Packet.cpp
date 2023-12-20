@@ -3,6 +3,7 @@
 #include "Transport.h"
 #include "Identity.h"
 #include "Log.h"
+#include "Utilities/OS.h"
 
 #include <string.h>
 #include <stdexcept>
@@ -10,6 +11,11 @@
 using namespace RNS;
 using namespace RNS::Type::PacketReceipt;
 using namespace RNS::Type::Packet;
+using namespace RNS::Utilities;
+
+ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::SINGLE, packet.get_hash().left(Type::Reticulum::TRUNCATED_HASHLENGTH/8))
+{
+}
 
 Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
 
@@ -232,7 +238,7 @@ but excluding any interface access codes.
 
 void Packet::pack() {
 	assert(_object);
-	debug("Packet::pack: packing packet...");
+	extreme("Packet::pack: packing packet...");
 
 	_object->_destination_hash = _object->_destination.hash();
 
@@ -243,14 +249,14 @@ void Packet::pack() {
 	_object->_raw << _object->_hops;
 
 	if (_object->_context == LRPROOF) {
-		debug("Packet::pack: destination link id: " + _object->_destination.link_id().toHex() );
+		extreme("Packet::pack: destination link id: " + _object->_destination.link_id().toHex() );
 		_object->_raw << _object->_destination.link_id();
 		_object->_raw << (uint8_t)_object->_context;
 		_object->_raw << _object->_data;
 	}
 	else {
 		if (_object->_header_type == HEADER_1) {
-			debug("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+			extreme("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
 			_object->_raw << _object->_destination.hash();
 			_object->_raw << (uint8_t)_object->_context;
 
@@ -295,8 +301,8 @@ void Packet::pack() {
 			if (!_object->_transport_id) {
                 throw std::invalid_argument("Packet with header type 2 must have a transport ID");
 			}
-			debug("Packet::pack: transport id: " + _object->_transport_id.toHex() );
-			debug("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+			extreme("Packet::pack: transport id: " + _object->_transport_id.toHex() );
+			extreme("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
 			_object->_raw << _object->_transport_id;
 			_object->_raw << _object->_destination.hash();
 			_object->_raw << (uint8_t)_object->_context;
@@ -318,7 +324,7 @@ void Packet::pack() {
 
 bool Packet::unpack() {
 	assert(_object);
-	debug("Packet::unpack: unpacking packet...");
+	extreme("Packet::unpack: unpacking packet...");
 	try {
 		if (_object->_raw.size() < Type::Reticulum::HEADER_MINSIZE) {
 			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MINSIZE) +" bytes");
@@ -376,10 +382,11 @@ Sends the packet.
 */
 bool Packet::send() {
 	assert(_object);
-	debug("Packet::send: sending packet...");
+	extreme("Packet::send: sending packet...");
 	if (_object->_sent) {
         throw std::logic_error("Packet was already sent");
 	}
+// TODO
 /*
 	if (_destination->type == RNS::Destination::LINK) {
 		if (_destination->status == Type::Link::CLOSED) {
@@ -398,7 +405,7 @@ bool Packet::send() {
 	}
 
 	if (Transport::outbound(*this)) {
-		debug("Packet::send: successfully sent packet!!!");
+		extreme("Packet::send: successfully sent packet!!!");
 		//z return self.receipt
 		// MOCK
 		return true;
@@ -418,7 +425,7 @@ Re-sends the packet.
 */
 bool Packet::resend() {
 	assert(_object);
-	debug("Packet::resend: re-sending packet...");
+	extreme("Packet::resend: re-sending packet...");
 	if (!_object->_sent) {
 		throw std::logic_error("Packet was not sent yet");
 	}
@@ -427,7 +434,7 @@ bool Packet::resend() {
 	pack();
 
 	if (Transport::outbound(*this)) {
-		debug("Packet::resend: successfully sent packet!!!");
+		extreme("Packet::resend: successfully sent packet!!!");
 		//z return self.receipt
 		// MOCK
 		return true;
@@ -441,11 +448,11 @@ bool Packet::resend() {
 }
 
 void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
-/*
 	assert(_object);
+	extreme("Packet::prove: proving packet...");
 	if (_object->_fromPacked && _object->_destination) {
 		if (_object->_destination.identity() && _object->_destination.identity().prv()) {
-			_object->_destination.identity().prove(*this, _object->_destination);
+			_object->_destination.identity().prove(*this, destination);
 		}
 	}
 	else if (_object->_fromPacked && _object->_link) {
@@ -454,7 +461,29 @@ void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
 	else {
 		error("Could not prove packet associated with neither a destination nor a link");
 	}
-*/
+}
+
+
+// Generates a special destination that allows Reticulum
+// to direct the proof back to the proved packet's sender
+ProofDestination Packet::generate_proof_destination() const {
+	return ProofDestination(*this);
+}
+
+bool Packet::validate_proof_packet(const Packet& proof_packet) {
+	assert(_object);
+	if (!_object->_receipt) {
+		return false;
+	}
+	return _object->_receipt.validate_proof_packet(proof_packet);
+}
+
+bool Packet::validate_proof(const Bytes& proof) {
+	assert(_object);
+	if (!_object->_receipt) {
+		return false;
+	}
+	return _object->_receipt.validate_proof(proof);
 }
 
 void Packet::update_hash() {
@@ -488,12 +517,6 @@ const Bytes Packet::get_hashable_part() const {
 	}
 	return hashable_part;
 }
-
-// Generates a special destination that allows Reticulum
-// to direct the proof back to the proved packet's sender
-//ProofDestination& Packet::generate_proof_destination() {
-//	return ProofDestination();
-//}
 
 
 #ifndef NDEBUG
@@ -570,6 +593,149 @@ PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
 	else {
 		_object->_timeout    = TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
 	}
+}
+
+// Validate a proof packet
+bool PacketReceipt::validate_proof_packet(const Packet& proof_packet) {
+	if (proof_packet.link()) {
+		return validate_link_proof(proof_packet.data(), proof_packet.link(), proof_packet);
+	}
+	else {
+		return validate_proof(proof_packet.data(), proof_packet);
+	}
+}
+
+// Validate a raw proof for a link
+//bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, const Packet& proof_packet /*= {Type::NONE}*/) {
+bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link) {
+	return validate_link_proof(proof, link, {Type::NONE});
+}
+bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, const Packet& proof_packet) {
+	assert(_object);
+	extreme("PacketReceipt::validate_link_proof: validating link proof...");
+	// TODO: Hardcoded as explicit proofs for now
+	if (true || proof.size() == EXPL_LENGTH) {
+		// This is an explicit proof
+		Bytes proof_hash = proof.left(Type::Identity::HASHLENGTH/8);
+		Bytes signature = proof.mid(Type::Identity::HASHLENGTH/8, Type::Identity::SIGLENGTH/8);
+		if (proof_hash == _object->_hash) {
+			//z if (link.validate(signature, _object->_hash)) {
+			if (false) {
+				_object->_status = DELIVERED;
+				_object->_proved = true;
+				_object->_concluded_at = OS::time();
+				//z _object->_proof_packet = proof_packet;
+				//z link.last_proof(_object->_concluded_at);
+
+				if (_object->_callbacks._delivery) {
+					try {
+						_object->_callbacks._delivery(*this);
+					}
+					catch (std::exception& e) {
+						error("An error occurred while evaluating external delivery callback for " + link.toString());
+						error("The contained exception was: "  + std::string(e.what()));
+					}
+				}
+				return true;
+			}
+			else {
+				return false;
+			}
+		}
+		else {
+			return false;
+		}
+	}
+	else if (proof.size() == IMPL_LENGTH) {
+		// TODO: Why is this disabled?
+		// signature = proof[:RNS.Identity.SIGLENGTH//8]
+		// proof_valid = self.link.validate(signature, self.hash)
+		// if proof_valid:
+		//       self.status = PacketReceipt.DELIVERED
+		//       self.proved = True
+		//       self.concluded_at = time.time()
+		//       if self.callbacks.delivery != None:
+		//           self.callbacks.delivery(self)
+		//       RNS.log("valid")
+		//       return True
+		// else:
+		//   RNS.log("invalid")
+		//   return False
+	}
+	else {
+		return false;
+	}
+	return false;
+}
+
+// Validate a raw proof
+//bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packet /*= {Type::NONE}*/) {
+bool PacketReceipt::validate_proof(const Bytes& proof) {
+	return validate_proof(proof, {Type::NONE});
+}
+bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packet) {
+	assert(_object);
+	extreme("PacketReceipt::validate_proof: validating proof...");
+	if (proof.size() == EXPL_LENGTH) {
+		// This is an explicit proof
+		Bytes proof_hash = proof.left(Type::Identity::HASHLENGTH/8);
+		Bytes signature = proof.mid(Type::Identity::HASHLENGTH/8, Type::Identity::SIGLENGTH/8);
+		if (proof_hash == _object->_hash) {
+			if (_object->_destination.identity().validate(signature, _object->_hash)) {
+				_object->_status = DELIVERED;
+				_object->_proved = true;
+				_object->_concluded_at = OS::time();
+				//z _object->_proof_packet = proof_packet;
+
+				if (_object->_callbacks._delivery) {
+					try {
+						_object->_callbacks._delivery(*this);
+					}
+					catch (std::exception& e) {
+						error("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
+					}
+				}
+				return true;
+			}
+			else {
+				return false;
+			}
+		}
+		else {
+			return false;
+		}
+	}
+	else if (proof.size() == IMPL_LENGTH) {
+		// This is an implicit proof
+		if (!_object->_destination.identity()) {
+			return false;
+		}
+
+		Bytes signature = proof.left(Type::Identity::SIGLENGTH/8);
+		if (_object->_destination.identity().validate(signature, _object->_hash)) {
+			_object->_status = DELIVERED;
+			_object->_proved = true;
+			_object->_concluded_at = OS::time();
+			//z _object->_proof_packet = proof_packet;
+
+			if (_object->_callbacks._delivery) {
+				try {
+					_object->_callbacks._delivery(*this);
+				}
+				catch (std::exception& e) {
+					error("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
+				}
+			}
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+	else {
+		return false;
+	}
+	return false;
 }
 
 void PacketReceipt::check_timeout() {

@@ -104,8 +104,8 @@ namespace RNS {
 		:param accepts: If ``True`` or ``False``, this method sets whether the destination accepts incoming link requests. If not provided or ``None``, the method returns whether the destination currently accepts link requests.
 		:returns: ``True`` or ``False`` depending on whether the destination accepts incoming link requests, if the *accepts* parameter is not provided or ``None``.
 		*/
-		inline void set_accepts_links(bool accepts) { assert(_object); _object->_accept_link_requests = accepts; }
-		inline bool get_accepts_links() { assert(_object); return _object->_accept_link_requests; }
+		inline void accepts_links(bool accepts) { assert(_object); _object->_accept_link_requests = accepts; }
+		inline bool accepts_links() { assert(_object); return _object->_accept_link_requests; }
 
 		/*
 			Registers a function to be called when a link has been established to
@@ -155,9 +155,9 @@ namespace RNS {
 		void receive(const Packet& packet);
 		void incoming_link_request(const Bytes& data, const Packet& packet);
 
-		const Bytes encrypt(const Bytes& data);
-		const Bytes decrypt(const Bytes& data);
-		const Bytes sign(const Bytes& message);
+		virtual const Bytes encrypt(const Bytes& data);
+		virtual const Bytes decrypt(const Bytes& data);
+		virtual const Bytes sign(const Bytes& message);
 
 		// getters/setters
 		inline Type::Destination::types type() const { assert(_object); return _object->_type; }

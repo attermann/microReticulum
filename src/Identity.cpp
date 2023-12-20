@@ -585,17 +585,24 @@ void Identity::prove(const Packet& packet, const Destination& destination /*= {T
 	Bytes proof_data;
 	if (RNS::Reticulum::should_use_implicit_proof()) {
 		proof_data = signature;
+		extreme("Identity::prove: implicit proof data: " + proof_data.toHex());
 	}
 	else {
 		proof_data = packet.packet_hash() + signature;
+		extreme("Identity::prove: explicit proof data: " + proof_data.toHex());
 	}
 	
-	//z if (!destination) {
-	//z		destination = packet.generate_proof_destination();
-	//z }
-
-	Packet proof(destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
-	proof.send();
+	if (!destination) {
+		extreme("Identity::prove: proving packet with proof destination...");
+		ProofDestination proof_destination = packet.generate_proof_destination();
+		Packet proof(proof_destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
+		proof.send();
+	}
+	else {
+		extreme("Identity::prove: proving packet with specified destination...");
+		Packet proof(destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
+		proof.send();
+	}
 }
 
 void Identity::prove(const Packet& packet) const {

@@ -21,8 +21,15 @@ namespace RNS {
 		LOG_MEM      = 9
 	};
 
+	using log_callback = void(*)(const char* msg, LogLevel level);
+
+	const char* getLevelName(LogLevel level);
+	const char* getTimeString();
+
 	void loglevel(LogLevel level);
 	LogLevel loglevel();
+
+	void setLogCallback(log_callback on_log = nullptr);
 
 	void doLog(const char* msg, LogLevel level);
 

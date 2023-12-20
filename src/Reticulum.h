@@ -81,6 +81,7 @@ namespace RNS {
 		inline static void transport_enabled(bool transport_enabled) { __transport_enabled = transport_enabled; }
 
 		inline static bool probe_destination_enabled() { return __allow_probes; }
+		inline static void probe_destination_enabled(bool allow_probes) { __allow_probes = allow_probes; }
 
 		// getters/setters
 		inline bool is_connected_to_shared_instance() const { assert(_object); return _object->_is_connected_to_shared_instance; }

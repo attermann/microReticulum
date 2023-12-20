@@ -150,7 +150,7 @@ namespace RNS {
 		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
 		inline const Bytes& app_data() const { assert(_object); return _object->_app_data; }
 		inline void app_data(const Bytes& app_data) { assert(_object); _object->_app_data = app_data; }
-		//inline const Cryptography::X25519PrivateKey::Ptr prv() const { assert(_object); return _object->_prv; }
+		inline const Cryptography::X25519PrivateKey::Ptr prv() const { assert(_object); return _object->_prv; }
 		inline const Cryptography::X25519PublicKey::Ptr pub() const { assert(_object); return _object->_pub; }
 
 		inline std::string toString() const { if (!_object) return ""; return "{Identity:" + _object->_hash.toHex() + "}"; }
