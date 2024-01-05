@@ -56,6 +56,19 @@ namespace RNS {
 	class Transport {
 
 	public:
+		class Callbacks {
+		public:
+			using receive_packet = void(*)(const Bytes& raw, const Interface& interface);
+			using transmit_packet = void(*)(const Bytes& raw, const Interface& interface);
+			using filter_packet = bool(*)(const Packet& packet);
+		public:
+			receive_packet _receive_packet = nullptr;
+			transmit_packet _transmit_packet = nullptr;
+			filter_packet _filter_packet = nullptr;
+		friend class Transport;
+		};
+
+	public:
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
 		class DestinationEntry {
@@ -77,7 +90,6 @@ namespace RNS {
 			uint8_t _hops = 0;
 			double _expires = 0;
 			std::set<Bytes> _random_blobs;
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
 			Interface _receiving_interface = {Type::NONE};
 			//const Packet& _announce_packet;
 			Packet _announce_packet = {Type::NONE};
@@ -129,8 +141,6 @@ namespace RNS {
 			const Packet _packet = {Type::NONE};
 			uint8_t _local_rebroadcasts = 0;
 			bool _block_rebroadcasts = false;
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			//const Interface& _attached_interface;
 			const Interface _attached_interface = {Type::NONE};
 		};
 
@@ -152,12 +162,8 @@ namespace RNS {
 		public:
 			double _timestamp = 0;
 			const Bytes _next_hop;
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			//const Interface& _outbound_interface;
 			const Interface _outbound_interface = {Type::NONE};
 			uint8_t _remaining_hops = 0;
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			//const Interface& _receiving_interface;
 			Interface _receiving_interface = {Type::NONE};
 			uint8_t _hops = 0;
 			const Bytes _destination_hash;
@@ -175,11 +181,7 @@ namespace RNS {
 			{
 			}
 		public:
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			//const Interface& _receiving_interface;
 			Interface _receiving_interface = {Type::NONE};
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			//const Interface& _outbound_interface;
 			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
 		};
@@ -196,8 +198,6 @@ namespace RNS {
 		public:
 			const Bytes _destination_hash;
 			double _timeout = 0;
-			// CBA TODO does this need to be a reference in order for virtual method callbacks to work?
-			//const Interface& _requesting_interface;
 			const Interface _requesting_interface = {Type::NONE};
 		};
 
@@ -254,6 +254,13 @@ namespace RNS {
 		static void exit_handler();
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
+
+		// getters/setters
+		static inline void set_receive_packet_callback(Callbacks::receive_packet callback) { _callbacks._receive_packet = callback; }
+		static inline void set_transmit_packet_callback(Callbacks::transmit_packet callback) { _callbacks._transmit_packet = callback; }
+		static inline void set_filter_packet_callback(Callbacks::filter_packet callback) { _callbacks._filter_packet = callback; }
+		static inline const Reticulum& reticulum() { return _owner; }
+		static inline const Identity& identity() { return _identity; }
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
@@ -335,6 +342,9 @@ namespace RNS {
 
 		static Reticulum _owner;
 		static Identity _identity;
+
+		// CBA
+		static Callbacks _callbacks;
 	};
 
 }

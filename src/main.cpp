@@ -43,7 +43,8 @@
 #define LORA_INTERFACE
 //#define RETICULUM_PACKET_TEST
 
-#define USER_BUTTON_PIN 38
+#define BUTTON_PIN                  38
+//#define BUTTON_PIN_MASK             GPIO_SEL_38
 
 // Let's define an app name. We'll use this for all
 // destinations we create. Since this basic example
@@ -310,7 +311,7 @@ void reticulum_teardown() {
 void userKey(void)
 {
 	//delay(10);
-	if (digitalRead(USER_BUTTON_PIN) == LOW) {
+	if (digitalRead(BUTTON_PIN) == LOW) {
 		//Serial.print("T-Beam USER button press\n");
 		send_announce = true;
 	}
@@ -324,8 +325,8 @@ void setup() {
 	Serial.print("Hello from T-Beam on PlatformIO!\n");
 
 	// Setup user button
-	pinMode(USER_BUTTON_PIN, INPUT);
-	attachInterrupt(USER_BUTTON_PIN, userKey, FALLING);  
+	pinMode(BUTTON_PIN, INPUT);
+	attachInterrupt(BUTTON_PIN, userKey, FALLING);  
 
 	// Setup filesystem
 	if (!SPIFFS.begin(true, "")){

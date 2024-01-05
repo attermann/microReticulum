@@ -58,6 +58,9 @@ uint8_t Packet::get_packed_flags() {
 		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (Type::Destination::LINK << 2) | _object->_packet_type;
 	}
 	else {
+		if (!_object->_destination) {
+			throw std::logic_error("Packet destination is required");
+		}
 		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (_object->_destination.type() << 2) | _object->_packet_type;
 	}
 	return packed_flags;
@@ -240,6 +243,9 @@ void Packet::pack() {
 	assert(_object);
 	extreme("Packet::pack: packing packet...");
 
+	if (!_object->_destination) {
+		throw std::logic_error("Packet destination is required");
+	}
 	_object->_destination_hash = _object->_destination.hash();
 
 	_object->_raw.clear();
@@ -311,6 +317,9 @@ void Packet::pack() {
 				// Announce packets are not encrypted
 				_object->_raw << _object->_data;
 			}
+			// CBA No default encryption here like with header type HEADER_1 ???
+			// CBA Is there any packet type besides ANNOUNCE with header type HEADER_2 ???
+			// CBA Safe to assume that all HEADER_2 type packets are in transport and therefore can not and will not be decrypted locally ???
 		}
 	}
 
@@ -353,7 +362,7 @@ bool Packet::unpack() {
 			_object->_context = static_cast<context_types>(raw[2*Type::Reticulum::DESTINATION_LENGTH+2]);
 			_object->_data.assign(raw+2*Type::Reticulum::DESTINATION_LENGTH+3, _object->_raw.size()-(2*Type::Reticulum::DESTINATION_LENGTH+3));
 			// uknown at this point whether data is encrypted or not
-			_object->_encrypted = true;
+			_object->_encrypted = false;
 		}
 		else {
 			_object->_transport_id.clear();
@@ -361,7 +370,7 @@ bool Packet::unpack() {
 			_object->_context = static_cast<context_types>(raw[Type::Reticulum::DESTINATION_LENGTH+2]);
 			_object->_data.assign(raw+Type::Reticulum::DESTINATION_LENGTH+3, _object->_raw.size()-(Type::Reticulum::DESTINATION_LENGTH+3));
 			// uknown at this point whether data is encrypted or not
-			_object->_encrypted = true;
+			_object->_encrypted = false;
 		}
 
 		_object->_packed = false;
@@ -450,6 +459,9 @@ bool Packet::resend() {
 void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
 	assert(_object);
 	extreme("Packet::prove: proving packet...");
+	if (!_object->_destination) {
+		throw std::logic_error("Packet destination is required");
+	}
 	if (_object->_fromPacked && _object->_destination) {
 		if (_object->_destination.identity() && _object->_destination.identity().prv()) {
 			_object->_destination.identity().prove(*this, destination);
@@ -527,7 +539,8 @@ std::string Packet::debugString() const {
 	if (_object->_packed) {
 		//unpack();
 	}
-	std::string str = "ht=" + std::to_string(_object->_header_type);
+	std::string str = "ph=" + _object->_packet_hash.toHex();
+	str += " ht=" + std::to_string(_object->_header_type);
 	str += " tt=" + std::to_string(_object->_transport_type);
 	str += " dt=" + std::to_string(_object->_destination_type);
 	str += " pt=" + std::to_string(_object->_packet_type);
@@ -540,25 +553,175 @@ std::string Packet::dumpString() const {
 	if (!_object) {
 		return "";
 	}
-	if (_object->_packed) {
-		//unpack();
-	}
+	//if (_object->_packed) {
+	//	unpack();
+	//}
+	bool encrypted = true;
 	std::string dump;
-	dump = "\n--------------------\n";
+	dump = "\n------------------------------------------------------------------------------\n";
+	dump += "hash:         " + _object->_packet_hash.toHex() + "\n";
 	dump += "flags:        " + hexFromByte(_object->_flags) + "\n";
-	dump += "  header_type:      " + std::to_string(_object->_header_type) + "\n";
-	dump += "  transport_type:   " + std::to_string(_object->_transport_type) + "\n";
-	dump += "  destination_type: " + std::to_string(_object->_destination_type) + "\n";
-	dump += "  packet_type:      " + std::to_string(_object->_packet_type) + "\n";
+	//dump += "  header_type:      " + std::to_string(_object->_header_type) + "\n";
+	dump += "  header_type:      ";
+	switch (_object->_header_type) {
+	case HEADER_1:
+		dump += "HEADER_1\n";
+		break;
+	case HEADER_2:
+		encrypted = false;
+		dump += "HEADER_2\n";
+		break;
+	default:
+		std::to_string(_object->_header_type) + "\n";
+	}
+	//dump += "  transport_type:   " + std::to_string(_object->_transport_type) + "\n";
+	dump += "  transport_type:   ";
+	switch (_object->_transport_type) {
+	case Type::Transport::BROADCAST:
+		dump += "BROADCAST\n";
+		break;
+	case Type::Transport::TRANSPORT:
+		dump += "TRANSPORT\n";
+		break;
+	case Type::Transport::RELAY:
+		dump += "RELAY\n";
+		break;
+	case Type::Transport::TUNNEL:
+		dump += "TUNNEL\n";
+		break;
+	case Type::Transport::NONE:
+		dump += "NONE\n";
+		break;
+	default:
+		std::to_string(_object->_transport_type) + "\n";
+	}
+	//dump += "  destination_type: " + std::to_string(_object->_destination_type) + "\n";
+	dump += "  destination_type: ";
+	switch (_object->_destination_type) {
+	case Type::Destination::SINGLE:
+		dump += "SINGLE\n";
+		break;
+	case Type::Destination::GROUP:
+		dump += "GROUP\n";
+		break;
+	case Type::Destination::PLAIN:
+		dump += "PLAIN\n";
+		break;
+	case Type::Destination::LINK:
+		dump += "LINK\n";
+		break;
+	default:
+		std::to_string(_object->_destination_type) + "\n";
+	}
+	//dump += "  packet_type:      " + std::to_string(_object->_packet_type) + "\n";
+	dump += "  packet_type:      ";
+	switch (_object->_packet_type) {
+	case DATA:
+		dump += "DATA\n";
+		break;
+	case ANNOUNCE:
+		encrypted = false;
+		dump += "ANNOUNCE\n";
+		break;
+	case LINKREQUEST:
+		encrypted = false;
+		dump += "LINKREQUEST\n";
+		break;
+	case PROOF:
+		dump += "PROOF\n";
+		if (_object->_context == RESOURCE_PRF) {
+			encrypted = false;
+		}
+		if (_object->_destination && _object->_destination.type() == Type::Destination::LINK) {
+			encrypted = false;
+		}
+		break;
+	default:
+		std::to_string(_object->_packet_type) + "\n";
+	}
 	dump += "hops:         " + std::to_string(_object->_hops) + "\n";
 	dump += "transport:    " + _object->_transport_id.toHex() + "\n";
 	dump += "destination:  " + _object->_destination_hash.toHex() + "\n";
-	dump += "context_type: " + std::to_string(_object->_header_type) + "\n";
+	//dump += "context:      " + std::to_string(_object->_context) + "\n";
+	dump += "context:      ";
+	switch (_object->_context) {
+	case CONTEXT_NONE:
+		dump += "CONTEXT_NONE\n";
+		break;
+	case RESOURCE:
+		encrypted = false;
+		dump += "RESOURCE\n";
+		break;
+	case RESOURCE_ADV:
+		dump += "RESOURCE_ADV\n";
+		break;
+	case RESOURCE_REQ:
+		dump += "RESOURCE_REQ\n";
+		break;
+	case RESOURCE_HMU:
+		dump += "RESOURCE_HMU\n";
+		break;
+	case RESOURCE_PRF:
+		encrypted = false;
+		dump += "RESOURCE_PRF\n";
+		break;
+	case RESOURCE_ICL:
+		dump += "RESOURCE_ICL\n";
+		break;
+	case RESOURCE_RCL:
+		dump += "RESOURCE_RCL\n";
+		break;
+	case CACHE_REQUEST:
+		encrypted = false;
+		dump += "CACHE_REQUEST\n";
+		break;
+	case REQUEST:
+		dump += "REQUEST\n";
+		break;
+	case RESPONSE:
+		dump += "RESPONSE\n";
+		break;
+	case PATH_RESPONSE:
+		dump += "PATH_RESPONSE\n";
+		break;
+	case COMMAND:
+		dump += "COMMAND\n";
+		break;
+	case COMMAND_STATUS:
+		dump += "COMMAND_STATUS\n";
+		break;
+	case CHANNEL:
+		dump += "CHANNEL\n";
+		break;
+	case KEEPALIVE:
+		encrypted = false;
+		dump += "KEEPALIVE\n";
+		break;
+	case LINKIDENTIFY:
+		dump += "LINKIDENTIFY\n";
+		break;
+	case LINKCLOSE:
+		dump += "LINKCLOSE\n";
+		break;
+	case LINKPROOF:
+		dump += "LINKPROOF\n";
+		break;
+	case LRRTT:
+		dump += "LRRTT\n";
+		break;
+	case LRPROOF:
+		encrypted = false;
+		dump += "LRPROOF\n";
+		break;
+	default:
+		std::to_string(_object->_context) + "\n";
+	}
 	dump += "raw:          " + _object->_raw.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_object->_raw.size()) + "\n";
 	dump += "data:         " + _object->_data.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_object->_data.size()) + "\n";
-	if (_object->_encrypted && _object->_raw.size() > 0) {
+	//if ((encrypted || _object->_encrypted) && _object->_raw.size() > 0) {
+	if (false) {
 		size_t header_len = Type::Reticulum::HEADER_MINSIZE;
 		if (_object->_header_type == HEADER_2) {
 			header_len = Type::Reticulum::HEADER_MAXSIZE;
@@ -571,16 +734,21 @@ std::string Packet::dumpString() const {
 		dump += "    length:           " + std::to_string(ciphertext.size()) + "\n";
 		dump += "    iv:               " + ciphertext.left(16).toHex() + "\n";
 		dump += "    sig:              " + ciphertext.right(32).toHex() + "\n";
-		dump += "    aes ciphertext:   " + ciphertext.mid(16, ciphertext.size()-48).toHex() + "\n";
-		dump += "      length:           " + std::to_string(ciphertext.size()-48) + "\n";
+		if (ciphertext.size() >= 48) {
+			dump += "    aes ciphertext:   " + ciphertext.mid(16, ciphertext.size()-48).toHex() + "\n";
+			dump += "      length:           " + std::to_string(ciphertext.size()-48) + "\n";
+		}
 	}
-	dump += "--------------------\n";
+	dump += "------------------------------------------------------------------------------\n";
 	return dump;
 }
 #endif
 
 PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
 
+	if (!packet.destination()) {
+		throw std::invalid_argument("Packet with destination is required");
+	}
 	_object->_hash           = packet.get_hash();
 	_object->_truncated_hash = packet.getTruncatedHash();
 	_object->_destination    = packet.destination();

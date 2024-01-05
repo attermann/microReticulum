@@ -202,7 +202,7 @@ namespace RNS {
 		inline const uint8_t* data() const { if (!_data) return nullptr; return _data->data(); }
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
-		std::string toHex(bool upper = true) const;
+		std::string toHex(bool upper = false) const;
 		Bytes mid(size_t beginpos, size_t len) const;
 		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }

@@ -34,22 +34,22 @@ void Identity::createKeys() {
 	// CRYPTO: create encryption private keys
 	_object->_prv           = Cryptography::X25519PrivateKey::generate();
 	_object->_prv_bytes     = _object->_prv->private_bytes();
-	debug("Identity::createKeys: prv bytes:     " + _object->_prv_bytes.toHex());
+	//extreme("Identity::createKeys: prv bytes:     " + _object->_prv_bytes.toHex());
 
 	// CRYPTO: create signature private keys
 	_object->_sig_prv       = Cryptography::Ed25519PrivateKey::generate();
 	_object->_sig_prv_bytes = _object->_sig_prv->private_bytes();
-	debug("Identity::createKeys: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
+	//extreme("Identity::createKeys: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
 
 	// CRYPTO: create encryption public keys
 	_object->_pub           = _object->_prv->public_key();
 	_object->_pub_bytes     = _object->_pub->public_bytes();
-	debug("Identity::createKeys: pub bytes:     " + _object->_pub_bytes.toHex());
+	//extreme("Identity::createKeys: pub bytes:     " + _object->_pub_bytes.toHex());
 
 	// CRYPTO: create signature public keys
 	_object->_sig_pub       = _object->_sig_prv->public_key();
 	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-	debug("Identity::createKeys: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
+	//extreme("Identity::createKeys: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 	update_hashes();
 
@@ -70,20 +70,20 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 		//p self.prv_bytes     = prv_bytes[:Identity.KEYSIZE//8//2]
 		_object->_prv_bytes     = prv_bytes.left(Type::Identity::KEYSIZE/8/2);
 		_object->_prv           = X25519PrivateKey::from_private_bytes(_object->_prv_bytes);
-		debug("Identity::load_private_key: prv bytes:     " + _object->_prv_bytes.toHex());
+		//extreme("Identity::load_private_key: prv bytes:     " + _object->_prv_bytes.toHex());
 
 		//p self.sig_prv_bytes = prv_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
 		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
-		debug("Identity::load_private_key: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
+		//extreme("Identity::load_private_key: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
 
 		_object->_pub           = _object->_prv->public_key();
 		_object->_pub_bytes     = _object->_pub->public_bytes();
-		debug("Identity::load_private_key: pub bytes:     " + _object->_pub_bytes.toHex());
+		//extreme("Identity::load_private_key: pub bytes:     " + _object->_pub_bytes.toHex());
 
 		_object->_sig_pub       = _object->_sig_prv->public_key();
 		_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-		debug("Identity::load_private_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
+		//extreme("Identity::load_private_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 		update_hashes();
 
@@ -110,11 +110,11 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 
 		//_pub_bytes     = pub_bytes[:Identity.KEYSIZE//8//2]
 		_object->_pub_bytes     = pub_bytes.left(Type::Identity::KEYSIZE/8/2);
-		debug("Identity::load_public_key: pub bytes:     " + _object->_pub_bytes.toHex());
+		//extreme("Identity::load_public_key: pub bytes:     " + _object->_pub_bytes.toHex());
 
 		//_sig_pub_bytes = pub_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_pub_bytes = pub_bytes.mid(Type::Identity::KEYSIZE/8/2);
-		debug("Identity::load_public_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
+		//extreme("Identity::load_public_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes);
 		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes);
@@ -344,25 +344,25 @@ Recall last heard app_data for a destination hash.
 	try {
 		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
 			Bytes destination_hash = packet.destination_hash();
-			extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
+			//extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
 			Bytes public_key = packet.data().left(KEYSIZE/8);
-			extreme("Identity::validate_announce: public_key:       " + public_key.toHex());
+			//extreme("Identity::validate_announce: public_key:       " + public_key.toHex());
 			Bytes name_hash = packet.data().mid(KEYSIZE/8, NAME_HASH_LENGTH/8);
-			extreme("Identity::validate_announce: name_hash:        " + name_hash.toHex());
+			//extreme("Identity::validate_announce: name_hash:        " + name_hash.toHex());
 			Bytes random_hash = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8, RANDOM_HASH_LENGTH/8);
-			extreme("Identity::validate_announce: random_hash:      " + random_hash.toHex());
+			//extreme("Identity::validate_announce: random_hash:      " + random_hash.toHex());
 			Bytes signature = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8, SIGLENGTH/8);
-			extreme("Identity::validate_announce: signature:        " + signature.toHex());
+			//extreme("Identity::validate_announce: signature:        " + signature.toHex());
 			Bytes app_data;
 			if (packet.data().size() > (KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8)) {
 				app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8);
 			}
-			extreme("Identity::validate_announce: app_data:         " + app_data.toHex());
-			extreme("Identity::validate_announce: app_data text:    " + app_data.toString());
+			//extreme("Identity::validate_announce: app_data:         " + app_data.toHex());
+			//extreme("Identity::validate_announce: app_data text:    " + app_data.toString());
 
 			Bytes signed_data;
 			signed_data << packet.destination_hash() << public_key << name_hash << random_hash+app_data;
-			extreme("Identity::validate_announce: signed_data:      " + signed_data.toHex());
+			//extreme("Identity::validate_announce: signed_data:      " + signed_data.toHex());
 
 			if (packet.data().size() <= KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8) {
 				app_data.clear();
@@ -374,8 +374,8 @@ Recall last heard app_data for a destination hash.
 			if (announced_identity.pub() && announced_identity.validate(signature, signed_data)) {
 				Bytes hash_material = name_hash << announced_identity.hash();
 				Bytes expected_hash = full_hash(hash_material).left(Type::Reticulum::TRUNCATED_HASHLENGTH/8);
-				extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
-				extreme("Identity::validate_announce: expected_hash:    " + expected_hash.toHex());
+				//extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
+				//extreme("Identity::validate_announce: expected_hash:    " + expected_hash.toHex());
 
 				if (packet.destination_hash() == expected_hash) {
 					// Check if we already have a public key for this destination
@@ -448,18 +448,18 @@ Encrypts information for the identity.
 */
 const Bytes Identity::encrypt(const Bytes& plaintext) const {
 	assert(_object);
-	debug("Identity::encrypt: encrypting data...");
+	extreme("Identity::encrypt: encrypting data...");
 	if (!_object->_pub) {
 		throw std::runtime_error("Encryption failed because identity does not hold a public key");
 	}
 	Cryptography::X25519PrivateKey::Ptr ephemeral_key = Cryptography::X25519PrivateKey::generate();
 	Bytes ephemeral_pub_bytes = ephemeral_key->public_key()->public_bytes();
-	debug("Identity::encrypt: ephemeral public key: " + ephemeral_pub_bytes.toHex());
+	extreme("Identity::encrypt: ephemeral public key: " + ephemeral_pub_bytes.toHex());
 
 	// CRYPTO: create shared key for key exchange using own public key
 	//shared_key = ephemeral_key.exchange(self.pub)
 	Bytes shared_key = ephemeral_key->exchange(_object->_pub_bytes);
-	debug("Identity::encrypt: shared key:           " + shared_key.toHex());
+	extreme("Identity::encrypt: shared key:           " + shared_key.toHex());
 
 	Bytes derived_key = Cryptography::hkdf(
 		32,
@@ -467,10 +467,10 @@ const Bytes Identity::encrypt(const Bytes& plaintext) const {
 		get_salt(),
 		get_context()
 	);
-	debug("Identity::encrypt: derived key:          " + derived_key.toHex());
+	extreme("Identity::encrypt: derived key:          " + derived_key.toHex());
 
 	Cryptography::Fernet fernet(derived_key);
-	debug("Identity::encrypt: Fernet encrypting data of length " + std::to_string(plaintext.size()));
+	extreme("Identity::encrypt: Fernet encrypting data of length " + std::to_string(plaintext.size()));
 	extreme("Identity::encrypt: plaintext:  " + plaintext.toHex());
 	Bytes ciphertext = fernet.encrypt(plaintext);
 	extreme("Identity::encrypt: ciphertext: " + ciphertext.toHex());
@@ -488,7 +488,7 @@ Decrypts information for the identity.
 */
 const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 	assert(_object);
-	debug("Identity::decrypt: decrypting data...");
+	extreme("Identity::decrypt: decrypting data...");
 	if (!_object->_prv) {
 		throw std::runtime_error("Decryption failed because identity does not hold a private key");
 	}
@@ -502,12 +502,12 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		Bytes peer_pub_bytes = ciphertext_token.left(Type::Identity::KEYSIZE/8/2);
 		//peer_pub = X25519PublicKey.from_public_bytes(peer_pub_bytes)
 		//Cryptography::X25519PublicKey::Ptr peer_pub = Cryptography::X25519PublicKey::from_public_bytes(peer_pub_bytes);
-		debug("Identity::decrypt: peer public key:      " + peer_pub_bytes.toHex());
+		extreme("Identity::decrypt: peer public key:      " + peer_pub_bytes.toHex());
 
 		// CRYPTO: create shared key for key exchange using peer public key
 		//shared_key = _object->_prv->exchange(peer_pub);
 		Bytes shared_key = _object->_prv->exchange(peer_pub_bytes);
-		debug("Identity::decrypt: shared key:           " + shared_key.toHex());
+		extreme("Identity::decrypt: shared key:           " + shared_key.toHex());
 
 		Bytes derived_key = Cryptography::hkdf(
 			32,
@@ -515,16 +515,16 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 			get_salt(),
 			get_context()
 		);
-		debug("Identity::decrypt: derived key:          " + derived_key.toHex());
+		extreme("Identity::decrypt: derived key:          " + derived_key.toHex());
 
 		Cryptography::Fernet fernet(derived_key);
 		//ciphertext = ciphertext_token[Identity.KEYSIZE//8//2:]
 		Bytes ciphertext(ciphertext_token.mid(Type::Identity::KEYSIZE/8/2));
-		debug("Identity::decrypt: Fernet decrypting data of length " + std::to_string(ciphertext.size()));
+		extreme("Identity::decrypt: Fernet decrypting data of length " + std::to_string(ciphertext.size()));
 		extreme("Identity::decrypt: ciphertext: " + ciphertext.toHex());
 		plaintext = fernet.decrypt(ciphertext);
 		extreme("Identity::decrypt: plaintext:  " + plaintext.toHex());
-		debug("Identity::decrypt: Fernet decrypted data of length " + std::to_string(plaintext.size()));
+		//extreme("Identity::decrypt: Fernet decrypted data of length " + std::to_string(plaintext.size()));
 	}
 	catch (std::exception& e) {
 		debug("Decryption by " + toString() + " failed: " + e.what());

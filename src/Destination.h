@@ -90,7 +90,7 @@ namespace RNS {
 		static std::string expand_name(const Identity& identity, const char* app_name, const char* aspects);
 		static Bytes hash(const Identity& identity, const char* app_name, const char* aspects);
 		static Bytes name_hash(const char* app_name, const char* aspects);
-		static Bytes app_and_aspects_from_name(const char* full_name);
+		static std::vector<std::string> app_and_aspects_from_name(const char* full_name);
 		static Bytes hash_from_name_and_identity(const char* full_name, const Identity& identity);
 
 	public:

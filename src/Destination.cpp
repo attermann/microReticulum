@@ -21,7 +21,7 @@ Destination::Destination(const Identity& identity, const directions direction, c
 	if (strchr(app_name, '.') != nullptr) {
 		throw std::invalid_argument("Dots can't be used in app names");
 	}
-	extreme("Destination::Destination: app name: " + std::string(app_name));
+	//extreme("Destination::Destination: app name: " + std::string(app_name));
 
 	_object->_type = type;
 	_object->_direction = direction;
@@ -33,26 +33,26 @@ Destination::Destination(const Identity& identity, const directions direction, c
 		// CBA TODO determine why identity.hexhash is added both here and by expand_name called below
 		fullaspects += "." + _object->_identity.hexhash();
 	}
-	extreme("Destination::Destination: full aspects: " + fullaspects);
+	//extreme("Destination::Destination: full aspects: " + fullaspects);
 
 	if (_object->_identity && _object->_type == PLAIN) {
 		throw std::invalid_argument("Selected destination type PLAIN cannot hold an identity");
 	}
 
 	_object->_name = expand_name(_object->_identity, app_name, fullaspects.c_str());
-	extreme("Destination::Destination: name: " + _object->_name);
+	//extreme("Destination::Destination: name: " + _object->_name);
 
 	// Generate the destination address hash
-	extreme("Destination::Destination: creating hash...");
+	//extreme("Destination::Destination: creating hash...");
 	_object->_hash = hash(_object->_identity, app_name, fullaspects.c_str());
 	_object->_hexhash = _object->_hash.toHex();
-	extreme("Destination::Destination: hash:      " + _object->_hash.toHex());
-	extreme("Destination::Destination: creating name hash...");
+	extreme("Destination::Destination: hash: " + _object->_hash.toHex());
+	//extreme("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash(app_name, aspects);
-	extreme("Destination::Destination: name hash: " + _object->_name_hash.toHex());
+	//extreme("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
-	extreme("Destination::Destination: calling register_destination");
+	//extreme("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
 
 	mem("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -71,13 +71,13 @@ Destination::Destination(const Identity& identity, const Type::Destination::dire
 
 	_object->_hash = hash;
 	_object->_hexhash = _object->_hash.toHex();
-	extreme("Destination::Destination: hash:      " + _object->_hash.toHex());
-	extreme("Destination::Destination: creating name hash...");
+	extreme("Destination::Destination: hash: " + _object->_hash.toHex());
+	//extreme("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash("unknown", "unknown");
-	extreme("Destination::Destination: name hash: " + _object->_name_hash.toHex());
+	//extreme("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
-	extreme("Destination::Destination: calling register_destination");
+	//extreme("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
 
 	mem("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -123,21 +123,33 @@ Destination::Destination(const Identity& identity, const Type::Destination::dire
 /*
 :returns: A tuple containing the app name and a list of aspects, for a full-name string.
 */
-/*static*/ Bytes Destination::app_and_aspects_from_name(const char* full_name) {
-	//z components = full_name.split(".")
-	//z return (components[0], components[1:])
-	// MOCK
-	return {Bytes::NONE};
+/*static*/ std::vector<std::string> Destination::app_and_aspects_from_name(const char* full_name) {
+	//p components = full_name.split(".")
+	//p return (components[0], components[1:])
+	std::vector<std::string> components;
+	std::string name(full_name);
+	std::size_t pos = name.find('.');
+	components.push_back(name.substr(0, pos));
+	if (pos != std::string::npos) {
+		components.push_back(name.substr(pos+1));
+	}
+	return components;
 }
 
 /*
 :returns: A destination name in adressable hash form, for a full name string and Identity instance.
 */
 /*static*/ Bytes Destination::hash_from_name_and_identity(const char* full_name, const Identity& identity) {
-	//z app_name, aspects = Destination.app_and_aspects_from_name(full_name)
-	//z return Destination.hash(identity, app_name, *aspects)
-	// MOCK
-	return {Bytes::NONE};
+	//p app_name, aspects = Destination.app_and_aspects_from_name(full_name)
+	//p return Destination.hash(identity, app_name, *aspects)
+	std::vector<std::string> components = app_and_aspects_from_name(full_name);
+	if (components.size() == 0) {
+		return {Bytes::NONE};
+	}
+	if (components.size() == 1) {
+		return hash(identity, components[0].c_str(), "");
+	}
+	return hash(identity, components[0].c_str(), components[1].c_str());
 }
 
 /*
@@ -250,20 +262,20 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		}
 
 		Bytes signed_data;
-		extreme("Destination::announce: hash:         " + _object->_hash.toHex());
-		extreme("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
-		extreme("Destination::announce: name hash:    " + _object->_name_hash.toHex());
-		extreme("Destination::announce: random hash:  " + random_hash.toHex());
-		extreme("Destination::announce: app data:     " + new_app_data.toHex());
-		extreme("Destination::announce: app data text:" + new_app_data.toString());
+		//extreme("Destination::announce: hash:         " + _object->_hash.toHex());
+		//extreme("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
+		//extreme("Destination::announce: name hash:    " + _object->_name_hash.toHex());
+		//extreme("Destination::announce: random hash:  " + random_hash.toHex());
+		//extreme("Destination::announce: app data:     " + new_app_data.toHex());
+		//extreme("Destination::announce: app data text:" + new_app_data.toString());
 		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
 		if (new_app_data) {
 			signed_data << new_app_data;
 		}
-		extreme("Destination::announce: signed data:  " + signed_data.toHex());
+		//extreme("Destination::announce: signed data:  " + signed_data.toHex());
 
 		Bytes signature(_object->_identity.sign(signed_data));
-		extreme("Destination::announce: signature:    " + signature.toHex());
+		//extreme("Destination::announce: signature:    " + signature.toHex());
 
 		announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
 
@@ -273,14 +285,14 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 
 		_object->_path_responses.insert({tag, {OS::time(), announce_data}});
 	}
-	extreme("Destination::announce: announce_data:" + announce_data.toHex());
+	//extreme("Destination::announce: announce_data:" + announce_data.toHex());
 
 	Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 	if (path_response) {
 		announce_context = Type::Packet::PATH_RESPONSE;
 	}
 
-	extreme("Destination::announce: creating announce packet...");
+	//extreme("Destination::announce: creating announce packet...");
     //p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
 	//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
 	Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
@@ -350,7 +362,7 @@ void Destination::receive(const Packet& packet) {
 	else {
 		// CBA TODO Why isn't the Packet decrypting itself?
 		Bytes plaintext(decrypt(packet.data()));
-		extreme("Destination::receive: decrypted data: " + plaintext.toHex());
+		//extreme("Destination::receive: decrypted data: " + plaintext.toHex());
 		if (plaintext) {
 			if (packet.packet_type() == Type::Packet::DATA) {
 				if (_object->_callbacks._packet) {

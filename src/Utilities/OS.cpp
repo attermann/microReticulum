@@ -37,6 +37,14 @@ void listDir(char * dir){
 		error("SPIFFS filesystem mount failed");
 	}
 	else {
+		uint32_t size = SPIFFS.totalBytes() / (1024 * 1024);
+		Serial.print("size: ");
+		Serial.print(size);
+		Serial.println(" MB");
+		uint32_t used = SPIFFS.usedBytes() / (1024 * 1024);
+		Serial.print("used: ");
+		Serial.print(used);
+		Serial.println(" MB");
 		// ensure filesystem is writable and format if not
 		Bytes test;
 		if (!OS::write_file(test, "/test")) {
@@ -44,7 +52,7 @@ void listDir(char * dir){
 			SPIFFS.format();
 		}
 		else {
-			OS::remove_file("test");
+			OS::remove_file("/test");
 		}
 		listDir("/");
 		debug("SPIFFS filesystem is ready");

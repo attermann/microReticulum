@@ -86,7 +86,7 @@ std::string RNS::hexFromByte(uint8_t byte, bool upper /*= true*/) {
 	return hex;
 }
 
-std::string Bytes::toHex(bool upper /*= true*/) const {
+std::string Bytes::toHex(bool upper /*= false*/) const {
 	if (!_data) {
 		return "";
 	}
