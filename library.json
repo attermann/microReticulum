@@ -1,12 +1,12 @@
 {
-	"name": "reticulum-cpp",
+	"name": "microReticulum",
 	"version": "0.1.1",
 	"description": "Port of Reticulum Network Stack to C++ specifically but not exclusively targeting 32-bit and better MCUs",
 	"keywords": "reticulum, mcu, esp32",
 	"repository":
 	{
 		"type": "git",
-		"url": "https://github.com/attermann/reticulum-cpp.git"
+		"url": "https://github.com/attermann/microReticulum.git"
 	},
 	"authors":
 	[
