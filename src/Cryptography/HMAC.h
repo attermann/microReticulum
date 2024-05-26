@@ -7,6 +7,7 @@
 #include <SHA512.h>
 #include <stdexcept>
 #include <memory>
+#include <cassert>
 
 namespace RNS { namespace Cryptography {
 

@@ -41,8 +41,6 @@ Reticulum::Reticulum() : _object(new Object()) {
 	// Initialkize random number generator
 	RNG.begin("Reticulum");
 
-	Utilities::OS::setup();
-
 #ifdef ARDUINO
 	// Stir in the Ethernet MAC address.
 	//byte mac[6];

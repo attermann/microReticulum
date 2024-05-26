@@ -20,15 +20,12 @@
 	"homepage": "https://reticulum.network/",
 	"dependencies": {
 		"ArduinoJson": "~6.21.3",
-		"rweather/Crypto": "~0.4.0",
-		"sandeepmistry/LoRa": "~0.8.0",
-		"WiFi": "~2.0.0"
+		"rweather/Crypto": "~0.4.0"
 	},
 	"frameworks": "*",
 	"platforms": "*",
 	"export": {},
 	"exclude": [
-		".github",
-		"src/main.cpp"
+		".github"
 	]
 }

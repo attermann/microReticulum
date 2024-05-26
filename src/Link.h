@@ -5,6 +5,7 @@
 #include "Type.h"
 
 #include <memory>
+#include <cassert>
 
 namespace RNS {
 

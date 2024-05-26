@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <cassert>
 #include <stdint.h>
 
 namespace RNS {

@@ -1,9 +1,9 @@
 //#include <unity.h>
 
+#include "Interface.h"
 #include "Transport.h"
 #include "Log.h"
 #include "Bytes.h"
-#include "Interfaces/LoRaInterface.h"
 #include "Utilities/OS.h"
 
 #include "Utilities/Persistence.h"
@@ -18,6 +18,27 @@
 #include <stdio.h>
 
 
+class TestInterface : public RNS::Interface {
+
+public:
+	TestInterface(const char* name = "TestInterface") : Interface(name) {}
+	virtual ~TestInterface() {}
+
+	virtual inline std::string toString() const { return "TestInterface[" + name() + "]"; }
+
+private:
+	virtual void on_incoming(const RNS::Bytes& data) {
+		RNS::debug(toString() + ".on_incoming: data: " + data.toHex());
+		Interface::on_incoming(data);
+	}
+	virtual void on_outgoing(const RNS::Bytes& data) {
+		RNS::debug(toString() + ".on_outgoing: data: " + data.toHex());
+		Interface::on_outgoing(data);
+	}
+
+};
+
+
 class TestObject {
 public:
     TestObject() {}
@@ -27,6 +48,7 @@ public:
     std::string _str;
     std::vector<std::string> _vec;
 };
+
 
 namespace ArduinoJson {
 	// ArduinoJSON serialization support for TestObject
@@ -523,7 +545,7 @@ void testSerializeDestinationTable() {
 	//RNS::Bytes empty;
 	//std::set<RNS::Bytes> blobs;
 	//RNS::Interface interface({RNS::Type::NONE});
-	RNS::Interfaces::LoRaInterface lora_interface; 
+	TestInterface test_interface; 
 	//RNS::Packet packet({RNS::Type::NONE});
 	static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
 	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
@@ -536,7 +558,7 @@ void testSerializeDestinationTable() {
 	RNS::Transport::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;
-	entry_one._receiving_interface = lora_interface;
+	entry_one._receiving_interface = test_interface;
 	entry_one._random_blobs = blobs;
 	RNS::Bytes one;
 	one.assignHex("1111111111111111");
@@ -545,7 +567,7 @@ void testSerializeDestinationTable() {
 	RNS::Transport::DestinationEntry entry_two;
 	entry_two._timestamp = 2.0;
 	entry_two._received_from = received;
-	entry_two._receiving_interface = lora_interface;
+	entry_two._receiving_interface = test_interface;
 	entry_two._random_blobs = blobs;
 	RNS::Bytes two;
 	two.assignHex("2222222222222222");

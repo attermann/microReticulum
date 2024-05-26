@@ -91,19 +91,25 @@ using namespace RNS::Utilities;
 
 	if (!_identity) {
 		std::string transport_identity_path = Reticulum::_storagepath + "/transport_identity";
+		debug("Checking for transport identity...");
+		try {
 // CBA TEST
 //OS::remove_file(transport_identity_path.c_str());
-		if (OS::file_exists(transport_identity_path.c_str())) {
-			_identity = Identity::from_file(transport_identity_path.c_str());
-		}
+			if (OS::file_exists(transport_identity_path.c_str())) {
+				_identity = Identity::from_file(transport_identity_path.c_str());
+			}
 
-		if (!_identity) {
-			verbose("No valid Transport Identity in storage, creating...");
-			_identity = Identity();
-			_identity.to_file(transport_identity_path.c_str());
+			if (!_identity) {
+				verbose("No valid Transport Identity in storage, creating...");
+				_identity = Identity();
+				_identity.to_file(transport_identity_path.c_str());
+			}
+			else {
+				verbose("Loaded Transport Identity from storage");
+			}
 		}
-		else {
-			verbose("Loaded Transport Identity from storage");
+		catch (std::exception& e) {
+			error("Failed to check for transport identity, the contained exception was: " + std::string(e.what()));
 		}
 	}
 
@@ -118,7 +124,7 @@ using namespace RNS::Utilities;
 				file.close();
 			}
 			catch (std::exception& e) {
-				error("Could not load packet hashlist from storage, the contained exception was: " + e.what());
+				error("Could not load packet hashlist from storage, the contained exception was: " + std::string(e.what()));
 			}
 		}
 	}

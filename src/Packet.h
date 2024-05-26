@@ -9,6 +9,7 @@
 #include "Utilities/OS.h"
 
 #include <memory>
+#include <cassert>
 #include <stdint.h>
 #include <time.h>
 

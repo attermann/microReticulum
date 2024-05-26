@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 #include <map>
+#include <cassert>
 #include <stdint.h>
 
 namespace RNS {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Filesystem.h"
 #include "../Bytes.h"
 
 #include <cmath>
@@ -12,13 +13,16 @@
 #include <Arduino.h>
 #endif
 
+#undef round
+
 namespace RNS { namespace Utilities {
 
 	class OS {
 
-	public:
-		static void setup();
+	private:
+		static Filesystem filesystem;
 
+	public:
         // sleep for specified milliseconds
 		//static inline void sleep(float seconds) { ::sleep(seconds); }
 #ifdef ARDUINO
@@ -35,8 +39,12 @@ namespace RNS { namespace Utilities {
 		static inline double time() { timeval time; ::gettimeofday(&time, NULL); return (double)time.tv_sec + ((double)time.tv_usec / 1000000); }
 
 		// round decimal number to specified precision
-        //static inline float round(float value, uint8_t precision) { return std::round(value / precision) * precision; }
-        static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
+		//static inline float round(float value, uint8_t precision) { return std::round(value / precision) * precision; }
+		//static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
+		static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
+
+		static void register_filesystem(Filesystem& filesystem);
+		static void deregister_filesystem();
 
 		static bool file_exists(const char* file_path);
 		static const RNS::Bytes read_file(const char* file_path);

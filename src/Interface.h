@@ -8,6 +8,7 @@
 
 #include <list>
 #include <memory>
+#include <cassert>
 #include <stdint.h>
 
 namespace RNS {
@@ -97,7 +98,7 @@ namespace RNS {
 		inline void add_announce(AnnounceEntry& entry) { assert(_object); _object->_announce_queue.push_back(entry); }
 
 	protected:
-		// CBA TODO these should NOT called internally, and should likely be protected (only to be overridden and called by Object)
+		// CBA These should NOT be called internally, and should be protected (only to be overridden and called by Object)
 	    virtual void on_incoming(const Bytes& data);
 		virtual void on_outgoing(const Bytes& data);
 
