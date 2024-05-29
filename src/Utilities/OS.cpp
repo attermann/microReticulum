@@ -8,17 +8,16 @@ using namespace RNS::Utilities;
 /*static*/ Filesystem OS::filesystem = {Type::NONE};
 
 /*static*/ void OS::register_filesystem(Filesystem& filesystem) {
-	extreme("Registering filesystem......");
+	extreme("Registering filesystem...");
 	OS::filesystem = filesystem;
 }
 
 /*static*/ void OS::deregister_filesystem() {
-	extreme("Deregistering filesystem......");
+	extreme("Deregistering filesystem...");
 	OS::filesystem = {Type::NONE};
 }
 
 /*static*/ bool OS::file_exists(const char* file_path) {
-	extreme("file_exists: checking for filesystem");
 	if (!filesystem) {
 		warning("file_exists: filesystem not registered");
 		throw std::runtime_error("Filesystem has not been registered");

@@ -87,7 +87,7 @@ namespace RNS {
 		inline void update_hashes() {
 			assert(_object);
 			_object->_hash = truncated_hash(get_public_key());
-			extreme("Identity::update_hashes: hash:       " + _object->_hash.toHex());
+			extreme("Identity::update_hashes: hash: " + _object->_hash.toHex());
 			_object->_hexhash = _object->_hash.toHex();
 		};
 		bool load(const char* path);

@@ -35,7 +35,8 @@ namespace RNS {
 
 	inline void log(const char* msg, LogLevel level = LOG_NOTICE) { doLog(msg, level); }
 #ifdef ARDUINO
-	inline void log(const String msg, LogLevel level = LOG_NOTICE) { doLog(msg.c_str(), level); }
+	inline void log(const String& msg, LogLevel level = LOG_NOTICE) { doLog(msg.c_str(), level); }
+	inline void log(const StringSumHelper& msg, LogLevel level = LOG_NOTICE) { doLog(msg.c_str(), level); }
 #endif
 	inline void log(const std::string& msg, LogLevel level = LOG_NOTICE) { doLog(msg.c_str(), level); }
 
