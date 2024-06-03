@@ -201,10 +201,51 @@ namespace RNS {
 			const Interface _requesting_interface = {Type::NONE};
 		};
 
+/*
+		// CBA TODO Analyze safety of using Inrerface references here
+		class SerialisedEntry {
+		public:
+			SerialisedEntry(const Bytes& destination_hash, double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
+				_destination_hash(destination_hash),
+				_timestamp(timestamp),
+				_hops(announce_hops),
+				_expires(expires),
+				_random_blobs(random_blobs),
+				_receiving_interface(receiving_interface),
+				_announce_packet(packet)
+			{
+			}
+		public:
+			const Bytes _destination_hash;
+			double _timestamp = 0;
+			const Bytes _received_from;
+			uint8_t _hops = 0;
+			double _expires = 0;
+			std::set<Bytes> _random_blobs;
+			Interface _receiving_interface = {Type::NONE};
+			Packet _announce_packet = {Type::NONE};
+		};
+*/
+
+		// CBA TODO Analyze safety of using Inrerface references here
+		class TunnelEntry {
+		public:
+			TunnelEntry(const Bytes& tunnel_id, const Bytes& interface_hash, double expires) :
+				_tunnel_id(tunnel_id),
+				_interface_hash(interface_hash),
+				_expires(expires)
+			{
+			}
+		public:
+			const Bytes _tunnel_id;
+			const Bytes _interface_hash;
+			std::map<Bytes, DestinationEntry> _serialised_paths;
+			double _expires = 0;
+		};
+
 	public:
 		static void start(const Reticulum& reticulum_instance);
 		static void loop();
-		static void jobloop();
 		static void jobs();
 		static void transmit(Interface& interface, const Bytes& raw);
 		static bool outbound(Packet& packet);
@@ -227,8 +268,10 @@ namespace RNS {
 		static bool should_cache(const Packet& packet);
 		static bool cache(const Packet& packet, bool force_cache = false);
 		static Packet get_cached_packet(const Bytes& packet_hash);
+		static bool clear_cached_packet(const Bytes& packet_hash);
 		static bool cache_request_packet(const Packet& packet);
 		static void cache_request(const Bytes& packet_hash, const Destination& destination);
+		static bool remove_path(const Bytes& destination_hash);
 		static bool has_path(const Bytes& destination_hash);
 		static uint8_t hops_to(const Bytes& destination_hash);
 		static Bytes next_hop(const Bytes& destination_hash);
@@ -251,6 +294,7 @@ namespace RNS {
 		static bool save_path_table();
 		static void save_tunnel_table();
 		static void persist_data();
+		static void clean_caches();
 		static void exit_handler();
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
@@ -295,13 +339,12 @@ namespace RNS {
 		static std::map<Bytes, LinkEntry> _link_table;           // A lookup table containing hops for links
 		static std::map<Bytes, AnnounceEntry> _held_announces;           // A table containing temporarily held announce-table entries
 		static std::set<HAnnounceHandler> _announce_handlers;           // A table storing externally registered announce handlers
-		//z _tunnels              = {}           // A table storing tunnels to other transport instances
+		static std::map<Bytes, TunnelEntry> _tunnels;           // A table storing tunnels to other transport instances
 		//z _announce_rate_table  = {}           // A table for keeping track of announce rates
 		static std::map<Bytes, double> _path_requests;           // A table for storing path request timestamps
 
 		static std::map<Bytes, PathRequestEntry> _discovery_path_requests;       // A table for keeping track of path requests on behalf of other nodes
 		static std::set<Bytes> _discovery_pr_tags;       // A table for keeping track of tagged path requests
-		static uint16_t _max_pr_tags;    // Maximum amount of unique path request tags to remember
 
 		// Transport control destinations are used
 		// for control purposes like path requests
@@ -334,11 +377,14 @@ namespace RNS {
 		static double _tables_last_culled;
 		static float _tables_cull_interval;
 		static bool _saving_path_table;
-		static uint32_t _hashlist_maxsize;
+		static uint16_t _hashlist_maxsize;
+		static uint16_t _max_pr_tags;
 
 		// CBA
+		static uint16_t _path_table_maxsize;
 		static double _last_saved;
 		static float _save_interval;
+		static uint8_t _destination_table_crc;
 
 		static Reticulum _owner;
 		static Identity _identity;

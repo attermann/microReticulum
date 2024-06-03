@@ -18,6 +18,9 @@ using namespace RNS;
 using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
 
+// Imported from Crypto.cpp
+extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
+
 #if defined(INTERFACES_SET)
 ///*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_interfaces;
 /*static*/ std::set<std::reference_wrapper<Interface>, std::less<Interface>> Transport::_interfaces;
@@ -42,11 +45,11 @@ using namespace RNS::Utilities;
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
 /*static*/ std::map<Bytes, Transport::AnnounceEntry> Transport::_held_announces;
 /*static*/ std::set<HAnnounceHandler> Transport::_announce_handlers;
+/*static*/ std::map<Bytes, Transport::TunnelEntry> Transport::_tunnels;
 /*static*/ std::map<Bytes, double> Transport::_path_requests;
 
 /*static*/ std::map<Bytes, Transport::PathRequestEntry> Transport::_discovery_path_requests;
 /*static*/ std::set<Bytes> Transport::_discovery_pr_tags;
-/*static*/ uint16_t Transport::_max_pr_tags			= 32000;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
@@ -61,22 +64,31 @@ using namespace RNS::Utilities;
 /*static*/ double Transport::_start_time				= 0;
 /*static*/ bool Transport::_jobs_locked					= false;
 /*static*/ bool Transport::_jobs_running				= false;
-/*static*/ float Transport::_job_interval			= 0.250;
+/*static*/ float Transport::_job_interval				= 0.250;
 /*static*/ double Transport::_jobs_last_run				= 0;
 /*static*/ double Transport::_links_last_checked		= 0;
-/*static*/ float Transport::_links_check_interval	= 1.0;
-/*static*/ double Transport::_receipts_last_checked	= 0;
+/*static*/ float Transport::_links_check_interval		= 1.0;
+/*static*/ double Transport::_receipts_last_checked		= 0;
 /*static*/ float Transport::_receipts_check_interval	= 1.0;
 /*static*/ double Transport::_announces_last_checked	= 0;
-/*static*/ float Transport::_announces_check_interval= 1.0;
-/*static*/ double Transport::_tables_last_culled		= 0;
-/*static*/ float Transport::_tables_cull_interval	= 5.0;
+/*static*/ float Transport::_announces_check_interval	= 1.0;
+/*static*/ double Transport::_tables_last_culled		= 0.0;
+// CBA MCU
+/*static*/ //float Transport::_tables_cull_interval		= 5.0;
+/*static*/ float Transport::_tables_cull_interval		= 60.0;
 /*static*/ bool Transport::_saving_path_table			= false;
-/*static*/ uint32_t Transport::_hashlist_maxsize		= 1000000;
+// CBA MCU
+/*static*/ //uint16_t Transport::_hashlist_maxsize		= 1000000;
+/*static*/ uint16_t Transport::_hashlist_maxsize		= 10000;
+// CBA MCU
+/*static*/ //uint16_t Transport::_max_pr_tags			= 32000;
+/*static*/ uint16_t Transport::_max_pr_tags				= 320;
 
 // CBA
-/*static*/ double Transport::_last_saved = 0;
-/*static*/ float Transport::_save_interval = 3600;
+/*static*/ uint16_t Transport::_path_table_maxsize		= 200;
+/*static*/ double Transport::_last_saved				= 0.0;
+/*static*/ float Transport::_save_interval				= 3600.0;
+/*static*/ uint8_t Transport::_destination_table_crc	= 0;
 
 /*static*/ Reticulum Transport::_owner({Type::NONE});
 /*static*/ Identity Transport::_identity({Type::NONE});
@@ -88,6 +100,23 @@ using namespace RNS::Utilities;
 	info("Transport starting...");
 	_jobs_running = true;
 	_owner = reticulum_instance;
+
+	// ensure required directories exist
+	if (!OS::directory_exists(Reticulum::_cachepath.c_str())) {
+		verbose("No cache directory, creating...");
+		OS::create_directory(Reticulum::_cachepath.c_str());
+	}
+
+#ifdef ARDUINO
+	// load time offset from file if it exists
+	std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
+	if (OS::file_exists(time_offset_path.c_str())) {
+		Bytes buf = OS::read_file(time_offset_path.c_str());
+		uint64_t offset = *(uint64_t*)buf.data();
+		debug("Read time offset of " + std::to_string(offset) + " from file");
+		OS::setTimeOffset(offset);
+	}
+#endif
 
 	if (!_identity) {
 		std::string transport_identity_path = Reticulum::_storagepath + "/transport_identity";
@@ -205,12 +234,22 @@ using namespace RNS::Utilities;
 					//DeserializationError error = deserializeMsgPack(doc, data.data());
 					if (!error) {
 						_destination_table = doc.as<std::map<Bytes, DestinationEntry>>();
-						RNS::extreme("Transport::start: successfully deserialized");
-#ifndef NDEBUG
-						for (auto& [hash, entry] : _destination_table) {
-							RNS::extreme("Transport::start: entry: " + hash.toHex() + " = " + entry.debugString());
+						RNS::extreme("Transport::start: successfully deserialized path table");
+						// Calculate crc for dirty-checking before write
+						_destination_table_crc = crypto_crc8(0, data.data(), data.size());
+						std::vector<Bytes> invalid_paths;
+						for (auto& [destination_hash, destination_entry] : _destination_table) {
+							RNS::extreme("Transport::start: entry: " + destination_hash.toHex() + " = " + destination_entry.debugString());
+							// CBA TODO If announce packet load fails then remove destination en try (it's useless without announce packet)
+							if (!destination_entry._announce_packet) {
+								// remove destination
+								RNS::extreme("Transport::start: removing invalid path " + destination_hash.toHex());
+								invalid_paths.push_back(destination_hash);
+							}
 						}
-#endif
+						for (const auto& destination_hash : invalid_paths) {
+							_destination_table.erase(destination_hash);
+						}
 					}
 					else {
 						RNS::extreme("Transport::start: failed to deserialize");
@@ -310,17 +349,11 @@ using namespace RNS::Utilities;
 	}
 }
 
-/*static*/ void Transport::jobloop() {
-	while (true) {
-		jobs();
-		OS::sleep(_job_interval);
-	}
-}
-
 /*static*/ void Transport::jobs() {
 
 	std::vector<Packet> outgoing;
 	std::set<Bytes> path_requests;
+	int count;
 	_jobs_running = true;
 
 	try {
@@ -348,7 +381,8 @@ using namespace RNS::Utilities;
 
 								if ((OS::time() - last_path_request) > Type::Transport::PATH_REQUEST_MI) {
 									debug("Trying to rediscover path for " + link.destination().hash().toHex() + " since an attempted link was never established");
-									if (path_requests.find(link.destination().hash()) == path_requests.end()) {
+									//if (path_requests.find(link.destination().hash()) == path_requests.end()) {
+									if (path_requests.count(link.destination().hash()) == 0) {
 										path_requests.insert(link.destination().hash());
 									}
 								}
@@ -377,17 +411,19 @@ using namespace RNS::Utilities;
 					culled_receipt.check_timeout();
 				}
 
-// TODO (erase while iterating)
-/*
+				std::list<PacketReceipt> cull_receipts;
 				for (auto& receipt : _receipts) {
 					receipt.check_timeout();
 					if (receipt.status() != Type::PacketReceipt::SENT) {
-						// CBA Can NOT modify collection while iterating!
-						//z if receipt in Transport.receipts:
-						//z 	Transport.receipts.remove(receipt)
+						//p if receipt in Transport.receipts:
+						//p 	Transport.receipts.remove(receipt)
+						cull_receipts.push_back(receipt);
 					}
 				}
-*/
+				// CBA since modifying of collection while iterating is forbidden
+				for (auto& receipt : _receipts) {
+					cull_receipts.remove(receipt);
+				}
 
 				_receipts_last_checked = OS::time();
 			}
@@ -480,210 +516,225 @@ using namespace RNS::Utilities;
 				_announces_last_checked = OS::time();
 			}
 
-// TODO
-/*
 			// Cull the packet hashlist if it has reached its max size
-			if len(Transport.packet_hashlist) > Transport.hashlist_maxsize:
-				Transport.packet_hashlist = Transport.packet_hashlist[len(Transport.packet_hashlist)-Transport.hashlist_maxsize:len(Transport.packet_hashlist)-1]
+			if (_packet_hashlist.size() > _hashlist_maxsize) {
+				std::set<Bytes>::iterator iter = _packet_hashlist.begin();
+				std::advance(iter, _packet_hashlist.size() - _hashlist_maxsize);
+				_packet_hashlist.erase(_packet_hashlist.begin(), iter);
+			}
 
 			// Cull the path request tags list if it has reached its max size
-			if len(Transport.discovery_pr_tags) > Transport.max_pr_tags:
-				Transport.discovery_pr_tags = Transport.discovery_pr_tags[len(Transport.discovery_pr_tags)-Transport.max_pr_tags:len(Transport.discovery_pr_tags)-1]
+			if (_discovery_pr_tags.size() > _max_pr_tags) {
+				std::set<Bytes>::iterator iter = _discovery_pr_tags.begin();
+				std::advance(iter, _discovery_pr_tags.size() - _max_pr_tags);
+				_discovery_pr_tags.erase(_discovery_pr_tags.begin(), iter);
+			}
 
-			if time.time() > Transport.tables_last_culled + Transport.tables_cull_interval:
+			// Cull the path table if it has reached its max size
+			if (_destination_table.size() > _path_table_maxsize) {
+				// TODO prune by age, or better yet by last use
+				std::map<Bytes, DestinationEntry>::iterator iter = _destination_table.begin();
+				std::advance(iter, _destination_table.size() - _path_table_maxsize);
+				_destination_table.erase(_destination_table.begin(), iter);
+			}
+
+			if (OS::time() > (_tables_last_culled + _tables_cull_interval)) {
+
 				// Cull the reverse table according to timeout
-				stale_reverse_entries = []
-				for truncated_packet_hash in Transport.reverse_table:
-					reverse_entry = Transport.reverse_table[truncated_packet_hash]
-					if time.time() > reverse_entry[2] + Transport.REVERSE_TIMEOUT:
-						stale_reverse_entries.append(truncated_packet_hash)
+				std::vector<Bytes> stale_reverse_entries;
+				for (const auto& [packet_hash, reverse_entry] : _reverse_table) {
+					if (OS::time() > (reverse_entry._timestamp + REVERSE_TIMEOUT)) {
+						stale_reverse_entries.push_back(packet_hash);
+					}
+				}
 
 				// Cull the link table according to timeout
-				stale_links = []
-				for link_id in Transport.link_table:
-					link_entry = Transport.link_table[link_id]
+				std::vector<Bytes> stale_links;
+				for (const auto& [link_id, link_entry] : _link_table) {
+					if (link_entry._validated) {
+						if (OS::time() > (link_entry._timestamp + LINK_TIMEOUT)) {
+							stale_links.push_back(link_id);
+						}
+					}
+					else {
+						if (OS::time() > link_entry._proof_timeout) {
+							stale_links.push_back(link_id);
 
-					if link_entry[7] == True:
-						if time.time() > link_entry[0] + Transport.LINK_TIMEOUT:
-							stale_links.append(link_id)
-					else:
-						if time.time() > link_entry[8]:
-							stale_links.append(link_id)
+							double last_path_request = 0.0;
+							const auto& iter = _path_requests.find(link_entry._destination_hash);
+							if (iter != _path_requests.end()) {
+								last_path_request = (*iter).second;
+							}
 
-							last_path_request = 0
-							if link_entry[6] in Transport.path_requests:
-								last_path_request = Transport.path_requests[link_entry[6]]
+							uint8_t lr_taken_hops = link_entry._hops;
 
-							lr_taken_hops = link_entry[5]
-
-							path_request_throttle = time.time() - last_path_request < Transport.PATH_REQUEST_MI
-							path_request_conditions = False
+							bool path_request_throttle = (OS::time() - last_path_request) < PATH_REQUEST_MI;
+							bool path_request_conditions = false;
 							
 							// If the path has been invalidated between the time of
 							// making the link request and now, try to rediscover it
-							if not Transport.has_path(link_entry[6]):
-								RNS.log("Trying to rediscover path for "+RNS.prettyhexrep(link_entry[6])+" since an attempted link was never established, and path is now missing", RNS.LOG_DEBUG)
-								path_request_conditions =True
+							if (!has_path(link_entry._destination_hash)) {
+								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and path is now missing");
+								path_request_conditions = true;
+							}
 
 							// If this link request was originated from a local client
 							// attempt to rediscover a path to the destination, if this
 							// has not already happened recently.
-							elif not path_request_throttle and lr_taken_hops == 0:
-								RNS.log("Trying to rediscover path for "+RNS.prettyhexrep(link_entry[6])+" since an attempted local client link was never established", RNS.LOG_DEBUG)
-								path_request_conditions = True
+							else if (!path_request_throttle && lr_taken_hops == 0) {
+								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted local client link was never established");
+								path_request_conditions = true;
+							}
 
 							// If the link destination was previously only 1 hop
 							// away, this likely means that it was local to one
 							// of our interfaces, and that it roamed somewhere else.
 							// In that case, try to discover a new path.
-							elif not path_request_throttle and Transport.hops_to(link_entry[6]) == 1:
-								RNS.log("Trying to rediscover path for "+RNS.prettyhexrep(link_entry[6])+" since an attempted link was never established, and destination was previously local to an interface on this instance", RNS.LOG_DEBUG)
-								path_request_conditions = True
+							else if (!path_request_throttle && hops_to(link_entry._destination_hash) == 1) {
+								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and destination was previously local to an interface on this instance");
+								path_request_conditions = true;
+							}
 
 							// If the link destination was previously only 1 hop
 							// away, this likely means that it was local to one
 							// of our interfaces, and that it roamed somewhere else.
 							// In that case, try to discover a new path.
-							elif not path_request_throttle and lr_taken_hops == 1:
-								RNS.log("Trying to rediscover path for "+RNS.prettyhexrep(link_entry[6])+" since an attempted link was never established, and link initiator is local to an interface on this instance", RNS.LOG_DEBUG)
-								path_request_conditions = True
+							else if ( !path_request_throttle and lr_taken_hops == 1) {
+								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and link initiator is local to an interface on this instance");
+								path_request_conditions = true;
+							}
 
-							if path_request_conditions:
-								if not link_entry[6] in path_requests:
-									path_requests.append(link_entry[6])
+							if (path_request_conditions) {
+								if (path_requests.count(link_entry._destination_hash) == 0) {
+									path_requests.insert(link_entry._destination_hash);
+								}
 
-								if not RNS.Reticulum.transport_enabled():
+								if (!Reticulum::transport_enabled()) {
 									// Drop current path if we are not a transport instance, to
 									// allow using higher-hop count paths or reused announces
 									// from newly adjacent transport instances.
-									Transport.expire_path(link_entry[6])
+									expire_path(link_entry._destination_hash);
+								}
+							}
+						}
+					}
+				}
 
 				// Cull the path table
-				stale_paths = []
-				for destination_hash in Transport.destination_table:
-					destination_entry = Transport.destination_table[destination_hash]
-					attached_interface = destination_entry[5]
+				std::vector<Bytes> stale_paths;
+				for (const auto& [destination_hash, destination_entry] : _destination_table) {
+					const auto& attached_interface = destination_entry._receiving_interface;
+					double destination_expiry;
+					if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
+						destination_expiry = destination_entry._timestamp + AP_PATH_TIME;
+					}
+					else if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ROAMING) {
+						destination_expiry = destination_entry._timestamp + ROAMING_PATH_TIME;
+					}
+					else {
+						destination_expiry = destination_entry._timestamp + DESTINATION_TIMEOUT;
+					}
 
-					if attached_interface != None and hasattr(attached_interface, "mode") and attached_interface.mode == RNS.Interfaces.Interface.Interface.MODE_ACCESS_POINT:
-						destination_expiry = destination_entry[0] + Transport.AP_PATH_TIME
-					elif attached_interface != None and hasattr(attached_interface, "mode") and attached_interface.mode == RNS.Interfaces.Interface.Interface.MODE_ROAMING:
-						destination_expiry = destination_entry[0] + Transport.ROAMING_PATH_TIME
-					else:
-						destination_expiry = destination_entry[0] + Transport.DESTINATION_TIMEOUT
-
-					if time.time() > destination_expiry:
-						stale_paths.append(destination_hash)
-						RNS.log("Path to "+RNS.prettyhexrep(destination_hash)+" timed out and was removed", RNS.LOG_DEBUG)
-					elif not attached_interface in Transport.interfaces:
-						stale_paths.append(destination_hash)
-						RNS.log("Path to "+RNS.prettyhexrep(destination_hash)+" was removed since the attached interface no longer exists", RNS.LOG_DEBUG)
+					if (OS::time() > destination_expiry) {
+						stale_paths.push_back(destination_hash);
+						debug("Path to " + destination_hash.toHex() + " timed out and was removed");
+					}
+					else if (_interfaces.count(attached_interface.get_hash()) == 0) {
+						stale_paths.push_back(destination_hash);
+						debug("Path to " + destination_hash.toHex() + " was removed since the attached interface no longer exists");
+					}
+				}
 
 				// Cull the pending discovery path requests table
-				stale_discovery_path_requests = []
-				for destination_hash in Transport.discovery_path_requests:
-					entry = Transport.discovery_path_requests[destination_hash]
-
-					if time.time() > entry["timeout"]:
-						stale_discovery_path_requests.append(destination_hash)
-						RNS.log("Waiting path request for "+RNS.prettyhexrep(destination_hash)+" timed out and was removed", RNS.LOG_DEBUG)
+				std::vector<Bytes> stale_discovery_path_requests;
+				for (const auto& [destination_hash, path_entry] : _discovery_path_requests) {
+					if (OS::time() > path_entry._timeout) {
+						stale_discovery_path_requests.push_back(destination_hash);
+						debug("Waiting path request for " + destination_hash.toString() + " timed out and was removed");
+					}
+				}
 
 				// Cull the tunnel table
-				stale_tunnels = []
-				ti = 0
-				for tunnel_id in Transport.tunnels:
-					tunnel_entry = Transport.tunnels[tunnel_id]
+				count = 0;
+				std::vector<Bytes> stale_tunnels;
+				for (const auto& [tunnel_id, tunnel_entry] : _tunnels) {
+					if (OS::time() > tunnel_entry._expires) {
+						stale_tunnels.push_back(tunnel_id);
+						extreme("Tunnel " + tunnel_id.toHex() + " timed out and was removed");
+					}
+					else {
+						std::vector<Bytes> stale_tunnel_paths;
+						for (const auto& [destination_hash, destination_entry] : tunnel_entry._serialised_paths) {
+							if (OS::time() > (destination_entry._timestamp + DESTINATION_TIMEOUT)) {
+								stale_tunnel_paths.push_back(destination_hash);
+								extreme("Tunnel path to " + destination_hash.toHex() + " timed out and was removed");
+							}
+						}
 
-					expires = tunnel_entry[3]
-					if time.time() > expires:
-						stale_tunnels.append(tunnel_id)
-						RNS.log("Tunnel "+RNS.prettyhexrep(tunnel_id)+" timed out and was removed", RNS.LOG_EXTREME)
-					else:
-						stale_tunnel_paths = []
-						tunnel_paths = tunnel_entry[2]
-						for tunnel_path in tunnel_paths:
-							tunnel_path_entry = tunnel_paths[tunnel_path]
-
-							if time.time() > tunnel_path_entry[0] + Transport.DESTINATION_TIMEOUT:
-								stale_tunnel_paths.append(tunnel_path)
-								RNS.log("Tunnel path to "+RNS.prettyhexrep(tunnel_path)+" timed out and was removed", RNS.LOG_EXTREME)
-
-						for tunnel_path in stale_tunnel_paths:
-							tunnel_paths.pop(tunnel_path)
-							ti += 1
-
-
-				if ti > 0:
-					if ti == 1:
-						RNS.log("Removed "+str(ti)+" tunnel path", RNS.LOG_EXTREME)
-					else:
-						RNS.log("Removed "+str(ti)+" tunnel paths", RNS.LOG_EXTREME)
-
-
+						//for (const auto& destination_hash : stale_tunnel_paths) {
+						for (const Bytes& destination_hash : stale_tunnel_paths) {
+							const_cast<TunnelEntry&>(tunnel_entry)._serialised_paths.erase(destination_hash);
+							++count;
+						}
+					}
+				}
+				if (count > 0) {
+					extreme("Removed " + std::to_string(count) + " tunnel paths");
+				}
 				
-				i = 0
-				for truncated_packet_hash in stale_reverse_entries:
-					Transport.reverse_table.pop(truncated_packet_hash)
-					i += 1
+				count = 0;
+				for (const auto& truncated_packet_hash : stale_reverse_entries) {
+					_reverse_table.erase(truncated_packet_hash);
+					++count;
+				}
+				if (count > 0) {
+					extreme("Released " + std::to_string(count) + " reverse table entries");
+				}
 
-				if i > 0:
-					if i == 1:
-						RNS.log("Released "+str(i)+" reverse table entry", RNS.LOG_EXTREME)
-					else:
-						RNS.log("Released "+str(i)+" reverse table entries", RNS.LOG_EXTREME)
+				count = 0;
+				for (const auto& link_id : stale_links) {
+					_link_table.erase(link_id);
+					++count;
+				}
+				if (count > 0) {
+					extreme("Released " + std::to_string(count) + " links");
+				}
 
-				
+				count = 0;
+				for (const auto& destination_hash : stale_paths) {
+					//_destination_table.erase(destination_hash);
+					remove_path(destination_hash);
+					++count;
+				}
+				if (count > 0) {
+					extreme("Removed " + std::to_string(count) + " paths");
+				}
 
-				i = 0
-				for link_id in stale_links:
-					Transport.link_table.pop(link_id)
-					i += 1
+				count = 0;
+				for (const auto& destination_hash : stale_discovery_path_requests) {
+					_discovery_path_requests.erase(destination_hash);
+					++count;
+				}
+				if (count > 0) {
+					extreme("Removed " + std::to_string(count) + " waiting path requests");
+				}
 
-				if i > 0:
-					if i == 1:
-						RNS.log("Released "+str(i)+" link", RNS.LOG_EXTREME)
-					else:
-						RNS.log("Released "+str(i)+" links", RNS.LOG_EXTREME)
+				count = 0;
+				for (const auto& tunnel_id : stale_tunnels) {
+					_tunnels.erase(tunnel_id);
+					++count;
+				}
+				if (count > 0) {
+					extreme("Removed " + std::to_string(count) + " tunnels");
+				}
 
-				i = 0
-				for destination_hash in stale_paths:
-					Transport.destination_table.pop(destination_hash)
-					i += 1
-
-				if i > 0:
-					if i == 1:
-						RNS.log("Removed "+str(i)+" path", RNS.LOG_EXTREME)
-					else:
-						RNS.log("Removed "+str(i)+" paths", RNS.LOG_EXTREME)
-
-				i = 0
-				for destination_hash in stale_discovery_path_requests:
-					Transport.discovery_path_requests.pop(destination_hash)
-					i += 1
-
-				if i > 0:
-					if i == 1:
-						RNS.log("Removed "+str(i)+" waiting path request", RNS.LOG_EXTREME)
-					else:
-						RNS.log("Removed "+str(i)+" waiting path requests", RNS.LOG_EXTREME)
-
-				i = 0
-				for tunnel_id in stale_tunnels:
-					Transport.tunnels.pop(tunnel_id)
-					i += 1
-
-				if i > 0:
-					if i == 1:
-						RNS.log("Removed "+str(i)+" tunnel", RNS.LOG_EXTREME)
-					else:
-						RNS.log("Removed "+str(i)+" tunnels", RNS.LOG_EXTREME)
-
-				Transport.tables_last_culled = time.time()
-*/
+				_tables_last_culled = OS::time();
+			}
 
 			// Periodically persist data
 			if (OS::time() > (_last_saved + _save_interval)) {
 				// CBA temporarily disabled for testing with empty destination table
-				//persist_data();
+				persist_data();
 				_last_saved = OS::time();
 			}
 		}
@@ -1067,34 +1118,26 @@ using namespace RNS::Utilities;
 
 											if (!queued_announces) {
 												double wait_time = std::max(interface.announce_allowed_at() - OS::time(), (double)0);
+
 												// CBA TODO THREAD?
 												//z timer = threading.Timer(wait_time, interface.process_announce_queue)
 												//z timer.start()
 
-												std::string wait_time_str;
 												if (wait_time < 1000) {
-													wait_time_str = std::to_string(wait_time) + "ms";
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(wait_time) + "ms");
 												}
 												else {
-													wait_time_str = std::to_string(OS::round(wait_time/1000,1)) + "s";
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + "s");
 												}
-
-												std::string ql_str = std::to_string(interface.announce_queue().size());
-												extreme("Added announce to queue (height " + ql_str + ") on " + interface.toString() + " for processing in " + wait_time_str);
 											}
 											else {
 												double wait_time = std::max(interface.announce_allowed_at() - OS::time(), (double)0);
-
-												std::string wait_time_str;
 												if (wait_time < 1000) {
-													wait_time_str = std::to_string(wait_time) + "ms";
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(wait_time) + "ms");
 												}
 												else {
-													wait_time_str = std::to_string(OS::round(wait_time/1000,2)) + "s";
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,2)) + "s");
 												}
-
-												std::string ql_str = std::to_string(interface.announce_queue().size());
-												extreme("Added announce to queue (height " + ql_str + ") on " + interface.toString() + " for processing in " + wait_time_str);
 											}
 										}
 									}
@@ -2647,23 +2690,7 @@ Deregisters an announce handler.
 	if (should_cache(packet) || force_cache) {
 		extreme("Saving packet " + packet.get_hash().toHex() + " to storage");
 		try {
-/*p
-			packet_hash = RNS.hexrep(packet.get_hash(), delimit=False)
-			interface_reference = None
-			if packet.receiving_interface != None:
-				interface_reference = str(packet.receiving_interface)
-
-			file = open(RNS.Reticulum.cachepath+"/"+packet_hash, "wb")  
-			file.write(umsgpack.packb([packet.raw, interface_reference]))
-			file.close()
-*/
 			std::string packet_cache_path = Reticulum::_cachepath + "/" + packet.get_hash().toHex();
-// CBA remporarily disabled until CachedPacket is implemented
-/*
-			DynamicJsonDocument doc(1024);
-			doc.set(packet);
-			return Persistence::serialize(doc, packet_cache_path.c_str(), 1024);
-*/
 			return Persistence::serialize(packet, packet_cache_path.c_str(), 1024);
 		}
 		catch (std::exception& e) {
@@ -2674,7 +2701,7 @@ Deregisters an announce handler.
 }
 
 /*static*/ Packet Transport::get_cached_packet(const Bytes& packet_hash) {
-	extreme("Loading packet " + packet_hash.toHex() + " to storage");
+	extreme("Loading packet " + packet_hash.toHex() + " from cache storage");
 	try {
 /*p
 		packet_hash = RNS.hexrep(packet_hash, delimit=False)
@@ -2697,14 +2724,6 @@ Deregisters an announce handler.
 			return None
 */
 		std::string packet_cache_path = Reticulum::_cachepath + "/" + packet_hash.toHex();
-// CBA remporarily disabled until CachedPacket is implemented since this results in recursive calls
-//  due to Packet deserializer calling get_cached_packet()
-/*
-		DynamicJsonDocument doc(1024);
-		if (Persistence::deserialize(doc, packet_cache_path.c_str())) {
-			return doc.as<Packet>();
-		}
-*/
 		//return Persistence::deserialize(packet_cache_path.c_str());
 		Packet packet({Type::NONE});
 		Persistence::deserialize(packet, packet_cache_path.c_str());
@@ -2715,6 +2734,27 @@ Deregisters an announce handler.
 		error("The contained exception was: " + std::string(e.what()));
 	}
 	return {Type::NONE};
+}
+
+/*static*/ bool Transport::clear_cached_packet(const Bytes& packet_hash) {
+	extreme("Clearing packet " + packet_hash.toHex() + " from cache storage");
+	try {
+		std::string packet_cache_path = Reticulum::_cachepath + "/" + packet_hash.toHex();
+		double start_time = OS::time();
+		bool success = RNS::Utilities::OS::remove_file(packet_cache_path.c_str());
+		double diff_time = OS::time() - start_time;
+		if (diff_time < 1.0) {
+			debug("Remove cached packet in " + std::to_string(diff_time * 1000) + " ms");
+		}
+		else {
+			debug("Remove cached packet in " + std::to_string(diff_time) + " s");
+		}
+	}
+	catch (std::exception& e) {
+		error("Exception occurred while clearing cached packet.");
+		error("The contained exception was: " + std::string(e.what()));
+	}
+	return false;
 }
 
 /*static*/ bool Transport::cache_request_packet(const Packet& packet) {
@@ -2751,6 +2791,13 @@ Deregisters an announce handler.
 		Packet request(destination, packet_hash, Type::Packet::DATA, Type::Packet::CACHE_REQUEST);
 		request.send();
 	}
+}
+
+/*static*/ bool Transport::remove_path(const Bytes& destination_hash) {
+	if (_destination_table.erase(destination_hash) > 0) {
+		// CBA also remove cached announce packet if exists
+	}
+	return false;
 }
 
 /*
@@ -3134,7 +3181,8 @@ will announce it.
 #elif defined(INTERFACES_MAP)
 			for (auto& [hash, interface] : _interfaces) {
 #endif
-				// CBA TEST consider forwarding path requests even on requestor interface
+				// CBA EXPERIMENTAL forwarding path requests even on requestor interface in order to support
+				//  path-finding over LoRa mesh
 				//if (interface != attached_interface) {
 				if (true) {
 					extreme("Transport::path_request: requesting path on interface " + interface.toString());
@@ -3404,8 +3452,15 @@ will announce it.
 		}
 		RNS::extreme("Transport::save_path_table: serialized " + std::to_string(length) + " bytes");
 		if (length > 0) {
-			if (RNS::Utilities::OS::write_file(data, destination_table_path.c_str())) {
-				RNS::extreme("Transport::save_path_table: wrote: " + std::to_string(data.size()) + " bytes");
+			// Check crc to see if data has changed before writing
+			uint8_t crc = crypto_crc8(0, data.data(), data.size());
+			if (_destination_table_crc > 0 && crc == _destination_table_crc) {
+				RNS::extreme("Transport::save_path_table: no change detected, skipping write");
+			}
+			else if (RNS::Utilities::OS::write_file(data, destination_table_path.c_str())) {
+				RNS::extreme("Transport::save_path_table: wrote " + std::to_string(_destination_table.size()) + " entries, " + std::to_string(data.size()) + " bytes");
+				_destination_table_crc = crc;
+				success = true;
 			}
 			else {
 				RNS::extreme("Transport::save_path_table: write failed");
@@ -3415,16 +3470,28 @@ will announce it.
 			RNS::extreme("Transport::save_path_table: failed to serialize");
 		}
 
-		double save_time = OS::time() - save_start;
-		std::string time_str;
-		if (save_time < 1) {
-			time_str = std::to_string(OS::round(save_time * 1000, 2)) + "ms";
+		if (success) {
+			double save_time = OS::time() - save_start;
+			if (save_time < 1.0) {
+				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time * 1000, 2)) + " ms");
+				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time * 1000) + " ms");
+			}
+			else {
+				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time, 2)) + " s");
+				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time) + " s");
+			}
 		}
-		else {
-			time_str = std::to_string(OS::round(save_time, 2)) + "s";
+
+#ifdef ARDUINO
+		// write time offset to file
+		{
+			std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
+			uint64_t offset = OS::ltime();
+			debug("Writing time offset of " + std::to_string(offset) + " to file");
+			Bytes buf((uint8_t*)&offset, sizeof(offset));
+			OS::write_file(buf, time_offset_path.c_str());
 		}
-		debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + time_str);
-		success = true;
+#endif
 	}
 	catch (std::exception& e) {
 		error("Could not save path table to storage, the contained exception was: " + std::string(e.what()));
@@ -3503,9 +3570,9 @@ will announce it.
 
 			save_time = time.time() - save_start
 			if save_time < 1:
-				time_str = str(round(save_time*1000,2))+"ms"
+				time_str = str(round(save_time*1000,2))+" ms"
 			else:
-				time_str = str(round(save_time,2))+"s"
+				time_str = str(round(save_time,2))+" s"
 			RNS.log("Saved "+str(len(serialised_tunnels))+" tunnel table entries in "+time_str, RNS.LOG_DEBUG)
 		except Exception as e:
 			RNS.log("Could not save tunnel table to storage, the contained exception was: "+str(e), RNS.LOG_ERROR)

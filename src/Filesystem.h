@@ -73,7 +73,10 @@ namespace RNS {
 		virtual bool write_file(const Bytes& data, const char* file_path) { return false; }
 		virtual bool remove_file(const char* file_path) { return false; }
 		virtual bool rename_file(const char* from_file_path, const char* to_file_path) { return false; }
+		virtual bool directory_exists(const char* directory_path) { return false; }
 		virtual bool create_directory(const char* directory_path) { return false; }
+		virtual bool remove_directory(const char* directory_path) { return false; }
+		virtual std::list<std::string> list_directory(const char* directory_path) { return _empty; }
 
 	public:
 		inline bool do_file_exists(const char* file_path) { assert(_object); return _object->do_file_exists(file_path); }
@@ -81,7 +84,13 @@ namespace RNS {
 		inline bool do_write_file(const Bytes& data, const char* file_path) { assert(_object); return _object->do_write_file(data, file_path); }
 		inline bool do_remove_file(const char* file_path) { assert(_object); return _object->do_remove_file(file_path); }
 		inline bool do_rename_file(const char* from_file_path, const char* to_file_path) { assert(_object); return _object->do_rename_file(from_file_path, to_file_path); }
+		inline bool do_directory_exists(const char* directory_path) { assert(_object); return _object->do_directory_exists(directory_path); }
 		inline bool do_create_directory(const char* directory_path) { assert(_object); return _object->do_create_directory(directory_path); }
+		inline bool do_remove_directory(const char* directory_path) { assert(_object); return _object->do_remove_directory(directory_path); }
+		virtual std::list<std::string> do_list_directory(const char* directory_path) { assert(_object); return _object->do_list_directory(directory_path); }
+
+	private:
+		std::list<std::string> _empty;
 
 		// getters/setters
 	protected:
@@ -107,11 +116,17 @@ namespace RNS {
 			virtual inline bool do_write_file(const Bytes& data, const char* file_path) { if (_parent == nullptr) return false; return  _parent->write_file(data, file_path); }
 			virtual inline bool do_remove_file(const char* file_path) { if (_parent == nullptr) return false; return _parent->remove_file(file_path); }
 			virtual inline bool do_rename_file(const char* from_file_path, const char* to_file_path) { if (_parent == nullptr) return false; return _parent->rename_file(from_file_path, to_file_path); }
+			virtual inline bool do_directory_exists(const char* directory_path) { if (_parent == nullptr) return false; return _parent->directory_exists(directory_path); }
 			virtual inline bool do_create_directory(const char* directory_path) { if (_parent == nullptr) return false; return _parent->create_directory(directory_path); }
+			virtual inline bool do_remove_directory(const char* directory_path) { if (_parent == nullptr) return false; return _parent->remove_directory(directory_path); }
+			virtual inline std::list<std::string> do_list_directory(const char* directory_path) { if (_parent == nullptr) return _empty; return _parent->do_list_directory(directory_path); }
 		private:
 			Filesystem* _parent = nullptr;
+			std::list<std::string> _empty;
 		friend class Filesystem;
 		};
+
+	private:
 		std::shared_ptr<Object> _object;
 		bool _creator = false;
 

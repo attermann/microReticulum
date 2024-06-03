@@ -1,5 +1,7 @@
 #include "Log.h"
 
+#include "Utilities/OS.h"
+
 #include <sys/time.h>
 #include <time.h>
 #include <stdio.h>
@@ -10,7 +12,7 @@ using namespace RNS;
 LogLevel _level = LOG_EXTREME;
 //LogLevel _level = LOG_MEM;
 RNS::log_callback _on_log = nullptr;
-char _datetime[32];
+char _datetime[20];
 
 const char* RNS::getLevelName(LogLevel level) {
 	switch (level) {
@@ -38,6 +40,16 @@ const char* RNS::getLevelName(LogLevel level) {
 }
 
 const char* RNS::getTimeString() {
+#ifdef ARDUINO
+	uint64_t time = Utilities::OS::ltime();
+	if (time < 86400000) {
+		snprintf(_datetime, sizeof(_datetime), "%02d:%02d:%02d.%03d", (int)(time/3600000), (int)((time/60000)%60), (int)((time/1000)%60), (int)(time%1000));
+	}
+	else {
+		snprintf(_datetime, sizeof(_datetime), "%02d-%02d:%02d:%02d.%03d", (int)(time/86400000), (int)((time/3600000)%24), (int)((time/60000)%60), (int)((time/1000)%60), (int)(time%1000));
+	}
+	return _datetime;
+#else
 	struct timeval tv;
 	gettimeofday(&tv, nullptr);
 	int millis = lrint(tv.tv_usec/1000.0);
@@ -49,6 +61,7 @@ const char* RNS::getTimeString() {
 	size_t len = strftime(_datetime, sizeof(_datetime), "%Y-%m-%d %H:%M:%S", tm);
 	sprintf(_datetime+len, ".%03d", millis);
 	return _datetime;
+#endif
 }
 
 void RNS::loglevel(LogLevel level) {

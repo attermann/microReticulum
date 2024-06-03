@@ -2,6 +2,7 @@
 
 #include "Log.h"
 #include "Type.h"
+#include "Utilities/OS.h"
 
 #include <vector>
 #include <string>
@@ -33,6 +34,23 @@ namespace RNS {
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
 
+		uint16_t _local_interface_port = 37428;
+		uint16_t _local_control_port   = 37429;
+		bool _share_instance       = true;
+		//p _rpc_listener         = None
+
+		//p _ifac_salt = Reticulum.IFAC_SALT
+
+		bool _is_shared_instance = false;
+		bool _is_connected_to_shared_instance = false;
+		bool _is_standalone_instance = false;
+		//p _jobs_thread = None
+		double _last_data_persist = Utilities::OS::time();
+		double _last_cache_clean = 0.0;
+
+		// CBA
+		double _jobs_last_run = Utilities::OS::time();
+
 	public:
 		Reticulum(Type::NoneConstructor none) {
 			mem("Reticulum NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -60,6 +78,10 @@ namespace RNS {
 	public:
 		void start();
 		void loop();
+		void jobs();
+		void should_persist_data();
+		void persist_data();
+		void clean_caches();
 
 		/*
 		Returns whether proofs sent are explicit or implicit.

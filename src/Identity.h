@@ -141,6 +141,8 @@ namespace RNS {
 		}
 
 		static bool validate_announce(const Packet& packet);
+		static void persist_data();
+		static void exit_handler();
 
 		// getters/setters
 		inline const Bytes& encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }

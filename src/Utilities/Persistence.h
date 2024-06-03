@@ -203,6 +203,8 @@ namespace ArduinoJson {
 			//packet.set_hash(src["hash"]);
 			packet.sent_at(src["sent_at"]);
 			RNS::Bytes destination_hash = src["destination_hash"];
+			// set cached flag since pcket was read from cache
+			packet.cached(true);
 /**/
 			RNS::extreme(">>> Finished deserializing packet");
 			return packet;
@@ -233,11 +235,19 @@ namespace ArduinoJson {
 			else {
 				dst["receiving_interface_hash"] = nullptr;
 			}
+			// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
 			//dst["packet"] = src._announce_packet;
 			if (src._announce_packet) {
 				dst["packet_hash"] = src._announce_packet.get_hash();
-				// Whenever a reference to a packet is serilized we must ensure that packet itself also gets serialized separately
-				RNS::Transport::cache(src._announce_packet, true);
+				// Only cache packet if not already cached
+				if (!src._announce_packet.cached()) {
+					if (RNS::Transport::cache(src._announce_packet, true)) {
+						const_cast<RNS::Packet&>(src._announce_packet).cached(true);
+					}
+				}
+				else {
+					RNS::extreme("Destination announce packet " + src._announce_packet.get_hash().toHex() + " is already cached");
+				}
 			}
 			else {
 				dst["packet_hash"] = nullptr;
@@ -256,14 +266,16 @@ namespace ArduinoJson {
 			dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
 			//dst._receiving_interface = src["receiving_interface"];
 			RNS::Bytes interface_hash = src["receiving_interface_hash"];
-			if (interface_hash)
+			if (interface_hash) {
 				// Query transport for matching interface
 				dst._receiving_interface = RNS::Transport::find_interface_from_hash(interface_hash);
+			}
 			//dst._announce_packet = src["packet"];
 			RNS::Bytes packet_hash = src["packet_hash"];
-			if (packet_hash)
+			if (packet_hash) {
 				// Query transport for matching packet
 				dst._announce_packet = RNS::Transport::get_cached_packet(packet_hash);
+			}
 /**/
 /*
 			//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
@@ -308,7 +320,7 @@ namespace RNS { namespace Persistence {
 		RNS::extreme("Persistence::serialize: serialized " + std::to_string(length) + " bytes");
 		if (length > 0) {
 			if (RNS::Utilities::OS::write_file(data, file_path)) {
-				RNS::extreme("Persistence::serialize: wrote: " + std::to_string(data.size()) + " bytes");
+				RNS::extreme("Persistence::serialize: wrote " + std::to_string(data.size()) + " bytes");
 			}
 			else {
 				RNS::extreme("Persistence::serialize: write failed");

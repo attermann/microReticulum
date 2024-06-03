@@ -6,6 +6,7 @@ using namespace RNS;
 using namespace RNS::Utilities;
 
 /*static*/ Filesystem OS::filesystem = {Type::NONE};
+/*static*/ uint64_t OS::timeOffset = 0;
 
 /*static*/ void OS::register_filesystem(Filesystem& filesystem) {
 	extreme("Registering filesystem...");
@@ -53,9 +54,30 @@ using namespace RNS::Utilities;
 	return filesystem.do_rename_file(from_file_path, to_file_path);
 }
 
+/*static*/ bool OS::directory_exists(const char* directory_path) {
+	if (!filesystem) {
+		throw std::runtime_error("Filesystem has not been registered");
+	}
+	return filesystem.do_directory_exists(directory_path);
+}
+
 /*static*/ bool OS::create_directory(const char* directory_path) {
 	if (!filesystem) {
 		throw std::runtime_error("Filesystem has not been registered");
 	}
 	return filesystem.do_create_directory(directory_path);
+}
+
+/*static*/ bool OS::remove_directory(const char* directory_path) {
+	if (!filesystem) {
+		throw std::runtime_error("Filesystem has not been registered");
+	}
+	return filesystem.do_remove_directory(directory_path);
+}
+
+/*static*/ std::list<std::string> OS::list_directory(const char* directory_path) {
+	if (!filesystem) {
+		throw std::runtime_error("Filesystem has not been registered");
+	}
+	return filesystem.do_list_directory(directory_path);
 }
