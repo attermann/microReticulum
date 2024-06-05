@@ -47,6 +47,9 @@ Reticulum::Reticulum() : _object(new Object()) {
 	//Ethernet.begin(mac);
 	// WiFi.macAddress(mac);
 	//RNG.stir(mac, sizeof(mac));
+
+	int seed = analogRead(0);
+	RNG.stir((uint8_t*)&seed, sizeof(seed));
  
 	// Add the noise source to the list of sources known to RNG.
 	//RNG.addNoiseSource(noise);
