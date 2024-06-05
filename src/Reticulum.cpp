@@ -3,11 +3,12 @@
 #include "Transport.h"
 #include "Log.h"
 
+//#include <TransistorNoiseSource.h>
 #include <RNG.h>
 
 #ifdef ARDUINO
+#include <Arduino.h>
 //#include <TransistorNoiseSource.h>
-//#include <Ethernet.h>
 #endif
 
 using namespace RNS;
@@ -40,18 +41,43 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 	// Initialkize random number generator
 	RNG.begin("Reticulum");
+	extreme("RNG pre-seed random value: " + std::to_string(Cryptography::randomnum()));
 
 #ifdef ARDUINO
-	// Stir in the Ethernet MAC address.
-	//byte mac[6];
-	//Ethernet.begin(mac);
-	// WiFi.macAddress(mac);
-	//RNG.stir(mac, sizeof(mac));
 
-	int seed = analogRead(0);
+/*
+	uint64_t testseed = 0;
+	uint64_t value;
+
+	value = analogRead(A0);
+	extreme("A0 value: " + std::to_string(value));
+	//RNG.stir((uint8_t*)&value, sizeof(value));
+	testseed |= value;
+
+	value = analogRead(A3);
+	extreme("A3 value: " + std::to_string(value));
+	//RNG.stir((uint8_t*)&value, sizeof(value));
+	testseed |= (value << 16);
+
+	value = analogRead(A4);
+	extreme("A4 value: " + std::to_string(value));
+	//RNG.stir((uint8_t*)&value, sizeof(value));
+	testseed |= (value << 32);
+
+	value = analogRead(A5);
+	extreme("A5 value: " + std::to_string(value));
+	//RNG.stir((uint8_t*)&value, sizeof(value));
+	testseed |= (value << 48);
+
+	extreme("RNG testseed: " + std::to_string(testseed));
+*/
+
+	// Stir in some entropy (currently only adding entropy on nrf52 platform)
+	uint64_t seed = ((uint64_t)analogRead(A5) << 48) | ((uint64_t)analogRead(A4) << 32) | ((uint64_t)analogRead(A3) << 16) | (uint64_t)analogRead(A0);
+	extreme("RNG seed: " + std::to_string(seed));
 	RNG.stir((uint8_t*)&seed, sizeof(seed));
- 
-	// Add the noise source to the list of sources known to RNG.
+
+	// Add a noise source to the list of sources known to RNG.
 	//RNG.addNoiseSource(noise);
  #endif
 
