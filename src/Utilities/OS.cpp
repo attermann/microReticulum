@@ -2,11 +2,34 @@
 
 #include "../Log.h"
 
+#ifdef ARDUINO
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+//extern "C" char* sbrk(int incr);
+#else
+extern char *__brkval;
+#endif
+#endif
+
 using namespace RNS;
 using namespace RNS::Utilities;
 
 /*static*/ Filesystem OS::filesystem = {Type::NONE};
 /*static*/ uint64_t OS::timeOffset = 0;
+
+/*static*/ int OS::freeMemory() {
+#ifdef ARDUINO
+	char top;
+#ifdef __arm__
+	return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+	return &top - __brkval;
+#else
+	return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif
+	return -1;
+#endif
+}
 
 /*static*/ void OS::register_filesystem(Filesystem& filesystem) {
 	extreme("Registering filesystem...");

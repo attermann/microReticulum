@@ -70,10 +70,12 @@ namespace RNS { namespace Type {
 
 		static const uint16_t MDU              = MTU - HEADER_MAXSIZE - IFAC_MIN_SIZE;
 
-		static const uint32_t RESOURCE_CACHE   = 24*60*60;
-		static const uint16_t JOB_INTERVAL     = 5*60;
-		static const uint16_t CLEAN_INTERVAL   = 15*60;
-		static const uint16_t PERSIST_INTERVAL = 60*60*12;
+		static const uint32_t RESOURCE_CACHE   = 60*60*24;
+		static const uint16_t JOB_INTERVAL     = 60*5;
+		static const uint16_t CLEAN_INTERVAL   = 60*15;
+		// CBA
+		//static const uint16_t PERSIST_INTERVAL = 60*60*12;
+		static const uint16_t PERSIST_INTERVAL = 60*60;
 		static const uint16_t GRACIOUS_PERSIST_INTERVAL = 60*5;
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes

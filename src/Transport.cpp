@@ -61,16 +61,16 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 /*static*/ uint16_t Transport::_LOCAL_CLIENT_CACHE_MAXSIZE = 512;
 
-/*static*/ double Transport::_start_time				= 0;
+/*static*/ double Transport::_start_time				= 0.0;
 /*static*/ bool Transport::_jobs_locked					= false;
 /*static*/ bool Transport::_jobs_running				= false;
 /*static*/ float Transport::_job_interval				= 0.250;
-/*static*/ double Transport::_jobs_last_run				= 0;
-/*static*/ double Transport::_links_last_checked		= 0;
+/*static*/ double Transport::_jobs_last_run				= 0.0;
+/*static*/ double Transport::_links_last_checked		= 0.0;
 /*static*/ float Transport::_links_check_interval		= 1.0;
-/*static*/ double Transport::_receipts_last_checked		= 0;
+/*static*/ double Transport::_receipts_last_checked		= 0.0;
 /*static*/ float Transport::_receipts_check_interval	= 1.0;
-/*static*/ double Transport::_announces_last_checked	= 0;
+/*static*/ double Transport::_announces_last_checked	= 0.0;
 /*static*/ float Transport::_announces_check_interval	= 1.0;
 /*static*/ double Transport::_tables_last_culled		= 0.0;
 // CBA MCU
@@ -101,22 +101,19 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	_jobs_running = true;
 	_owner = reticulum_instance;
 
+	// Initialize time-based variables *after* time offset update
+	_jobs_last_run = OS::time();
+	_links_last_checked = OS::time();
+	_receipts_last_checked = OS::time();
+	_announces_last_checked = OS::time();
+	_tables_last_culled = OS::time();
+	_last_saved = OS::time();
+
 	// ensure required directories exist
 	if (!OS::directory_exists(Reticulum::_cachepath.c_str())) {
 		verbose("No cache directory, creating...");
 		OS::create_directory(Reticulum::_cachepath.c_str());
 	}
-
-#ifdef ARDUINO
-	// load time offset from file if it exists
-	std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
-	if (OS::file_exists(time_offset_path.c_str())) {
-		Bytes buf = OS::read_file(time_offset_path.c_str());
-		uint64_t offset = *(uint64_t*)buf.data();
-		debug("Read time offset of " + std::to_string(offset) + " from file");
-		OS::setTimeOffset(offset);
-	}
-#endif
 
 	if (!_identity) {
 		std::string transport_identity_path = Reticulum::_storagepath + "/transport_identity";
@@ -234,7 +231,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					//DeserializationError error = deserializeMsgPack(doc, data.data());
 					if (!error) {
 						_destination_table = doc.as<std::map<Bytes, DestinationEntry>>();
-						RNS::extreme("Transport::start: successfully deserialized path table");
+						RNS::extreme("Transport::start: successfully deserialized path table with " + std::to_string(_destination_table.size()) + " entries");
 						// Calculate crc for dirty-checking before write
 						_destination_table_crc = crypto_crc8(0, data.data(), data.size());
 						std::vector<Bytes> invalid_paths;
@@ -731,12 +728,11 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				_tables_last_culled = OS::time();
 			}
 
-			// Periodically persist data
-			if (OS::time() > (_last_saved + _save_interval)) {
-				// CBA temporarily disabled for testing with empty destination table
-				persist_data();
-				_last_saved = OS::time();
-			}
+			// CBA Periodically persist data
+			//if (OS::time() > (_last_saved + _save_interval)) {
+			//	persist_data();
+			//	_last_saved = OS::time();
+			//}
 		}
 		else {
 			// Transport jobs were locked, do nothing
@@ -1124,19 +1120,19 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 												//z timer.start()
 
 												if (wait_time < 1000) {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(wait_time) + "ms");
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string((int)wait_time) + " ms");
 												}
 												else {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + "s");
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + " s");
 												}
 											}
 											else {
 												double wait_time = std::max(interface.announce_allowed_at() - OS::time(), (double)0);
 												if (wait_time < 1000) {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(wait_time) + "ms");
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string((int)wait_time) + " ms");
 												}
 												else {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,2)) + "s");
+													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + " s");
 												}
 											}
 										}
@@ -2744,7 +2740,7 @@ Deregisters an announce handler.
 		bool success = RNS::Utilities::OS::remove_file(packet_cache_path.c_str());
 		double diff_time = OS::time() - start_time;
 		if (diff_time < 1.0) {
-			debug("Remove cached packet in " + std::to_string(diff_time * 1000) + " ms");
+			debug("Remove cached packet in " + std::to_string((int)(diff_time*1000)) + " ms");
 		}
 		else {
 			debug("Remove cached packet in " + std::to_string(diff_time) + " s");
@@ -3473,25 +3469,14 @@ will announce it.
 		if (success) {
 			double save_time = OS::time() - save_start;
 			if (save_time < 1.0) {
-				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time * 1000, 2)) + " ms");
-				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time * 1000) + " ms");
+				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time * 1000, 1)) + " ms");
+				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string((int)(save_time*1000)) + " ms");
 			}
 			else {
-				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time, 2)) + " s");
+				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time, 1)) + " s");
 				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time) + " s");
 			}
 		}
-
-#ifdef ARDUINO
-		// write time offset to file
-		{
-			std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
-			uint64_t offset = OS::ltime();
-			debug("Writing time offset of " + std::to_string(offset) + " to file");
-			Bytes buf((uint8_t*)&offset, sizeof(offset));
-			OS::write_file(buf, time_offset_path.c_str());
-		}
-#endif
 	}
 	catch (std::exception& e) {
 		error("Could not save path table to storage, the contained exception was: " + std::string(e.what()));

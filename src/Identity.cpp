@@ -298,10 +298,10 @@ Recall last heard app_data for a destination hash.
 		std::string time_str;
 		double save_time = OS::time() - save_start;
 		if (save_time < 1) {
-			time_str = std::to_string(OS::round(save_time*1000, 2)) + "ms";
+			time_str = std::to_string((int)(save_time*1000)) + " ms";
 		}
 		else {
-			time_str = std::to_string(OS::round(save_time, 2)) + "s";
+			time_str = std::to_string(OS::round(save_time, 1)) + " s";
 		}
 
 		debug("Saved known destinations to storage in " + time_str);

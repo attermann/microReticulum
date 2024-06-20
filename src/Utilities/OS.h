@@ -27,6 +27,8 @@ namespace RNS { namespace Utilities {
 		static inline uint64_t getTimeOffset() { return timeOffset; }
 		static inline void setTimeOffset(uint64_t offset) { timeOffset = offset; }
 
+		static int freeMemory();
+
 #ifdef ARDUINO
         // return current time in milliseconds since startup
 		static inline uint64_t ltime() {
@@ -76,6 +78,14 @@ namespace RNS { namespace Utilities {
 		static bool create_directory(const char* directory_path);
 		static bool remove_directory(const char* directory_path);
 		static std::list<std::string> list_directory(const char* directory_path);
+
+		static inline int storage_size() {
+			return -1;
+		}
+
+		static inline int storage_available() {
+			return -1;
+		}
 
     };
 

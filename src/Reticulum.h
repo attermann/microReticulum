@@ -34,23 +34,6 @@ namespace RNS {
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
 
-		uint16_t _local_interface_port = 37428;
-		uint16_t _local_control_port   = 37429;
-		bool _share_instance       = true;
-		//p _rpc_listener         = None
-
-		//p _ifac_salt = Reticulum.IFAC_SALT
-
-		bool _is_shared_instance = false;
-		bool _is_connected_to_shared_instance = false;
-		bool _is_standalone_instance = false;
-		//p _jobs_thread = None
-		double _last_data_persist = Utilities::OS::time();
-		double _last_cache_clean = 0.0;
-
-		// CBA
-		double _jobs_last_run = Utilities::OS::time();
-
 	public:
 		Reticulum(Type::NoneConstructor none) {
 			mem("Reticulum NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -119,7 +102,24 @@ namespace RNS {
 				mem("Reticulum data object destroyed, this: " + std::to_string((uintptr_t)this));
 			}
 		private:
+
+			uint16_t _local_interface_port = 37428;
+			uint16_t _local_control_port   = 37429;
+			bool _share_instance       = true;
+			//p _rpc_listener         = None
+
+			//p _ifac_salt = Reticulum.IFAC_SALT
+
+			bool _is_shared_instance = false;
 			bool _is_connected_to_shared_instance = false;
+			bool _is_standalone_instance = false;
+			//p _jobs_thread = None
+			double _last_data_persist = Utilities::OS::time();
+			double _last_cache_clean = 0.0;
+
+			// CBA
+			double _jobs_last_run = Utilities::OS::time();
+
 		friend class Reticulum;
 		};
 		std::shared_ptr<Object> _object;

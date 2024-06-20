@@ -72,7 +72,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	Reticulum.resourcepath  = Reticulum.configdir+"/storage/resources"
 	Reticulum.identitypath  = Reticulum.configdir+"/storage/identities"
 */
-// CBA MOCK
+// CBA TEST
 #ifdef ARDUINO
 	_storagepath = "";
 	_cachepath = "/cache";
@@ -80,6 +80,29 @@ Reticulum::Reticulum() : _object(new Object()) {
 	_storagepath = ".";
 	_cachepath = "./cache";
 #endif
+
+#ifdef ARDUINO
+	// load time offset from file if it exists
+	try {
+		std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
+		if (OS::file_exists(time_offset_path.c_str())) {
+			Bytes buf = OS::read_file(time_offset_path.c_str());
+			if (buf.size() == 8) {
+				uint64_t offset = *(uint64_t*)buf.data();
+				debug("Read time offset of " + std::to_string(offset) + " from file");
+				OS::setTimeOffset(offset);
+			}
+		}
+	}
+	catch (std::exception& e) {
+		error("Failed to load time offset, the contained exception was: " + std::string(e.what()));
+	}
+#endif
+
+	// Initialize time-based variables *after* time offset update
+	_object->_last_data_persist = OS::time();
+	_object->_last_cache_clean = 0.0;
+	_object->_jobs_last_run = OS::time();
 
 /* TODO
 	if not os.path.isdir(Reticulum.storagepath):
@@ -166,6 +189,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 */
 
 void Reticulum::start() {
+	info("Starting Transport...");
 	Transport::start(*this);
 }
 
@@ -173,9 +197,9 @@ void Reticulum::loop() {
 	assert(_object);
 	if (!_object->_is_connected_to_shared_instance) {
 
-		if (OS::time() > (_jobs_last_run + JOB_INTERVAL)) {
+		if (OS::time() > (_object->_jobs_last_run + JOB_INTERVAL)) {
 			jobs();
-			_jobs_last_run = OS::time();
+			_object->_jobs_last_run = OS::time();
 		}
 
 		RNS::Transport::loop();
@@ -188,26 +212,44 @@ void Reticulum::jobs() {
 
 	double now = OS::time();
 
-	if (now > _last_cache_clean + CLEAN_INTERVAL) {
+	if (now > _object->_last_cache_clean + CLEAN_INTERVAL) {
 		clean_caches();
-		_last_cache_clean = OS::time();
+		_object->_last_cache_clean = OS::time();
 	}
 
-	if (now > _last_data_persist + PERSIST_INTERVAL) {
+	if (now > _object->_last_data_persist + PERSIST_INTERVAL) {
 		persist_data();
 	}
+
+	debug("Available Memory: " + std::to_string(OS::freeMemory()) + "  Available Storage: " + std::to_string(OS::storage_available()));
 }
 
 void Reticulum::should_persist_data() {
-	if (OS::time() > _last_data_persist + GRACIOUS_PERSIST_INTERVAL) {
+	if (OS::time() > _object->_last_data_persist + GRACIOUS_PERSIST_INTERVAL) {
 		persist_data();
 	}
 }
 
 void Reticulum::persist_data() {
+	extreme("Persisting transport and identity data...");
 	Transport::persist_data();
 	Identity::persist_data();
-	_last_data_persist = OS::time();
+
+#ifdef ARDUINO
+	// write time offset to file
+	try {
+		std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
+		uint64_t offset = OS::ltime();
+		debug("Writing time offset of " + std::to_string(offset) + " to file");
+		Bytes buf((uint8_t*)&offset, sizeof(offset));
+		OS::write_file(buf, time_offset_path.c_str());
+	}
+	catch (std::exception& e) {
+		error("Failed to write time offset, the contained exception was: " + std::string(e.what()));
+	}
+#endif
+
+	_object->_last_data_persist = OS::time();
 }
 
 void Reticulum::clean_caches() {
