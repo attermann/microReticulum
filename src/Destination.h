@@ -48,7 +48,7 @@ namespace RNS {
 			link_established _link_established = nullptr;
 			packet _packet = nullptr;
 			proof_requested _proof_requested = nullptr;
-		friend class Detination;
+		friend class Destination;
 		};
 
 		using PathResponse = std::pair<double, Bytes>;

@@ -29,6 +29,8 @@ namespace RNS {
 		//p cachepath        = ""
 		static std::string _cachepath;
 
+		static const Reticulum& _instance;
+
 		static bool __transport_enabled;
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
@@ -50,6 +52,9 @@ namespace RNS {
 
 		// CBA
 		double _jobs_last_run = Utilities::OS::time();
+
+	public:
+		static const Reticulum& get_instance();
 
 	public:
 		Reticulum(Type::NoneConstructor none) {
