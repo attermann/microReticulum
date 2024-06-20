@@ -2,7 +2,8 @@
 
 #include "../Log.h"
 
-#ifdef ARDUINO
+//#ifdef ARDUINO
+#if 0
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 //extern "C" char* sbrk(int incr);
@@ -18,7 +19,8 @@ using namespace RNS::Utilities;
 /*static*/ uint64_t OS::timeOffset = 0;
 
 /*static*/ int OS::freeMemory() {
-#ifdef ARDUINO
+//#ifdef ARDUINO
+#if 0
 	char top;
 #ifdef __arm__
 	return &top - reinterpret_cast<char*>(sbrk(0));
