@@ -154,14 +154,16 @@ namespace RNS {
 		// getters/setters
 		inline const Bytes& encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }
 		inline const Bytes& signingPrivateKey() const { assert(_object); return _object->_sig_prv_bytes; }
-		inline const Bytes& encryptionPublicKey() const { assert(_object); return _object->_prv_bytes; }
-		inline const Bytes& signingPublicKey() const { assert(_object); return _object->_sig_prv_bytes; }
+		inline const Bytes& encryptionPublicKey() const { assert(_object); return _object->_pub_bytes; }
+		inline const Bytes& signingPublicKey() const { assert(_object); return _object->_sig_pub_bytes; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
 		inline std::string hexhash() const { assert(_object); return _object->_hexhash; }
 		inline const Bytes& app_data() const { assert(_object); return _object->_app_data; }
 		inline void app_data(const Bytes& app_data) { assert(_object); _object->_app_data = app_data; }
 		inline const Cryptography::X25519PrivateKey::Ptr prv() const { assert(_object); return _object->_prv; }
+		inline const Cryptography::Ed25519PrivateKey::Ptr sig_prv() const { assert(_object); return _object->_sig_prv; }
 		inline const Cryptography::X25519PublicKey::Ptr pub() const { assert(_object); return _object->_pub; }
+		inline const Cryptography::Ed25519PublicKey::Ptr sig_pub() const { assert(_object); return _object->_sig_pub; }
 
 		inline std::string toString() const { if (!_object) return ""; return "{Identity:" + _object->_hash.toHex() + "}"; }
 

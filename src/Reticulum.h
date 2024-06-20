@@ -31,10 +31,15 @@ namespace RNS {
 		//static std::string _cachepath;
 		static char _cachepath[Type::Reticulum::FILEPATH_MAXSIZE];
 
+		static const Reticulum& _instance;
+
 		static bool __transport_enabled;
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
+
+	public:
+		static const Reticulum& get_instance();
 
 	public:
 		Reticulum(Type::NoneConstructor none) {

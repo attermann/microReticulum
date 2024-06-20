@@ -20,6 +20,8 @@ using namespace RNS::Utilities;
 /*static*/ //std::string Reticulum::_cachepath;
 /*static*/ char Reticulum::_cachepath[FILEPATH_MAXSIZE];
 
+/*static*/ const Reticulum& Reticulum::_instance = {Type::NONE};
+
 /*static*/ bool Reticulum::__transport_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
@@ -37,6 +39,35 @@ pass any traffic before being instantiated.
 
 :param configdir: Full path to a Reticulum configuration directory.
 */
+
+/*p TODO
+@staticmethod
+def exit_handler():
+	# This exit handler is called whenever Reticulum is asked to
+	# shut down, and will in turn call exit handlers in other
+	# classes, saving necessary information to disk and carrying
+	# out cleanup operations.
+
+	RNS.Transport.exit_handler()
+	RNS.Identity.exit_handler()
+
+@staticmethod
+def sigint_handler(signal, frame):
+	RNS.Transport.detach_interfaces()
+	RNS.exit()
+
+
+@staticmethod
+def sigterm_handler(signal, frame):
+	RNS.Transport.detach_interfaces()
+	RNS.exit()
+*/
+
+// Return the currently running Reticulum instance
+/*static*/ const Reticulum& Reticulum::get_instance() {
+	return _instance;
+}
+
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -169,37 +200,6 @@ Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
-/*p TODO
-    @staticmethod
-    def exit_handler():
-        # This exit handler is called whenever Reticulum is asked to
-        # shut down, and will in turn call exit handlers in other
-        # classes, saving necessary information to disk and carrying
-        # out cleanup operations.
-
-        RNS.Transport.exit_handler()
-        RNS.Identity.exit_handler()
-
-    @staticmethod
-    def sigint_handler(signal, frame):
-        RNS.Transport.detach_interfaces()
-        RNS.exit()
-
-
-    @staticmethod
-    def sigterm_handler(signal, frame):
-        RNS.Transport.detach_interfaces()
-        RNS.exit()
-
-
-    @staticmethod
-    def get_instance():
-        """
-        Return the currently running Reticulum instance
-        """
-        return Reticulum.__instance
-*/
-
 void Reticulum::start() {
 	INFO("Starting Transport...");
 	Transport::start(*this);
@@ -250,6 +250,17 @@ void Reticulum::jobs() {
 		persist_data();
 	}
 }
+
+// CBA TODO
+/*
+void Reticulum::start_local_interface() {
+}
+
+void Reticulum::apply_config() {
+}
+
+def _add_interface(self,interface, mode = None, configured_bitrate=None, ifac_size=None, ifac_netname=None, ifac_netkey=None, announce_cap=None, announce_rate_target=None, announce_rate_grace=None, announce_rate_penalty=None):
+*/
 
 void Reticulum::should_persist_data() {
 	if (OS::time() > _object->_last_data_persist + GRACIOUS_PERSIST_INTERVAL) {
@@ -353,3 +364,114 @@ void Reticulum::clear_caches() {
 		ERRORF("Failed to clear cache file(s), the contained exception was: %s", e.what());
 	}
 }
+
+// CBA TODO
+/*
+
+def __create_default_config(self):
+	self.config = ConfigObj(__default_rns_config__)
+	self.config.filename = Reticulum.configpath
+	
+	if not os.path.isdir(Reticulum.configdir):
+		os.makedirs(Reticulum.configdir)
+	self.config.write()
+
+def rpc_loop(self):
+
+def get_interface_stats(self):
+*/
+
+def get_path_table(self):
+	path_table = []
+	for dst_hash in RNS.Transport.destination_table:
+		entry = {
+			"hash": dst_hash,
+			"timestamp": RNS.Transport.destination_table[dst_hash][0],
+			"via": RNS.Transport.destination_table[dst_hash][1],
+			"hops": RNS.Transport.destination_table[dst_hash][2],
+			"expires": RNS.Transport.destination_table[dst_hash][3],
+			"interface": str(RNS.Transport.destination_table[dst_hash][5]),
+		}
+		path_table.append(entry)
+
+	return path_table
+
+def get_rate_table(self):
+	rate_table = []
+	for dst_hash in RNS.Transport.announce_rate_table:
+		entry = {
+			"hash": dst_hash,
+			"last": RNS.Transport.announce_rate_table[dst_hash]["last"],
+			"rate_violations": RNS.Transport.announce_rate_table[dst_hash]["rate_violations"],
+			"blocked_until": RNS.Transport.announce_rate_table[dst_hash]["blocked_until"],
+			"timestamps": RNS.Transport.announce_rate_table[dst_hash]["timestamps"],
+		}
+		rate_table.append(entry)
+
+	return rate_table
+
+def drop_path(self, destination):
+	return RNS.Transport.expire_path(destination)
+
+def drop_all_via(self, transport_hash):
+	dropped_count = 0
+	for destination_hash in RNS.Transport.destination_table:
+		if RNS.Transport.destination_table[destination_hash][1] == transport_hash:
+			RNS.Transport.expire_path(destination_hash)
+			dropped_count += 1
+
+	return dropped_count
+
+def drop_announce_queues(self):
+	return RNS.Transport.drop_announce_queues()
+
+def get_next_hop_if_name(self, destination):
+	return str(RNS.Transport.next_hop_interface(destination))
+
+def get_first_hop_timeout(self, destination):
+	return RNS.Transport.first_hop_timeout(destination)
+
+def get_next_hop(self, destination):
+	return RNS.Transport.next_hop(destination)
+
+def get_link_count(self):
+	return len(RNS.Transport.link_table)
+
+def get_packet_rssi(self, packet_hash):
+	for entry in RNS.Transport.local_client_rssi_cache:
+		if entry[0] == packet_hash:
+			return entry[1]
+
+	return None
+
+def get_packet_snr(self, packet_hash):
+	for entry in RNS.Transport.local_client_snr_cache:
+		if entry[0] == packet_hash:
+			return entry[1]
+
+	return None
+
+def get_packet_q(self, packet_hash):
+	for entry in RNS.Transport.local_client_q_cache:
+		if entry[0] == packet_hash:
+			return entry[1]
+
+	return None
+
+
+// Returns whether proofs sent are explicit or implicit.
+// :returns: True if the current running configuration specifies to use implicit proofs. False if not.
+/*static*/ Reticulum::should_use_implicit_proof():
+	return Reticulum.__use_implicit_proof
+
+// Returns whether Transport is enabled for the running
+// instance.
+// When Transport is enabled, Reticulum will
+// route traffic for other peers, respond to path requests
+// and pass announces over the network.
+// :returns: True if Transport is enabled, False if not.
+/*static*/ Reticulum::transport_enabled():
+	return Reticulum.__transport_enabled
+
+/*static*/ Reticulum::probe_destination_enabled():
+	return Reticulum.__allow_probes
