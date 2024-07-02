@@ -65,6 +65,7 @@ namespace RNS {
 		void should_persist_data();
 		void persist_data();
 		void clean_caches();
+		void clear_caches();
 
 		/*
 		Returns whether proofs sent are explicit or implicit.

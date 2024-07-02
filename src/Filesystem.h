@@ -69,19 +69,19 @@ namespace RNS {
 	protected:
 		// CBA These should NOT be called internally, and should be protected (only to be overridden and called by Object)
 		virtual bool file_exists(const char* file_path) { return false; }
-		virtual const Bytes read_file(const char* file_path) { return {Bytes::NONE}; }
-		virtual bool write_file(const Bytes& data, const char* file_path) { return false; }
+		virtual size_t read_file(const char* file_path, Bytes& data) { return 0; }
+		virtual size_t write_file(const char* file_path, const Bytes& data) { return 0; }
 		virtual bool remove_file(const char* file_path) { return false; }
 		virtual bool rename_file(const char* from_file_path, const char* to_file_path) { return false; }
 		virtual bool directory_exists(const char* directory_path) { return false; }
 		virtual bool create_directory(const char* directory_path) { return false; }
 		virtual bool remove_directory(const char* directory_path) { return false; }
-		virtual std::list<std::string> list_directory(const char* directory_path) { return _empty; }
+		virtual std::list<std::string> list_directory(const char* directory_path) { extreme("list_directory: empty"); return _empty; }
 
 	public:
 		inline bool do_file_exists(const char* file_path) { assert(_object); return _object->do_file_exists(file_path); }
-		inline const Bytes do_read_file(const char* file_path) { assert(_object); return _object->do_read_file(file_path); }
-		inline bool do_write_file(const Bytes& data, const char* file_path) { assert(_object); return _object->do_write_file(data, file_path); }
+		inline size_t do_read_file(const char* file_path, Bytes& data) { assert(_object); return _object->do_read_file(file_path, data); }
+		inline size_t do_write_file(const char* file_path, const Bytes& data) { assert(_object); return _object->do_write_file(file_path, data); }
 		inline bool do_remove_file(const char* file_path) { assert(_object); return _object->do_remove_file(file_path); }
 		inline bool do_rename_file(const char* from_file_path, const char* to_file_path) { assert(_object); return _object->do_rename_file(from_file_path, to_file_path); }
 		inline bool do_directory_exists(const char* directory_path) { assert(_object); return _object->do_directory_exists(directory_path); }
@@ -112,14 +112,14 @@ namespace RNS {
 			virtual ~Object() { mem("Filesystem::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			virtual inline bool do_file_exists(const char* file_path) { if (_parent == nullptr) return false; return _parent->file_exists(file_path); }
-			virtual inline const Bytes do_read_file(const char* file_path) { if (_parent == nullptr) return {Bytes::NONE}; return _parent->read_file(file_path); }
-			virtual inline bool do_write_file(const Bytes& data, const char* file_path) { if (_parent == nullptr) return false; return  _parent->write_file(data, file_path); }
+			virtual inline size_t do_read_file(const char* file_path, Bytes& data) { if (_parent == nullptr) return {Bytes::NONE}; return _parent->read_file(file_path, data); }
+			virtual inline size_t do_write_file(const char* file_path, const Bytes& data) { if (_parent == nullptr) return false; return  _parent->write_file(file_path, data); }
 			virtual inline bool do_remove_file(const char* file_path) { if (_parent == nullptr) return false; return _parent->remove_file(file_path); }
 			virtual inline bool do_rename_file(const char* from_file_path, const char* to_file_path) { if (_parent == nullptr) return false; return _parent->rename_file(from_file_path, to_file_path); }
 			virtual inline bool do_directory_exists(const char* directory_path) { if (_parent == nullptr) return false; return _parent->directory_exists(directory_path); }
 			virtual inline bool do_create_directory(const char* directory_path) { if (_parent == nullptr) return false; return _parent->create_directory(directory_path); }
 			virtual inline bool do_remove_directory(const char* directory_path) { if (_parent == nullptr) return false; return _parent->remove_directory(directory_path); }
-			virtual inline std::list<std::string> do_list_directory(const char* directory_path) { if (_parent == nullptr) return _empty; return _parent->do_list_directory(directory_path); }
+			virtual inline std::list<std::string> do_list_directory(const char* directory_path) { if (_parent == nullptr) return _empty; return _parent->list_directory(directory_path); }
 		private:
 			Filesystem* _parent = nullptr;
 			std::list<std::string> _empty;

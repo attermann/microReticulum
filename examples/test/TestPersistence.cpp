@@ -81,7 +81,7 @@ const char test_file_data[] = "test data";
 
 void testWrite() {
 	RNS::Bytes data(test_file_data);
-	if (RNS::Utilities::OS::write_file(data, test_file_path)) {
+	if (RNS::Utilities::OS::write_file(test_file_path, data) == data.size()) {
 		RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
 	}
 	else {
@@ -91,8 +91,8 @@ void testWrite() {
 }
 
 void testRead() {
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_file_path);
-	if (data) {
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_file_path, data) > 0) {
 		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
 		RNS::extreme("data: " + data.toString());
 		assert(data.size() == strlen(test_file_data));
@@ -129,7 +129,7 @@ void testSerializeObject() {
 	}
 	RNS::extreme("serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		if (RNS::Utilities::OS::write_file(data, test_object_path)) {
+		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
 			RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
@@ -147,9 +147,10 @@ void testSerializeObject() {
 void testDeserializeObject() {
 
 	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(8192);
+	DynamicJsonDocument doc(1024);
 
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_object_path);
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
 	if (data) {
 		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("data: " + data.toString());
@@ -192,7 +193,7 @@ void testSerializeObject() {
 	}
 	RNS::extreme("serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		if (RNS::Utilities::OS::write_file(data, test_object_path)) {
+		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
 			RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
@@ -210,10 +211,10 @@ void testSerializeObject() {
 void testDeserializeObject() {
 
 	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(8192);
+	DynamicJsonDocument doc(1024);
 
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_object_path);
-	if (data) {
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
 		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
@@ -290,7 +291,7 @@ void testSerializeVector() {
 	}
 	RNS::extreme("testSerializeVector: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		if (RNS::Utilities::OS::write_file(data, test_vector_path)) {
+		if (RNS::Utilities::OS::write_file(test_vector_path, data) == data.size()) {
 			RNS::extreme("testSerializeVector: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
@@ -314,10 +315,10 @@ void testDeserializeVector() {
 		4*JSON_OBJECT_SIZE(1);
 
 	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(8192);
+	DynamicJsonDocument doc(1024);
 
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_vector_path);
-	if (data) {
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_vector_path, data) > 0) {
 		RNS::extreme("testDeserializeVector: read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
@@ -387,7 +388,7 @@ void testSerializeSet() {
 	}
 	RNS::extreme("testSerializeSet: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		if (RNS::Utilities::OS::write_file(data, test_set_path)) {
+		if (RNS::Utilities::OS::write_file(test_set_path, data) == data.size()) {
 			RNS::extreme("testSerializeSet: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
@@ -411,10 +412,10 @@ void testDeserializeSet() {
 		4*JSON_OBJECT_SIZE(1);
 
 	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(8192);
+	DynamicJsonDocument doc(1024);
 
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_set_path);
-	if (data) {
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_set_path, data) > 0) {
 		RNS::extreme("testDeserializeSet: read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("testDeserializeSet: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
@@ -476,7 +477,7 @@ void testSerializeMap() {
 	}
 	RNS::extreme("testSerializeMap: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		if (RNS::Utilities::OS::write_file(data, test_map_path)) {
+		if (RNS::Utilities::OS::write_file(test_map_path, data) == data.size()) {
 			RNS::extreme("testSerializeMap: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
@@ -500,10 +501,10 @@ void testDeserializeMap() {
 		4*JSON_OBJECT_SIZE(1);
 
 	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(8192);
+	DynamicJsonDocument doc(1024);
 
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_map_path);
-	if (data) {
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_map_path, data) > 0) {
 		RNS::extreme("testDeserializeMap: read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("testDeserializeMap: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
@@ -573,15 +574,51 @@ void testSerializeDestinationTable() {
 	two.assignHex("2222222222222222");
 	map.insert({two, entry_two});
 
+	for (int n = 0; n < 20; n++) {
+		RNS::Transport::DestinationEntry entry;
+		entry._timestamp = 1.0;
+		entry._received_from = received;
+		entry._receiving_interface = test_interface;
+		entry._random_blobs = blobs;
+		RNS::Bytes hash;
+		hash.assign(std::to_string(1000000000000001 + n).c_str());
+		map.insert({hash, entry});
+	}
+
 	for (auto& [hash, test] : map) {
 		RNS::extreme("testSerializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
 	}
 
-	StaticJsonDocument<4096> doc;
-	doc = map;
+	//StaticJsonDocument<1024> doc;
+	//doc = map;
+	RNS::extreme("testSerializeDestinationTable: JSON_OBJECT_SIZE " + std::to_string(JSON_OBJECT_SIZE(1)) + " bytes");
+	RNS::extreme("testSerializeDestinationTable: JSON_ARRAY_SIZE " + std::to_string(JSON_ARRAY_SIZE(1)) + " bytes");
+	int calcsize = 0;
+	for (auto& [destination_hash, destination_entry] : map) {
+		// entry
+		calcsize += JSON_ARRAY_SIZE(1);
+		// map key
+		calcsize += JSON_OBJECT_SIZE(1);
+		// entry (+1)
+		calcsize += JSON_OBJECT_SIZE(7+1);
+		// blobs
+		calcsize += JSON_ARRAY_SIZE(destination_entry._random_blobs.size());
+	}
+	RNS::extreme("testSerializeDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
+	const int BUFFER_SIZE = (JSON_OBJECT_SIZE(9) + JSON_ARRAY_SIZE(2)) * map.size() + JSON_ARRAY_SIZE(map.size());
+	RNS::extreme("testSerializeDestinationTable: BUFFER_SIZE " + std::to_string(BUFFER_SIZE) + " bytes");
+	//DynamicJsonDocument doc(32768);
+	//DynamicJsonDocument doc(BUFFER_SIZE);
+	DynamicJsonDocument doc(calcsize);
+	doc.set(map);
+	RNS::extreme("testSerializeDestinationTable: doc size " + std::to_string(doc.size()));
+	RNS::extreme("testSerializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 
 	RNS::Bytes data;
-	size_t size = 4096;
+	// /size_t size = 1024;
+	//size_t size = calcsize;
+	size_t size = doc.memoryUsage();
+	RNS::extreme("testSerializeDestinationTable: buffer size " + std::to_string(size) + " bytes");
 	size_t length = serializeJson(doc, data.writable(size), size);
 	//size_t length = serializeMsgPack(doc, data.writable(size), size);
 	if (length < size) {
@@ -589,7 +626,8 @@ void testSerializeDestinationTable() {
 	}
 	RNS::extreme("testSerializeDestinationTable: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		if (RNS::Utilities::OS::write_file(data, test_destination_table_path)) {
+		RNS::extreme("json: " + data.toString());
+		if (RNS::Utilities::OS::write_file(test_destination_table_path, data) == data.size()) {
 			RNS::extreme("testSerializeDestinationTable: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
@@ -606,23 +644,22 @@ void testSerializeDestinationTable() {
 
 void testDeserializeDestinationTable() {
 
-	// Compute the required size
-	const int capacity =
-		JSON_ARRAY_SIZE(2) +
-		2*JSON_OBJECT_SIZE(3) +
-		4*JSON_OBJECT_SIZE(1);
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_destination_table_path, data) > 0) {
+		//StaticJsonDocument<8192> doc;
+		//DynamicJsonDocument doc(1024);
+		int calcsize = data.size() * 1.5;
+		DynamicJsonDocument doc(calcsize);
 
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(8192);
-
-	RNS::Bytes data = RNS::Utilities::OS::read_file(test_destination_table_path);
-	if (data) {
 		RNS::extreme("testDeserializeDestinationTable: read: " + std::to_string(data.size()) + " bytes");
 		//RNS::extreme("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
+		RNS::extreme("testDeserializeDestinationTable: doc size " + std::to_string(doc.size()));
+		RNS::extreme("testDeserializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 		if (!error) {
-			RNS::extreme("testDeserializeDestinationTable: successfully deserialized");
+			RNS::extreme("testDeserializeDestinationTable: successfully deserialized " + std::to_string(data.size()) + " bytes");
+			RNS::extreme("json: " + data.toString());
 
 			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
 			for (auto& [hash, test] : map) {

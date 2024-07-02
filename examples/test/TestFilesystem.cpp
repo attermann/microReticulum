@@ -1,5 +1,6 @@
 #include "TestFilesystem.h"
 
+#include <Utilities/OS.h>
 #include <Log.h>
 
 #ifdef ARDUINO
@@ -65,7 +66,7 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	Serial.println(" MB");
 	// ensure filesystem is writable and format if not
 	Bytes test;
-	if (!OS::write_file(test, "/test")) {
+	if (!OS::write_file("/test", test)) {
 		info("SPIFFS filesystem is being formatted, please wait...");
 		SPIFFS.format();
 	}
@@ -94,8 +95,7 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	if (file) {
 #elif NRF52
 	File file(InternalFS);
-	file.open(file_path, FILE_O_READ);
-	if (file) {
+	if (file.open(file_path, FILE_O_READ)) {
 #else
 	if (false) {
 #endif
@@ -121,24 +121,22 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	}
 }
 
-/*virtual*/ const Bytes TestFilesystem::read_file(const char* file_path) {
-    Bytes data;
+/*virtual*/ size_t TestFilesystem::read_file(const char* file_path, Bytes& data) {
+	size_t read = 0;
 #ifdef ARDUINO
 #ifdef ESP32
 	File file = SPIFFS.open(file_path, FILE_READ);
 	if (file) {
 		size_t size = file.size();
-		size_t read = file.readBytes((char*)data.writable(size), size);
+		read = file.readBytes((char*)data.writable(size), size);
 #elif NRF52
 	File file(InternalFS);
-	file.open(file_path, FILE_O_READ);
-	if (file) {
+	if (file.open(file_path, FILE_O_READ)) {
 		size_t size = file.size();
-		size_t read = file.readBytes((char*)data.writable(size), size);
+		read = file.readBytes((char*)data.writable(size), size);
 #else
 	if (false) {
 		size_t size = 0;
-		size_t read = 0;
 #endif
 #else
 	FILE* file = fopen(file_path, "r");
@@ -168,24 +166,22 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	else {
 		error("read_file: failed to open input file " + std::string(file_path));
 	}
-    return data;
+    return read;
 }
 
-/*virtual*/ bool TestFilesystem::write_file(const Bytes& data, const char* file_path) {
-    bool success = false;
+/*virtual*/ size_t TestFilesystem::write_file(const char* file_path, const Bytes& data) {
+    size_t wrote = 0;
 #ifdef ARDUINO
 #ifdef ESP32
 	File file = SPIFFS.open(file_path, FILE_WRITE);
 	if (file) {
-		size_t wrote = file.write(data.data(), data.size());
+		wrote = file.write(data.data(), data.size());
 #elif NRF52
 	File file(InternalFS);
-	file.open(file_path, FILE_O_WRITE);
-	if (file) {
-		size_t wrote = file.write(data.data(), data.size());
+	if (file.open(file_path, FILE_O_WRITE)) {
+		wrote = file.write(data.data(), data.size());
 #else
 	if (false) {
-		size_t wrote = 0;
 #endif
 #else
 	FILE* file = fopen(file_path, "w");
@@ -194,11 +190,8 @@ TestFilesystem::TestFilesystem() : Filesystem() {
         size_t wrote = fwrite(data.data(), 1, data.size(), file);
 #endif
         extreme("write_file: wrote " + std::to_string(wrote) + " Bytes to file " + std::string(file_path));
-        if (wrote == data.size()) {
-            success = true;
-        }
-        else {
-			error("write_file: failed to write file " + std::string(file_path));
+        if (wrote < data.size()) {
+			warning("write_file: not all data was written to file " + std::string(file_path));
 		}
 		//extreme("write_file: closing output file");
 #ifdef ARDUINO
@@ -214,7 +207,7 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	else {
 		error("write_file: failed to open output file " + std::string(file_path));
 	}
-    return success;
+    return wrote;
 }
 
 /*virtual*/ bool TestFilesystem::remove_file(const char* file_path) {

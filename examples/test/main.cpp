@@ -2,7 +2,7 @@
 
 #include "TestFilesystem.h"
 
-#include <Test/Test.h>
+#include "Test.h"
 
 #include "Log.h"
 #include "Utilities/OS.h"
@@ -45,10 +45,16 @@ void setup() {
 		RNS::LogLevel loglevel = RNS::loglevel();
 		//RNS::loglevel(RNS::LOG_WARNING);
 		RNS::loglevel(RNS::LOG_EXTREME);
+
+		// all tests
 		//test();
+
+		// individiual tests
 		//testReference();
 		//testCrypto();
-		testPersistence();
+		//testPersistence();
+		testBytes();
+
 		RNS::loglevel(loglevel);
 		RNS::extreme("Finished running tests");
 		//return;

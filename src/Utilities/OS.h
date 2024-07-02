@@ -27,8 +27,6 @@ namespace RNS { namespace Utilities {
 		static inline uint64_t getTimeOffset() { return timeOffset; }
 		static inline void setTimeOffset(uint64_t offset) { timeOffset = offset; }
 
-		static int freeMemory();
-
 #ifdef ARDUINO
         // return current time in milliseconds since startup
 		static inline uint64_t ltime() {
@@ -70,8 +68,8 @@ namespace RNS { namespace Utilities {
 		static void deregister_filesystem();
 
 		static bool file_exists(const char* file_path);
-		static const RNS::Bytes read_file(const char* file_path);
-		static bool write_file(const RNS::Bytes& data, const char* file_path);
+		static size_t read_file(const char* file_path, RNS::Bytes& data);
+		static size_t write_file(const char* file_path, const RNS::Bytes& data);
 		static bool remove_file(const char* file_path);
 		static bool rename_file(const char* from_file_path, const char* to_file_path);
 		static bool directory_exists(const char* directory_path);
@@ -85,6 +83,45 @@ namespace RNS { namespace Utilities {
 
 		static inline int storage_available() {
 			return -1;
+		}
+
+		static inline uint32_t memory_size() {
+		}
+
+/*
+		static inline uint32_t memory_available()
+		{
+			uint32_t  i;
+			uint32_t  len;
+			uint8_t*  ptr;
+
+			for(i=1;;i++) {
+				len = i * 512;
+				ptr = (uint8_t*)malloc(len);
+				if (ptr == nullptr) {
+					break;
+				}
+				free(ptr);
+			}
+
+			len -= 512; //(i-1)*512 is aviliable size
+
+			return len;
+		}
+*/
+
+		static inline size_t memory_available()
+		{
+			const size_t block_size = 256;
+			size_t block_count;
+			for(block_count = 1; ; block_count++) {
+				void* ptr = malloc(block_count * block_size);
+				if (ptr == nullptr) {
+					break;
+				}
+				free(ptr);
+			}
+			return (block_count - 1) * block_size;
 		}
 
     };

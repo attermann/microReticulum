@@ -69,12 +69,43 @@ namespace RNS {
 		};
 
 	public:
+
+		class PacketEntry {
+		public:
+			PacketEntry() {}
+			PacketEntry(const Bytes& raw, double sent_at, const Bytes& destination_hash) :
+				_raw(raw),
+				_sent_at(sent_at),
+				_destination_hash(destination_hash)
+			{
+			}
+			PacketEntry(const Packet& packet) :
+				_raw(packet.raw()),
+				_sent_at(packet.sent_at()),
+				_destination_hash(packet.destination_hash())
+			{
+			}
+		public:
+			Bytes _raw;
+			double _sent_at = 0;
+			Bytes _destination_hash;
+			bool _cached = false;
+#ifndef NDEBUG
+			inline std::string debugString() const {
+				std::string dump;
+				dump = "PacketEntry: destination_hash=" + _destination_hash.toHex() +
+					" sent_at=" + std::to_string(_sent_at);
+				return dump;
+			}
+#endif
+		};
+
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
 		class DestinationEntry {
 		public:
 			DestinationEntry() {}
-			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
+			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Bytes& receiving_interface, const Bytes& packet) :
 				_timestamp(timestamp),
 				_received_from(received_from),
 				_hops(announce_hops),
@@ -85,14 +116,23 @@ namespace RNS {
 			{
 			}
 		public:
+			inline Interface receiving_interface() const { return find_interface_from_hash(_receiving_interface); }
+			inline Packet announce_packet() const { return get_cached_packet(_announce_packet); }
+		public:
 			double _timestamp = 0;
 			Bytes _received_from;
 			uint8_t _hops = 0;
 			double _expires = 0;
 			std::set<Bytes> _random_blobs;
-			Interface _receiving_interface = {Type::NONE};
+			//Interface _receiving_interface = {Type::NONE};
+			Bytes _receiving_interface;
 			//const Packet& _announce_packet;
-			Packet _announce_packet = {Type::NONE};
+			//Packet _announce_packet = {Type::NONE};
+			Bytes _announce_packet;
+			inline bool operator < (const DestinationEntry& entry) const {
+				// sort by ascending timestamp (oldest entries at the top)
+				return _timestamp < entry._timestamp;
+			}
 #ifndef NDEBUG
 			inline std::string debugString() const {
 				std::string dump;
@@ -101,8 +141,8 @@ namespace RNS {
 					" hops=" + std::to_string(_hops) +
 					" expires=" + std::to_string(_expires) +
 					//" random_blobs=" + _random_blobs +
-					" receiving_interface=" + _receiving_interface.toString() +
-					" announce_packet=" + _announce_packet.toString();
+					" receiving_interface=" + _receiving_interface.toHex() +
+					" announce_packet=" + _announce_packet.toHex();
 				dump += " random_blobs=(";
 				for (auto& blob : _random_blobs) {
 					dump += blob.toHex() + ",";
@@ -265,8 +305,8 @@ namespace RNS {
 		static void register_announce_handler(HAnnounceHandler handler);
 		static void deregister_announce_handler(HAnnounceHandler handler);
 		static Interface find_interface_from_hash(const Bytes& interface_hash);
-		static bool should_cache(const Packet& packet);
-		static bool cache(const Packet& packet, bool force_cache = false);
+		static bool should_cache_packet(const Packet& packet);
+		static bool cache_packet(const Packet& packet, bool force_cache = false);
 		static Packet get_cached_packet(const Bytes& packet_hash);
 		static bool clear_cached_packet(const Bytes& packet_hash);
 		static bool cache_request_packet(const Packet& packet);
@@ -290,14 +330,20 @@ namespace RNS {
 		static void shared_connection_reappeared();
 		static void drop_announce_queues();
 		static bool announce_emitted(const Packet& packet);
-		static void save_packet_hashlist();
-		static bool save_path_table();
-		static void save_tunnel_table();
+		static void write_packet_hashlist();
+		static bool read_path_table();
+		static bool write_path_table();
+		static void read_tunnel_table();
+		static void write_tunnel_table();
 		static void persist_data();
 		static void clean_caches();
+		static void dump_stats();
 		static void exit_handler();
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
+
+		// CBA
+		static void cull_path_table();
 
 		// getters/setters
 		static inline void set_receive_packet_callback(Callbacks::receive_packet callback) { _callbacks._receive_packet = callback; }
@@ -305,6 +351,10 @@ namespace RNS {
 		static inline void set_filter_packet_callback(Callbacks::filter_packet callback) { _callbacks._filter_packet = callback; }
 		static inline const Reticulum& reticulum() { return _owner; }
 		static inline const Identity& identity() { return _identity; }
+		inline static uint16_t path_table_maxsize() { return _path_table_maxsize; }
+		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; }
+		inline static uint16_t probe_destination_enabled() { return _path_table_maxpersist; }
+		inline static void path_table_maxpersist(uint16_t path_table_maxpersist) { _path_table_maxpersist = path_table_maxpersist; }
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
@@ -359,6 +409,9 @@ namespace RNS {
 
 		static std::map<Bytes, const Interface&> _pending_local_path_requests;
 
+		// CBA
+		static std::map<Bytes, PacketEntry> _packet_table;           // A lookup table containing announce packets for known paths
+
 		//z _local_client_rssi_cache    = []
 		//z _local_client_snr_cache     = []
 		static uint16_t _LOCAL_CLIENT_CACHE_MAXSIZE;
@@ -382,6 +435,7 @@ namespace RNS {
 
 		// CBA
 		static uint16_t _path_table_maxsize;
+		static uint16_t _path_table_maxpersist;
 		static double _last_saved;
 		static float _save_interval;
 		static uint8_t _destination_table_crc;
@@ -391,6 +445,25 @@ namespace RNS {
 
 		// CBA
 		static Callbacks _callbacks;
+
+		// CBA Stats
+		static uint32_t _packets_sent;
+		static uint32_t _packets_received;
+		static uint32_t _destinations_added;
 	};
+
+	template <typename M, typename S> 
+	void MapToValues(const M& m, S& s) {
+		for (typename M::const_iterator it = m.begin(); it != m.end(); ++it) {
+			s.insert(it->second);
+		}
+	}
+
+	template <typename M, typename S> 
+	void MapToPairs(const M& m, S& s) {
+		for (typename M::const_iterator it = m.begin(); it != m.end(); ++it) {
+			s.push_back(*it);
+		}
+	}
 
 }

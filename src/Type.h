@@ -12,11 +12,15 @@ namespace RNS { namespace Type {
 		NONE
 	};
 
+	namespace Persistence {
+
+		static const uint16_t DOCUMENT_MAXSIZE = 8192;
+		static const uint16_t BUFFER_MAXSIZE = Persistence::DOCUMENT_MAXSIZE * 1.5;	// Json write buffer of 1.5 times document seems to be sufficient
+
+	}
+
 	namespace Reticulum {
 
-		// Future minimum will probably be locked in at 251 bytes to support
-		// networks with segments of different MTUs. Absolute minimum is 219.
-		static const uint16_t MTU = 500;
 		/*
 		The MTU that Reticulum adheres to, and will expect other peers to
 		adhere to. By default, the MTU is 507 bytes. In custom RNS network
@@ -26,7 +30,11 @@ namespace RNS { namespace Type {
 
 		Unless you really know what you are doing, the MTU should be left at
 		the default value.
+
+		Future minimum will probably be locked in at 251 bytes to support
+		networks with segments of different MTUs. Absolute minimum is 219.
 		*/
+		static const uint16_t MTU = 500;
 
 		static const uint16_t MAX_QUEUED_ANNOUNCES = 16384;
 		static const uint32_t QUEUED_ANNOUNCE_LIFE = 60*60*24;
@@ -71,11 +79,17 @@ namespace RNS { namespace Type {
 		static const uint16_t MDU              = MTU - HEADER_MAXSIZE - IFAC_MIN_SIZE;
 
 		static const uint32_t RESOURCE_CACHE   = 60*60*24;
-		static const uint16_t JOB_INTERVAL     = 60*5;
-		static const uint16_t CLEAN_INTERVAL   = 60*15;
+		// CBA TEST
+		//static const uint16_t JOB_INTERVAL     = 60*5;
+		static const uint16_t JOB_INTERVAL     = 60;
+		// CBA TEST
+		//static const uint16_t CLEAN_INTERVAL   = 60*15;
+		static const uint16_t CLEAN_INTERVAL   = 60;
 		// CBA
 		//static const uint16_t PERSIST_INTERVAL = 60*60*12;
-		static const uint16_t PERSIST_INTERVAL = 60*60;
+		// CBA TEST
+		//static const uint16_t PERSIST_INTERVAL = 60*60;
+		static const uint16_t PERSIST_INTERVAL = 60;
 		static const uint16_t GRACIOUS_PERSIST_INTERVAL = 60*5;
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes

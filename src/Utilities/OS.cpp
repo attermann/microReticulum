@@ -18,21 +18,6 @@ using namespace RNS::Utilities;
 /*static*/ Filesystem OS::filesystem = {Type::NONE};
 /*static*/ uint64_t OS::timeOffset = 0;
 
-/*static*/ int OS::freeMemory() {
-//#ifdef ARDUINO
-#if 0
-	char top;
-#ifdef __arm__
-	return &top - reinterpret_cast<char*>(sbrk(0));
-#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
-	return &top - __brkval;
-#else
-	return __brkval ? &top - __brkval : &top - __malloc_heap_start;
-#endif
-	return -1;
-#endif
-}
-
 /*static*/ void OS::register_filesystem(Filesystem& filesystem) {
 	extreme("Registering filesystem...");
 	OS::filesystem = filesystem;
@@ -51,18 +36,18 @@ using namespace RNS::Utilities;
 	return filesystem.do_file_exists(file_path);
 }
 
-/*static*/ const Bytes OS::read_file(const char* file_path) {
+/*static*/ size_t OS::read_file(const char* file_path, Bytes& data) {
 	if (!filesystem) {
 		throw std::runtime_error("Filesystem has not been registered");
 	}
-	return filesystem.do_read_file(file_path);
+	return filesystem.do_read_file(file_path, data);
 }
 
-/*static*/ bool OS::write_file(const Bytes& data, const char* file_path) {
+/*static*/ size_t OS::write_file(const char* file_path, const Bytes& data) {
 	if (!filesystem) {
 		throw std::runtime_error("Filesystem has not been registered");
 	}
-	return filesystem.do_write_file(data, file_path);
+	return filesystem.do_write_file(file_path, data);
 }
 
 /*static*/ bool OS::remove_file(const char* file_path) {

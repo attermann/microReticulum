@@ -86,8 +86,8 @@ Reticulum::Reticulum() : _object(new Object()) {
 	try {
 		std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
 		if (OS::file_exists(time_offset_path.c_str())) {
-			Bytes buf = OS::read_file(time_offset_path.c_str());
-			if (buf.size() == 8) {
+			Bytes buf;
+			if (OS::read_file(time_offset_path.c_str(), buf) == 8) {
 				uint64_t offset = *(uint64_t*)buf.data();
 				debug("Read time offset of " + std::to_string(offset) + " from file");
 				OS::setTimeOffset(offset);
@@ -220,8 +220,6 @@ void Reticulum::jobs() {
 	if (now > _object->_last_data_persist + PERSIST_INTERVAL) {
 		persist_data();
 	}
-
-	debug("Available Memory: " + std::to_string(OS::freeMemory()) + "  Available Storage: " + std::to_string(OS::storage_available()));
 }
 
 void Reticulum::should_persist_data() {
@@ -242,7 +240,7 @@ void Reticulum::persist_data() {
 		uint64_t offset = OS::ltime();
 		debug("Writing time offset of " + std::to_string(offset) + " to file");
 		Bytes buf((uint8_t*)&offset, sizeof(offset));
-		OS::write_file(buf, time_offset_path.c_str());
+		OS::write_file(time_offset_path.c_str(), buf);
 	}
 	catch (std::exception& e) {
 		error("Failed to write time offset, the contained exception was: " + std::string(e.what()));
@@ -291,4 +289,27 @@ void Reticulum::clean_caches() {
 		}
 	}
 */
+
+	Transport::clean_caches();
+
+}
+
+void Reticulum::clear_caches() {
+	extreme("Clearing resource and packet caches...");
+
+	try {
+		std::string destination_table_path = _storagepath + "/destination_table";
+		OS::remove_file(destination_table_path.c_str());
+
+		std::string packet_cache_path = _cachepath;
+		OS::remove_directory(packet_cache_path.c_str());
+
+#ifdef ARDUINO
+		std::string time_offset_path = _storagepath + "/time_offset";
+		OS::remove_file(time_offset_path.c_str());
+#endif
+	}
+	catch (std::exception& e) {
+		error("Failed to clear cache file(s), the contained exception was: " + std::string(e.what()));
+	}
 }

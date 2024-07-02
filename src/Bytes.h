@@ -53,6 +53,11 @@ namespace RNS {
 			assign(string);
 			//mem(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
+		Bytes(size_t capacity) {
+			newData();
+			reserve(capacity);
+			//mem(std::string("Bytes object created with capacity ") + std::to_string(capacity) + ", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+		}
 		virtual ~Bytes() {
 			//mem(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
@@ -90,39 +95,31 @@ namespace RNS {
 	private:
 		inline SharedData shareData() const {
 			//mem("Bytes is sharing its own data");
-			_owner = false;
+			_exclusive = false;
 			return _data;
 		}
-		inline void newData(size_t size = 0) {
-			//mem("Bytes is creating its own data");
-			if (size > 0) {
-				_data = SharedData(new Data(size));
-			}
-			else {
-				_data = SharedData(new Data());
-			}
-			_owner = true;
-		}
-		void ownData();
+		void newData(size_t size = 0);
+		void exclusiveData(bool copy = true, size_t size = 0);
 
 	public:
 		inline void clear() {
 			_data = nullptr;
-			_owner = true;
+			_exclusive = true;
 		}
 
 		inline void assign(const Bytes& bytes) {
 #ifdef COW
 			_data = bytes.shareData();
-			_owner = false;
+			_exclusive = false;
 #else
 			// if assignment is empty then clear data and don't bother creating new
 			if (bytes.size() <= 0) {
 				_data = nullptr;
-				_owner = true;
+				_exclusive = true;
 				return;
 			}
-			newData();
+			//newData();
+			exclusiveData(false);
 			_data->insert(_data->begin(), bytes._data->begin(), bytes._data->end());
 #endif
 		}
@@ -130,20 +127,22 @@ namespace RNS {
 			// if assignment is empty then clear data and don't bother creating new
 			if (chunk == nullptr || size <= 0) {
 				_data = nullptr;
-				_owner = true;
+				_exclusive = true;
 				return;
 			}
-			newData();
+			//newData();
+			exclusiveData(false);
 			_data->insert(_data->begin(), chunk, chunk + size);
 		}
 		inline void assign(const char* string) {
 			// if assignment is empty then clear data and don't bother creating new
 			if (string == nullptr || string[0] == 0) {
 				_data = nullptr;
-				_owner = true;
+				_exclusive = true;
 				return;
 			}
-			newData();
+			//newData();
+			exclusiveData(false);
 			_data->insert(_data->begin(), (uint8_t* )string, (uint8_t* )string + strlen(string));
 		}
 		inline void assign(const std::string& string) { assign(string.c_str()); }
@@ -154,7 +153,7 @@ namespace RNS {
 			if (bytes.size() <= 0) {
 				return;
 			}
-			ownData();
+			exclusiveData(true);
 			_data->insert(_data->end(), bytes._data->begin(), bytes._data->end());
 		}
 		inline void append(const uint8_t* chunk, size_t size) {
@@ -162,7 +161,7 @@ namespace RNS {
 			if (chunk == nullptr || size <= 0) {
 				return;
 			}
-			ownData();
+			exclusiveData(true);
 			_data->insert(_data->end(), chunk, chunk + size);
 		}
 		inline void append(const char* string) {
@@ -170,28 +169,37 @@ namespace RNS {
 			if (string == nullptr || string[0] == 0) {
 				return;
 			}
-			ownData();
+			exclusiveData(true);
 			_data->insert(_data->end(), (uint8_t* )string, (uint8_t* )string + strlen(string));
 		}
 		inline void append(const std::string& string) { append(string.c_str()); }
 		inline void append(uint8_t byte) {
-			ownData();
+			exclusiveData(true);
 			_data->push_back(byte);
 		}
 		void appendHex(const char* hex);
+
+		inline uint8_t* writable(size_t size) {
+			if (size > 0) {
+				//newData(size);
+				exclusiveData(false, size);
+				return _data->data();
+			}
+			else if (_data) {
+				//newData(_data->size());
+				exclusiveData(false, _data->size());
+				return _data->data();
+			}
+			return nullptr;
+		}
 
 		inline void resize(size_t newsize) {
 			// if size is unchanged then do nothing
 			if (newsize == size()) {
 				return;
 			}
-			ownData();
+			exclusiveData(true);
 			_data->resize(newsize);
-		}
-
-		inline uint8_t* writable(size_t size) {
-			newData(size);
-			return _data->data();
 		}
 
 	public:
@@ -199,6 +207,7 @@ namespace RNS {
 		inline size_t size() const { if (!_data) return 0; return _data->size(); }
 		inline bool empty() const { if (!_data) return true; return _data->empty(); }
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
+		inline void reserve(size_t capacity) const { if (!_data) return; _data->reserve(capacity); }
 		inline const uint8_t* data() const { if (!_data) return nullptr; return _data->data(); }
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
@@ -232,7 +241,7 @@ namespace RNS {
 
 	private:
 		SharedData _data;
-		mutable bool _owner = true;
+		mutable bool _exclusive = true;
 
 	};
 

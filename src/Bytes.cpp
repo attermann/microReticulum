@@ -2,22 +2,69 @@
 
 using namespace RNS;
 
-void Bytes::ownData() {
-	if (!_data) {
-		newData();
+// Creates new shared data for instance
+// - If size is specified (>0) then create shared data with initial size
+// - If size is not specified (<=0) then create empty shared data
+void Bytes::newData(size_t size /*= 0*/) {
+	//mem("Bytes is creating its own data");
+	if (size > 0) {
+		// CBA Note that this method of construction creates vector with specified and initializes all eleemtnets with default values
+		Data* data = new Data(size);
+		if (data == nullptr) {
+			error("Bytes failed to allocate data buffer");
+			throw std::runtime_error("Failed to allocate data buffer");
+		}
+		_data = SharedData(data);
 	}
-	else if (!_owner) {
+	else {
+		Data* data = new Data();
+		if (data == nullptr) {
+			error("Bytes failed to allocate empty data buffer");
+			throw std::runtime_error("Failed to allocate empty data buffer");
+		}
+		_data = SharedData(data);
+	}
+	_exclusive = true;
+}
+
+// Ensures that instance has exclusive shared data
+// - If instance has no shared data then create new shared data
+// - If instance does not have exclusive on shared data that is not empty then make a copy of shared data (if requests) and resize (if requested)
+// - If instance does not have exclusive on shared data that is empty then then create new shared data
+// - If instance already has exclusive on shared data then do nothing except resize (if requested)
+void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
+	if (!_data) {
+		newData(size);
+	}
+	else if (!_exclusive) {
 		Data *data;
-		if (!_data->empty()) {
+		if (copy && !_data->empty()) {
 			//extreme("Bytes is creating a writable copy of its shared data");
 			data = new Data(*_data.get());
+			if (data == nullptr) {
+				error("Bytes failed to duplicate data buffer");
+				throw std::runtime_error("Failed to duplicate data buffer");
+			}
+			if (size > 0) {
+				data->resize(size);
+			}
+			_data = SharedData(data);
+			_exclusive = true;
 		}
 		else {
 			//extreme("Bytes is creating its own data because shared is empty");
-			data = new Data();
+			//data = new Data();
+			//if (data == nullptr) {
+			//	error("Bytes failed to allocate empty data buffer");
+			//	throw std::runtime_error("Failed to allocate empty data buffer");
+			//}
+			//_data = SharedData(data);
+			//_exclusive = true;
+			newData(size);
 		}
-		_data = SharedData(data);
-		_owner = true;
+	}
+	else if (size > 0) {
+		_data->resize(size);
 	}
 }
 
@@ -46,7 +93,7 @@ void Bytes::assignHex(const char* hex) {
 	// if assignment is empty then clear data and don't bother creating new
 	if (hex == nullptr || hex[0] == 0) {
 		_data = nullptr;
-		_owner = true;
+		_exclusive = true;
 		return;
 	}
 	newData();
@@ -62,7 +109,7 @@ void Bytes::appendHex(const char* hex) {
 	if (hex == nullptr || hex[0] == 0) {
 		return;
 	}
-	ownData();
+	exclusiveData();
 	size_t len = strlen(hex);
 	for (size_t i = 0; i < len; i += 2) {
 		uint8_t byte = (hex[i] % 32 + 9) % 25 * 16 + (hex[i+1] % 32 + 9) % 25;

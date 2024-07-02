@@ -3,6 +3,7 @@
 // CBA NOTE If headers for classes referenced in this file are not included here,
 //  then they MUST be included BEFORE this header is included.
 #include "Transport.h"
+#include "Type.h"
 
 #include <ArduinoJson.h>
 
@@ -152,8 +153,8 @@ namespace ArduinoJson {
 				return dst.set(nullptr);
 			}
 			RNS::extreme("<<< Serializing packet hash " + src.get_hash().toHex());
-			// Whenever a reference to a packet is serilized we must ensure that packet itself also gets serialized separately
-			RNS::Transport::cache(src, true);
+			// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
+			RNS::Transport::cache_packet(src, true);
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Packet fromJson(JsonVariantConst src) {
@@ -178,23 +179,16 @@ namespace ArduinoJson {
 	template <>
 	struct Converter<RNS::Packet> {
 		static bool toJson(const RNS::Packet& src, JsonVariant dst) {
-			RNS::extreme("<<< Serializing packet");
-			dst["hash"] = src.get_hash();
+			RNS::extreme("<<< Serializing Packet");
+			//dst["hash"] = src.get_hash();
 			dst["raw"] = src.raw();
 			dst["sent_at"] = src.sent_at();
 			dst["destination_hash"] = src.get_hash();
-			RNS::extreme("<<< Finished serializing packet");
+			RNS::extreme("<<< Finished serializing Packet");
 			return true;
 		}
 		static RNS::Packet fromJson(JsonVariantConst src) {
-			RNS::extreme(">>> Deserializing packet");
-/*
-			RNS::Packet packet;
-			//packet.set_hash(src["hash"]);
-			packet.sent_at(src["sent_at"]);
-			RNS::Bytes destination_hash = src["destination_hash"];
-*/
-/**/
+			RNS::extreme(">>> Deserializing Packet");
 			RNS::Bytes raw = src["raw"];
 			RNS::Packet packet(
 				{RNS::Type::NONE},
@@ -205,13 +199,45 @@ namespace ArduinoJson {
 			RNS::Bytes destination_hash = src["destination_hash"];
 			// set cached flag since pcket was read from cache
 			packet.cached(true);
-/**/
-			RNS::extreme(">>> Finished deserializing packet");
+			RNS::extreme(">>> Finished deserializing Packet");
 			return packet;
 		}
 		static bool checkJson(JsonVariantConst src) {
 			return
-				src["hash"].is<RNS::Bytes>() &&
+				//src["hash"].is<RNS::Bytes>() &&
+				src["raw"].is<RNS::Bytes>() &&
+				src["sent_at"].is<double>() &&
+				src["destination_hash"].is<RNS::Bytes>();
+		}
+	};
+
+	// ArduinoJSON serialization support for RNS::Transport::PacketEntry
+	template <>
+	struct Converter<RNS::Transport::PacketEntry> {
+		static bool toJson(const RNS::Transport::PacketEntry& src, JsonVariant dst) {
+			RNS::extreme("<<< Serializing Transport::PacketEntry");
+			//dst["hash"] = src._hash;
+			dst["raw"] = src._raw;
+			dst["sent_at"] = src._sent_at;
+			dst["destination_hash"] = src._destination_hash;
+			RNS::extreme("<<< Finished serializing Transport::PacketEntry");
+			return true;
+		}
+		static RNS::Transport::PacketEntry fromJson(JsonVariantConst src) {
+			RNS::extreme(">>> Deserializing Transport::PacketEntry");
+			RNS::Transport::PacketEntry dst;
+			//dst._hash = src["hash"];
+			dst._raw = src["raw"];
+			dst._sent_at = src["sent_at"];
+			dst._destination_hash = src["destination_hash"];
+			// set cached flag since pcket was read from cache
+			dst._cached = true;
+			RNS::extreme(">>> Finished deserializing Transport::PacketEntry");
+			return dst;
+		}
+		static bool checkJson(JsonVariantConst src) {
+			return
+				//src["hash"].is<RNS::Bytes>() &&
 				src["raw"].is<RNS::Bytes>() &&
 				src["sent_at"].is<double>() &&
 				src["destination_hash"].is<RNS::Bytes>();
@@ -228,20 +254,23 @@ namespace ArduinoJson {
 			dst["announce_hops"] = src._hops;
 			dst["expires"] = src._expires;
 			dst["random_blobs"] = src._random_blobs;
-			//dst["receiving_interface"] = src._receiving_interface;
+/*
+			//dst["interface_hash"] = src._receiving_interface;
 			if (src._receiving_interface) {
-				dst["receiving_interface_hash"] = src._receiving_interface.get_hash();
+				dst["interface_hash"] = src._receiving_interface.get_hash();
 			}
 			else {
-				dst["receiving_interface_hash"] = nullptr;
+				dst["interface_hash"] = nullptr;
 			}
+			// CBA TODO Move packet serialization to *after* destination table serialization since packets are useless
+			//  anyway if there's no space to left to write destination table.
 			// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
 			//dst["packet"] = src._announce_packet;
 			if (src._announce_packet) {
 				dst["packet_hash"] = src._announce_packet.get_hash();
 				// Only cache packet if not already cached
 				if (!src._announce_packet.cached()) {
-					if (RNS::Transport::cache(src._announce_packet, true)) {
+					if (RNS::Transport::cache_packet(src._announce_packet, true)) {
 						const_cast<RNS::Packet&>(src._announce_packet).cached(true);
 					}
 				}
@@ -252,20 +281,23 @@ namespace ArduinoJson {
 			else {
 				dst["packet_hash"] = nullptr;
 			}
+*/
+			dst["interface_hash"] = src._receiving_interface;
+			dst["packet_hash"] = src._announce_packet;
 			RNS::extreme("<<< Finished Serializing Transport::DestinationEntry");
 			return true;
 		}
 		static RNS::Transport::DestinationEntry fromJson(JsonVariantConst src) {
 			RNS::extreme(">>> Deserializing Transport::DestinationEntry");
-/**/
 			RNS::Transport::DestinationEntry dst;
 			dst._timestamp = src["timestamp"];
 			dst._received_from = src["received_from"];
 			dst._hops = src["announce_hops"];
 			dst._expires = src["expires"];
 			dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
-			//dst._receiving_interface = src["receiving_interface"];
-			RNS::Bytes interface_hash = src["receiving_interface_hash"];
+/*
+			//dst._receiving_interface = src["interface_hash"];
+			RNS::Bytes interface_hash = src["interface_hash"];
 			if (interface_hash) {
 				// Query transport for matching interface
 				dst._receiving_interface = RNS::Transport::find_interface_from_hash(interface_hash);
@@ -276,7 +308,9 @@ namespace ArduinoJson {
 				// Query transport for matching packet
 				dst._announce_packet = RNS::Transport::get_cached_packet(packet_hash);
 			}
-/**/
+*/
+			dst._receiving_interface = src["interface_hash"];
+			dst._announce_packet = src["packet_hash"];
 /*
 			//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
 			RNS::Transport::DestinationEntry dst(
@@ -299,7 +333,7 @@ namespace ArduinoJson {
 				src["announce_hops"].is<int>() &&
 				src["expires"].is<double>() &&
 				src["random_blobs"].is<std::set<RNS::Bytes>>() &&
-				src["receiving_interface_hash"].is<RNS::Bytes>() &&
+				src["interface_hash"].is<RNS::Bytes>() &&
 				src["packet_hash"].is<RNS::Bytes>();
 		}
 	};
@@ -308,19 +342,24 @@ namespace ArduinoJson {
 
 namespace RNS { namespace Persistence {
 
-	template <typename T> bool serialize(const T& obj, const char* file_path, size_t max_size) {
-		DynamicJsonDocument doc(1024);
-		doc.set(obj);
-		RNS::Bytes data;
-		size_t length = serializeJson(doc, data.writable(max_size), max_size);
-		//size_t length = serializeMsgPack(doc, data.writable(max_size), max_size);
-		if (length < max_size) {
-			data.resize(length);
+	static DynamicJsonDocument _document(Type::Persistence::DOCUMENT_MAXSIZE);
+	static Bytes _buffer(Type::Persistence::BUFFER_MAXSIZE);
+
+	template <typename T> bool serialize(const T& obj, const char* file_path) {
+		_document.set(obj);
+		size_t size = _buffer.capacity();
+#ifdef USE_MSGPACK
+		size_t length = serializeMsgPack(_document, _buffer.writable(size), size);
+#else
+		size_t length = serializeJson(_document, _buffer.writable(size), size);
+#endif
+		if (length < size) {
+			_buffer.resize(length);
 		}
 		RNS::extreme("Persistence::serialize: serialized " + std::to_string(length) + " bytes");
 		if (length > 0) {
-			if (RNS::Utilities::OS::write_file(data, file_path)) {
-				RNS::extreme("Persistence::serialize: wrote " + std::to_string(data.size()) + " bytes");
+			if (RNS::Utilities::OS::write_file(file_path, _buffer) == _buffer.size()) {
+				RNS::extreme("Persistence::serialize: wrote " + std::to_string(_buffer.size()) + " bytes");
 			}
 			else {
 				RNS::extreme("Persistence::serialize: write failed");
@@ -334,16 +373,17 @@ namespace RNS { namespace Persistence {
 		return true;
 	}
 	template <typename T> bool deserialize(T& obj, const char* file_path) {
-		DynamicJsonDocument doc(1024);
-		RNS::Bytes data = RNS::Utilities::OS::read_file(file_path);
-		if (data) {
-			RNS::extreme("Persistence::deserialize: read: " + std::to_string(data.size()) + " bytes");
-			//RNS::extreme("testDeserializeVector: data: " + data.toString());
-			DeserializationError error = deserializeJson(doc, data.data());
-			//DeserializationError error = deserializeMsgPack(doc, data.data());
+		if (RNS::Utilities::OS::read_file(file_path, _buffer) > 0) {
+			RNS::extreme("Persistence::deserialize: read: " + std::to_string(_buffer.size()) + " bytes");
+			//RNS::extreme("testDeserializeVector: data: " + _buffer.toString());
+#ifdef USE_MSGPACK
+			DeserializationError error = deserializeMsgPack(_document, _buffer.data());
+#else
+			DeserializationError error = deserializeJson(_document, _buffer.data());
+#endif
 			if (!error) {
 				RNS::extreme("Persistence::deserialize: successfully deserialized");
-				obj = doc.as<T>();
+				obj = _document.as<T>();
 				return true;
 			}
 			else {

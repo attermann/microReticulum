@@ -129,8 +129,8 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 bool Identity::load(const char* path) {
 	extreme("Reading identity key from storage...");
 	try {
-		Bytes prv_bytes = OS::read_file(path);
-		if (prv_bytes) {
+		Bytes prv_bytes;
+		if (OS::read_file(path, prv_bytes) > 0) {
 			return load_private_key(prv_bytes);
 		}
 		else {
@@ -155,7 +155,7 @@ communication for the identity. Be very careful with this method.
 bool Identity::to_file(const char* path) {
 	extreme("Writing identity key to storage...");
 	try {
-		return OS::write_file(get_private_key(), path);
+		return (OS::write_file(path, get_private_key()) == get_private_key().size());
 	}
 	catch (std::exception& e) {
 		error("Error while saving identity to " + std::string(path));

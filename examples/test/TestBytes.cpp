@@ -295,7 +295,7 @@ void testBytesConversion() {
 
 	{
 		RNS::Bytes bytes("Hello World");
-		std::string hex = bytes.toHex();
+		std::string hex = bytes.toHex(true);
 		RNS::extreme("text: \"" + bytes.toString() + "\" upper hex: \"" + hex + "\"");
 		assert(hex.length() == 22);
 		assert(hex.compare("48656C6C6F20576F726C64") == 0);
@@ -340,11 +340,33 @@ void testBytesConversion() {
 
 }
 
+void testBytesResize() {
+	RNS::extreme("Testing downsize of Bytes with initial capacity");
+
+	RNS::Bytes bytes(1024);
+	assert(!bytes);
+	assert(bytes.size() == 0);
+	assert(bytes.capacity() == 1024);
+	assert(bytes.data() != nullptr);
+
+	uint8_t* buffer = bytes.writable(bytes.capacity());
+	assert(bytes);
+	assert(bytes.size() == 1024);
+	assert(bytes.capacity() == 1024);
+
+	assert(buffer != nullptr);
+	memcpy(buffer, "Hello World", 11);
+	bytes.resize(11);
+	assert(bytes.size() == 11);
+	assert(bytes.capacity() == 1024);
+}
+
 void testBytes() {
 	RNS::head("Running testBytes...", RNS::LOG_EXTREME);
 	testBytesMain();
 	testCowBytes();
 	testBytesConversion();
+	testBytesResize();
 }
 
 /*
