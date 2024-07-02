@@ -6,7 +6,7 @@ using namespace RNS;
 // - If size is specified (>0) then create shared data with initial size
 // - If size is not specified (<=0) then create empty shared data
 void Bytes::newData(size_t size /*= 0*/) {
-	//mem("Bytes is creating its own data");
+	MEM("Bytes is creating its own data");
 	if (size > 0) {
 		// CBA Note that this method of construction creates vector with specified and initializes all eleemtnets with default values
 		Data* data = new Data(size);
@@ -39,7 +39,7 @@ void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
 	else if (!_exclusive) {
 		Data *data;
 		if (copy && !_data->empty()) {
-			//extreme("Bytes is creating a writable copy of its shared data");
+			//TRACE("Bytes is creating a writable copy of its shared data");
 			data = new Data(*_data.get());
 			if (data == nullptr) {
 				error("Bytes failed to duplicate data buffer");
@@ -52,7 +52,7 @@ void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
 			_exclusive = true;
 		}
 		else {
-			//extreme("Bytes is creating its own data because shared is empty");
+			//TRACE("Bytes is creating its own data because shared is empty");
 			//data = new Data();
 			//if (data == nullptr) {
 			//	error("Bytes failed to allocate empty data buffer");

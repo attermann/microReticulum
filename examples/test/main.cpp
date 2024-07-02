@@ -41,7 +41,7 @@ void setup() {
 
 	try {
 
-		RNS::extreme("Running tests...");
+		TRACE("Running tests...");
 		RNS::LogLevel loglevel = RNS::loglevel();
 		//RNS::loglevel(RNS::LOG_WARNING);
 		RNS::loglevel(RNS::LOG_EXTREME);
@@ -56,7 +56,7 @@ void setup() {
 		testBytes();
 
 		RNS::loglevel(loglevel);
-		RNS::extreme("Finished running tests");
+		TRACE("Finished running tests");
 		//return;
 	}
 	catch (std::exception& e) {

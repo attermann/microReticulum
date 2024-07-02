@@ -20,7 +20,7 @@ ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NO
 Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
 
 	if (_object->_destination) {
-		extreme("Creating packet with destination...");
+		TRACE("Creating packet with destination...");
 		// CBA Should never see empty transport_type
 		//if (transport_type == NONE) {
 		//	transport_type = Type::Transport::BROADCAST;
@@ -41,13 +41,13 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_create_receipt = create_receipt;
 	}
 	else {
-		extreme("Creating packet without destination...");
+		TRACE("Creating packet without destination...");
 		_object->_raw = data;
 		_object->_packed = true;
 		_object->_fromPacked = true;
 		_object->_create_receipt = false;
 	}
-	mem("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 
@@ -241,7 +241,7 @@ but excluding any interface access codes.
 
 void Packet::pack() {
 	assert(_object);
-	extreme("Packet::pack: packing packet...");
+	TRACE("Packet::pack: packing packet...");
 
 	if (!_object->_destination) {
 		throw std::logic_error("Packet destination is required");
@@ -255,14 +255,14 @@ void Packet::pack() {
 	_object->_raw << _object->_hops;
 
 	if (_object->_context == LRPROOF) {
-		extreme("Packet::pack: destination link id: " + _object->_destination.link_id().toHex() );
+		TRACE("Packet::pack: destination link id: " + _object->_destination.link_id().toHex() );
 		_object->_raw << _object->_destination.link_id();
 		_object->_raw << (uint8_t)_object->_context;
 		_object->_raw << _object->_data;
 	}
 	else {
 		if (_object->_header_type == HEADER_1) {
-			extreme("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
 			_object->_raw << _object->_destination.hash();
 			_object->_raw << (uint8_t)_object->_context;
 
@@ -307,8 +307,8 @@ void Packet::pack() {
 			if (!_object->_transport_id) {
                 throw std::invalid_argument("Packet with header type 2 must have a transport ID");
 			}
-			extreme("Packet::pack: transport id: " + _object->_transport_id.toHex() );
-			extreme("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+			TRACE("Packet::pack: transport id: " + _object->_transport_id.toHex() );
+			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
 			_object->_raw << _object->_transport_id;
 			_object->_raw << _object->_destination.hash();
 			_object->_raw << (uint8_t)_object->_context;
@@ -333,7 +333,7 @@ void Packet::pack() {
 
 bool Packet::unpack() {
 	assert(_object);
-	extreme("Packet::unpack: unpacking packet...");
+	TRACE("Packet::unpack: unpacking packet...");
 	try {
 		if (_object->_raw.size() < Type::Reticulum::HEADER_MINSIZE) {
 			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MINSIZE) +" bytes");
@@ -391,7 +391,7 @@ Sends the packet.
 */
 bool Packet::send() {
 	assert(_object);
-	extreme("Packet::send: sending packet...");
+	TRACE("Packet::send: sending packet...");
 	if (_object->_sent) {
         throw std::logic_error("Packet was already sent");
 	}
@@ -414,7 +414,7 @@ bool Packet::send() {
 	}
 
 	if (Transport::outbound(*this)) {
-		extreme("Packet::send: successfully sent packet!!!");
+		TRACE("Packet::send: successfully sent packet!!!");
 		//z return self.receipt
 		// MOCK
 		return true;
@@ -434,7 +434,7 @@ Re-sends the packet.
 */
 bool Packet::resend() {
 	assert(_object);
-	extreme("Packet::resend: re-sending packet...");
+	TRACE("Packet::resend: re-sending packet...");
 	if (!_object->_sent) {
 		throw std::logic_error("Packet was not sent yet");
 	}
@@ -443,7 +443,7 @@ bool Packet::resend() {
 	pack();
 
 	if (Transport::outbound(*this)) {
-		extreme("Packet::resend: successfully sent packet!!!");
+		TRACE("Packet::resend: successfully sent packet!!!");
 		//z return self.receipt
 		// MOCK
 		return true;
@@ -458,7 +458,7 @@ bool Packet::resend() {
 
 void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
 	assert(_object);
-	extreme("Packet::prove: proving packet...");
+	TRACE("Packet::prove: proving packet...");
 	if (!_object->_destination) {
 		throw std::logic_error("Packet destination is required");
 	}
@@ -780,7 +780,7 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link) {
 }
 bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, const Packet& proof_packet) {
 	assert(_object);
-	extreme("PacketReceipt::validate_link_proof: validating link proof...");
+	TRACE("PacketReceipt::validate_link_proof: validating link proof...");
 	// TODO: Hardcoded as explicit proofs for now
 	if (true || proof.size() == EXPL_LENGTH) {
 		// This is an explicit proof
@@ -843,7 +843,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof) {
 }
 bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packet) {
 	assert(_object);
-	extreme("PacketReceipt::validate_proof: validating proof...");
+	TRACE("PacketReceipt::validate_proof: validating proof...");
 	if (proof.size() == EXPL_LENGTH) {
 		// This is an explicit proof
 		Bytes proof_hash = proof.left(Type::Identity::HASHLENGTH/8);

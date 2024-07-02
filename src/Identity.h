@@ -43,19 +43,19 @@ namespace RNS {
 
 	public:
 		Identity(Type::NoneConstructor none) {
-			mem("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(const Identity& identity) : _object(identity._object) {
-			mem("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(bool create_keys = true);
 		virtual ~Identity() {
-			mem("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Identity& operator = (const Identity& identity) {
 			_object = identity._object;
-			mem("Identity object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Identity object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -87,7 +87,7 @@ namespace RNS {
 		inline void update_hashes() {
 			assert(_object);
 			_object->_hash = truncated_hash(get_public_key());
-			extreme("Identity::update_hashes: hash: " + _object->_hash.toHex());
+			TRACE("Identity::update_hashes: hash: " + _object->_hash.toHex());
 			_object->_hexhash = _object->_hash.toHex();
 		};
 		bool load(const char* path);
@@ -161,8 +161,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object() { mem("Identity::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { mem("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object() { MEM("Identity::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { MEM("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 
 			Cryptography::X25519PrivateKey::Ptr _prv;

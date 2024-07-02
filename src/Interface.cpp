@@ -10,17 +10,17 @@ using namespace RNS::Type::Interface;
 
 Interface::Interface() : _object(new Object(this)), _creator(true) {
 	_object->_hash = Identity::full_hash({toString()});
-	mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 Interface::Interface(const char* name) : _object(new Object(this, name)), _creator(true) {
 	_object->_hash = Identity::full_hash({toString()});
-	mem("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 /*virtual*/ inline void Interface::on_incoming(const Bytes& data) {
-	//extreme("Interface.on_incoming: data: " + data.toHex());
-	extreme("Interface.on_incoming");
+	//TRACE("Interface.on_incoming: data: " + data.toHex());
+	TRACE("Interface.on_incoming");
 	assert(_object);
 	_object->_rxb += data.size();
 	// CBA TODO implement concept of owner or a callback mechanism for incoming data
@@ -29,8 +29,8 @@ Interface::Interface(const char* name) : _object(new Object(this, name)), _creat
 }
 
 /*virtual*/ inline void Interface::on_outgoing(const Bytes& data) {
-	//extreme("Interface.on_outgoing: data: " + data.toHex());
-	extreme("Interface.on_outgoing");
+	//TRACE("Interface.on_outgoing: data: " + data.toHex());
+	TRACE("Interface.on_outgoing");
 	assert(_object);
 	_object->_txb += data.size();
 }
@@ -90,19 +90,19 @@ void Interface::process_announce_queue() {
 
 /*
 void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Interface& dst) {
-	RNS::extreme(">>> Deserializing Interface");
-RNS::extreme(">>> Interface pre: " + dst.debugString());
+	TRACE(">>> Deserializing Interface");
+TRACE(">>> Interface pre: " + dst.debugString());
 	if (!src.isNull()) {
 		RNS::Bytes hash;
 		hash.assignHex(src.as<const char*>());
-		RNS::extreme(">>> Querying Transport for Interface hash " + hash.toHex());
+		TRACE(">>> Querying Transport for Interface hash " + hash.toHex());
 		// Query transport for matching interface
 		dst = Transport::find_interface_from_hash(hash);
-RNS::extreme(">>> Interface post: " + dst.debugString());
+TRACE(">>> Interface post: " + dst.debugString());
 	}
 	else {
 		dst = {RNS::Type::NONE};
-RNS::extreme(">>> Interface post: " + dst.debugString());
+TRACE(">>> Interface post: " + dst.debugString());
 	}
 }
 */

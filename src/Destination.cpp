@@ -15,52 +15,52 @@ using namespace RNS::Utilities;
 
 Destination::Destination(const Identity& identity, const directions direction, const types type, const char* app_name, const char* aspects) : _object(new Object(identity)) {
 	assert(_object);
-	mem("Destination object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Destination object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
 	// Check input values and build name string
 	if (strchr(app_name, '.') != nullptr) {
 		throw std::invalid_argument("Dots can't be used in app names");
 	}
-	//extreme("Destination::Destination: app name: " + std::string(app_name));
+	//TRACE("Destination::Destination: app name: " + std::string(app_name));
 
 	_object->_type = type;
 	_object->_direction = direction;
 
 	std::string fullaspects(aspects);
 	if (!identity && direction == IN && _object->_type != PLAIN) {
-		extreme("Destination::Destination: identity not provided, creating new one");
+		TRACE("Destination::Destination: identity not provided, creating new one");
 		_object->_identity = Identity();
 		// CBA TODO determine why identity.hexhash is added both here and by expand_name called below
 		fullaspects += "." + _object->_identity.hexhash();
 	}
-	//extreme("Destination::Destination: full aspects: " + fullaspects);
+	//TRACE("Destination::Destination: full aspects: " + fullaspects);
 
 	if (_object->_identity && _object->_type == PLAIN) {
 		throw std::invalid_argument("Selected destination type PLAIN cannot hold an identity");
 	}
 
 	_object->_name = expand_name(_object->_identity, app_name, fullaspects.c_str());
-	//extreme("Destination::Destination: name: " + _object->_name);
+	//TRACE("Destination::Destination: name: " + _object->_name);
 
 	// Generate the destination address hash
-	//extreme("Destination::Destination: creating hash...");
+	//TRACE("Destination::Destination: creating hash...");
 	_object->_hash = hash(_object->_identity, app_name, fullaspects.c_str());
 	_object->_hexhash = _object->_hash.toHex();
-	extreme("Destination::Destination: hash: " + _object->_hash.toHex());
-	//extreme("Destination::Destination: creating name hash...");
+	TRACE("Destination::Destination: hash: " + _object->_hash.toHex());
+	//TRACE("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash(app_name, aspects);
-	//extreme("Destination::Destination: name hash: " + _object->_name_hash.toHex());
+	//TRACE("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
-	//extreme("Destination::Destination: calling register_destination");
+	//TRACE("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
 
-	mem("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 Destination::Destination(const Identity& identity, const Type::Destination::directions direction, const Type::Destination::types type, const Bytes& hash) : _object(new Object(identity)) {
 	assert(_object);
-	mem("Destination object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Destination object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
 	_object->_type = type;
 	_object->_direction = direction;
@@ -71,26 +71,26 @@ Destination::Destination(const Identity& identity, const Type::Destination::dire
 
 	_object->_hash = hash;
 	_object->_hexhash = _object->_hash.toHex();
-	extreme("Destination::Destination: hash: " + _object->_hash.toHex());
-	//extreme("Destination::Destination: creating name hash...");
+	TRACE("Destination::Destination: hash: " + _object->_hash.toHex());
+	//TRACE("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash("unknown", "unknown");
-	//extreme("Destination::Destination: name hash: " + _object->_name_hash.toHex());
+	//TRACE("Destination::Destination: name hash: " + _object->_name_hash.toHex());
 
-	//extreme("Destination::Destination: calling register_destination");
+	//TRACE("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
 
-	mem("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Destination object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 /*virtual*/ Destination::~Destination() {
-	mem("Destination object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Destination object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 	if (_object && _object.use_count() == 1) {
-		mem("Destination object has last data reference");
+		MEM("Destination object has last data reference");
 
 		// CBA Can't call deregister_destination here because it's possible (likely even) that Destination
 		//  is being destructed from that same collection which will result in a llop and memory errors.
-		//extreme("Destination::~Destination: calling deregister_destination");
+		//TRACE("Destination::~Destination: calling deregister_destination");
 		//Transport::deregister_destination(*this);
 	}
 }
@@ -184,7 +184,7 @@ relevant interfaces. Application specific data can be added to the announce.
 //Packet Destination::announce(const Bytes& app_data /*= {}*/, bool path_response /*= false*/, const Interface& attached_interface /*= {Type::NONE}*/, const Bytes& tag /*= {}*/, bool send /*= true*/) {
 Packet Destination::announce(const Bytes& app_data, bool path_response, const Interface& attached_interface, const Bytes& tag /*= {}*/, bool send /*= true*/) {
 	assert(_object);
-	extreme("Destination::announce: announcing destination...");
+	TRACE("Destination::announce: announcing destination...");
 
 	if (_object->_type != SINGLE) {
 		throw std::invalid_argument("Only SINGLE destination types can be announced");
@@ -213,29 +213,29 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 
 /*
 	// CBA TEST
-	extreme("Destination::announce: performing path test...");
-	extreme("Destination::announce: inserting path...");
+	TRACE("Destination::announce: performing path test...");
+	TRACE("Destination::announce: inserting path...");
 	_object->_path_responses.insert({Bytes("foo_tag"), {0, Bytes("this is foo tag")}});
-	extreme("Destination::announce: inserting path...");
+	TRACE("Destination::announce: inserting path...");
 	_object->_path_responses.insert({Bytes("test_tag"), {0, Bytes("this is test tag")}});
 	if (path_response) {
-		extreme("Destination::announce: path_response is true");
+		TRACE("Destination::announce: path_response is true");
 	}
 	if (!tag.empty()) {
-		extreme("Destination::announce: tag is specified");
+		TRACE("Destination::announce: tag is specified");
 		std::string tagstr((const char*)tag.data(), tag.size());
-		debug(std::string("Destination::announce: tag: ") + tagstr);
-		debug(std::string("Destination::announce: tag len: ") + std::to_string(tag.size()));
-		extreme("Destination::announce: searching for tag...");
+		DEBUG(std::string("Destination::announce: tag: ") + tagstr);
+		DEBUG(std::string("Destination::announce: tag len: ") + std::to_string(tag.size()));
+		TRACE("Destination::announce: searching for tag...");
 		if (_object->_path_responses.find(tag) != _object->_path_responses.end()) {
-			extreme("Destination::announce: found tag in _path_responses");
-			debug(std::string("Destination::announce: data: ") +_object->_path_responses[tag].second.toString());
+			TRACE("Destination::announce: found tag in _path_responses");
+			DEBUG(std::string("Destination::announce: data: ") +_object->_path_responses[tag].second.toString());
 		}
 		else {
-			extreme("Destination::announce: tag not found in _path_responses");
+			TRACE("Destination::announce: tag not found in _path_responses");
 		}
 	}
-	extreme("Destination::announce: path test finished");
+	TRACE("Destination::announce: path test finished");
 */
 
 	if (path_response && !tag.empty() && _object->_path_responses.find(tag) != _object->_path_responses.end()) {
@@ -247,7 +247,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		// received via multiple paths. The difference in reception time will
 		// potentially also be useful in determining characteristics of the
 		// multiple available paths, and to choose the best one.
-		//z extreme("Using cached announce data for answering path request with tag "+RNS.prettyhexrep(tag));
+		//z TRACE("Using cached announce data for answering path request with tag "+RNS.prettyhexrep(tag));
 		announce_data << _object->_path_responses[tag].second;
 	}
 	else {
@@ -262,20 +262,20 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		}
 
 		Bytes signed_data;
-		//extreme("Destination::announce: hash:         " + _object->_hash.toHex());
-		//extreme("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
-		//extreme("Destination::announce: name hash:    " + _object->_name_hash.toHex());
-		//extreme("Destination::announce: random hash:  " + random_hash.toHex());
-		//extreme("Destination::announce: app data:     " + new_app_data.toHex());
-		//extreme("Destination::announce: app data text:" + new_app_data.toString());
+		//TRACE("Destination::announce: hash:         " + _object->_hash.toHex());
+		//TRACE("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
+		//TRACE("Destination::announce: name hash:    " + _object->_name_hash.toHex());
+		//TRACE("Destination::announce: random hash:  " + random_hash.toHex());
+		//TRACE("Destination::announce: app data:     " + new_app_data.toHex());
+		//TRACE("Destination::announce: app data text:" + new_app_data.toString());
 		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
 		if (new_app_data) {
 			signed_data << new_app_data;
 		}
-		//extreme("Destination::announce: signed data:  " + signed_data.toHex());
+		//TRACE("Destination::announce: signed data:  " + signed_data.toHex());
 
 		Bytes signature(_object->_identity.sign(signed_data));
-		//extreme("Destination::announce: signature:    " + signature.toHex());
+		//TRACE("Destination::announce: signature:    " + signature.toHex());
 
 		announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
 
@@ -285,20 +285,20 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 
 		_object->_path_responses.insert({tag, {OS::time(), announce_data}});
 	}
-	//extreme("Destination::announce: announce_data:" + announce_data.toHex());
+	//TRACE("Destination::announce: announce_data:" + announce_data.toHex());
 
 	Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 	if (path_response) {
 		announce_context = Type::Packet::PATH_RESPONSE;
 	}
 
-	//extreme("Destination::announce: creating announce packet...");
+	//TRACE("Destination::announce: creating announce packet...");
     //p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
 	//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
 	Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
 
 	if (send) {
-		extreme("Destination::announce: sending announce packet...");
+		TRACE("Destination::announce: sending announce packet...");
 		announce_packet.send();
 		return {Type::NONE};
 	}
@@ -362,7 +362,7 @@ void Destination::receive(const Packet& packet) {
 	else {
 		// CBA TODO Why isn't the Packet decrypting itself?
 		Bytes plaintext(decrypt(packet.data()));
-		//extreme("Destination::receive: decrypted data: " + plaintext.toHex());
+		//TRACE("Destination::receive: decrypted data: " + plaintext.toHex());
 		if (plaintext) {
 			if (packet.packet_type() == Type::Packet::DATA) {
 				if (_object->_callbacks._packet) {
@@ -370,7 +370,7 @@ void Destination::receive(const Packet& packet) {
 						_object->_callbacks._packet(plaintext, packet);
 					}
 					catch (std::exception& e) {
-						debug("Error while executing receive callback from " + toString() + ". The contained exception was: " + e.what());
+						DEBUG("Error while executing receive callback from " + toString() + ". The contained exception was: " + e.what());
 					}
 				}
 			}
@@ -396,7 +396,7 @@ Encrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 */
 /*virtual*/ const Bytes Destination::encrypt(const Bytes& data) {
 	assert(_object);
-	extreme("Destination::encrypt: encrypting data...");
+	TRACE("Destination::encrypt: encrypting data...");
 
 	if (_object->_type == PLAIN) {
 		return data;
@@ -433,7 +433,7 @@ Decrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 */
 /*virtual*/ const Bytes Destination::decrypt(const Bytes& data) {
 	assert(_object);
-	extreme("Destination::decrypt: decrypting data...");
+	TRACE("Destination::decrypt: decrypting data...");
 
 	if (_object->_type == PLAIN) {
 		return data;

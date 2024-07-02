@@ -19,12 +19,12 @@ using namespace RNS::Utilities;
 /*static*/ uint64_t OS::timeOffset = 0;
 
 /*static*/ void OS::register_filesystem(Filesystem& filesystem) {
-	extreme("Registering filesystem...");
+	TRACE("Registering filesystem...");
 	OS::filesystem = filesystem;
 }
 
 /*static*/ void OS::deregister_filesystem() {
-	extreme("Deregistering filesystem...");
+	TRACE("Deregistering filesystem...");
 	OS::filesystem = {Type::NONE};
 }
 

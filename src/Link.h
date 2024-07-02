@@ -22,14 +22,14 @@ namespace RNS {
 
 	public:
 		Link(Type::NoneConstructor none) {
-			mem("Link NONE object created");
+			MEM("Link NONE object created");
 		}
 		Link(const Link& link) : _object(link._object) {
-			mem("Link object copy created");
+			MEM("Link object copy created");
 		}
 		Link(const Destination& destination);
 		virtual ~Link(){
-			mem("Link object destroyed");
+			MEM("Link object destroyed");
 		}
 
 		inline Link& operator = (const Link& link) {

@@ -43,50 +43,50 @@ namespace RNS {
 
 	public:
 		Interface(Type::NoneConstructor none) {
-			mem("Interface object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Interface(const Interface& interface) : _object(interface._object) {
-			mem("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Interface();
 		Interface(const char* name);
 		virtual ~Interface() {
 			if (_creator) {
-				mem("Interface object clearing parent reference, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+				MEM("Interface object clearing parent reference, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 				// clear reference to parent in object foir safety
 				assert(_object);
 				_object->_parent = nullptr;
 			}
-			mem("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Interface& operator = (const Interface& interface) {
 			_object = interface._object;
-			mem("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			if (_creator) {
-				mem("Interface object clearing creator flag, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+				MEM("Interface object clearing creator flag, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 				_creator = false;
 			}
 			return *this;
 		}
 		inline operator bool() const {
-			mem("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Interface& interface) const {
-			mem("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() < interface._object.get();
 		}
 		inline bool operator > (const Interface& interface) const {
-			mem("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() > interface._object.get();
 		}
 		inline bool operator == (const Interface& interface) const {
-			mem("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() == interface._object.get();
 		}
 		inline bool operator != (const Interface& interface) const {
-			mem("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != interface._object.get();
 		}
 
@@ -147,9 +147,9 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(Interface* parent) : _parent(parent) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			Object(Interface* parent, const char* name) : _parent(parent), _name(name) { mem("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { mem("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object(Interface* parent) : _parent(parent) { MEM("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(Interface* parent, const char* name) : _parent(parent), _name(name) { MEM("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { MEM("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			//virtual inline void process_incoming(const Bytes& data) { if (_parent != nullptr) { _parent->on_incoming(data); } }
 			virtual inline void process_outgoing(const Bytes& data) { if (_parent != nullptr) { _parent->on_outgoing(data); } }
@@ -187,11 +187,11 @@ namespace RNS {
 /*
 namespace ArduinoJson {
 	inline bool convertToJson(const RNS::Interface& src, JsonVariant dst) {
-		RNS::extreme("<<< Serializing Interface");
+		TRACE("<<< Serializing Interface");
 		if (!src) {
 			return dst.set(nullptr);
 		}
-		RNS::extreme("<<< Interface hash " + src.get_hash().toHex());
+		TRACE("<<< Interface hash " + src.get_hash().toHex());
 		return dst.set(src.get_hash().toHex());
 	}
 	void convertFromJson(JsonVariantConst src, RNS::Interface& dst);
@@ -208,15 +208,15 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			RNS::extreme("<<< Serializing interface hash " + src.get_hash().toHex());
+			TRACE("<<< Serializing interface hash " + src.get_hash().toHex());
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Interface fromJson(JsonVariantConst src) {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				RNS::extreme(">>> Deserialized interface hash " + hash.toHex());
-				RNS::extreme(">>> Querying transport for interface");
+				TRACE(">>> Deserialized interface hash " + hash.toHex());
+				TRACE(">>> Querying transport for interface");
 				// Query transport for matching interface
 				return RNS::Interface::find_interface_from_hash(hash);
 			}

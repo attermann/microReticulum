@@ -28,7 +28,7 @@ void testReference() {
 	interfaces.insert(testinterface);
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
 		RNS::Interface& interface = (*iter);
-		RNS::extreme("Found interface: " + interface.toString());
+		TRACE("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
@@ -41,7 +41,7 @@ void testReference() {
 	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
 	interfaces.insert(testinterface);
 	for (auto& interface : interfaces) {
-		RNS::extreme("Found interface: " + interface.toString());
+		TRACE("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
@@ -55,7 +55,7 @@ void testReference() {
 	interfaces.push_back(testinterface);
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
 		RNS::Interface& interface = (*iter);
-		RNS::extreme("Found interface: " + interface.toString());
+		TRACE("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
@@ -69,7 +69,7 @@ void testReference() {
 	interfaces.push_back(testinterface);
 	//for (auto& interface : interfaces) {
 	for (RNS::Interface& interface : interfaces) {
-		RNS::extreme("Found interface: " + interface.toString());
+		TRACE("Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
@@ -83,14 +83,14 @@ void testReference() {
 		interfaces.push_back(testinterface);
 		for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
 			RNS::Interface& interface = (*iter);
-			RNS::extreme("1 Found interface: " + interface.toString());
+			TRACE("1 Found interface: " + interface.toString());
 			RNS::Bytes data;
 			const_cast<RNS::Interface&>(interface).on_outgoing(data);
 		}
 	}
 	for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
 		RNS::Interface& interface = (*iter);
-		RNS::extreme("2 Found interface: " + interface.toString());
+		TRACE("2 Found interface: " + interface.toString());
 		RNS::Bytes data;
 		const_cast<RNS::Interface&>(interface).on_outgoing(data);
 	}
@@ -103,13 +103,13 @@ void testReference() {
 		destinations.insert({destination.hash(), destination});
 		//for (RNS::Destination& destination : destinations) {
 		for (auto& [hash, destination] : destinations) {
-			RNS::extreme("Iterated destination: " + destination.toString());
+			TRACE("Iterated destination: " + destination.toString());
 		}
 		RNS::Bytes hash = destination.hash();
 		auto iter = destinations.find(hash);
 		if (iter != destinations.end()) {
 			RNS::Destination& destination = (*iter).second;
-			RNS::extreme("Found destination: " + destination.toString());
+			TRACE("Found destination: " + destination.toString());
 		}
 		return;
 	}

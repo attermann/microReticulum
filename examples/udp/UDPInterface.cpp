@@ -57,12 +57,12 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	}
 	_local_port = port;
 	_remote_port = port;
-	extreme("UDPInterface: wifi ssid: " + _wifi_ssid);
-	extreme("UDPInterface: wifi password: " + _wifi_password);
-	extreme("UDPInterface: local host: " + _local_host);
-	extreme("UDPInterface: local port: " + std::to_string(_local_port));
-	extreme("UDPInterface: remote host: " + _remote_host);
-	extreme("UDPInterface: remote port: " + std::to_string(_remote_port));
+	TRACE("UDPInterface: wifi ssid: " + _wifi_ssid);
+	TRACE("UDPInterface: wifi password: " + _wifi_password);
+	TRACE("UDPInterface: local host: " + _local_host);
+	TRACE("UDPInterface: local port: " + std::to_string(_local_port));
+	TRACE("UDPInterface: remote host: " + _remote_host);
+	TRACE("UDPInterface: remote port: " + std::to_string(_remote_port));
  
 #ifdef ARDUINO
 	// Connect to the WiFi network
@@ -149,7 +149,7 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	}
 
 	// open udp socket
-	extreme("Opening UDP socket");
+	TRACE("Opening UDP socket");
 	_socket = socket( PF_INET, SOCK_DGRAM, 0 );
 	if (_socket < 0) {
 		error("Unable to create socket with error " + std::to_string(errno));
@@ -219,12 +219,12 @@ void UDPInterface::loop() {
 }
 
 /*virtual*/ void UDPInterface::on_incoming(const Bytes& data) {
-	debug(toString() + ".on_incoming: data: " + data.toHex());
+	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
 	Interface::on_incoming(data);
 }
 
 /*virtual*/ void UDPInterface::on_outgoing(const Bytes& data) {
-	debug(toString() + ".on_outgoing: data: " + data.toHex());
+	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
 		if (online()) {
 			// Send packet
@@ -233,13 +233,13 @@ void UDPInterface::loop() {
 			udp.write(data.data(), data.size());
 			udp.endPacket();
 #else
-			extreme("Sending UDP packet to " + std::string(_remote_host) + ":" + std::to_string(_remote_port));
+			TRACE("Sending UDP packet to " + std::string(_remote_host) + ":" + std::to_string(_remote_port));
 			sockaddr_in sock_addr;
 			sock_addr.sin_family = AF_INET;
 			sock_addr.sin_addr.s_addr = _remote_address;
 			sock_addr.sin_port = htons(_remote_port);
 			int sent = sendto(_socket, data.data(), data.size(), 0, (struct sockaddr*)&sock_addr, sizeof(sock_addr));
-			extreme("Sent " + std::to_string(sent) + " bytes to " + std::string(_remote_host) + ":" + std::to_string(_remote_port));
+			TRACE("Sent " + std::to_string(sent) + " bytes to " + std::string(_remote_host) + ":" + std::to_string(_remote_port));
 #endif
 		}
 

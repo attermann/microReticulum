@@ -9,7 +9,7 @@ using namespace RNS::Type::Link;
 Link::Link(const Destination& destination) : _object(new Object(destination)) {
 	assert(_object);
 
-	mem("Link object created");
+	MEM("Link object created");
 }
 
 

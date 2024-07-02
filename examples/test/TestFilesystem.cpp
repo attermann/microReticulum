@@ -46,7 +46,7 @@ void listDir(char * dir){
 #endif
 
 TestFilesystem::TestFilesystem() : Filesystem() {
-	extreme("TestFilesystem initializing...");
+	TRACE("TestFilesystem initializing...");
 
 #ifdef ARDUINO
 #ifdef ESP32
@@ -73,7 +73,7 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	else {
 		OS::remove_file("/test");
 	}
-	debug("SPIFFS filesystem is ready");
+	DEBUG("SPIFFS filesystem is ready");
 #elif NRF52
 	// Initialize Internal File System
 	info("InternalFS mounting filesystem");
@@ -103,7 +103,7 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 	FILE* file = fopen(file_path, "r");
 	if (file != nullptr) {
 #endif
-		//extreme("file_exists: file exists, closing file");
+		//TRACE("file_exists: file exists, closing file");
 #ifdef ARDUINO
 #ifdef ESP32
 		file.close();
@@ -147,12 +147,12 @@ TestFilesystem::TestFilesystem() : Filesystem() {
 		//size_t read = fread(data.writable(size), size, 1, file);
 		size_t read = fread(data.writable(size), 1, size, file);
 #endif
-		extreme("read_file: read " + std::to_string(read) + " Bytes from file " + std::string(file_path));
+		TRACE("read_file: read " + std::to_string(read) + " Bytes from file " + std::string(file_path));
 		if (read != size) {
 			error("read_file: failed to read file " + std::string(file_path));
             data.clear();
 		}
-		//extreme("read_file: closing input file");
+		//TRACE("read_file: closing input file");
 #ifdef ARDUINO
 #ifdef ESP32
 		file.close();
@@ -189,11 +189,11 @@ TestFilesystem::TestFilesystem() : Filesystem() {
         //size_t wrote = fwrite(data.data(), data.size(), 1, file);
         size_t wrote = fwrite(data.data(), 1, data.size(), file);
 #endif
-        extreme("write_file: wrote " + std::to_string(wrote) + " Bytes to file " + std::string(file_path));
+        TRACE("write_file: wrote " + std::to_string(wrote) + " Bytes to file " + std::string(file_path));
         if (wrote < data.size()) {
 			warning("write_file: not all data was written to file " + std::string(file_path));
 		}
-		//extreme("write_file: closing output file");
+		//TRACE("write_file: closing output file");
 #ifdef ARDUINO
 #ifdef ESP32
 		file.close();

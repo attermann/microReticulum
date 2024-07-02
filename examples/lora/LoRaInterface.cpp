@@ -58,7 +58,7 @@ bool LoRaInterface::start() {
 	LoRa.setTxPower(power);
 
 	info("LoRa init succeeded.");
-	extreme("LoRa bandwidth is " + std::to_string(Utilities::OS::round(bitrate()/1000.0, 2)) + " Kbps");
+	TRACE("LoRa bandwidth is " + std::to_string(Utilities::OS::round(bitrate()/1000.0, 2)) + " Kbps");
 #endif
 
 	online(true);
@@ -80,7 +80,7 @@ void LoRaInterface::loop() {
 #ifdef ARDUINO
 		int available = LoRa.parsePacket();
 		if (available > 0) {
-			extreme("LoRaInterface: receiving bytes...");
+			TRACE("LoRaInterface: receiving bytes...");
 
 			// read header (for detecting split packets)
 		    uint8_t header  = LoRa.read();
@@ -103,15 +103,15 @@ void LoRaInterface::loop() {
 }
 
 /*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
-	debug(toString() + ".on_incoming: data: " + data.toHex());
+	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
 	Interface::on_incoming(data);
 }
 
 /*virtual*/ void LoRaInterface::on_outgoing(const Bytes& data) {
-	debug(toString() + ".on_outgoing: data: " + data.toHex());
+	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
 		if (online()) {
-			extreme("LoRaInterface: sending " + std::to_string(data.size()) + " bytes...");
+			TRACE("LoRaInterface: sending " + std::to_string(data.size()) + " bytes...");
 			// Send packet
 #ifdef ARDUINO
 
@@ -132,7 +132,7 @@ void LoRaInterface::loop() {
 			LoRa.endPacket();                     // finish packet and send it
 
 #endif
-			extreme("LoRaInterface: sent bytes");
+			TRACE("LoRaInterface: sent bytes");
 		}
 		Interface::on_outgoing(data);
 	}

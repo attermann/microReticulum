@@ -37,12 +37,12 @@ pass any traffic before being instantiated.
 */
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
-	mem("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
 	// Initialize random number generator
-	extreme("Initializing RNG...");
+	TRACE("Initializing RNG...");
 	RNG.begin("Reticulum");
-	extreme("RNG initial random value: " + std::to_string(Cryptography::randomnum()));
+	TRACE("RNG initial random value: " + std::to_string(Cryptography::randomnum()));
 
 #ifdef ARDUINO
 	// Add a noise source to the list of sources known to RNG.
@@ -89,7 +89,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 			Bytes buf;
 			if (OS::read_file(time_offset_path.c_str(), buf) == 8) {
 				uint64_t offset = *(uint64_t*)buf.data();
-				debug("Read time offset of " + std::to_string(offset) + " from file");
+				DEBUG("Read time offset of " + std::to_string(offset) + " from file");
 				OS::setTimeOffset(offset);
 			}
 		}
@@ -154,7 +154,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	signal.signal(signal.SIGTERM, Reticulum.sigterm_handler)
 */
 
-	mem("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 /*p TODO
@@ -229,7 +229,7 @@ void Reticulum::should_persist_data() {
 }
 
 void Reticulum::persist_data() {
-	extreme("Persisting transport and identity data...");
+	TRACE("Persisting transport and identity data...");
 	Transport::persist_data();
 	Identity::persist_data();
 
@@ -238,7 +238,7 @@ void Reticulum::persist_data() {
 	try {
 		std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
 		uint64_t offset = OS::ltime();
-		debug("Writing time offset of " + std::to_string(offset) + " to file");
+		DEBUG("Writing time offset of " + std::to_string(offset) + " to file");
 		Bytes buf((uint8_t*)&offset, sizeof(offset));
 		OS::write_file(time_offset_path.c_str(), buf);
 	}
@@ -251,7 +251,7 @@ void Reticulum::persist_data() {
 }
 
 void Reticulum::clean_caches() {
-	extreme("Cleaning resource and packet caches...");
+	TRACE("Cleaning resource and packet caches...");
 	double now = OS::time();
 
 /*
@@ -295,7 +295,7 @@ void Reticulum::clean_caches() {
 }
 
 void Reticulum::clear_caches() {
-	extreme("Clearing resource and packet caches...");
+	TRACE("Clearing resource and packet caches...");
 
 	try {
 		std::string destination_table_path = _storagepath + "/destination_table";

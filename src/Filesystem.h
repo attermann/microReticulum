@@ -18,51 +18,51 @@ namespace RNS {
 
 	public:
 		Filesystem(Type::NoneConstructor none) {
-			mem("Filesystem object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Filesystem(const Filesystem& filesystem) : _object(filesystem._object) {
-			mem("Filesystem object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Filesystem() : _object(new Object(this)), _creator(true) {
-			mem("Filesystem object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		virtual ~Filesystem() {
 			if (_creator) {
-				mem("Filesystem object clearing parent reference, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+				MEM("Filesystem object clearing parent reference, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 				// clear reference to parent in object foir safety
 				assert(_object);
 				_object->_parent = nullptr;
 			}
-			mem("Filesystem object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Filesystem& operator = (const Filesystem& filesystem) {
 			_object = filesystem._object;
-			mem("Filesystem object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			if (_creator) {
-				mem("Filesystem object clearing creator flag, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+				MEM("Filesystem object clearing creator flag, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 				_creator = false;
 			}
 			return *this;
 		}
 		inline operator bool() const {
-			mem("Filesystem object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Filesystem& filesystem) const {
-			mem("Filesystem object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() < filesystem._object.get();
 		}
 		inline bool operator > (const Filesystem& filesystem) const {
-			mem("Filesystem object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() > filesystem._object.get();
 		}
 		inline bool operator == (const Filesystem& filesystem) const {
-			mem("Filesystem object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() == filesystem._object.get();
 		}
 		inline bool operator != (const Filesystem& filesystem) const {
-			mem("Filesystem object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Filesystem object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return _object.get() != filesystem._object.get();
 		}
 
@@ -76,7 +76,7 @@ namespace RNS {
 		virtual bool directory_exists(const char* directory_path) { return false; }
 		virtual bool create_directory(const char* directory_path) { return false; }
 		virtual bool remove_directory(const char* directory_path) { return false; }
-		virtual std::list<std::string> list_directory(const char* directory_path) { extreme("list_directory: empty"); return _empty; }
+		virtual std::list<std::string> list_directory(const char* directory_path) { TRACE("list_directory: empty"); return _empty; }
 
 	public:
 		inline bool do_file_exists(const char* file_path) { assert(_object); return _object->do_file_exists(file_path); }
@@ -107,9 +107,9 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(Filesystem* parent) : _parent(parent) { mem("Filesystem::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			Object(Filesystem* parent, const char* name) : _parent(parent) { mem("Filesystem::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { mem("Filesystem::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object(Filesystem* parent) : _parent(parent) { MEM("Filesystem::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			Object(Filesystem* parent, const char* name) : _parent(parent) { MEM("Filesystem::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { MEM("Filesystem::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			virtual inline bool do_file_exists(const char* file_path) { if (_parent == nullptr) return false; return _parent->file_exists(file_path); }
 			virtual inline size_t do_read_file(const char* file_path, Bytes& data) { if (_parent == nullptr) return {Bytes::NONE}; return _parent->read_file(file_path, data); }

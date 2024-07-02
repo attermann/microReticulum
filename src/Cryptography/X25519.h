@@ -169,26 +169,26 @@ namespace RNS { namespace Cryptography {
 		}
 */
 		inline const Bytes exchange(const Bytes& peer_public_key) {
-			debug("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
-			debug("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
-			debug("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());
+			DEBUG("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
+			DEBUG("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
+			DEBUG("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());
 			Bytes sharedKey;
 			if (!Curve25519::eval(sharedKey.writable(32), _privateKey.data(), peer_public_key.data())) {
 				throw std::runtime_error("Peer key is invalid");
 			}
-			debug("X25519PublicKey::exchange: shared key:       " + sharedKey.toHex());
-			debug("X25519PublicKey::exchange: post private key: " + _privateKey.toHex());
+			DEBUG("X25519PublicKey::exchange: shared key:       " + sharedKey.toHex());
+			DEBUG("X25519PublicKey::exchange: post private key: " + _privateKey.toHex());
 			return sharedKey;
 		}
 
 		inline bool verify(const Bytes& peer_public_key) {
-			debug("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
-			debug("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
-			debug("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());
+			DEBUG("X25519PublicKey::exchange: public key:       " + _publicKey.toHex());
+			DEBUG("X25519PublicKey::exchange: peer public key:  " + peer_public_key.toHex());
+			DEBUG("X25519PublicKey::exchange: pre private key:  " + _privateKey.toHex());
 			Bytes sharedKey(peer_public_key);
 			bool success = Curve25519::dh2(sharedKey.writable(32), _privateKey.writable(32));
-			debug("X25519PublicKey::exchange: shared key:       " + sharedKey.toHex());
-			debug("X25519PublicKey::exchange: post private key: " + _privateKey.toHex());
+			DEBUG("X25519PublicKey::exchange: shared key:       " + sharedKey.toHex());
+			DEBUG("X25519PublicKey::exchange: post private key: " + _privateKey.toHex());
 			return success;
 		}
 

@@ -31,35 +31,35 @@ namespace RNS {
 
 	public:
 		Bytes() {
-			//mem("Bytes object created from default, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM("Bytes object created from default, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const NoneConstructor none) {
-			//mem("Bytes object created from NONE, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM("Bytes object created from NONE, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const Bytes& bytes) {
-			//mem("Bytes is using shared data");
+			MEM("Bytes is using shared data");
 			assign(bytes);
-			//mem("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM("Bytes object copy created from bytes \"" + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const uint8_t* chunk, size_t size) {
 			assign(chunk, size);
-			//mem(std::string("Bytes object created from chunk \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM(std::string("Bytes object created from chunk \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const char* string) {
 			assign(string);
-			//mem(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM(std::string("Bytes object created from string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(const std::string& string) {
 			assign(string);
-			//mem(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM(std::string("Bytes object created from std::string \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		Bytes(size_t capacity) {
 			newData();
 			reserve(capacity);
-			//mem(std::string("Bytes object created with capacity ") + std::to_string(capacity) + ", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM(std::string("Bytes object created with capacity ") + std::to_string(capacity) + ", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 		virtual ~Bytes() {
-			//mem(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
+			MEM(std::string("Bytes object destroyed \"") + toString() + "\", this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((unsigned long)_data.get()));
 		}
 
 		inline const Bytes& operator = (const Bytes& bytes) {
@@ -94,7 +94,7 @@ namespace RNS {
 
 	private:
 		inline SharedData shareData() const {
-			//mem("Bytes is sharing its own data");
+			MEM("Bytes is sharing its own data");
 			_exclusive = false;
 			return _data;
 		}

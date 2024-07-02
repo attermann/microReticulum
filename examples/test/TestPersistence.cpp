@@ -28,11 +28,11 @@ public:
 
 private:
 	virtual void on_incoming(const RNS::Bytes& data) {
-		RNS::debug(toString() + ".on_incoming: data: " + data.toHex());
+		DEBUG(toString() + ".on_incoming: data: " + data.toHex());
 		Interface::on_incoming(data);
 	}
 	virtual void on_outgoing(const RNS::Bytes& data) {
-		RNS::debug(toString() + ".on_outgoing: data: " + data.toHex());
+		DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
 		Interface::on_outgoing(data);
 	}
 
@@ -82,10 +82,10 @@ const char test_file_data[] = "test data";
 void testWrite() {
 	RNS::Bytes data(test_file_data);
 	if (RNS::Utilities::OS::write_file(test_file_path, data) == data.size()) {
-		RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
+		TRACE("wrote: " + std::to_string(data.size()) + " bytes");
 	}
 	else {
-		RNS::extreme("write failed");
+		TRACE("write failed");
 		assert(false);
 	}
 }
@@ -93,14 +93,14 @@ void testWrite() {
 void testRead() {
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_file_path, data) > 0) {
-		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
-		RNS::extreme("data: " + data.toString());
+		TRACE("read: " + std::to_string(data.size()) + " bytes");
+		TRACE("data: " + data.toString());
 		assert(data.size() == strlen(test_file_data));
 		assert(memcmp(data.data(), test_file_data, strlen(test_file_data)) == 0);
 		//assert(RNS::Utilities::OS::remove_file(test_file_path));
 	}
 	else {
-		RNS::extreme("read failed");
+		TRACE("read failed");
 		assert(false);
 	}
 }
@@ -127,18 +127,18 @@ void testSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	RNS::extreme("serialized " + std::to_string(length) + " bytes");
+	TRACE("serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			RNS::extreme("write failed");
+			TRACE("write failed");
 			assert(false);
 		}
 	}
 	else {
-		RNS::extreme("failed to serialize");
+		TRACE("failed to serialize");
 		assert(false);
 	}
 
@@ -152,24 +152,24 @@ void testDeserializeObject() {
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
 	if (data) {
-		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
-		//RNS::extreme("data: " + data.toString());
+		TRACE("read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
 			JsonObject root = doc.as<JsonObject>();
 			for (JsonPair kv : root) {
-				RNS::extreme("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
+				TRACE("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
 			}
 		}
 		else {
-			RNS::extreme("failed to deserialize");
+			TRACE("failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_object_path));
 	}
 	else {
-		RNS::extreme("read failed");
+		TRACE("read failed");
 		assert(false);
 	}
 
@@ -179,7 +179,7 @@ void testSerializeObject() {
 
 	std::vector<std::string> vec({"one", "two"});
 	TestObject test("test", vec);
-	RNS::extreme("serializeObject: test: " + test.toString());
+	TRACE("serializeObject: test: " + test.toString());
 
 	StaticJsonDocument<1024> doc;
 	doc = test;
@@ -191,18 +191,18 @@ void testSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	RNS::extreme("serialized " + std::to_string(length) + " bytes");
+	TRACE("serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			RNS::extreme("wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			RNS::extreme("write failed");
+			TRACE("write failed");
 			assert(false);
 		}
 	}
 	else {
-		RNS::extreme("failed to serialize");
+		TRACE("failed to serialize");
 		assert(false);
 	}
 
@@ -215,26 +215,26 @@ void testDeserializeObject() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
-		RNS::extreme("read: " + std::to_string(data.size()) + " bytes");
-		//RNS::extreme("data: " + data.toString());
+		TRACE("read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
 			//JsonObject root = doc.as<JsonObject>();
 			//for (JsonPair kv : root) {
-			//	RNS::extreme("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
+			//	TRACE("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
 			//}
 			TestObject test = doc.as<TestObject>();
-			RNS::extreme("testDeserializeObject: test: " + test.toString());
+			TRACE("testDeserializeObject: test: " + test.toString());
 		}
 		else {
-			RNS::extreme("failed to deserialize");
+			TRACE("failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_object_path));
 	}
 	else {
-		RNS::extreme("read failed");
+		TRACE("read failed");
 		assert(false);
 	}
 
@@ -289,18 +289,18 @@ void testSerializeVector() {
 	if (length < size) {
 		data.resize(length);
 	}
-	RNS::extreme("testSerializeVector: serialized " + std::to_string(length) + " bytes");
+	TRACE("testSerializeVector: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_vector_path, data) == data.size()) {
-			RNS::extreme("testSerializeVector: wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("testSerializeVector: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			RNS::extreme("testSerializeVector: write failed");
+			TRACE("testSerializeVector: write failed");
 			assert(false);
 		}
 	}
 	else {
-		RNS::extreme("testSerializeVector: failed to serialize");
+		TRACE("testSerializeVector: failed to serialize");
 		assert(false);
 	}
 
@@ -319,31 +319,31 @@ void testDeserializeVector() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_vector_path, data) > 0) {
-		RNS::extreme("testDeserializeVector: read: " + std::to_string(data.size()) + " bytes");
-		//RNS::extreme("testDeserializeVector: data: " + data.toString());
+		TRACE("testDeserializeVector: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
-			RNS::extreme("testDeserializeVector: successfully deserialized");
+			TRACE("testDeserializeVector: successfully deserialized");
 
 			std::vector<TestObject> vector = doc.as<std::vector<TestObject>>();
 			for (auto& test : vector) {
-				RNS::extreme("testDeserializeVector: entry: " + test.toString());
+				TRACE("testDeserializeVector: entry: " + test.toString());
 			}
 
 			//JsonArray arr = doc.as<JsonArray>();
 			//for (JsonVariant elem : arr) {
-			//	RNS::extreme("testDeserializeVector: entry: " + elem.as<TestObject>().toString());
+			//	TRACE("testDeserializeVector: entry: " + elem.as<TestObject>().toString());
 			//}
 		}
 		else {
-			RNS::extreme("testDeserializeVector: failed to deserialize");
+			TRACE("testDeserializeVector: failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_vector_path));
 	}
 	else {
-		RNS::extreme("testDeserializeVector: read failed");
+		TRACE("testDeserializeVector: read failed");
 		assert(false);
 	}
 
@@ -386,18 +386,18 @@ void testSerializeSet() {
 	if (length < size) {
 		data.resize(length);
 	}
-	RNS::extreme("testSerializeSet: serialized " + std::to_string(length) + " bytes");
+	TRACE("testSerializeSet: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_set_path, data) == data.size()) {
-			RNS::extreme("testSerializeSet: wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("testSerializeSet: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			RNS::extreme("testSerializeSet: write failed");
+			TRACE("testSerializeSet: write failed");
 			assert(false);
 		}
 	}
 	else {
-		RNS::extreme("testSerializeSet: failed to serialize");
+		TRACE("testSerializeSet: failed to serialize");
 		assert(false);
 	}
 
@@ -416,31 +416,31 @@ void testDeserializeSet() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_set_path, data) > 0) {
-		RNS::extreme("testDeserializeSet: read: " + std::to_string(data.size()) + " bytes");
-		//RNS::extreme("testDeserializeSet: data: " + data.toString());
+		TRACE("testDeserializeSet: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("testDeserializeSet: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
-			RNS::extreme("testDeserializeSet: successfully deserialized");
+			TRACE("testDeserializeSet: successfully deserialized");
 
 			std::set<TestObject> set = doc.as<std::set<TestObject>>();
 			for (auto& test : set) {
-				RNS::extreme("testDeserializeSet: entry: " + test.toString());
+				TRACE("testDeserializeSet: entry: " + test.toString());
 			}
 
 			//JsonArray arr = doc.as<JsonArray>();
 			//for (JsonVariant elem : arr) {
-			//	RNS::extreme("testDeserializeSet: entry: " + elem.as<TestObject>().toString());
+			//	TRACE("testDeserializeSet: entry: " + elem.as<TestObject>().toString());
 			//}
 		}
 		else {
-			RNS::extreme("testDeserializeSet: failed to deserialize");
+			TRACE("testDeserializeSet: failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_set_path));
 	}
 	else {
-		RNS::extreme("testDeserializeSet: read failed");
+		TRACE("testDeserializeSet: read failed");
 		assert(false);
 	}
 
@@ -475,18 +475,18 @@ void testSerializeMap() {
 	if (length < size) {
 		data.resize(length);
 	}
-	RNS::extreme("testSerializeMap: serialized " + std::to_string(length) + " bytes");
+	TRACE("testSerializeMap: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_map_path, data) == data.size()) {
-			RNS::extreme("testSerializeMap: wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("testSerializeMap: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			RNS::extreme("testSerializeMap: write failed");
+			TRACE("testSerializeMap: write failed");
 			assert(false);
 		}
 	}
 	else {
-		RNS::extreme("testSerializeMap: failed to serialize");
+		TRACE("testSerializeMap: failed to serialize");
 		assert(false);
 	}
 
@@ -505,31 +505,31 @@ void testDeserializeMap() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_map_path, data) > 0) {
-		RNS::extreme("testDeserializeMap: read: " + std::to_string(data.size()) + " bytes");
-		//RNS::extreme("testDeserializeMap: data: " + data.toString());
+		TRACE("testDeserializeMap: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("testDeserializeMap: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
-			RNS::extreme("testDeserializeMap: successfully deserialized");
+			TRACE("testDeserializeMap: successfully deserialized");
 
 			std::map<std::string, TestObject> map(doc.as<std::map<std::string, TestObject>>());
 			for (auto& [str, test] : map) {
-				RNS::extreme("testDeserializeMap: entry: " + str + " = " + test.toString());
+				TRACE("testDeserializeMap: entry: " + str + " = " + test.toString());
 			}
 
 			//JsonObject root = doc.as<JsonObject>();
 			//for (JsonPair kv : root) {
-			//	RNS::extreme("testDeserializeMap: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<TestObject>().toString());
+			//	TRACE("testDeserializeMap: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<TestObject>().toString());
 			//}
 		}
 		else {
-			RNS::extreme("testDeserializeMap: failed to deserialize");
+			TRACE("testDeserializeMap: failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_map_path));
 	}
 	else {
-		RNS::extreme("testDeserializeMap: read failed");
+		TRACE("testDeserializeMap: read failed");
 		assert(false);
 	}
 
@@ -586,13 +586,13 @@ void testSerializeDestinationTable() {
 	}
 
 	for (auto& [hash, test] : map) {
-		RNS::extreme("testSerializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
+		TRACE("testSerializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
 	}
 
 	//StaticJsonDocument<1024> doc;
 	//doc = map;
-	RNS::extreme("testSerializeDestinationTable: JSON_OBJECT_SIZE " + std::to_string(JSON_OBJECT_SIZE(1)) + " bytes");
-	RNS::extreme("testSerializeDestinationTable: JSON_ARRAY_SIZE " + std::to_string(JSON_ARRAY_SIZE(1)) + " bytes");
+	TRACE("testSerializeDestinationTable: JSON_OBJECT_SIZE " + std::to_string(JSON_OBJECT_SIZE(1)) + " bytes");
+	TRACE("testSerializeDestinationTable: JSON_ARRAY_SIZE " + std::to_string(JSON_ARRAY_SIZE(1)) + " bytes");
 	int calcsize = 0;
 	for (auto& [destination_hash, destination_entry] : map) {
 		// entry
@@ -604,39 +604,39 @@ void testSerializeDestinationTable() {
 		// blobs
 		calcsize += JSON_ARRAY_SIZE(destination_entry._random_blobs.size());
 	}
-	RNS::extreme("testSerializeDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
+	TRACE("testSerializeDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
 	const int BUFFER_SIZE = (JSON_OBJECT_SIZE(9) + JSON_ARRAY_SIZE(2)) * map.size() + JSON_ARRAY_SIZE(map.size());
-	RNS::extreme("testSerializeDestinationTable: BUFFER_SIZE " + std::to_string(BUFFER_SIZE) + " bytes");
+	TRACE("testSerializeDestinationTable: BUFFER_SIZE " + std::to_string(BUFFER_SIZE) + " bytes");
 	//DynamicJsonDocument doc(32768);
 	//DynamicJsonDocument doc(BUFFER_SIZE);
 	DynamicJsonDocument doc(calcsize);
 	doc.set(map);
-	RNS::extreme("testSerializeDestinationTable: doc size " + std::to_string(doc.size()));
-	RNS::extreme("testSerializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
+	TRACE("testSerializeDestinationTable: doc size " + std::to_string(doc.size()));
+	TRACE("testSerializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 
 	RNS::Bytes data;
 	// /size_t size = 1024;
 	//size_t size = calcsize;
 	size_t size = doc.memoryUsage();
-	RNS::extreme("testSerializeDestinationTable: buffer size " + std::to_string(size) + " bytes");
+	TRACE("testSerializeDestinationTable: buffer size " + std::to_string(size) + " bytes");
 	size_t length = serializeJson(doc, data.writable(size), size);
 	//size_t length = serializeMsgPack(doc, data.writable(size), size);
 	if (length < size) {
 		data.resize(length);
 	}
-	RNS::extreme("testSerializeDestinationTable: serialized " + std::to_string(length) + " bytes");
+	TRACE("testSerializeDestinationTable: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		RNS::extreme("json: " + data.toString());
+		TRACE("json: " + data.toString());
 		if (RNS::Utilities::OS::write_file(test_destination_table_path, data) == data.size()) {
-			RNS::extreme("testSerializeDestinationTable: wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("testSerializeDestinationTable: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			RNS::extreme("testSerializeDestinationTable: write failed");
+			TRACE("testSerializeDestinationTable: write failed");
 			assert(false);
 		}
 	}
 	else {
-		RNS::extreme("testSerializeDestinationTable: failed to serialize");
+		TRACE("testSerializeDestinationTable: failed to serialize");
 		assert(false);
 	}
 
@@ -651,34 +651,34 @@ void testDeserializeDestinationTable() {
 		int calcsize = data.size() * 1.5;
 		DynamicJsonDocument doc(calcsize);
 
-		RNS::extreme("testDeserializeDestinationTable: read: " + std::to_string(data.size()) + " bytes");
-		//RNS::extreme("testDeserializeVector: data: " + data.toString());
+		TRACE("testDeserializeDestinationTable: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
-		RNS::extreme("testDeserializeDestinationTable: doc size " + std::to_string(doc.size()));
-		RNS::extreme("testDeserializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
+		TRACE("testDeserializeDestinationTable: doc size " + std::to_string(doc.size()));
+		TRACE("testDeserializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 		if (!error) {
-			RNS::extreme("testDeserializeDestinationTable: successfully deserialized " + std::to_string(data.size()) + " bytes");
-			RNS::extreme("json: " + data.toString());
+			TRACE("testDeserializeDestinationTable: successfully deserialized " + std::to_string(data.size()) + " bytes");
+			TRACE("json: " + data.toString());
 
 			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
 			for (auto& [hash, test] : map) {
-				RNS::extreme("testDeserializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
+				TRACE("testDeserializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
 			}
 
 			//JsonObject root = doc.as<JsonObject>();
 			//for (JsonPair kv : root) {
-			//	RNS::extreme("testDeserializeDestinationTable: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<TestObject>().toString());
+			//	TRACE("testDeserializeDestinationTable: entry: " + std::string(kv.key().c_str()) + " = " + kv.value().as<TestObject>().toString());
 			//}
 		}
 		else {
-			RNS::extreme("testDeserializeDestinationTable: failed to deserialize");
+			TRACE("testDeserializeDestinationTable: failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_destination_table_path));
 	}
 	else {
-		RNS::extreme("testDeserializeDestinationTable: read failed");
+		TRACE("testDeserializeDestinationTable: read failed");
 		assert(false);
 	}
 

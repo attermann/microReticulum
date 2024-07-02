@@ -36,19 +36,19 @@ namespace RNS {
 
 	public:
 		Reticulum(Type::NoneConstructor none) {
-			mem("Reticulum NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Reticulum NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Reticulum(const Reticulum& reticulum) : _object(reticulum._object) {
-			mem("Reticulum object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Reticulum object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Reticulum();
 		virtual ~Reticulum() {
-			mem("Reticulum object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Reticulum object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 
 		inline Reticulum& operator = (const Reticulum& reticulum) {
 			_object = reticulum._object;
-			mem("Reticulum object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Reticulum object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -97,10 +97,10 @@ namespace RNS {
 		class Object {
 		public:
 			Object() {
-				mem("Reticulum data object created, this: " + std::to_string((uintptr_t)this));
+				MEM("Reticulum data object created, this: " + std::to_string((uintptr_t)this));
 			}
 			virtual ~Object() {
-				mem("Reticulum data object destroyed, this: " + std::to_string((uintptr_t)this));
+				MEM("Reticulum data object destroyed, this: " + std::to_string((uintptr_t)this));
 			}
 		private:
 

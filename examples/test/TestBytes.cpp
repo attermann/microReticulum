@@ -16,7 +16,7 @@ RNS::Bytes ref("Test");
 const RNS::Bytes& testBytesReference() {
 	// NOTE: Can NOT return local instance as reference!!!
 	//RNS::Bytes ref("Test");
-	RNS::extreme("returning...");
+	TRACE("returning...");
 	return ref;
 }
 
@@ -51,18 +51,18 @@ void testBytesMain() {
 	assert(prebuf != postbuf);
 
 	if (prebuf == postbuf) {
-		RNS::extreme("bytess are the same");
+		TRACE("bytess are the same");
 	}
 	else {
-		RNS::extreme("bytess are different");
+		TRACE("bytess are different");
 	}
 
 	bytes += prebuf + postbuf;
 	assert(bytes.size() == 11);
 	assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
-	RNS::extreme("assign bytes: " + bytes.toString());
-	RNS::extreme("assign prebuf: " + prebuf.toString());
-	RNS::extreme("assign postbuf: " + postbuf.toString());
+	TRACE("assign bytes: " + bytes.toString());
+	TRACE("assign prebuf: " + prebuf.toString());
+	TRACE("assign postbuf: " + postbuf.toString());
 
 	// test string assignment
 	bytes = "Foo";
@@ -84,56 +84,56 @@ void testBytesMain() {
 	// test left in range
 	{
 		RNS::Bytes left(bytes.left(5));
-		RNS::extreme("left: " + left.toString());
+		TRACE("left: " + left.toString());
 		assert(left.size() == 5);
 		assert(memcmp(left.data(), "Hello", left.size()) == 0);
 	}
 	// test left oob
 	{
 		RNS::Bytes left(bytes.left(20));
-		RNS::extreme("oob left: " + left.toString());
+		TRACE("oob left: " + left.toString());
 		assert(left.size() == 11);
 		assert(memcmp(left.data(), "Hello World", left.size()) == 0);
 	}
 	// test right in range
 	{
 		RNS::Bytes right(bytes.right(5));
-		RNS::extreme("right: " + right.toString());
+		TRACE("right: " + right.toString());
 		assert(right.size() == 5);
 		assert(memcmp(right.data(), "World", right.size()) == 0);
 	}
 	// test right oob
 	{
 		RNS::Bytes right(bytes.right(20));
-		RNS::extreme("oob right: " + right.toString());
+		TRACE("oob right: " + right.toString());
 		assert(right.size() == 11);
 		assert(memcmp(right.data(), "Hello World", right.size()) == 0);
 	}
 	// test mid in range
 	{
 		RNS::Bytes mid(bytes.mid(3, 5));
-		RNS::extreme("mid: " + mid.toString());
+		TRACE("mid: " + mid.toString());
 		assert(mid.size() == 5);
 		assert(memcmp(mid.data(), "lo Wo", mid.size()) == 0);
 	}
 	// test mid oob pos
 	{
 		RNS::Bytes mid(bytes.mid(20, 5));
-		RNS::extreme("oob pos mid: " + mid.toString());
+		TRACE("oob pos mid: " + mid.toString());
 		assert(!mid);
 		assert(mid.size() == 0);
 	}
 	// test mid oob pos
 	{
 		RNS::Bytes mid(bytes.mid(3, 20));
-		RNS::extreme("oob len mid: " + mid.toString());
+		TRACE("oob len mid: " + mid.toString());
 		assert(mid.size() == 8);
 		assert(memcmp(mid.data(), "lo World", mid.size()) == 0);
 	}
 	// test mid to end variant
 	{
 		RNS::Bytes mid(bytes.mid(3));
-		RNS::extreme("end mid: " + mid.toString());
+		TRACE("end mid: " + mid.toString());
 		assert(mid.size() == 8);
 		assert(memcmp(mid.data(), "lo World", mid.size()) == 0);
 	}
@@ -142,7 +142,7 @@ void testBytesMain() {
 	{
 		RNS::Bytes shrink(bytes);
 		shrink.resize(5);
-		RNS::extreme("shrink: " + shrink.toString());
+		TRACE("shrink: " + shrink.toString());
 		assert(shrink.size() == 5);
 		assert(memcmp(shrink.data(), "Hello", shrink.size()) == 0);
 	}
@@ -151,9 +151,9 @@ void testBytesMain() {
 	{
 		RNS::Bytes strmbuf;
 		strmbuf << prebuf << postbuf;
-		RNS::extreme("stream prebuf: " + prebuf.toString());
-		RNS::extreme("stream postbuf: " + postbuf.toString());
-		RNS::extreme("stream strmbuf: " + strmbuf.toString());
+		TRACE("stream prebuf: " + prebuf.toString());
+		TRACE("stream postbuf: " + postbuf.toString());
+		TRACE("stream strmbuf: " + strmbuf.toString());
 		assert(strmbuf.size() == 11);
 		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
 		assert(prebuf.size() == 5);
@@ -170,9 +170,9 @@ void testBytesMain() {
 		assert(memcmp(strmbuf.data(), "Stream ", strmbuf.size()) == 0);
 
 		strmbuf << prebuf << postbuf;
-		RNS::extreme("stream prebuf: " + prebuf.toString());
-		RNS::extreme("stream postbuf: " + postbuf.toString());
-		RNS::extreme("stream strmbuf: " + strmbuf.toString());
+		TRACE("stream prebuf: " + prebuf.toString());
+		TRACE("stream postbuf: " + postbuf.toString());
+		TRACE("stream strmbuf: " + strmbuf.toString());
 		assert(strmbuf.size() == 18);
 		assert(memcmp(strmbuf.data(), "Stream Hello World", strmbuf.size()) == 0);
 		assert(prebuf.size() == 5);
@@ -190,9 +190,9 @@ void testBytesMain() {
 		const RNS::Bytes post(" World");
 		assert(post.size() == 6);
 		RNS::Bytes strmbuf = pre << post;
-		RNS::extreme("stream pre: " + prebuf.toString());
-		RNS::extreme("stream post: " + postbuf.toString());
-		RNS::extreme("stream strmbuf: " + strmbuf.toString());
+		TRACE("stream pre: " + prebuf.toString());
+		TRACE("stream post: " + postbuf.toString());
+		TRACE("stream strmbuf: " + strmbuf.toString());
 		assert(strmbuf.size() == 11);
 		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
 		assert(pre.size() == 11);
@@ -234,14 +234,14 @@ void testBytesMain() {
 	}
 
 	// function default argument
-	RNS::extreme("TestBytes: function default argument");
+	TRACE("TestBytes: function default argument");
 	testBytesDefault();
 
 	// function reference return
-	RNS::extreme("TestBytes: function reference return");
+	TRACE("TestBytes: function reference return");
 	{
 		RNS::Bytes test = testBytesReference();
-		RNS::extreme("returned");
+		TRACE("returned");
 		assert(test);
 		assert(test.size() == 4);
 		assert(memcmp(test.data(), "Test", test.size()) == 0);
@@ -267,9 +267,9 @@ void testCowBytes() {
 	assert(memcmp(bytes3.data(), "1", bytes3.size()) == 0);
 	assert(bytes3.data() == bytes2.data());
 
-	RNS::extreme("pre bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
-	RNS::extreme("pre bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
-	RNS::extreme("pre bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
+	TRACE("pre bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
+	TRACE("pre bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
+	TRACE("pre bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
 
 	//bytes1.append("mississippi");
 	//assert(bytes1.size() == 12);
@@ -286,9 +286,9 @@ void testCowBytes() {
 	assert(memcmp(bytes3.data(), "mississippi", bytes3.size()) == 0);
 	assert(bytes3.data() != bytes2.data());
 
-	RNS::extreme("post bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
-	RNS::extreme("post bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
-	RNS::extreme("post bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
+	TRACE("post bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
+	TRACE("post bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
+	TRACE("post bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
 }
 
 void testBytesConversion() {
@@ -296,14 +296,14 @@ void testBytesConversion() {
 	{
 		RNS::Bytes bytes("Hello World");
 		std::string hex = bytes.toHex(true);
-		RNS::extreme("text: \"" + bytes.toString() + "\" upper hex: \"" + hex + "\"");
+		TRACE("text: \"" + bytes.toString() + "\" upper hex: \"" + hex + "\"");
 		assert(hex.length() == 22);
 		assert(hex.compare("48656C6C6F20576F726C64") == 0);
 	}
 	{
 		RNS::Bytes bytes("Hello World");
 		std::string hex = bytes.toHex(false);
-		RNS::extreme("text: \"" + bytes.toString() + "\" lower hex: \"" + hex + "\"");
+		TRACE("text: \"" + bytes.toString() + "\" lower hex: \"" + hex + "\"");
 		assert(hex.length() == 22);
 		assert(hex.compare("48656c6c6f20576f726c64") == 0);
 	}
@@ -312,7 +312,7 @@ void testBytesConversion() {
 		RNS::Bytes bytes;
 		bytes.assignHex(hex.c_str());
 		std::string text = bytes.toString();
-		RNS::extreme("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
 		assert(text.length() == 11);
 		assert(text.compare("Hello World") == 0);
 	}
@@ -321,19 +321,19 @@ void testBytesConversion() {
 		RNS::Bytes bytes;
 		bytes.assignHex(hex.c_str());
 		std::string text = bytes.toString();
-		RNS::extreme("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
 		assert(text.length() == 11);
 		assert(text.compare("Hello World") == 0);
 
 		bytes.assignHex(hex.c_str());
 		text = bytes.toString();
-		RNS::extreme("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
 		assert(text.length() == 11);
 		assert(text.compare("Hello World") == 0);
 
 		bytes.appendHex(hex.c_str());
 		text = bytes.toString();
-		RNS::extreme("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
 		assert(text.length() == 22);
 		assert(text.compare("Hello WorldHello World") == 0);
 	}
@@ -341,7 +341,7 @@ void testBytesConversion() {
 }
 
 void testBytesResize() {
-	RNS::extreme("Testing downsize of Bytes with initial capacity");
+	TRACE("Testing downsize of Bytes with initial capacity");
 
 	RNS::Bytes bytes(1024);
 	assert(!bytes);

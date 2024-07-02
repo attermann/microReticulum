@@ -43,10 +43,10 @@ void testHMAC() {
 		RNS::Bytes key(keystr);
 		RNS::Bytes data(datastr);
 		RNS::Bytes hash(hasharr, sizeof(hasharr));
-		RNS::extreme("expected hash: " + hash.toHex());
+		TRACE("expected hash: " + hash.toHex());
 		RNS::Cryptography::HMAC hmac(key, data);
 		RNS::Bytes result = hmac.digest();
-		RNS::extreme("result hash:   " + result.toHex());
+		TRACE("result hash:   " + result.toHex());
 		assert(memcmp(hash.data(), result.data(), result.size()) == 0);
 	}
 }

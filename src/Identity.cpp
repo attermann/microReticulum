@@ -25,7 +25,7 @@ Identity::Identity(bool create_keys /*= true*/) : _object(new Object()) {
 	if (create_keys) {
 		createKeys();
 	}
-	mem("Identity object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEM("Identity object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 void Identity::createKeys() {
@@ -34,22 +34,22 @@ void Identity::createKeys() {
 	// CRYPTO: create encryption private keys
 	_object->_prv           = Cryptography::X25519PrivateKey::generate();
 	_object->_prv_bytes     = _object->_prv->private_bytes();
-	//extreme("Identity::createKeys: prv bytes:     " + _object->_prv_bytes.toHex());
+	//TRACE("Identity::createKeys: prv bytes:     " + _object->_prv_bytes.toHex());
 
 	// CRYPTO: create signature private keys
 	_object->_sig_prv       = Cryptography::Ed25519PrivateKey::generate();
 	_object->_sig_prv_bytes = _object->_sig_prv->private_bytes();
-	//extreme("Identity::createKeys: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
+	//TRACE("Identity::createKeys: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
 
 	// CRYPTO: create encryption public keys
 	_object->_pub           = _object->_prv->public_key();
 	_object->_pub_bytes     = _object->_pub->public_bytes();
-	//extreme("Identity::createKeys: pub bytes:     " + _object->_pub_bytes.toHex());
+	//TRACE("Identity::createKeys: pub bytes:     " + _object->_pub_bytes.toHex());
 
 	// CRYPTO: create signature public keys
 	_object->_sig_pub       = _object->_sig_prv->public_key();
 	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-	//extreme("Identity::createKeys: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
+	//TRACE("Identity::createKeys: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 	update_hashes();
 
@@ -70,20 +70,20 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 		//p self.prv_bytes     = prv_bytes[:Identity.KEYSIZE//8//2]
 		_object->_prv_bytes     = prv_bytes.left(Type::Identity::KEYSIZE/8/2);
 		_object->_prv           = X25519PrivateKey::from_private_bytes(_object->_prv_bytes);
-		//extreme("Identity::load_private_key: prv bytes:     " + _object->_prv_bytes.toHex());
+		//TRACE("Identity::load_private_key: prv bytes:     " + _object->_prv_bytes.toHex());
 
 		//p self.sig_prv_bytes = prv_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
 		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
-		//extreme("Identity::load_private_key: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
+		//TRACE("Identity::load_private_key: sig prv bytes: " + _object->_sig_prv_bytes.toHex());
 
 		_object->_pub           = _object->_prv->public_key();
 		_object->_pub_bytes     = _object->_pub->public_bytes();
-		//extreme("Identity::load_private_key: pub bytes:     " + _object->_pub_bytes.toHex());
+		//TRACE("Identity::load_private_key: pub bytes:     " + _object->_pub_bytes.toHex());
 
 		_object->_sig_pub       = _object->_sig_prv->public_key();
 		_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-		//extreme("Identity::load_private_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
+		//TRACE("Identity::load_private_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 		update_hashes();
 
@@ -110,11 +110,11 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 
 		//_pub_bytes     = pub_bytes[:Identity.KEYSIZE//8//2]
 		_object->_pub_bytes     = pub_bytes.left(Type::Identity::KEYSIZE/8/2);
-		//extreme("Identity::load_public_key: pub bytes:     " + _object->_pub_bytes.toHex());
+		//TRACE("Identity::load_public_key: pub bytes:     " + _object->_pub_bytes.toHex());
 
 		//_sig_pub_bytes = pub_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_pub_bytes = pub_bytes.mid(Type::Identity::KEYSIZE/8/2);
-		//extreme("Identity::load_public_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
+		//TRACE("Identity::load_public_key: sig pub bytes: " + _object->_sig_pub_bytes.toHex());
 
 		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes);
 		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes);
@@ -127,7 +127,7 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 }
 
 bool Identity::load(const char* path) {
-	extreme("Reading identity key from storage...");
+	TRACE("Reading identity key from storage...");
 	try {
 		Bytes prv_bytes;
 		if (OS::read_file(path, prv_bytes) > 0) {
@@ -153,7 +153,7 @@ communication for the identity. Be very careful with this method.
 :returns: True if the file was saved, otherwise False.
 */
 bool Identity::to_file(const char* path) {
-	extreme("Writing identity key to storage...");
+	TRACE("Writing identity key to storage...");
 	try {
 		return (OS::write_file(path, get_private_key()) == get_private_key().size());
 	}
@@ -197,10 +197,10 @@ Recall identity for a destination hash.
 :returns: An :ref:`RNS.Identity<api-identity>` instance that can be used to create an outgoing :ref:`RNS.Destination<api-destination>`, or *None* if the destination is unknown.
 */
 /*static*/ Identity Identity::recall(const Bytes& destination_hash) {
-	extreme("Identity::recall...");
+	TRACE("Identity::recall...");
 	auto iter = _known_destinations.find(destination_hash);
 	if (iter != _known_destinations.end()) {
-		extreme("Identity::recall: Found identity entry for destination " + destination_hash.toHex());
+		TRACE("Identity::recall: Found identity entry for destination " + destination_hash.toHex());
 		const IdentityEntry& identity_data = (*iter).second;
 		Identity identity(false);
 		identity.load_public_key(identity_data._public_key);
@@ -208,16 +208,16 @@ Recall identity for a destination hash.
 		return identity;
 	}
 	else {
-		extreme("Identity::recall: Unable to find identity entry for destination " + destination_hash.toHex() + ", performing destination lookup...");
+		TRACE("Identity::recall: Unable to find identity entry for destination " + destination_hash.toHex() + ", performing destination lookup...");
 		Destination registered_destination(Transport::find_destination_from_hash(destination_hash));
 		if (registered_destination) {
-			extreme("Identity::recall: Found destination " + destination_hash.toHex());
+			TRACE("Identity::recall: Found destination " + destination_hash.toHex());
 			Identity identity(false);
 			identity.load_public_key(registered_destination.identity().get_public_key());
 			identity.app_data({Bytes::NONE});
 			return identity;
 		}
-		extreme("Identity::recall: Unable to find destination " + destination_hash.toHex());
+		TRACE("Identity::recall: Unable to find destination " + destination_hash.toHex());
 		return {Type::NONE};
 	}
 }
@@ -229,15 +229,15 @@ Recall last heard app_data for a destination hash.
 :returns: *Bytes* containing app_data, or *None* if the destination is unknown.
 */
 /*static*/ Bytes Identity::recall_app_data(const Bytes& destination_hash) {
-	extreme("Identity::recall_app_data...");
+	TRACE("Identity::recall_app_data...");
 	auto iter = _known_destinations.find(destination_hash);
 	if (iter != _known_destinations.end()) {
-		extreme("Identity::recall_app_data: Found identity entry for destination " + destination_hash.toHex());
+		TRACE("Identity::recall_app_data: Found identity entry for destination " + destination_hash.toHex());
 		const IdentityEntry& identity_data = (*iter).second;
 		return identity_data._app_data;
 	}
 	else {
-		extreme("Identity::recall_app_data: Unable to find identity entry for destination " + destination_hash.toHex());
+		TRACE("Identity::recall_app_data: Unable to find identity entry for destination " + destination_hash.toHex());
 		return {Bytes::NONE};
 	}
 }
@@ -289,7 +289,7 @@ Recall last heard app_data for a destination hash.
 
 // TODO
 /*
-		debug("Saving " + std::to_string(_known_destinations.size()) + " known destinations to storage...");
+		DEBUG("Saving " + std::to_string(_known_destinations.size()) + " known destinations to storage...");
 		file = open(RNS.Reticulum.storagepath+"/known_destinations","wb")
 		umsgpack.dump(Identity.known_destinations, file)
 		file.close()
@@ -304,7 +304,7 @@ Recall last heard app_data for a destination hash.
 			time_str = std::to_string(OS::round(save_time, 1)) + " s";
 		}
 
-		debug("Saved known destinations to storage in " + time_str);
+		DEBUG("Saved known destinations to storage in " + time_str);
 
 		success = true;
 	}
@@ -344,25 +344,25 @@ Recall last heard app_data for a destination hash.
 	try {
 		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
 			Bytes destination_hash = packet.destination_hash();
-			//extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
+			//TRACE("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
 			Bytes public_key = packet.data().left(KEYSIZE/8);
-			//extreme("Identity::validate_announce: public_key:       " + public_key.toHex());
+			//TRACE("Identity::validate_announce: public_key:       " + public_key.toHex());
 			Bytes name_hash = packet.data().mid(KEYSIZE/8, NAME_HASH_LENGTH/8);
-			//extreme("Identity::validate_announce: name_hash:        " + name_hash.toHex());
+			//TRACE("Identity::validate_announce: name_hash:        " + name_hash.toHex());
 			Bytes random_hash = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8, RANDOM_HASH_LENGTH/8);
-			//extreme("Identity::validate_announce: random_hash:      " + random_hash.toHex());
+			//TRACE("Identity::validate_announce: random_hash:      " + random_hash.toHex());
 			Bytes signature = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8, SIGLENGTH/8);
-			//extreme("Identity::validate_announce: signature:        " + signature.toHex());
+			//TRACE("Identity::validate_announce: signature:        " + signature.toHex());
 			Bytes app_data;
 			if (packet.data().size() > (KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8)) {
 				app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8);
 			}
-			//extreme("Identity::validate_announce: app_data:         " + app_data.toHex());
-			//extreme("Identity::validate_announce: app_data text:    " + app_data.toString());
+			//TRACE("Identity::validate_announce: app_data:         " + app_data.toHex());
+			//TRACE("Identity::validate_announce: app_data text:    " + app_data.toString());
 
 			Bytes signed_data;
 			signed_data << packet.destination_hash() << public_key << name_hash << random_hash+app_data;
-			//extreme("Identity::validate_announce: signed_data:      " + signed_data.toHex());
+			//TRACE("Identity::validate_announce: signed_data:      " + signed_data.toHex());
 
 			if (packet.data().size() <= KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8) {
 				app_data.clear();
@@ -374,8 +374,8 @@ Recall last heard app_data for a destination hash.
 			if (announced_identity.pub() && announced_identity.validate(signature, signed_data)) {
 				Bytes hash_material = name_hash << announced_identity.hash();
 				Bytes expected_hash = full_hash(hash_material).left(Type::Reticulum::TRUNCATED_HASHLENGTH/8);
-				//extreme("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
-				//extreme("Identity::validate_announce: expected_hash:    " + expected_hash.toHex());
+				//TRACE("Identity::validate_announce: destination_hash: " + packet.destination_hash().toHex());
+				//TRACE("Identity::validate_announce: expected_hash:    " + expected_hash.toHex());
 
 				if (packet.destination_hash() == expected_hash) {
 					// Check if we already have a public key for this destination
@@ -412,21 +412,21 @@ Recall last heard app_data for a destination hash.
 */
 
 					if (packet.transport_id()) {
-						extreme("Valid announce for " + packet.destination_hash().toHex() + " " + std::to_string(packet.hops()) + " hops away, received via " + packet.transport_id().toHex() + " on " + packet.receiving_interface().toString() + signal_str);
+						TRACE("Valid announce for " + packet.destination_hash().toHex() + " " + std::to_string(packet.hops()) + " hops away, received via " + packet.transport_id().toHex() + " on " + packet.receiving_interface().toString() + signal_str);
 					}
 					else {
-						extreme("Valid announce for " + packet.destination_hash().toHex() + " " + std::to_string(packet.hops()) + " hops away, received on " + packet.receiving_interface().toString() + signal_str);
+						TRACE("Valid announce for " + packet.destination_hash().toHex() + " " + std::to_string(packet.hops()) + " hops away, received on " + packet.receiving_interface().toString() + signal_str);
 					}
 
 					return true;
 				}
 				else {
-					debug("Received invalid announce for " + packet.destination_hash().toHex() + ": Destination mismatch.");
+					DEBUG("Received invalid announce for " + packet.destination_hash().toHex() + ": Destination mismatch.");
 					return false;
 				}
 			}
 			else {
-				debug("Received invalid announce for " + packet.destination_hash().toHex() + ": Invalid signature.");
+				DEBUG("Received invalid announce for " + packet.destination_hash().toHex() + ": Invalid signature.");
 				//p del announced_identity
 				return false;
 			}
@@ -458,18 +458,18 @@ Encrypts information for the identity.
 */
 const Bytes Identity::encrypt(const Bytes& plaintext) const {
 	assert(_object);
-	extreme("Identity::encrypt: encrypting data...");
+	TRACE("Identity::encrypt: encrypting data...");
 	if (!_object->_pub) {
 		throw std::runtime_error("Encryption failed because identity does not hold a public key");
 	}
 	Cryptography::X25519PrivateKey::Ptr ephemeral_key = Cryptography::X25519PrivateKey::generate();
 	Bytes ephemeral_pub_bytes = ephemeral_key->public_key()->public_bytes();
-	extreme("Identity::encrypt: ephemeral public key: " + ephemeral_pub_bytes.toHex());
+	TRACE("Identity::encrypt: ephemeral public key: " + ephemeral_pub_bytes.toHex());
 
 	// CRYPTO: create shared key for key exchange using own public key
 	//shared_key = ephemeral_key.exchange(self.pub)
 	Bytes shared_key = ephemeral_key->exchange(_object->_pub_bytes);
-	extreme("Identity::encrypt: shared key:           " + shared_key.toHex());
+	TRACE("Identity::encrypt: shared key:           " + shared_key.toHex());
 
 	Bytes derived_key = Cryptography::hkdf(
 		32,
@@ -477,13 +477,13 @@ const Bytes Identity::encrypt(const Bytes& plaintext) const {
 		get_salt(),
 		get_context()
 	);
-	extreme("Identity::encrypt: derived key:          " + derived_key.toHex());
+	TRACE("Identity::encrypt: derived key:          " + derived_key.toHex());
 
 	Cryptography::Fernet fernet(derived_key);
-	extreme("Identity::encrypt: Fernet encrypting data of length " + std::to_string(plaintext.size()));
-	extreme("Identity::encrypt: plaintext:  " + plaintext.toHex());
+	TRACE("Identity::encrypt: Fernet encrypting data of length " + std::to_string(plaintext.size()));
+	TRACE("Identity::encrypt: plaintext:  " + plaintext.toHex());
 	Bytes ciphertext = fernet.encrypt(plaintext);
-	extreme("Identity::encrypt: ciphertext: " + ciphertext.toHex());
+	TRACE("Identity::encrypt: ciphertext: " + ciphertext.toHex());
 
 	return ephemeral_pub_bytes + ciphertext;
 }
@@ -498,12 +498,12 @@ Decrypts information for the identity.
 */
 const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 	assert(_object);
-	extreme("Identity::decrypt: decrypting data...");
+	TRACE("Identity::decrypt: decrypting data...");
 	if (!_object->_prv) {
 		throw std::runtime_error("Decryption failed because identity does not hold a private key");
 	}
 	if (ciphertext_token.size() <= Type::Identity::KEYSIZE/8/2) {
-		debug("Decryption failed because the token size " + std::to_string(ciphertext_token.size()) + " was invalid.");
+		DEBUG("Decryption failed because the token size " + std::to_string(ciphertext_token.size()) + " was invalid.");
 		return {Bytes::NONE};
 	}
 	Bytes plaintext;
@@ -512,12 +512,12 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		Bytes peer_pub_bytes = ciphertext_token.left(Type::Identity::KEYSIZE/8/2);
 		//peer_pub = X25519PublicKey.from_public_bytes(peer_pub_bytes)
 		//Cryptography::X25519PublicKey::Ptr peer_pub = Cryptography::X25519PublicKey::from_public_bytes(peer_pub_bytes);
-		extreme("Identity::decrypt: peer public key:      " + peer_pub_bytes.toHex());
+		TRACE("Identity::decrypt: peer public key:      " + peer_pub_bytes.toHex());
 
 		// CRYPTO: create shared key for key exchange using peer public key
 		//shared_key = _object->_prv->exchange(peer_pub);
 		Bytes shared_key = _object->_prv->exchange(peer_pub_bytes);
-		extreme("Identity::decrypt: shared key:           " + shared_key.toHex());
+		TRACE("Identity::decrypt: shared key:           " + shared_key.toHex());
 
 		Bytes derived_key = Cryptography::hkdf(
 			32,
@@ -525,19 +525,19 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 			get_salt(),
 			get_context()
 		);
-		extreme("Identity::decrypt: derived key:          " + derived_key.toHex());
+		TRACE("Identity::decrypt: derived key:          " + derived_key.toHex());
 
 		Cryptography::Fernet fernet(derived_key);
 		//ciphertext = ciphertext_token[Identity.KEYSIZE//8//2:]
 		Bytes ciphertext(ciphertext_token.mid(Type::Identity::KEYSIZE/8/2));
-		extreme("Identity::decrypt: Fernet decrypting data of length " + std::to_string(ciphertext.size()));
-		extreme("Identity::decrypt: ciphertext: " + ciphertext.toHex());
+		TRACE("Identity::decrypt: Fernet decrypting data of length " + std::to_string(ciphertext.size()));
+		TRACE("Identity::decrypt: ciphertext: " + ciphertext.toHex());
 		plaintext = fernet.decrypt(ciphertext);
-		extreme("Identity::decrypt: plaintext:  " + plaintext.toHex());
-		//extreme("Identity::decrypt: Fernet decrypted data of length " + std::to_string(plaintext.size()));
+		TRACE("Identity::decrypt: plaintext:  " + plaintext.toHex());
+		//TRACE("Identity::decrypt: Fernet decrypted data of length " + std::to_string(plaintext.size()));
 	}
 	catch (std::exception& e) {
-		debug("Decryption by " + toString() + " failed: " + e.what());
+		DEBUG("Decryption by " + toString() + " failed: " + e.what());
 	}
 		
 	return plaintext;
@@ -576,7 +576,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	if (_object->_pub) {
 		try {
-			extreme("Identity::validate: Attempting to verify signature: " + signature.toHex() + " and message: " + message.toHex());
+			TRACE("Identity::validate: Attempting to verify signature: " + signature.toHex() + " and message: " + message.toHex());
 			_object->_sig_pub->verify(signature, message);
 			return true;
 		}
@@ -595,21 +595,21 @@ void Identity::prove(const Packet& packet, const Destination& destination /*= {T
 	Bytes proof_data;
 	if (RNS::Reticulum::should_use_implicit_proof()) {
 		proof_data = signature;
-		extreme("Identity::prove: implicit proof data: " + proof_data.toHex());
+		TRACE("Identity::prove: implicit proof data: " + proof_data.toHex());
 	}
 	else {
 		proof_data = packet.packet_hash() + signature;
-		extreme("Identity::prove: explicit proof data: " + proof_data.toHex());
+		TRACE("Identity::prove: explicit proof data: " + proof_data.toHex());
 	}
 	
 	if (!destination) {
-		extreme("Identity::prove: proving packet with proof destination...");
+		TRACE("Identity::prove: proving packet with proof destination...");
 		ProofDestination proof_destination = packet.generate_proof_destination();
 		Packet proof(proof_destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
 		proof.send();
 	}
 	else {
-		extreme("Identity::prove: proving packet with specified destination...");
+		TRACE("Identity::prove: proving packet with specified destination...");
 		Packet proof(destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
 		proof.send();
 	}

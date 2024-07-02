@@ -136,10 +136,10 @@ namespace RNS {
 
 	public:
 		Packet(Type::NoneConstructor none) {
-			mem("Packet NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Packet NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Packet(const Packet& packet) : _object(packet._object) {
-			mem("Packet object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Packet object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Packet(
 			const Destination& destination,
@@ -163,12 +163,12 @@ namespace RNS {
 			bool create_receipt = true
 		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
 		virtual ~Packet() {
-			mem("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}			
 
 		inline Packet& operator = (const Packet& packet) {
 			_object = packet._object;
-			mem("Packet object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Packet object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -244,8 +244,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { mem("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { mem("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { MEM("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			Destination _destination = {Type::NONE};
 			Link _link = {Type::NONE};
@@ -314,15 +314,15 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			RNS::extreme("<<< Serializing packet hash " + src.get_hash().toHex());
+			TRACE("<<< Serializing packet hash " + src.get_hash().toHex());
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Packet fromJson(JsonVariantConst src) {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				RNS::extreme(">>> Deserialized packet hash " + hash.toHex());
-				RNS::extreme(">>> Querying transport for cached packet");
+				TRACE(">>> Deserialized packet hash " + hash.toHex());
+				TRACE(">>> Querying transport for cached packet");
 				// Query transport for matching interface
 				return RNS::Packet::get_cached_packet(hash);
 			}

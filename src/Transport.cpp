@@ -126,7 +126,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 	if (!_identity) {
 		std::string transport_identity_path = Reticulum::_storagepath + "/transport_identity";
-		debug("Checking for transport identity...");
+		DEBUG("Checking for transport identity...");
 		try {
 // CBA TEST
 //OS::remove_file(transport_identity_path.c_str());
@@ -170,7 +170,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	path_request_destination.set_packet_callback(path_request_handler);
 	_control_destinations.insert(path_request_destination);
 	_control_hashes.insert(path_request_destination.hash());
-	debug("Created transport-specific path request destination " + path_request_destination.hash().toHex());
+	DEBUG("Created transport-specific path request destination " + path_request_destination.hash().toHex());
 
 	// Create transport-specific destination for tunnel synthesize
 	Destination tunnel_synthesize_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "tunnel.synthesize");
@@ -179,7 +179,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
     //p Transport.control_destinations.append(Transport.tunnel_synthesize_handler)
 	_control_destinations.insert(tunnel_synthesize_destination);
 	_control_hashes.insert(tunnel_synthesize_destination.hash());
-	debug("Created transport-specific tunnel synthesize destination " + tunnel_synthesize_destination.hash().toHex());
+	DEBUG("Created transport-specific tunnel synthesize destination " + tunnel_synthesize_destination.hash().toHex());
 
 	_jobs_running = false;
 
@@ -202,7 +202,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			Destination probe_destination(_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "probe");
 			probe_destination.accepts_links(false);
 			probe_destination.set_proof_strategy(Type::Destination::PROVE_ALL);
-			debug("Created probe responder destination " + probe_destination.hash().toHex());
+			DEBUG("Created probe responder destination " + probe_destination.hash().toHex());
 			probe_destination.announce();
 			notice("Transport Instance will respond to probe requests on " + probe_destination.toString());
 		}
@@ -264,7 +264,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								}
 
 								if ((OS::time() - last_path_request) > Type::Transport::PATH_REQUEST_MI) {
-									debug("Trying to rediscover path for " + link.destination().hash().toHex() + " since an attempted link was never established");
+									DEBUG("Trying to rediscover path for " + link.destination().hash().toHex() + " since an attempted link was never established");
 									//if (path_requests.find(link.destination().hash()) == path_requests.end()) {
 									if (path_requests.count(link.destination().hash()) == 0) {
 										path_requests.insert(link.destination().hash());
@@ -319,17 +319,17 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				//for (auto& pair : _announce_table) {
 				//	const auto& destination_hash = pair.first;
 				//	auto& announce_entry = pair.second;
-//extreme("[0] announce entry data size: " + std::to_string(announce_entry._packet.data().size()));
+//TRACE("[0] announce entry data size: " + std::to_string(announce_entry._packet.data().size()));
 					//p announce_entry = Transport.announce_table[destination_hash]
 					if (announce_entry._retries > Type::Transport::PATHFINDER_R) {
-						extreme("Completed announce processing for " + destination_hash.toHex() + ", retry limit reached");
+						TRACE("Completed announce processing for " + destination_hash.toHex() + ", retry limit reached");
 						// CBA OK to modify collection here since we're immediately exiting iteration
 						_announce_table.erase(destination_hash);
 						break;
 					}
 					else {
 						if (OS::time() > announce_entry._retransmit_timeout) {
-							extreme("Performing announce processing for " + destination_hash.toHex() + "...");
+							TRACE("Performing announce processing for " + destination_hash.toHex() + "...");
 							announce_entry._retransmit_timeout = OS::time() + Type::Transport::PATHFINDER_G + Type::Transport::PATHFINDER_RW;
 							announce_entry._retries += 1;
 							//p packet = announce_entry[5]
@@ -347,9 +347,9 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							//P announce_destination.hexhash = announce_destination.hash.hex()
 
 //if (announce_entry._attached_interface) {
-//extreme("[1] interface is valid");
-//extreme("[1] interface: " + announce_entry._attached_interface.debugString());
-//extreme("[1] interface: " + announce_entry._attached_interface.toString());
+//TRACE("[1] interface is valid");
+//TRACE("[1] interface: " + announce_entry._attached_interface.debugString());
+//TRACE("[1] interface: " + announce_entry._attached_interface.toString());
 //}
 							Packet new_packet(
 								announce_destination,
@@ -366,10 +366,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 							new_packet.hops(announce_entry._hops);
 							if (announce_entry._block_rebroadcasts) {
-								debug("Rebroadcasting announce as path response for " + announce_destination.hash().toHex() + " with hop count " + std::to_string(new_packet.hops()));
+								DEBUG("Rebroadcasting announce as path response for " + announce_destination.hash().toHex() + " with hop count " + std::to_string(new_packet.hops()));
 							}
 							else {
-								debug("Rebroadcasting announce for " + announce_destination.hash().toHex() + " with hop count " + std::to_string(new_packet.hops()));
+								DEBUG("Rebroadcasting announce for " + announce_destination.hash().toHex() + " with hop count " + std::to_string(new_packet.hops()));
 							}
 							
 							outgoing.push_back(new_packet);
@@ -391,7 +391,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								//_announce_table.insert_or_assign({destination_hash, held_entry});
 								_announce_table.erase(destination_hash);
 								_announce_table.insert({destination_hash, held_entry});
-								debug("Reinserting held announce into table");
+								DEBUG("Reinserting held announce into table");
 							}
 						}
 					}
@@ -453,7 +453,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							// If the path has been invalidated between the time of
 							// making the link request and now, try to rediscover it
 							if (!has_path(link_entry._destination_hash)) {
-								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and path is now missing");
+								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and path is now missing");
 								path_request_conditions = true;
 							}
 
@@ -461,7 +461,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							// attempt to rediscover a path to the destination, if this
 							// has not already happened recently.
 							else if (!path_request_throttle && lr_taken_hops == 0) {
-								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted local client link was never established");
+								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted local client link was never established");
 								path_request_conditions = true;
 							}
 
@@ -470,7 +470,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							// of our interfaces, and that it roamed somewhere else.
 							// In that case, try to discover a new path.
 							else if (!path_request_throttle && hops_to(link_entry._destination_hash) == 1) {
-								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and destination was previously local to an interface on this instance");
+								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and destination was previously local to an interface on this instance");
 								path_request_conditions = true;
 							}
 
@@ -479,7 +479,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							// of our interfaces, and that it roamed somewhere else.
 							// In that case, try to discover a new path.
 							else if ( !path_request_throttle and lr_taken_hops == 1) {
-								debug("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and link initiator is local to an interface on this instance");
+								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and link initiator is local to an interface on this instance");
 								path_request_conditions = true;
 							}
 
@@ -516,11 +516,11 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 					if (OS::time() > destination_expiry) {
 						stale_paths.push_back(destination_hash);
-						debug("Path to " + destination_hash.toHex() + " timed out and was removed");
+						DEBUG("Path to " + destination_hash.toHex() + " timed out and was removed");
 					}
 					else if (_interfaces.count(attached_interface.get_hash()) == 0) {
 						stale_paths.push_back(destination_hash);
-						debug("Path to " + destination_hash.toHex() + " was removed since the attached interface no longer exists");
+						DEBUG("Path to " + destination_hash.toHex() + " was removed since the attached interface no longer exists");
 					}
 				}
 
@@ -529,7 +529,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				for (const auto& [destination_hash, path_entry] : _discovery_path_requests) {
 					if (OS::time() > path_entry._timeout) {
 						stale_discovery_path_requests.push_back(destination_hash);
-						debug("Waiting path request for " + destination_hash.toString() + " timed out and was removed");
+						DEBUG("Waiting path request for " + destination_hash.toString() + " timed out and was removed");
 					}
 				}
 
@@ -539,14 +539,14 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				for (const auto& [tunnel_id, tunnel_entry] : _tunnels) {
 					if (OS::time() > tunnel_entry._expires) {
 						stale_tunnels.push_back(tunnel_id);
-						extreme("Tunnel " + tunnel_id.toHex() + " timed out and was removed");
+						TRACE("Tunnel " + tunnel_id.toHex() + " timed out and was removed");
 					}
 					else {
 						std::vector<Bytes> stale_tunnel_paths;
 						for (const auto& [destination_hash, destination_entry] : tunnel_entry._serialised_paths) {
 							if (OS::time() > (destination_entry._timestamp + DESTINATION_TIMEOUT)) {
 								stale_tunnel_paths.push_back(destination_hash);
-								extreme("Tunnel path to " + destination_hash.toHex() + " timed out and was removed");
+								TRACE("Tunnel path to " + destination_hash.toHex() + " timed out and was removed");
 							}
 						}
 
@@ -558,7 +558,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					}
 				}
 				if (count > 0) {
-					extreme("Removed " + std::to_string(count) + " tunnel paths");
+					TRACE("Removed " + std::to_string(count) + " tunnel paths");
 				}
 				
 				count = 0;
@@ -567,7 +567,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					++count;
 				}
 				if (count > 0) {
-					extreme("Released " + std::to_string(count) + " reverse table entries");
+					TRACE("Released " + std::to_string(count) + " reverse table entries");
 				}
 
 				count = 0;
@@ -576,7 +576,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					++count;
 				}
 				if (count > 0) {
-					extreme("Released " + std::to_string(count) + " links");
+					TRACE("Released " + std::to_string(count) + " links");
 				}
 
 				count = 0;
@@ -586,7 +586,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					++count;
 				}
 				if (count > 0) {
-					extreme("Removed " + std::to_string(count) + " paths");
+					TRACE("Removed " + std::to_string(count) + " paths");
 				}
 
 				count = 0;
@@ -595,7 +595,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					++count;
 				}
 				if (count > 0) {
-					extreme("Removed " + std::to_string(count) + " waiting path requests");
+					TRACE("Removed " + std::to_string(count) + " waiting path requests");
 				}
 
 				count = 0;
@@ -604,7 +604,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					++count;
 				}
 				if (count > 0) {
-					extreme("Removed " + std::to_string(count) + " tunnels");
+					TRACE("Removed " + std::to_string(count) + " tunnels");
 				}
 
 #ifndef NDEBUG
@@ -644,14 +644,14 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 }
 
 /*static*/ void Transport::transmit(Interface& interface, const Bytes& raw) {
-	extreme("Transport::transmit()");
+	TRACE("Transport::transmit()");
 	// CBA
 	if (_callbacks._transmit_packet) {
 		try {
 			_callbacks._transmit_packet(raw, interface);
 		}
 		catch (std::exception& e) {
-			debug("Error while executing transmit packet callback. The contained exception was: " + std::string(e.what()));
+			DEBUG("Error while executing transmit packet callback. The contained exception was: " + std::string(e.what()));
 		}
 	}
 	try {
@@ -706,7 +706,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 }
 
 /*static*/ bool Transport::outbound(Packet& packet) {
-	extreme("Transport::outbound()");
+	TRACE("Transport::outbound()");
 	++_packets_sent;
 
 	if (!packet.destination()) {
@@ -715,10 +715,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		return false;
 	}
 
-	extreme("Transport::outbound: destination=" + packet.destination_hash().toHex() + " hops=" + std::to_string(packet.hops()));
+	TRACE("Transport::outbound: destination=" + packet.destination_hash().toHex() + " hops=" + std::to_string(packet.hops()));
 
 	while (_jobs_running) {
-		extreme("Transport::outbound: sleeping...");
+		TRACE("Transport::outbound: sleeping...");
 		OS::sleep(0.0005);
 	}
 
@@ -730,7 +730,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	// Check if we have a known path for the destination in the path table
     //if packet.packet_type != RNS.Packet.ANNOUNCE and packet.destination.type != RNS.Destination.PLAIN and packet.destination.type != RNS.Destination.GROUP and packet.destination_hash in Transport.destination_table:
 	if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.destination().type() != Type::Destination::PLAIN && packet.destination().type() != Type::Destination::GROUP && _destination_table.find(packet.destination_hash()) != _destination_table.end()) {
-		extreme("Transport::outbound: Path to destination is known");
+		TRACE("Transport::outbound: Path to destination is known");
         //outbound_interface = Transport.destination_table[packet.destination_hash][5]
 		DestinationEntry destination_entry = (*_destination_table.find(packet.destination_hash())).second;
 		Interface outbound_interface = destination_entry.receiving_interface();
@@ -742,7 +742,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		// to a local shared Reticulum instance.
         //if Transport.destination_table[packet.destination_hash][2] > 1:
 		if (destination_entry._hops > 1) {
-			extreme("Forwarding packet to next closest interface...");
+			TRACE("Forwarding packet to next closest interface...");
 			if (packet.header_type() == Type::Packet::HEADER_1) {
 				// Insert packet into transport
                 //new_flags = (RNS.Packet.HEADER_2) << 6 | (Transport.TRANSPORT) << 4 | (packet.flags & 0b00001111)
@@ -772,7 +772,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		// to transport it onto the network.
         //elif Transport.destination_table[packet.destination_hash][2] == 1 and Transport.owner.is_connected_to_shared_instance:
 		else if (destination_entry._hops == 1 && _owner.is_connected_to_shared_instance()) {
-			extreme("Transport::outbound: Sending packet for directly connected interface to shared instance...");
+			TRACE("Transport::outbound: Sending packet for directly connected interface to shared instance...");
 			if (packet.header_type() == Type::Packet::HEADER_1) {
 				// Insert packet into transport
 				//new_flags = (RNS.Packet.HEADER_2) << 6 | (Transport.TRANSPORT) << 4 | (packet.flags & 0b00001111)
@@ -797,7 +797,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		// directly reachable, and also on which interface, so we
 		// simply transmit the packet directly on that one.
 		else {
-			extreme("Transport::outbound: Sending packet over directly connected interface...");
+			TRACE("Transport::outbound: Sending packet over directly connected interface...");
 			transmit(outbound_interface, packet.raw());
 			sent = true;
 		}
@@ -807,7 +807,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	// just the relevant interface if the packet has an attached
 	// interface, or belongs to a link.
 	else {
-		extreme("Transport::outbound: Path to destination is unknown");
+		TRACE("Transport::outbound: Path to destination is unknown");
 		bool stored_hash = false;
 #if defined(INTERFACES_SET)
 		for (const Interface& interface : _interfaces) {
@@ -816,13 +816,13 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 #elif defined(INTERFACES_MAP)
 		for (auto& [hash, interface] : _interfaces) {
 #endif
-			extreme("Transport::outbound: Checking interface " + interface.toString());
+			TRACE("Transport::outbound: Checking interface " + interface.toString());
 			if (interface.OUT()) {
 				bool should_transmit = true;
 
 				if (packet.destination().type() == Type::Destination::LINK) {
 					if (packet.destination().status() == Type::Link::CLOSED) {
-						extreme("Transport::outbound: Pscket destination is link-closed, not transmitting");
+						TRACE("Transport::outbound: Pscket destination is link-closed, not transmitting");
 						should_transmit = false;
 					}
 					// CBA Bug? Destination has no member attached_interface
@@ -832,15 +832,15 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				}
 				
 				if (packet.attached_interface() && interface != packet.attached_interface()) {
-					extreme("Transport::outbound: Packet has wrong attached interface, not transmitting");
+					TRACE("Transport::outbound: Packet has wrong attached interface, not transmitting");
 					should_transmit = false;
 				}
 
 				if (packet.packet_type() == Type::Packet::ANNOUNCE) {
 					if (!packet.attached_interface()) {
-						extreme("Transport::outbound: Packet has no attached interface");
+						TRACE("Transport::outbound: Packet has no attached interface");
 						if (interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
-							extreme("Blocking announce broadcast on " + interface.toString() + " due to AP mode");
+							TRACE("Blocking announce broadcast on " + interface.toString() + " due to AP mode");
 							should_transmit = false;
 						}
 						else if (interface.mode() == Type::Interface::MODE_ROAMING) {
@@ -865,7 +865,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							//}
 							if (iter != _destinations.end()) {
 #endif
-								extreme("Allowing announce broadcast on roaming-mode interface from instance-local destination");
+								TRACE("Allowing announce broadcast on roaming-mode interface from instance-local destination");
 							}
 							else {
 								const Interface& from_interface = next_hop_interface(packet.destination_hash());
@@ -873,19 +873,19 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								if (!from_interface || from_interface.mode() == Type::Interface::MODE_NONE) {
 									should_transmit = false;
 									if (!from_interface) {
-										extreme("Blocking announce broadcast on " + interface.toString() + " since next hop interface doesn't exist");
+										TRACE("Blocking announce broadcast on " + interface.toString() + " since next hop interface doesn't exist");
 									}
 									else if (from_interface.mode() == Type::Interface::MODE_NONE) {
-										extreme("Blocking announce broadcast on " + interface.toString() + " since next hop interface has no mode configured");
+										TRACE("Blocking announce broadcast on " + interface.toString() + " since next hop interface has no mode configured");
 									}
 								}
 								else {
 									if (from_interface.mode() == Type::Interface::MODE_ROAMING) {
-										extreme("Blocking announce broadcast on " + interface.toString() + " due to roaming-mode next-hop interface");
+										TRACE("Blocking announce broadcast on " + interface.toString() + " due to roaming-mode next-hop interface");
 										should_transmit = false;
 									}
 									else if (from_interface.mode() == Type::Interface::MODE_BOUNDARY) {
-										extreme("Blocking announce broadcast on " + interface.toString() + " due to boundary-mode next-hop interface");
+										TRACE("Blocking announce broadcast on " + interface.toString() + " due to boundary-mode next-hop interface");
 										should_transmit = false;
 									}
 								}
@@ -914,22 +914,22 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							auto iter = _destinations.find(packet.destination_hash());
 							if (iter != _destinations.end()) {
 #endif
-								extreme("Allowing announce broadcast on boundary-mode interface from instance-local destination");
+								TRACE("Allowing announce broadcast on boundary-mode interface from instance-local destination");
 							}
 							else {
 								const Interface& from_interface = next_hop_interface(packet.destination_hash());
 								if (!from_interface || from_interface.mode() == Type::Interface::MODE_NONE) {
 									should_transmit = false;
 									if (!from_interface) {
-										extreme("Blocking announce broadcast on " + interface.toString() + " since next hop interface doesn't exist");
+										TRACE("Blocking announce broadcast on " + interface.toString() + " since next hop interface doesn't exist");
 									}
 									else if (from_interface.mode() == Type::Interface::MODE_NONE) {
-										extreme("Blocking announce broadcast on "  + interface.toString() + " since next hop interface has no mode configured");
+										TRACE("Blocking announce broadcast on "  + interface.toString() + " since next hop interface has no mode configured");
 									}
 								}
 								else {
 									if (from_interface.mode() == Type::Interface::MODE_ROAMING) {
-										extreme("Blocking announce broadcast on " + interface.toString() + " due to roaming-mode next-hop interface");
+										TRACE("Blocking announce broadcast on " + interface.toString() + " due to roaming-mode next-hop interface");
 										should_transmit = false;
 									}
 								}
@@ -1007,19 +1007,19 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 												//z timer.start()
 
 												if (wait_time < 1000) {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string((int)wait_time) + " ms");
+													TRACE("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string((int)wait_time) + " ms");
 												}
 												else {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + " s");
+													TRACE("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + " s");
 												}
 											}
 											else {
 												double wait_time = std::max(interface.announce_allowed_at() - OS::time(), (double)0);
 												if (wait_time < 1000) {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string((int)wait_time) + " ms");
+													TRACE("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string((int)wait_time) + " ms");
 												}
 												else {
-													extreme("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + " s");
+													TRACE("Added announce to queue (height " + std::to_string(interface.announce_queue().size()) + ") on " + interface.toString() + " for processing in " + std::to_string(OS::round(wait_time/1000,1)) + " s");
 												}
 											}
 										}
@@ -1037,7 +1037,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				}
 						
 				if (should_transmit) {
-					extreme("Transport::outbound: Packet transmission allowed");
+					TRACE("Transport::outbound: Packet transmission allowed");
 					if (!stored_hash) {
 						_packet_hashlist.insert(packet.packet_hash());
 						stored_hash = true;
@@ -1058,7 +1058,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					sent = true;
 				}
 				else {
-					extreme("Transport::outbound: Packet transmission refused");
+					TRACE("Transport::outbound: Packet transmission refused");
 				}
 			}
 		}
@@ -1117,7 +1117,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	if (packet.destination_type() == Type::Destination::PLAIN) {
 		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
 			if (packet.hops() > 1) {
-				debug("Dropped PLAIN packet " + packet.packet_hash().toHex() + " with " + std::to_string(packet.hops()) + " hops");
+				DEBUG("Dropped PLAIN packet " + packet.packet_hash().toHex() + " with " + std::to_string(packet.hops()) + " hops");
 				return false;
 			}
 			else {
@@ -1125,7 +1125,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			}
 		}
 		else {
-			debug("Dropped invalid PLAIN announce packet");
+			DEBUG("Dropped invalid PLAIN announce packet");
 			return false;
 		}
 	}
@@ -1133,7 +1133,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	if (packet.destination_type() == Type::Destination::GROUP) {
 		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
 			if (packet.hops() > 1) {
-				debug("Dropped GROUP packet " + packet.packet_hash().toHex() + " with " + std::to_string(packet.hops()) + " hops");
+				DEBUG("Dropped GROUP packet " + packet.packet_hash().toHex() + " with " + std::to_string(packet.hops()) + " hops");
 				return false;
 			}
 			else {
@@ -1141,34 +1141,34 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			}
 		}
 		else {
-			debug("Dropped invalid GROUP announce packet");
+			DEBUG("Dropped invalid GROUP announce packet");
 			return false;
 		}
 	}
 
 	if (_packet_hashlist.find(packet.packet_hash()) == _packet_hashlist.end()) {
-		extreme("Transport::packet_filter: packet not previously seen");
+		TRACE("Transport::packet_filter: packet not previously seen");
 		return true;
 	}
 	else {
 		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
 			if (packet.destination_type() == Type::Destination::SINGLE) {
-				extreme("Transport::packet_filter: packet previously seen but is SINGLE ANNOUNCE");
+				TRACE("Transport::packet_filter: packet previously seen but is SINGLE ANNOUNCE");
 				return true;
 			}
 			else {
-				debug("Dropped invalid announce packet");
+				DEBUG("Dropped invalid announce packet");
 				return false;
 			}
 		}
 	}
 
-	debug("Filtered packet with hash " + packet.packet_hash().toHex());
+	DEBUG("Filtered packet with hash " + packet.packet_hash().toHex());
 	return false;
 }
 
 /*static*/ void Transport::inbound(const Bytes& raw, const Interface& interface /*= {Type::NONE}*/) {
-	extreme("Transport::inbound()");
+	TRACE("Transport::inbound()");
 	++_packets_received;
 	// CBA
 	if (_callbacks._receive_packet) {
@@ -1176,7 +1176,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			_callbacks._receive_packet(raw, interface);
 		}
 		catch (std::exception& e) {
-			debug("Error while executing receive packet callback. The contained exception was: " + std::string(e.what()));
+			DEBUG("Error while executing receive packet callback. The contained exception was: " + std::string(e.what()));
 		}
 	}
 // TODO
@@ -1248,7 +1248,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 */
 
 	while (_jobs_running) {
-		extreme("Transport::inbound: sleeping...");
+		TRACE("Transport::inbound: sleeping...");
 		OS::sleep(0.0005);
 	}
 
@@ -1265,10 +1265,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		return;
 	}
 #ifndef NDEBUG
-	extreme("Transport::inbound: packet: " + packet.debugString());
+	TRACE("Transport::inbound: packet: " + packet.debugString());
 #endif
 
-	extreme("Transport::inbound: destination=" + packet.destination_hash().toHex() + " hops=" + std::to_string(packet.hops()));
+	TRACE("Transport::inbound: destination=" + packet.destination_hash().toHex() + " hops=" + std::to_string(packet.hops()));
 
 	packet.receiving_interface(interface);
 	packet.hops(packet.hops() + 1);
@@ -1313,14 +1313,14 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			accept = _callbacks._filter_packet(packet);
 		}
 		catch (std::exception& e) {
-			debug("Error while executing filter packet callback. The contained exception was: " + std::string(e.what()));
+			DEBUG("Error while executing filter packet callback. The contained exception was: " + std::string(e.what()));
 		}
 	}
 	if (accept) {
 		accept = packet_filter(packet);
 	}
 	if (accept) {
-		extreme("Transport::inbound: Packet accepted by filter");
+		TRACE("Transport::inbound: Packet accepted by filter");
 		_packet_hashlist.insert(packet.packet_hash());
 		cache_packet(packet);
 		
@@ -1388,7 +1388,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					for (auto& [hash, interface] : _interfaces) {
 #endif
 						if (interface != packet.receiving_interface()) {
-							extreme("Transport::inbound: Broadcasting packet on " + interface.toString());
+							TRACE("Transport::inbound: Broadcasting packet on " + interface.toString());
 #if defined(INTERFACES_SET)
 							transmit(const_cast<Interface&>(interface), packet.raw());
 #else
@@ -1401,7 +1401,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				// it directly to all local clients
 				else {
 					for (const Interface& interface : _local_client_interfaces) {
-						extreme("Transport::inbound: Broadcasting packet on " + interface.toString());
+						TRACE("Transport::inbound: Broadcasting packet on " + interface.toString());
 						transmit(const_cast<Interface&>(interface), packet.raw());
 					}
 				}
@@ -1416,7 +1416,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		// packets according to transport tables and recording
 		// entries in reverse and link tables.
 		if (Reticulum::transport_enabled() || from_local_client || for_local_client || for_local_client_link) {
-			extreme("Transport::inbound: Performing general transport handling");
+			TRACE("Transport::inbound: Performing general transport handling");
 
 			// If there is no transport id, but the packet is
 			// for a local client, we generate the transport
@@ -1426,7 +1426,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			// able), and reinsert, so the normal transport
 			// implementation can handle the packet.
 			if (!packet.transport_id() && for_local_client) {
-				extreme("Transport::inbound: Regenerating transport id");
+				TRACE("Transport::inbound: Regenerating transport id");
 				packet.transport_id(_identity.hash());
 			}
 
@@ -1435,7 +1435,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			// normal processing.
 			if (packet.context() == Type::Packet::CACHE_REQUEST) {
 				if (cache_request_packet(packet)) {
-					extreme("Transport::inbound: Cached packet");
+					TRACE("Transport::inbound: Cached packet");
 					return;
 				}
 			}
@@ -1444,12 +1444,12 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			// are the designated next hop, and process it
 			// accordingly if we are.
 			if (packet.transport_id() && packet.packet_type() != Type::Packet::ANNOUNCE) {
-				extreme("Transport::inbound: Packet is in transport...");
+				TRACE("Transport::inbound: Packet is in transport...");
 				if (packet.transport_id() == _identity.hash()) {
-					extreme("Transport::inbound: We are designated next-hop");
+					TRACE("Transport::inbound: We are designated next-hop");
 					auto destination_iter = _destination_table.find(packet.destination_hash());
 					if (destination_iter != _destination_table.end()) {
-						extreme("Transport::inbound: Found next-hop path to destination");
+						TRACE("Transport::inbound: Found next-hop path to destination");
 						DestinationEntry destination_entry = (*destination_iter).second;
 						Bytes next_hop = destination_entry._received_from;
 						uint8_t remaining_hops = destination_entry._hops;
@@ -1490,7 +1490,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						Interface outbound_interface = destination_entry.receiving_interface();
 
 						if (packet.packet_type() == Type::Packet::LINKREQUEST) {
-							extreme("Transport::inbound: Packet is next-hop LINKREQUEST");
+							TRACE("Transport::inbound: Packet is next-hop LINKREQUEST");
 							double now = OS::time();
 							double proof_timeout = now + Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, remaining_hops);
 							LinkEntry link_entry(
@@ -1507,7 +1507,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							_link_table.insert({packet.getTruncatedHash(), link_entry});
 						}
 						else {
-							extreme("Transport::inbound: Packet is next-hop other type");
+							TRACE("Transport::inbound: Packet is next-hop other type");
 							ReverseEntry reverse_entry(
 								packet.receiving_interface(),
 								outbound_interface,
@@ -1515,7 +1515,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							);
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
 						}
-						extreme("Transport::outbound: Sending packet to next hop...");
+						TRACE("Transport::outbound: Sending packet to next hop...");
 #if defined(INTERFACES_SET)
 						transmit(const_cast<Interface&>(outbound_interface), new_raw);
 #else
@@ -1527,24 +1527,24 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						// TODO: There should probably be some kind of REJECT
 						// mechanism here, to signal to the source that their
 						// expected path failed.
-						extreme("Got packet in transport, but no known path to final destination " + packet.destination_hash().toHex() + ". Dropping packet.");
+						TRACE("Got packet in transport, but no known path to final destination " + packet.destination_hash().toHex() + ". Dropping packet.");
 					}
 				}
 				else {
-					extreme("Transport::inbound: We are not designated next-hop so not transporting");
+					TRACE("Transport::inbound: We are not designated next-hop so not transporting");
 				}
 			}
 			else {
-				extreme("Transport::inbound: Either packet is announce or packet has no next-hop (possibly for a local destination)");
+				TRACE("Transport::inbound: Either packet is announce or packet has no next-hop (possibly for a local destination)");
 			}
 
 			// Link transport handling. Directs packets according
 			// to entries in the link tables
 			if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.packet_type() != Type::Packet::LINKREQUEST && packet.context() != Type::Packet::LRPROOF) {
-				extreme("Transport::inbound: Checking if packet is meant for link transport...");
+				TRACE("Transport::inbound: Checking if packet is meant for link transport...");
 				auto link_iter = _link_table.find(packet.destination_hash());
 				if (link_iter != _link_table.end()) {
-					extreme("Transport::inbound: Found link entry, handling link transport");
+					TRACE("Transport::inbound: Found link entry, handling link transport");
 					LinkEntry link_entry = (*link_iter).second;
 					// If receiving and outbound interface is
 					// the same for this link, direction doesn't
@@ -1554,7 +1554,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						// But check that taken hops matches one
 						// of the expectede values.
 						if (packet.hops() == link_entry._remaining_hops || packet.hops() == link_entry._hops) {
-							extreme("Transport::inbound: Link inbound/outbound interfaes are same, transporting on same interface");
+							TRACE("Transport::inbound: Link inbound/outbound interfaes are same, transporting on same interface");
 							outbound_interface = link_entry._outbound_interface;
 						}
 					}
@@ -1565,21 +1565,21 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						if (packet.receiving_interface() == link_entry._outbound_interface) {
 							// Also check that expected hop count matches
 							if (packet.hops() == link_entry._remaining_hops) {
-								extreme("Transport::inbound: Link transporting on inbound interface");
+								TRACE("Transport::inbound: Link transporting on inbound interface");
 								outbound_interface = link_entry._receiving_interface;
 							}
 						}
 						else if (packet.receiving_interface() == link_entry._receiving_interface) {
 							// Also check that expected hop count matches
 							if (packet.hops() == link_entry._hops) {
-								extreme("Transport::inbound: Link transporting on outbound interface");
+								TRACE("Transport::inbound: Link transporting on outbound interface");
 								outbound_interface = link_entry._outbound_interface;
 							}
 						}
 					}
 
 					if (outbound_interface) {
-						extreme("Transport::inbound: Transmitting link transport packet");
+						TRACE("Transport::inbound: Transmitting link transport packet");
 						Bytes new_raw;
 						//new_raw = packet.raw[0:1]
 						new_raw << packet.raw().left(1);
@@ -1605,7 +1605,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		// announces, queueing rebroadcasts of these, and removal
 		// of queued announce rebroadcasts once handed to the next node.
 		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
-			extreme("Transport::inbound: Packet is ANNOUNCE");
+			TRACE("Transport::inbound: Packet is ANNOUNCE");
 			Bytes received_from;
 			//p local_destination = next((d for d in Transport.destinations if d.hash == packet.destination_hash), None)
 #if defined(DESTINATIONS_SET)
@@ -1625,7 +1625,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			auto iter = _destinations.find(packet.destination_hash());
 			if (iter == _destinations.end() && Identity::validate_announce(packet)) {
 #endif
-				extreme("Transport::inbound: Packet is announce for non-local destination, processing...");
+				TRACE("Transport::inbound: Packet is announce for non-local destination, processing...");
 				if (packet.transport_id()) {
 					received_from = packet.transport_id();
 					
@@ -1637,10 +1637,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						AnnounceEntry& announce_entry = (*_announce_table.find(packet.destination_hash())).second;
 						
 						if ((packet.hops() - 1) == announce_entry._hops) {
-							debug("Heard a local rebroadcast of announce for " + packet.destination_hash().toHex());
+							DEBUG("Heard a local rebroadcast of announce for " + packet.destination_hash().toHex());
 							announce_entry._local_rebroadcasts += 1;
 							if (announce_entry._local_rebroadcasts >= LOCAL_REBROADCASTS_MAX) {
-								debug("Max local rebroadcasts of announce for " + packet.destination_hash().toHex() + " reached, dropping announce from our table");
+								DEBUG("Max local rebroadcasts of announce for " + packet.destination_hash().toHex() + " reached, dropping announce from our table");
 								_announce_table.erase(packet.destination_hash());
 							}
 						}
@@ -1648,7 +1648,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						if ((packet.hops() - 1) == (announce_entry._hops + 1) && announce_entry._retries > 0) {
 							double now = OS::time();
 							if (now < announce_entry._timestamp) {
-								debug("Rebroadcasted announce for " + packet.destination_hash().toHex() + " has been passed on to another node, no further tries needed");
+								DEBUG("Rebroadcasted announce for " + packet.destination_hash().toHex() + " has been passed on to another node, no further tries needed");
 								_announce_table.erase(packet.destination_hash());
 							}
 						}
@@ -1734,7 +1734,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								if (random_blobs.find(random_blob) == random_blobs.end()) {
 									// TODO: Check that this ^ approach actually
 									// works under all circumstances
-									debug("Replacing destination table entry for " + packet.destination_hash().toHex() + " with new announce due to expired path");
+									DEBUG("Replacing destination table entry for " + packet.destination_hash().toHex() + " with new announce due to expired path");
 									should_add = true;
 								}
 								else {
@@ -1744,7 +1744,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							else {
 								if (announce_emitted > path_announce_emitted) {
 									if (random_blobs.find(random_blob) == random_blobs.end()) {
-										debug("Replacing destination table entry for " + packet.destination_hash().toHex() + " with new announce, since it was more recently emitted");
+										DEBUG("Replacing destination table entry for " + packet.destination_hash().toHex() + " with new announce, since it was more recently emitted");
 										should_add = true;
 									}
 									else {
@@ -1826,7 +1826,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							// Insert announce into announce table for retransmission
 
 							if (rate_blocked) {
-								debug("Blocking rebroadcast of announce from " + packet.destination_hash().toHex() + " due to excessive announce rate");
+								DEBUG("Blocking rebroadcast of announce from " + packet.destination_hash().toHex() + " due to excessive announce rate");
 							}
 							else {
 								if (Transport::from_local_client(packet)) {
@@ -1937,7 +1937,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							PathRequestEntry& pr_entry = (*iter).second;
 							attached_interface = pr_entry._requesting_interface;
 
-							debug("Got matching announce, answering waiting discovery path request for " + packet.destination_hash().toHex() + " on " + attached_interface.toString());
+							DEBUG("Got matching announce, answering waiting discovery path request for " + packet.destination_hash().toHex() + " on " + attached_interface.toString());
 							Identity announce_identity(Identity::recall(packet.destination_hash()));
 							//Destination announce_destination(announce_identity, Type::Destination::OUT, Type::Destination::SINGLE, "unknown", "unknown");
 							//announce_destination.hash(packet.destination_hash());
@@ -1962,14 +1962,14 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						}
 
 						// CBA Culling before adding to esnure table does not exceed maxsize
-						extreme("Caching packet " + packet.get_hash().toHex());
+						TRACE("Caching packet " + packet.get_hash().toHex());
 						if (RNS::Transport::cache_packet(packet, true)) {
 							packet.cached(true);
 						}
-						//extreme("Adding packet " + packet.get_hash().toHex() + " to packet table");
+						//TRACE("Adding packet " + packet.get_hash().toHex() + " to packet table");
 						//PacketEntry packet_entry(packet);
 						//_packet_table.insert({packet.get_hash(), packet_entry});
-						extreme("Adding destination " + packet.destination_hash().toHex() + " to path table");
+						TRACE("Adding destination " + packet.destination_hash().toHex() + " to path table");
 						DestinationEntry destination_table_entry(
 							now,
 							received_from,
@@ -1987,9 +1987,9 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							cull_path_table();
 						}
 
-						debug("Destination " + packet.destination_hash().toHex() + " is now " + std::to_string(announce_hops) + " hops away via " + received_from.toHex() + " on " + packet.receiving_interface().toString());
-						//extreme("Transport::inbound: Destination " + packet.destination_hash().toHex() + " has data: " + packet.data().toHex());
-						//extreme("Transport::inbound: Destination " + packet.destination_hash().toHex() + " has text: " + packet.data().toString());
+						DEBUG("Destination " + packet.destination_hash().toHex() + " is now " + std::to_string(announce_hops) + " hops away via " + received_from.toHex() + " on " + packet.receiving_interface().toString());
+						//TRACE("Transport::inbound: Destination " + packet.destination_hash().toHex() + " has data: " + packet.data().toHex());
+						//TRACE("Transport::inbound: Destination " + packet.destination_hash().toHex() + " has text: " + packet.data().toString());
 
 // TODO
 /*
@@ -2001,16 +2001,16 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							paths[packet.destination_hash] = destination_table_entry;
 							expires = OS::time() + Transport::DESTINATION_TIMEOUT;
 							tunnel_entry[3] = expires;
-							debug("Path to " + packet.destination_hash().toHex() + " associated with tunnel " + packet.receiving_interface().tunnel_id().toHex());
+							DEBUG("Path to " + packet.destination_hash().toHex() + " associated with tunnel " + packet.receiving_interface().tunnel_id().toHex());
 						}
 */
 
 						// Call externally registered callbacks from apps
 						// wanting to know when an announce arrives
 						if (packet.context() != Type::Packet::PATH_RESPONSE) {
-							extreme("Transport::inbound: Not path response, sending to announce handler...");
+							TRACE("Transport::inbound: Not path response, sending to announce handler...");
 							for (auto& handler : _announce_handlers) {
-								extreme("Transport::inbound: Checking filter of announce handler...");
+								TRACE("Transport::inbound: Checking filter of announce handler...");
 								try {
 									// Check that the announced destination matches
 									// the handlers aspect filter
@@ -2045,19 +2045,19 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					}
 				}
 				else {
-					extreme("Transport::inbound: Packet is announce for local destination, not processing");
+					TRACE("Transport::inbound: Packet is announce for local destination, not processing");
 				}
 			}
 			else {
-				extreme("Transport::inbound: Packet is announce for local destination, not processing");
+				TRACE("Transport::inbound: Packet is announce for local destination, not processing");
 			}
 		}
 
 		// Handling for link requests to local destinations
 		else if (packet.packet_type() == Type::Packet::LINKREQUEST) {
-			extreme("Transport::inbound: Packet is LINKREQUEST");
+			TRACE("Transport::inbound: Packet is LINKREQUEST");
 			if (!packet.transport_id() || packet.transport_id() == _identity.hash()) {
-				extreme("Transport::inbound: Checking if LINKREQUEST is for local destination");
+				TRACE("Transport::inbound: Checking if LINKREQUEST is for local destination");
 #if defined(DESTINATIONS_SET)
 				for (auto& destination : _destinations) {
 					if (destination.hash() == packet.destination_hash() && destination.type() == packet.destination_type()) {
@@ -2082,13 +2082,13 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		
 		// Handling for data packets to local destinations
 		else if (packet.packet_type() == Type::Packet::DATA) {
-			extreme("Transport::inbound: Packet is DATA");
+			TRACE("Transport::inbound: Packet is DATA");
 			if (packet.destination_type() == Type::Destination::LINK) {
 				// Data is destined for a link
-				extreme("Transport::inbound: Packet is DATA for a LINK");
+				TRACE("Transport::inbound: Packet is DATA for a LINK");
 				for (auto& link : _active_links) {
 					if (link.link_id() == packet.destination_hash()) {
-						extreme("Transport::inbound: Packet is DATA for an active LINK");
+						TRACE("Transport::inbound: Packet is DATA for an active LINK");
 						packet.link(link);
 						const_cast<Link&>(link).receive(packet);
 					}
@@ -2103,10 +2103,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				auto iter = _destinations.find(packet.destination_hash());
 				if (iter != _destinations.end()) {
 					// Data is for a local destination
-					debug("Packet destination " + packet.destination_hash().toHex() + " found, destination is local");
+					DEBUG("Packet destination " + packet.destination_hash().toHex() + " found, destination is local");
 					auto& destination = (*iter).second;
 					if (destination.type() == packet.destination_type()) {
-						extreme("Transport::inbound: Packet destination type " + std::to_string(packet.destination_type()) + " matched, processing");
+						TRACE("Transport::inbound: Packet destination type " + std::to_string(packet.destination_type()) + " matched, processing");
 #endif
 						packet.destination(destination);
 #if defined(DESTINATIONS_SET)
@@ -2132,20 +2132,20 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						}
 					}
 					else {
-						debug("Transport::inbound: Packet destination type " + std::to_string(packet.destination_type()) + " mismatch, ignoring");
+						DEBUG("Transport::inbound: Packet destination type " + std::to_string(packet.destination_type()) + " mismatch, ignoring");
 					}
 				}
 				else {
-					debug("Transport::inbound: Local destination " + packet.destination_hash().toHex() + " not found, not handling packet locally");
+					DEBUG("Transport::inbound: Local destination " + packet.destination_hash().toHex() + " not found, not handling packet locally");
 				}
 			}
 		}
 
 		// Handling for proofs and link-request proofs
 		else if (packet.packet_type() == Type::Packet::PROOF) {
-			extreme("Transport::inbound: Packet is PROOF");
+			TRACE("Transport::inbound: Packet is PROOF");
 			if (packet.context() == Type::Packet::LRPROOF) {
-				extreme("Transport::inbound: Packet is LINK PROOF");
+				TRACE("Transport::inbound: Packet is LINK PROOF");
 				// This is a link request proof, check if it
 				// needs to be transported
 				if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
@@ -2161,7 +2161,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								Bytes signature = packet.data().left(Type::Identity::SIGLENGTH/8);
 
 								if (peer_identity.validate(signature, signed_data)) {
-									extreme("Link request proof validated for transport via " + link_entry._receiving_interface.toString());
+									TRACE("Link request proof validated for transport via " + link_entry._receiving_interface.toString());
 									//p new_raw = packet.raw[0:1]
 									Bytes new_raw = packet.raw().left(1);
 									//p new_raw += struct.pack("!B", packet.hops)
@@ -2172,7 +2172,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 									transmit(link_entry._receiving_interface, new_raw);
 								}
 								else {
-									debug("Invalid link request proof in transport for link " + packet.destination_hash().toHex() + ", dropping proof.");
+									DEBUG("Invalid link request proof in transport for link " + packet.destination_hash().toHex() + ", dropping proof.");
 								}
 							}
 						}
@@ -2181,7 +2181,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						}
 					}
 					else {
-						debug("Link request proof received on wrong interface, not transporting it.");
+						DEBUG("Link request proof received on wrong interface, not transporting it.");
 					}
 				}
 				else {
@@ -2196,7 +2196,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				}
 			}
 			else if (packet.context() == Type::Packet::RESOURCE_PRF) {
-				extreme("Transport::inbound: Packet is RESOURCE PROOF");
+				TRACE("Transport::inbound: Packet is RESOURCE PROOF");
 				for (auto& link : _active_links) {
 					if (link.link_id() == packet.destination_hash()) {
 						// TODO
@@ -2205,7 +2205,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				}
 			}
 			else {
-				extreme("Transport::inbound: Packet is regular PROOF");
+				TRACE("Transport::inbound: Packet is regular PROOF");
 				if (packet.destination_type() == Type::Destination::LINK) {
 					for (auto& link : _active_links) {
 						if (link.link_id() == packet.destination_hash()) {
@@ -2223,7 +2223,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				if ((Reticulum::transport_enabled() || from_local_client || proof_for_local_client) && _reverse_table.find(packet.destination_hash()) != _reverse_table.end()) {
 					ReverseEntry reverse_entry = (*_reverse_table.find(packet.destination_hash())).second;
 					if (packet.receiving_interface() == reverse_entry._outbound_interface) {
-						extreme("Proof received on correct interface, transporting it via " + reverse_entry._receiving_interface.toString());
+						TRACE("Proof received on correct interface, transporting it via " + reverse_entry._receiving_interface.toString());
 						//p new_raw = packet.raw[0:1]
 						Bytes new_raw = packet.raw().left(1);
 						//p new_raw += struct.pack("!B", packet.hops)
@@ -2233,11 +2233,11 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						transmit(reverse_entry._receiving_interface, new_raw);
 					}
 					else {
-						debug("Proof received on wrong interface, not transporting it.");
+						DEBUG("Proof received on wrong interface, not transporting it.");
 					}
 				}
 				else {
-					extreme("Proof is not candidate for transporting");
+					TRACE("Proof is not candidate for transporting");
 				}
 
 				std::list<PacketReceipt> cull_receipts;
@@ -2383,7 +2383,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 }
 
 /*static*/ void Transport::register_interface(Interface& interface) {
-	extreme("Transport: Registering interface " + interface.get_hash().toHex() + " " + interface.toString());
+	TRACE("Transport: Registering interface " + interface.get_hash().toHex() + " " + interface.toString());
 #if defined(INTERFACES_SET)
 	_interfaces.insert(interface);
 #elif defined(INTERFACES_LIST)
@@ -2395,12 +2395,12 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 }
 
 /*static*/ void Transport::deregister_interface(const Interface& interface) {
-	extreme("Transport: Deregistering interface " + interface.toString());
+	TRACE("Transport: Deregistering interface " + interface.toString());
 #if defined(INTERFACES_SET)
 	//for (auto iter = _interfaces.begin(); iter != _interfaces.end(); ++iter) {
 	//	if ((*iter).get() == interface) {
 	//		_interfaces.erase(iter);
-	//		extreme("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
+	//		TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 	//		break;
 	//	}
 	//}
@@ -2408,28 +2408,28 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	auto iter = _interfaces.find(const_cast<Interface&>(interface));
 	if (iter != _interfaces.end()) {
 		_interfaces.erase(iter);
-		extreme("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
+		TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 	}
 #elif defined(INTERFACES_LIST)
 	for (auto iter = _interfaces.begin(); iter != _interfaces.end(); ++iter) {
 		if ((*iter).get() == interface) {
 			_interfaces.erase(iter);
-			extreme("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
+			TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 			break;
 		}
 	}
 #elif defined(INTERFACES_MAP)
 	auto iter = _interfaces.find(interface.get_hash());
 	if (iter != _interfaces.end()) {
-		extreme("Transport::deregister_interface: Found and removed interface " + (*iter).second.toString());
+		TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).second.toString());
 		_interfaces.erase(iter);
 	}
 #endif
 }
 
 /*static*/ void Transport::register_destination(Destination& destination) {
-	//extreme("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	extreme("Transport: Registering destination " + destination.toString());
+	//TRACE("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	TRACE("Transport: Registering destination " + destination.toString());
 	destination.mtu(Type::Reticulum::MTU);
 	if (destination.direction() == Type::Destination::IN) {
 #if defined(DESTINATIONS_SET)
@@ -2453,13 +2453,13 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 		if (_owner && _owner.is_connected_to_shared_instance()) {
 			if (destination.type() == Type::Destination::SINGLE) {
-				extreme("Transport:register_destination: Announcing destination " + destination.toString());
+				TRACE("Transport:register_destination: Announcing destination " + destination.toString());
 				destination.announce({}, true);
 			}
 		}
 	}
 	else {
-		extreme("Transport:register_destination: Skipping registration (not direction IN) of destination " + destination.toString());
+		TRACE("Transport:register_destination: Skipping registration (not direction IN) of destination " + destination.toString());
 	}
 
 /*
@@ -2468,24 +2468,24 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 #elif defined(DESTINATIONS_MAP)
 	for (auto& [hash, destination] : _destinations) {
 #endif
-		extreme("Transport::register_destination: Listed destination " + destination.toString());
+		TRACE("Transport::register_destination: Listed destination " + destination.toString());
 	}
 */
-	//extreme("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	//TRACE("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 /*static*/ void Transport::deregister_destination(const Destination& destination) {
-	extreme("Transport: Deregistering destination " + destination.toString());
+	TRACE("Transport: Deregistering destination " + destination.toString());
 #if defined(DESTINATIONS_SET)
 	if (_destinations.find(destination) != _destinations.end()) {
 		_destinations.erase(destination);
-		extreme("Transport::deregister_destination: Found and removed destination " + destination.toString());
+		TRACE("Transport::deregister_destination: Found and removed destination " + destination.toString());
 	}
 #elif defined(DESTINATIONS_MAP)
 	auto iter = _destinations.find(destination.hash());
 	if (iter != _destinations.end()) {
 		_destinations.erase(iter);
-		extreme("Transport::deregister_destination: Found and removed destination " + (*iter).second.toString());
+		TRACE("Transport::deregister_destination: Found and removed destination " + (*iter).second.toString());
 	}
 #endif
 }
@@ -2493,7 +2493,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ void Transport::register_link(const Link& link) {
 // TODO
 /*
-	extreme("Transport: Registering link " + link.toString());
+	TRACE("Transport: Registering link " + link.toString());
 	if (link.initiator()) {
 		_pending_links.insert(link);
 	}
@@ -2506,7 +2506,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ void Transport::activate_link(Link& link) {
 // TODO
 /*
-	extreme("Transport: Activating link " + link.toString());
+	TRACE("Transport: Activating link " + link.toString());
 	if (_pending_links.find(link) != _pending_links.end()) {
 		if (link.status() != Type::Link::ACTIVE) {
 			throw std::runtime_error("Invalid link state for link activation: " + link.status_string());
@@ -2527,7 +2527,7 @@ Registers an announce handler.
 :param handler: Must be an object with an *aspect_filter* attribute and a *received_announce(destination_hash, announced_identity, app_data)* callable. See the :ref:`Announce Example<example-announce>` for more info.
 */
 /*static*/ void Transport::register_announce_handler(HAnnounceHandler handler) {
-	extreme("Transport: Registering announce handler " + handler->aspect_filter());
+	TRACE("Transport: Registering announce handler " + handler->aspect_filter());
 	_announce_handlers.insert(handler);
 }
 
@@ -2537,10 +2537,10 @@ Deregisters an announce handler.
 :param handler: The announce handler to be deregistered.
 */
 /*static*/ void Transport::deregister_announce_handler(HAnnounceHandler handler) {
-	extreme("Transport: Deregistering announce handler " + handler->aspect_filter());
+	TRACE("Transport: Deregistering announce handler " + handler->aspect_filter());
 	if (_announce_handlers.find(handler) != _announce_handlers.end()) {
 		_announce_handlers.erase(handler);
-		extreme("Transport::deregister_announce_handler: Found and removed handler" + handler->aspect_filter());
+		TRACE("Transport::deregister_announce_handler: Found and removed handler" + handler->aspect_filter());
 	}
 }
 
@@ -2548,21 +2548,21 @@ Deregisters an announce handler.
 #if defined(INTERFACES_SET)
 	for (const Interface& interface : _interfaces) {
 		if (interface.get_hash() == interface_hash) {
-			extreme("Transport::find_interface_from_hash: Found interface " + interface.toString());
+			TRACE("Transport::find_interface_from_hash: Found interface " + interface.toString());
 			return interface;
 		}
 	}
 #elif defined(INTERFACES_LIST)
 	for (Interface& interface : _interfaces) {
 		if (interface.get_hash() == interface_hash) {
-			extreme("Transport::find_interface_from_hash: Found interface " + interface.toString());
+			TRACE("Transport::find_interface_from_hash: Found interface " + interface.toString());
 			return interface;
 		}
 	}
 #elif defined(INTERFACES_MAP)
 	auto iter = _interfaces.find(interface_hash);
 	if (iter != _interfaces.end()) {
-		extreme("Transport::find_interface_from_hash: Found interface " + (*iter).second.toString());
+		TRACE("Transport::find_interface_from_hash: Found interface " + (*iter).second.toString());
 		return (*iter).second;
 	}
 #endif
@@ -2586,9 +2586,9 @@ Deregisters an announce handler.
 // increased yet! Take note of this when reading from
 // the packet cache.
 /*static*/ bool Transport::cache_packet(const Packet& packet, bool force_cache /*= false*/) {
-	extreme("Checking to see if packet " + packet.get_hash().toHex() + " should be cached");
+	TRACE("Checking to see if packet " + packet.get_hash().toHex() + " should be cached");
 	if (should_cache_packet(packet) || force_cache) {
-		extreme("Saving packet " + packet.get_hash().toHex() + " to storage");
+		TRACE("Saving packet " + packet.get_hash().toHex() + " to storage");
 		try {
 			std::string packet_cache_path = Reticulum::_cachepath + "/" + packet.get_hash().toHex();
 			return Persistence::serialize(packet, packet_cache_path.c_str());
@@ -2601,7 +2601,7 @@ Deregisters an announce handler.
 }
 
 /*static*/ Packet Transport::get_cached_packet(const Bytes& packet_hash) {
-	extreme("Loading packet " + packet_hash.toHex() + " from cache storage");
+	TRACE("Loading packet " + packet_hash.toHex() + " from cache storage");
 	try {
 /*p
 		packet_hash = RNS.hexrep(packet_hash, delimit=False)
@@ -2638,17 +2638,17 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::clear_cached_packet(const Bytes& packet_hash) {
-	extreme("Clearing packet " + packet_hash.toHex() + " from cache storage");
+	TRACE("Clearing packet " + packet_hash.toHex() + " from cache storage");
 	try {
 		std::string packet_cache_path = Reticulum::_cachepath + "/" + packet_hash.toHex();
 		double start_time = OS::time();
 		bool success = RNS::Utilities::OS::remove_file(packet_cache_path.c_str());
 		double diff_time = OS::time() - start_time;
 		if (diff_time < 1.0) {
-			debug("Remove cached packet in " + std::to_string((int)(diff_time*1000)) + " ms");
+			DEBUG("Remove cached packet in " + std::to_string((int)(diff_time*1000)) + " ms");
 		}
 		else {
-			debug("Remove cached packet in " + std::to_string(diff_time) + " s");
+			DEBUG("Remove cached packet in " + std::to_string(diff_time) + " s");
 		}
 	}
 	catch (std::exception& e) {
@@ -2816,13 +2816,13 @@ will announce it.
 
 		bool queued_announces = (on_interface.announce_queue().size() > 0);
 		if (queued_announces) {
-			extreme("Blocking recursive path request on " + on_interface.toString() + " due to queued announces");
+			TRACE("Blocking recursive path request on " + on_interface.toString() + " due to queued announces");
 			return;
 		}
 		else {
 			double now = OS::time();
 			if (now < on_interface.announce_allowed_at()) {
-				extreme("Blocking recursive path request on " + on_interface.toString() + " due to active announce cap");
+				TRACE("Blocking recursive path request on " + on_interface.toString() + " due to active announce cap");
 				return;
 			}
 			else {
@@ -2846,14 +2846,14 @@ will announce it.
 }
 
 /*static*/ void Transport::path_request_handler(const Bytes& data, const Packet& packet) {
-	extreme("Transport::path_request_handler");
+	TRACE("Transport::path_request_handler");
 	try {
 		// If there is at least bytes enough for a destination
 		// hash in the packet, we assume those bytes are the
 		// destination being requested.
 		if (data.size() >= Type::Identity::TRUNCATED_HASHLENGTH/8) {
 			Bytes destination_hash = data.left(Type::Identity::TRUNCATED_HASHLENGTH/8);
-			//extreme("Transport::path_request_handler: destination_hash: " + destination_hash.toHex());
+			//TRACE("Transport::path_request_handler: destination_hash: " + destination_hash.toHex());
 			// If there is also enough bytes for a transport
 			// instance ID and at least one tag byte, we
 			// assume the next bytes to be the trasport ID
@@ -2861,7 +2861,7 @@ will announce it.
 			Bytes requesting_transport_instance;
 			if (data.size() > (Type::Identity::TRUNCATED_HASHLENGTH/8)*2) {
 				requesting_transport_instance = data.mid(Type::Identity::TRUNCATED_HASHLENGTH/8, Type::Identity::TRUNCATED_HASHLENGTH/8);
-				//extreme("Transport::path_request_handler: requesting_transport_instance: " + requesting_transport_instance.toHex());
+				//TRACE("Transport::path_request_handler: requesting_transport_instance: " + requesting_transport_instance.toHex());
 			}
 
 			Bytes tag_bytes;
@@ -2873,13 +2873,13 @@ will announce it.
 			}
 
 			if (tag_bytes) {
-				//extreme("Transport::path_request_handler: tag_bytes: " + tag_bytes.toHex());
+				//TRACE("Transport::path_request_handler: tag_bytes: " + tag_bytes.toHex());
 				if (tag_bytes.size() > Type::Identity::TRUNCATED_HASHLENGTH/8) {
 					tag_bytes = tag_bytes.left(Type::Identity::TRUNCATED_HASHLENGTH/8);
 				}
 
 				Bytes unique_tag = destination_hash + tag_bytes;
-				//extreme("Transport::path_request_handler: unique_tag: " + unique_tag.toHex());
+				//TRACE("Transport::path_request_handler: unique_tag: " + unique_tag.toHex());
 
 				if (_discovery_pr_tags.find(unique_tag) == _discovery_pr_tags.end()) {
 					_discovery_pr_tags.insert(unique_tag);
@@ -2893,11 +2893,11 @@ will announce it.
 					);
 				}
 				else {
-					debug("Ignoring duplicate path request for " + destination_hash.toHex() + " with tag " + unique_tag.toHex());
+					DEBUG("Ignoring duplicate path request for " + destination_hash.toHex() + " with tag " + unique_tag.toHex());
 				}
 			}
 			else {
-				debug("Ignoring tagless path request for " + destination_hash.toHex());
+				DEBUG("Ignoring tagless path request for " + destination_hash.toHex());
 			}
 		}
 	}
@@ -2907,26 +2907,26 @@ will announce it.
 }
 
 /*static*/ void Transport::path_request(const Bytes& destination_hash, bool is_from_local_client, const Interface& attached_interface, const Bytes& requestor_transport_id /*= {}*/, const Bytes& tag /*= {}*/) {
-	extreme("Transport::path_request");
+	TRACE("Transport::path_request");
 	bool should_search_for_unknown = false;
 	std::string interface_str;
 
 	if (attached_interface) {
 		if (Reticulum::transport_enabled() && (attached_interface.mode() & Interface::DISCOVER_PATHS_FOR) > 0) {
-			extreme("Transport::path_request_handler: interface allows searching for unknown paths");
+			TRACE("Transport::path_request_handler: interface allows searching for unknown paths");
 			should_search_for_unknown = true;
 		}
 
 		interface_str = " on " + attached_interface.toString();
 	}
 
-	debug("Path request for destination " + destination_hash.toHex() + interface_str);
+	DEBUG("Path request for destination " + destination_hash.toHex() + interface_str);
 
 	bool destination_exists_on_local_client = false;
 	if (_local_client_interfaces.size() > 0) {
 		auto iter = _destination_table.find(destination_hash);
 		if (iter != _destination_table.end()) {
-			extreme("Transport::path_request_handler: entry found for destination " + destination_hash.toHex());
+			TRACE("Transport::path_request_handler: entry found for destination " + destination_hash.toHex());
 			DestinationEntry& destination_entry = (*iter).second;
 			if (is_local_client_interface(destination_entry.receiving_interface())) {
 				destination_exists_on_local_client = true;
@@ -2934,7 +2934,7 @@ will announce it.
 			}
 		}
 		else {
-			extreme("Transport::path_request_handler: entry not found for destination " + destination_hash.toHex());
+			TRACE("Transport::path_request_handler: entry not found for destination " + destination_hash.toHex());
 		}
 	}
 
@@ -2956,18 +2956,18 @@ will announce it.
 		auto& local_destination = (*iter).second;
 #endif
 		local_destination.announce({Bytes::NONE}, true, attached_interface, tag);
-		debug("Answering path request for destination " + destination_hash.toHex() + interface_str + ", destination is local to this system");
+		DEBUG("Answering path request for destination " + destination_hash.toHex() + interface_str + ", destination is local to this system");
 	}
     //p elif (RNS.Reticulum.transport_enabled() or is_from_local_client) and (destination_hash in Transport.destination_table):
 	else if ((Reticulum::transport_enabled() || is_from_local_client) && destination_iter != _destination_table.end()) {
-		extreme("Transport::path_request_handler: entry found for destination " + destination_hash.toHex());
+		TRACE("Transport::path_request_handler: entry found for destination " + destination_hash.toHex());
 		DestinationEntry& destination_entry = (*destination_iter).second;
 		const Packet& announce_packet = destination_entry.announce_packet();
 		const Bytes& next_hop = destination_entry._received_from;
 		const Interface& receiving_interface = destination_entry.receiving_interface();
 
 		if (attached_interface.mode() == Type::Interface::MODE_ROAMING && attached_interface == receiving_interface) {
-			debug("Not answering path request on roaming-mode interface, since next hop is on same roaming-mode interface");
+			DEBUG("Not answering path request on roaming-mode interface, since next hop is on same roaming-mode interface");
 		}
 		else {
 			if (requestor_transport_id && destination_entry._received_from == requestor_transport_id) {
@@ -2977,10 +2977,10 @@ will announce it.
 				// inefficient. There is probably a better way. Doing
 				// path invalidation here would decrease the network
 				// convergence time. Maybe just drop it?
-				debug("Not answering path request for destination " + destination_hash.toHex() + interface_str + ", since next hop is the requestor");
+				DEBUG("Not answering path request for destination " + destination_hash.toHex() + interface_str + ", since next hop is the requestor");
 			}
 			else {
-				debug("Answering path request for destination " + destination_hash.toHex() + interface_str + ", path is known");
+				DEBUG("Answering path request for destination " + destination_hash.toHex() + interface_str + ", path is known");
 
 				double now = OS::time();
 				uint8_t retries = Type::Transport::PATHFINDER_R;
@@ -3046,7 +3046,7 @@ will announce it.
 	else if (is_from_local_client) {
 		// Forward path request on all interfaces
 		// except the local client
-		debug("Forwarding path request from local client for destination " + destination_hash.toHex() + interface_str + " to all other interfaces");
+		DEBUG("Forwarding path request from local client for destination " + destination_hash.toHex() + interface_str + " to all other interfaces");
 		Bytes request_tag = Identity::get_random_hash();
 #if defined(INTERFACES_SET)
 		for (const Interface& interface : _interfaces) {
@@ -3061,14 +3061,14 @@ will announce it.
 		}
 	}
 	else if (should_search_for_unknown) {
-		extreme("Transport::path_request_handler: searching for unknown path to " + destination_hash.toHex());
+		TRACE("Transport::path_request_handler: searching for unknown path to " + destination_hash.toHex());
 		if (_discovery_path_requests.find(destination_hash) != _discovery_path_requests.end()) {
-			debug("There is already a waiting path request for destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
+			DEBUG("There is already a waiting path request for destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
 		}
 		else {
 			// Forward path request on all interfaces
 			// except the requestor interface
-			debug("Attempting to discover unknown path to destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
+			DEBUG("Attempting to discover unknown path to destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
 			//p pr_entry = { "destination_hash": destination_hash, "timeout": time.time()+Transport.PATH_REQUEST_TIMEOUT, "requesting_interface": attached_interface }
 			//p _discovery_path_requests[destination_hash] = pr_entry;
 			_discovery_path_requests.insert({destination_hash, {
@@ -3088,13 +3088,13 @@ will announce it.
 				//  path-finding over LoRa mesh
 				//if (interface != attached_interface) {
 				if (true) {
-					extreme("Transport::path_request: requesting path on interface " + interface.toString());
+					TRACE("Transport::path_request: requesting path on interface " + interface.toString());
 					// Use the previously extracted tag from this path request
 					// on the new path requests as well, to avoid potential loops
 					request_path(destination_hash, interface, tag, true);
 				}
 				else {
-					extreme("Transport::path_request: not requesting path on same interface " + interface.toString());
+					TRACE("Transport::path_request: not requesting path on same interface " + interface.toString());
 				}
 			}
 		}
@@ -3102,13 +3102,13 @@ will announce it.
 	else if (!is_from_local_client && _local_client_interfaces.size() > 0) {
 		// Forward the path request on all local
 		// client interfaces
-		debug("Forwarding path request for destination " + destination_hash.toHex() + interface_str + " to local clients");
+		DEBUG("Forwarding path request for destination " + destination_hash.toHex() + interface_str + " to local clients");
 		for (const Interface& interface : _local_client_interfaces) {
 			request_path(destination_hash, interface);
 		}
 	}
 	else {
-		debug("Ignoring path request for destination " + destination_hash.toHex() + interface_str + ", no path known");
+		DEBUG("Ignoring path request for destination " + destination_hash.toHex() + interface_str + ", no path known");
 	}
 }
 
@@ -3273,7 +3273,7 @@ will announce it.
 }
 
 /*static*/ bool Transport::read_path_table() {
-	debug("Transport::read_path_table");
+	DEBUG("Transport::read_path_table");
 	std::string destination_table_path = Reticulum::_storagepath + "/destination_table";
 	if (!_owner.is_connected_to_shared_instance() && OS::file_exists(destination_table_path.c_str())) {
 /*p
@@ -3313,31 +3313,31 @@ will announce it.
 */
 
 		try {
-extreme("Transport::start: buffer capacity " + std::to_string(Persistence::_buffer.capacity()) + " bytes");
+TRACE("Transport::start: buffer capacity " + std::to_string(Persistence::_buffer.capacity()) + " bytes");
 			if (RNS::Utilities::OS::read_file(destination_table_path.c_str(), Persistence::_buffer) > 0) {
-				extreme("Transport::start: read: " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				TRACE("Transport::start: read: " + std::to_string(Persistence::_buffer.size()) + " bytes");
 #ifndef NDEBUG
 				// CBA DEBUG Dump path table
-extreme("Transport::start: buffer addr: " + std::to_string((long)Persistence::_buffer.data()));
-extreme("Transport::start: buffer size " + std::to_string(Persistence::_buffer.size()) + " bytes");
-				//extreme("SERIALIZED: destination_table");
-				//extreme(Persistence::_buffer.toString());
+TRACE("Transport::start: buffer addr: " + std::to_string((long)Persistence::_buffer.data()));
+TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				//TRACE("SERIALIZED: destination_table");
+				//TRACE(Persistence::_buffer.toString());
 #endif
 #ifdef USE_MSGPACK
 				DeserializationError error = deserializeMsgPack(Persistence::_document, Persistence::_buffer.data());
 #else
 				DeserializationError error = deserializeJson(Persistence::_document, Persistence::_buffer.data());
 #endif
-				extreme("Transport::start: doc size: " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				TRACE("Transport::start: doc size: " + std::to_string(Persistence::_buffer.size()) + " bytes");
 				if (!error) {
 					_destination_table = Persistence::_document.as<std::map<Bytes, DestinationEntry>>();
-					extreme("Transport::start: successfully deserialized path table with " + std::to_string(_destination_table.size()) + " entries");
+					TRACE("Transport::start: successfully deserialized path table with " + std::to_string(_destination_table.size()) + " entries");
 					// Calculate crc for dirty-checking before write
 					_destination_table_crc = crypto_crc8(0, Persistence::_buffer.data(), Persistence::_buffer.size());
 					std::vector<Bytes> invalid_paths;
 					for (auto& [destination_hash, destination_entry] : _destination_table) {
 #ifndef NDEBUG
-						extreme("Transport::start: entry: " + destination_hash.toHex() + " = " + destination_entry.debugString());
+						TRACE("Transport::start: entry: " + destination_hash.toHex() + " = " + destination_entry.debugString());
 #endif
 						// CBA TODO If announce packet load fails then remove destination entry (it's useless without announce packet)
 						if (!destination_entry.announce_packet()) {
@@ -3352,11 +3352,11 @@ extreme("Transport::start: buffer size " + std::to_string(Persistence::_buffer.s
 					return true;
 				}
 				else {
-					extreme("Transport::start: failed to deserialize");
+					TRACE("Transport::start: failed to deserialize");
 				}
 			}
 			else {
-				extreme("Transport::start: destination table read failed");
+				TRACE("Transport::start: destination table read failed");
 			}
 			verbose("Loaded " + std::to_string(_destination_table.size()) + " path table entries from storage");
 
@@ -3369,7 +3369,7 @@ extreme("Transport::start: buffer size " + std::to_string(Persistence::_buffer.s
 }
 
 /*static*/ bool Transport::write_path_table() {
-	debug("Transport::write_path_table");
+	DEBUG("Transport::write_path_table");
 //return false;
 
 	if (Transport::_owner.is_connected_to_shared_instance()) {
@@ -3393,7 +3393,7 @@ extreme("Transport::start: buffer size " + std::to_string(Persistence::_buffer.s
 	try {
 		_saving_path_table = true;
 		double save_start = OS::time();
-		debug("Saving " + std::to_string(_destination_table.size()) + " path table entries to storage...");
+		DEBUG("Saving " + std::to_string(_destination_table.size()) + " path table entries to storage...");
 
 /*p
 		serialised_destinations = []
@@ -3440,19 +3440,19 @@ extreme("Transport::start: buffer size " + std::to_string(Persistence::_buffer.s
 
 		{
 			Persistence::_document.set(_destination_table);
-			extreme("Transport::write_path_table: doc size " + std::to_string(Persistence::_document.memoryUsage()) + " bytes");
+			TRACE("Transport::write_path_table: doc size " + std::to_string(Persistence::_document.memoryUsage()) + " bytes");
 
 			//size_t size = 8192;
 			size_t size = Persistence::_buffer.capacity();
-extreme("Transport::write_path_table: obtaining buffer size " + std::to_string(size) + " bytes");
+TRACE("Transport::write_path_table: obtaining buffer size " + std::to_string(size) + " bytes");
 			uint8_t* buffer = Persistence::_buffer.writable(size);
-extreme("Transport::write_path_table: buffer addr: " + std::to_string((long)buffer));
+TRACE("Transport::write_path_table: buffer addr: " + std::to_string((long)buffer));
 #ifdef USE_MSGPACK
 			size_t length = serializeMsgPack(Persistence::_document, buffer, size);
 #else
 			size_t length = serializeJson(Persistence::_document, buffer, size);
 #endif
-			extreme("Transport::write_path_table: serialized " + std::to_string(length) + " bytes");
+			TRACE("Transport::write_path_table: serialized " + std::to_string(length) + " bytes");
 			if (length < size) {
 				Persistence::_buffer.resize(length);
 			}
@@ -3460,46 +3460,46 @@ extreme("Transport::write_path_table: buffer addr: " + std::to_string((long)buff
 		if (Persistence::_buffer.size() > 0) {
 #ifndef NDEBUG
 			// CBA DEBUG Dump path table
-extreme("Transport::write_path_table: buffer addr: " + std::to_string((long)Persistence::_buffer.data()));
-extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence::_buffer.size()) + " bytes");
-			//extreme("SERIALIZED: destination_table");
-			//extreme(Persistence::_buffer.toString());
+TRACE("Transport::write_path_table: buffer addr: " + std::to_string((long)Persistence::_buffer.data()));
+TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::_buffer.size()) + " bytes");
+			//TRACE("SERIALIZED: destination_table");
+			//TRACE(Persistence::_buffer.toString());
 #endif
 			// Check crc to see if data has changed before writing
 			uint8_t crc = crypto_crc8(0, Persistence::_buffer.data(), Persistence::_buffer.size());
 			if (_destination_table_crc > 0 && crc == _destination_table_crc) {
-				extreme("Transport::write_path_table: no change detected, skipping write");
+				TRACE("Transport::write_path_table: no change detected, skipping write");
 			}
 			else if (RNS::Utilities::OS::write_file(destination_table_path.c_str(), Persistence::_buffer) == Persistence::_buffer.size()) {
-				extreme("Transport::write_path_table: wrote " + std::to_string(_destination_table.size()) + " entries, " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				TRACE("Transport::write_path_table: wrote " + std::to_string(_destination_table.size()) + " entries, " + std::to_string(Persistence::_buffer.size()) + " bytes");
 				_destination_table_crc = crc;
 				success = true;
 
 #ifndef NDEBUG
 				// CBA DEBUG Dump path table
-				//extreme("FILE: destination_table");
+				//TRACE("FILE: destination_table");
 				//if (OS::read_file("/destination_table", Persistence::_buffer) > 0) {
-				//	extreme(Persistence::_buffer.toString());
+				//	TRACE(Persistence::_buffer.toString());
 				//}
 #endif
 			}
 			else {
-				extreme("Transport::write_path_table: write failed");
+				TRACE("Transport::write_path_table: write failed");
 			}
 		}
 		else {
-			extreme("Transport::write_path_table: failed to serialize");
+			TRACE("Transport::write_path_table: failed to serialize");
 		}
 
 		if (success) {
 			double save_time = OS::time() - save_start;
 			if (save_time < 1.0) {
-				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time * 1000, 1)) + " ms");
-				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string((int)(save_time*1000)) + " ms");
+				//DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time * 1000, 1)) + " ms");
+				DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string((int)(save_time*1000)) + " ms");
 			}
 			else {
-				//debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time, 1)) + " s");
-				debug("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time) + " s");
+				//DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time, 1)) + " s");
+				DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time) + " s");
 			}
 		}
 	}
@@ -3513,7 +3513,7 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 }
 
 /*static*/ void Transport::read_tunnel_table() {
-	debug("Transport::read_tunnel_table");
+	DEBUG("Transport::read_tunnel_table");
 // TODO
 /*
 		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
@@ -3647,18 +3647,18 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 }
 
 /*static*/ void Transport::persist_data() {
-	extreme("Transport::persist_data()");
+	TRACE("Transport::persist_data()");
 	write_packet_hashlist();
 	write_path_table();
 	write_tunnel_table();
 }
 
 /*static*/ void Transport::clean_caches() {
-	extreme("Transport::clean_caches()");
+	TRACE("Transport::clean_caches()");
 	// CBA Remove cached packets no longer in path list
     std::list<std::string> files = OS::list_directory(Reticulum::_cachepath.c_str());
     for (auto& file : files) {
-		extreme("Transport::clean_caches: Checking for use of cached packet " + file);
+		TRACE("Transport::clean_caches: Checking for use of cached packet " + file);
 		bool found = false;
 		for (auto& [destination_hash, destination_entry] : _destination_table) {
 			if (file.compare(destination_entry._announce_packet.toHex()) == 0) {
@@ -3667,7 +3667,7 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 			}
 		}
 		if (!found) {
-			extreme("Transport::clean_caches: Removing cached packet " + file);
+			TRACE("Transport::clean_caches: Removing cached packet " + file);
 			std::string packet_cache_path = Reticulum::_cachepath + "/" + file;
 			OS::remove_file(packet_cache_path.c_str());
 		}
@@ -3691,39 +3691,39 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 	// _discovery_pr_tags
 	// _control_destinations
 	// _control_hashes
-	extreme("preqs: " + std::to_string(_path_requests.size()) + " dpreqs: " + std::to_string(_discovery_path_requests.size()) + " ppreqs: " + std::to_string(_pending_local_path_requests.size()) + " dprt: " + std::to_string(_discovery_pr_tags.size()) + " cdsts: " + std::to_string(_control_destinations.size()) + " chshs: " + std::to_string(_control_hashes.size()));
+	TRACE("preqs: " + std::to_string(_path_requests.size()) + " dpreqs: " + std::to_string(_discovery_path_requests.size()) + " ppreqs: " + std::to_string(_pending_local_path_requests.size()) + " dprt: " + std::to_string(_discovery_pr_tags.size()) + " cdsts: " + std::to_string(_control_destinations.size()) + " chshs: " + std::to_string(_control_hashes.size()));
 	// _packet_hashlist
 	// _receipts
 	// _link_table
 	// _pending_links
 	// _active_links
 	// _tunnels
-	extreme("phl: " + std::to_string(_packet_hashlist.size()) + " rcp: " + std::to_string(_receipts.size()) + " lt: " + std::to_string(_link_table.size()) + " pl: " + std::to_string(_pending_links.size()) + " al: " + std::to_string(_active_links.size()) + " tun: " + std::to_string(_tunnels.size()));
-	extreme("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + "\r\n");
+	TRACE("phl: " + std::to_string(_packet_hashlist.size()) + " rcp: " + std::to_string(_receipts.size()) + " lt: " + std::to_string(_link_table.size()) + " pl: " + std::to_string(_pending_links.size()) + " al: " + std::to_string(_active_links.size()) + " tun: " + std::to_string(_tunnels.size()));
+	TRACE("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + "\r\n");
 #endif
 
 }
 
 /*static*/ void Transport::exit_handler() {
-	extreme("Transport::exit_handler()");
+	TRACE("Transport::exit_handler()");
 	if (!_owner.is_connected_to_shared_instance()) {
 		persist_data();
 	}
 }
 
 /*static*/ Destination Transport::find_destination_from_hash(const Bytes& destination_hash) {
-	extreme("Transport::find_destination_from_hash: Searching for destination " + destination_hash.toHex());
+	TRACE("Transport::find_destination_from_hash: Searching for destination " + destination_hash.toHex());
 #if defined(DESTINATIONS_SET)
 	for (const Destination& destination : _destinations) {
 		if (destination.get_hash() == destination_hash) {
-			extreme("Transport::find_destination_from_hash: Found destination " + destination.toString());
+			TRACE("Transport::find_destination_from_hash: Found destination " + destination.toString());
 			return destination;
 		}
 	}
 #elif defined(DESTINATIONS_MAP)
 	auto iter = _destinations.find(destination_hash);
 	if (iter != _destinations.end()) {
-		extreme("Transport::find_destination_from_hash: Found destination " + (*iter).second.toString());
+		TRACE("Transport::find_destination_from_hash: Found destination " + (*iter).second.toString());
 		return (*iter).second;
 	}
 #endif
@@ -3746,7 +3746,7 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 		MapToValues(_destination_table, sorted_values);
 		for (auto& destination_entry : sorted_values) {
 			Packet announce_packet = destination_entry.announce_packet();
-			extreme("Transport::cull_path_table: Removing destination " + announce_packet.destination_hash().toHex() + " from path table");
+			TRACE("Transport::cull_path_table: Removing destination " + announce_packet.destination_hash().toHex() + " from path table");
 			// Remove destination from path table
 			if (_destination_table.erase(announce_packet.destination_hash()) < 1) {
 				warning("Failed to remove destination " + announce_packet.destination_hash().toHex() + " from path table");
@@ -3765,7 +3765,7 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 				break;
 			}
 		}
-		debug("Removed " + std::to_string(count) + " path(s) from path table");
+		DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
 */
 		uint16_t count = 0;
 		std::vector<std::pair<Bytes,DestinationEntry>> sorted_pairs;
@@ -3779,7 +3779,7 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 		});
 		// Iterate vector of sorted values
 		for (auto& [destination_hash, destination_entry] : sorted_pairs) {
-			extreme("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from path table");
+			TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from path table");
 			// Remove destination from path table
 			if (_destination_table.erase(destination_hash) < 1) {
 				warning("Failed to remove destination " + destination_hash.toHex() + " from path table");
@@ -3798,6 +3798,6 @@ extreme("Transport::write_path_table: buffer size " + std::to_string(Persistence
 				break;
 			}
 		}
-		debug("Removed " + std::to_string(count) + " path(s) from path table");
+		DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
 	}
 }

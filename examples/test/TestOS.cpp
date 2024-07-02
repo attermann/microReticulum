@@ -22,12 +22,12 @@ void testTime()
     double diff_time;
 
     diff_time = (double)(end_ltime - start_ltime) / 1000.0;
-	RNS::extreme(std::string("ltime diff: ") + std::to_string(diff_time));
+	TRACE(std::string("ltime diff: ") + std::to_string(diff_time));
     assert(diff_time > sleep_time * 0.99);
     assert(diff_time < sleep_time * 1.01);
 
     diff_time = end_dtime - start_dtime;
-	RNS::extreme(std::string("dtime diff: ") + std::to_string(diff_time));
+	TRACE(std::string("dtime diff: ") + std::to_string(diff_time));
     assert(diff_time > sleep_time * 0.99);
     assert(diff_time < sleep_time * 1.01);
 

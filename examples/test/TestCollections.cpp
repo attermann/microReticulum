@@ -29,14 +29,14 @@ void testBytesMap()
 	assert(preit != map.end());
 	assert((*preit).second.compare("hello") == 0);
 	if (preit != map.end()) {
-		RNS::extreme(std::string("found prebuf: ") + (*preit).second);
+		TRACE(std::string("found prebuf: ") + (*preit).second);
 	}
 
 	auto postit = map.find(postbuf);
 	assert(postit != map.end());
 	assert((*postit).second.compare("world") == 0);
 	if (postit != map.end()) {
-		RNS::extreme(std::string("found postbuf: ") + (*postit).second);
+		TRACE(std::string("found postbuf: ") + (*postit).second);
 	}
 
 	const uint8_t newstr[] = "World";
@@ -47,7 +47,7 @@ void testBytesMap()
 	assert(newit != map.end());
 	assert((*newit).second.compare("world") == 0);
 	if (newit != map.end()) {
-		RNS::extreme(std::string("found newbuf: ") + (*newit).second);
+		TRACE(std::string("found newbuf: ") + (*newit).second);
 	}
 
 	std::string str = map["World"];
@@ -59,9 +59,9 @@ class Entry {
 	public:
 	// CBA for some reason default constructor is required for map index reference/asign to work
 	//  ("error: no matching constructor for initialization of 'Entry'" results otherwise)
-    Entry() { RNS::extreme("Entry: default constructor"); }
-    Entry(const Entry& entry) : _hash(entry._hash) { RNS::extreme("Entry: copy constructor"); }
-    Entry(const char* hash) : _hash(hash) { RNS::extreme("Entry: hash constructor"); }
+    Entry() { TRACE("Entry: default constructor"); }
+    Entry(const Entry& entry) : _hash(entry._hash) { TRACE("Entry: copy constructor"); }
+    Entry(const char* hash) : _hash(hash) { TRACE("Entry: hash constructor"); }
     RNS::Bytes _hash;
 };
 
@@ -86,7 +86,7 @@ void testOldMap() {
 		}
 	}
 	for (auto& pair : entries) {
-		RNS::extreme("entries: " + pair.second._hash.toString());
+		TRACE("entries: " + pair.second._hash.toString());
 	}
 	assert(entries.size() == 2);
 	assert(other_entries.size() == 2);
@@ -114,7 +114,7 @@ void testNewMap() {
 		}
 	}
 	for (auto& [hash, entry] : entries) {
-		RNS::extreme("entries: " + entry._hash.toString());
+		TRACE("entries: " + entry._hash.toString());
 	}
 	assert(entries.size() == 2);
 	assert(other_entries.size() == 2);

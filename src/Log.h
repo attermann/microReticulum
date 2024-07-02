@@ -7,13 +7,14 @@
 #include <string>
 
 #ifndef NDEBUG
-#define DEBUG(msg) (RNS::debug(msg))
-#define TRACE(msg) (RNS::extreme(msg))
-#define MEM(msg) (RNS::mem(msg))
+	#define DEBUG(msg) (RNS::debug(msg))
+	#define TRACE(msg) (RNS::extreme(msg))
+	//#define MEM(msg) (RNS::mem(msg))
+	#define MEM(ignore) ((void)0)
 #else
-#define DEBUG(ignore) ((void)0)
-#define TRACE(ignore) ((void)0)
-#define MEM(ignore) ((void)0)
+	#define DEBUG(ignore) ((void)0)
+	#define TRACE(ignore) ((void)0)
+	#define MEM(ignore) ((void)0)
 #endif
 
 namespace RNS {

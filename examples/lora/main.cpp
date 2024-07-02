@@ -71,7 +71,7 @@ void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	RNS::info("onPacket: data: " + data.toHex());
 	RNS::info("onPacket: text: \"" + data.toString() + "\"");
-	//RNS::extreme("onPacket: " + packet.debugString());
+	//TRACE("onPacket: " + packet.debugString());
 	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
@@ -80,7 +80,7 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	RNS::info("onPingPacket: data: " + data.toHex());
 	RNS::info("onPingPacket: text: \"" + data.toString() + "\"");
-	//RNS::extreme("onPingPacket: " + packet.debugString());
+	//TRACE("onPingPacket: " + packet.debugString());
 	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
@@ -191,14 +191,14 @@ void reticulum_setup() {
 		RNS::head("Sending send packet...", RNS::LOG_EXTREME);
 		send_packet.pack();
 #ifndef NDEBUG
-		RNS::extreme("Test send_packet: " + send_packet.debugString());
+		TRACE("Test send_packet: " + send_packet.debugString());
 #endif
 
 		RNS::head("Creating recv packet...", RNS::LOG_EXTREME);
 		RNS::Packet recv_packet({RNS::Type::NONE}, send_packet.raw());
 		recv_packet.unpack();
 #ifndef NDEBUG
-		RNS::extreme("Test recv_packet: " + recv_packet.debugString());
+		TRACE("Test recv_packet: " + recv_packet.debugString());
 #endif
 
 		RNS::head("Spoofing recv packet to destination...", RNS::LOG_EXTREME);
@@ -257,7 +257,7 @@ void setup() {
 		RNS::error("SPIFFS filesystem mount failed");
 	}
 	else {
-		RNS::debug("SPIFFS filesystem is ready");
+		DEBUG("SPIFFS filesystem is ready");
 	}
 #endif
 

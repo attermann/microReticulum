@@ -55,10 +55,10 @@ namespace RNS {
 
 	public:
 		Destination(Type::NoneConstructor none) {
-			mem("Destination NONE object created, this: " + std::to_string((uintptr_t)this));
+			MEM("Destination NONE object created, this: " + std::to_string((uintptr_t)this));
 		}
 		Destination(const Destination& destination) : _object(destination._object) {
-			mem("Destination object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Destination object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Destination(
 			const Identity& identity,
@@ -77,7 +77,7 @@ namespace RNS {
 
 		inline Destination& operator = (const Destination& destination) {
 			_object = destination._object;
-			mem("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -179,8 +179,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object(const Identity& identity) : _identity(identity) { mem("Destination::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { mem("Destination::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object(const Identity& identity) : _identity(identity) { MEM("Destination::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { MEM("Destination::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			bool _accept_link_requests = true;
 			Callbacks _callbacks;
