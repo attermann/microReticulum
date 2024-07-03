@@ -377,7 +377,7 @@ bool Packet::unpack() {
 		update_hash();
 	}
 	catch (std::exception& e) {
-		error(std::string("Received malformed packet, dropping it. The contained exception was: ") + e.what());
+		ERROR(std::string("Received malformed packet, dropping it. The contained exception was: ") + e.what());
 		return false;
 	}
 

@@ -39,8 +39,8 @@ pass any traffic before being instantiated.
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
-	INFO("Total memory: " + std::to_string(OS::heap_available()));
-	INFO("Total flash: " + std::to_string(OS::storage_available()));
+	INFO("Total memory: " + std::to_string(OS::heap_size()));
+	INFO("Total flash: " + std::to_string(OS::storage_size()));
 
 	// Initialize random number generator
 	TRACE("Initializing RNG...");

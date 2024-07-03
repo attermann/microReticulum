@@ -3714,7 +3714,16 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 
 /*static*/ void Transport::dump_stats() {
 
-#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+#if defined(ESP32)
+	TRACE("Psram size:      " + std::to_string(ESP.getPsramSize()));
+	TRACE("Psram free:      " + std::to_string(ESP.getFreePsram()));
+	TRACE("Psram min free:  " + std::to_string(ESP.getMinFreePsram()));
+	TRACE("Psram max alloc: " + std::to_string(ESP.getMaxAllocPsram()));
+	TRACE("Heap size:       " + std::to_string(ESP.getHeapSize()));
+	TRACE("Heap free:       " + std::to_string(ESP.getFreeHeap()));
+	TRACE("Heap min free:   " + std::to_string(ESP.getMinFreeHeap()));
+	TRACE("Heap max alloc:  " + std::to_string(ESP.getMaxAllocHeap()));
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
 	if (loglevel() == LOG_TRACE) {
 		dbgMemInfo();
 	}
