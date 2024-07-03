@@ -43,6 +43,7 @@ namespace RNS {
 	void setLogCallback(log_callback on_log = nullptr);
 
 	void doLog(const char* msg, LogLevel level);
+	void doLog(LogLevel level, const char* msg, ...);
 
 	inline void log(const char* msg, LogLevel level = LOG_NOTICE) { doLog(msg, level); }
 #ifdef ARDUINO

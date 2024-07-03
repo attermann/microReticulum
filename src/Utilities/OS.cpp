@@ -91,3 +91,38 @@ using namespace RNS::Utilities;
 	}
 	return filesystem.do_list_directory(directory_path);
 }
+
+/*static*/ size_t OS::storage_size() {
+	if (!filesystem) {
+		throw std::runtime_error("Filesystem has not been registered");
+	}
+	return filesystem.do_storage_size();
+}
+
+/*static*/ size_t OS::storage_available() {
+	if (!filesystem) {
+		throw std::runtime_error("Filesystem has not been registered");
+	}
+	return filesystem.do_storage_available();
+}
+
+
+/*static*/ size_t OS::memory_size() {
+	return 0;
+}
+
+/*static*/ size_t OS::memory_available() {
+	//const size_t block_size = 256;
+	const size_t block_size = 32;
+	// Limit avuialable memory check (in case run on something larger than an MCU)
+	const size_t blocks_max = 1024 * 2000 / block_size;
+	size_t block_count;
+	for(block_count = 1; block_count <= blocks_max; block_count++) {
+		void* ptr = malloc(block_count * block_size);
+		if (ptr == nullptr) {
+			break;
+		}
+		free(ptr);
+	}
+	return (block_count - 1) * block_size;
+}

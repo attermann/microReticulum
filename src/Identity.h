@@ -40,6 +40,8 @@ namespace RNS {
 	public:
 		static std::map<Bytes, IdentityEntry> _known_destinations;
 		static bool _saving_known_destinations;
+		// CBA
+		static uint16_t _known_destinations_maxsize;
 
 	public:
 		Identity(Type::NoneConstructor none) {
@@ -111,6 +113,9 @@ namespace RNS {
 		static Bytes recall_app_data(const Bytes& destination_hash);
 		static bool save_known_destinations();
 		static void load_known_destinations();
+		// CBA
+		static void cull_known_destinations();
+
 		/*
 		Get a SHA-256 hash of passed data.
 
@@ -120,6 +125,7 @@ namespace RNS {
 		static inline const Bytes full_hash(const Bytes& data) {
 			return Cryptography::sha256(data);
 		}
+
 		/*
 		Get a truncated SHA-256 hash of passed data.
 
@@ -130,6 +136,7 @@ namespace RNS {
 			//p return Identity.full_hash(data)[:(Identity.TRUNCATED_HASHLENGTH//8)]
 			return full_hash(data).left(Type::Identity::TRUNCATED_HASHLENGTH/8);
 		}
+
 		/*
 		Get a random SHA-256 hash.
 

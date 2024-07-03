@@ -82,14 +82,15 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ bool Transport::_saving_path_table			= false;
 // CBA MCU
 /*static*/ //uint16_t Transport::_hashlist_maxsize		= 1000000;
-/*static*/ uint16_t Transport::_hashlist_maxsize		= 10000;
+/*static*/ //uint16_t Transport::_hashlist_maxsize		= 100;
+/*static*/ uint16_t Transport::_hashlist_maxsize		= 20;
 // CBA MCU
 /*static*/ //uint16_t Transport::_max_pr_tags			= 32000;
-/*static*/ uint16_t Transport::_max_pr_tags				= 320;
+/*static*/ uint16_t Transport::_max_pr_tags				= 32;
 
 // CBA
-/*static*/ uint16_t Transport::_path_table_maxsize		= 10;
-/*static*/ uint16_t Transport::_path_table_maxpersist	= 10;
+/*static*/ uint16_t Transport::_path_table_maxsize		= 20;
+/*static*/ uint16_t Transport::_path_table_maxpersist	= 20;
 /*static*/ double Transport::_last_saved				= 0.0;
 /*static*/ float Transport::_save_interval				= 3600.0;
 /*static*/ uint8_t Transport::_destination_table_crc	= 0;
@@ -104,6 +105,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ uint32_t Transport::_packets_sent = 0;
 /*static*/ uint32_t Transport::_packets_received = 0;
 /*static*/ uint32_t Transport::_destinations_added = 0;
+/*static*/ size_t Transport::_last_memory = 0;
 
 /*static*/ void Transport::start(const Reticulum& reticulum_instance) {
 	info("Transport starting...");
@@ -128,8 +130,6 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		std::string transport_identity_path = Reticulum::_storagepath + "/transport_identity";
 		DEBUG("Checking for transport identity...");
 		try {
-// CBA TEST
-//OS::remove_file(transport_identity_path.c_str());
 			if (OS::file_exists(transport_identity_path.c_str())) {
 				_identity = Identity::from_file(transport_identity_path.c_str());
 			}
@@ -168,7 +168,9 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	// Create transport-specific destination for path request
 	Destination path_request_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "path.request");
 	path_request_destination.set_packet_callback(path_request_handler);
+	// CBA ACCUMULATES
 	_control_destinations.insert(path_request_destination);
+	// CBA ACCUMULATES
 	_control_hashes.insert(path_request_destination.hash());
 	DEBUG("Created transport-specific path request destination " + path_request_destination.hash().toHex());
 
@@ -177,7 +179,9 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	tunnel_synthesize_destination.set_packet_callback(tunnel_synthesize_handler);
 	// CBA BUG?
     //p Transport.control_destinations.append(Transport.tunnel_synthesize_handler)
+	// CBA ACCUMULATES
 	_control_destinations.insert(tunnel_synthesize_destination);
+	// CBA ACCUMULATES
 	_control_hashes.insert(tunnel_synthesize_destination.hash());
 	DEBUG("Created transport-specific tunnel synthesize destination " + tunnel_synthesize_destination.hash().toHex());
 
@@ -220,10 +224,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			Transport.synthesize_tunnel(interface)
 */
 
-#ifndef NDEBUG
+//#ifndef NDEBUG
 	// CBA DEBUG
 	dump_stats();
-#endif
+//#endif
 }
 
 /*static*/ void Transport::loop() {
@@ -234,6 +238,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 }
 
 /*static*/ void Transport::jobs() {
+	//TRACE("Transport::jobs()");
 
 	std::vector<Packet> outgoing;
 	std::set<Bytes> path_requests;
@@ -267,6 +272,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 									DEBUG("Trying to rediscover path for " + link.destination().hash().toHex() + " since an attempted link was never established");
 									//if (path_requests.find(link.destination().hash()) == path_requests.end()) {
 									if (path_requests.count(link.destination().hash()) == 0) {
+										// CBA ACCUMULATES
 										path_requests.insert(link.destination().hash());
 									}
 								}
@@ -390,6 +396,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								//_announce_table[destination_hash] = held_entry;
 								//_announce_table.insert_or_assign({destination_hash, held_entry});
 								_announce_table.erase(destination_hash);
+								// CBA ACCUMULATES
 								_announce_table.insert({destination_hash, held_entry});
 								DEBUG("Reinserting held announce into table");
 							}
@@ -414,10 +421,11 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				_discovery_pr_tags.erase(_discovery_pr_tags.begin(), iter);
 			}
 
-			// Cull the path table if it has reached its max size
-			cull_path_table();
-
 			if (OS::time() > (_tables_last_culled + _tables_cull_interval)) {
+
+				// CBA Disabled following since we're calling immediately after adding to path table now
+				// Cull the path table if it has reached its max size
+				//cull_path_table();
 
 				// Cull the reverse table according to timeout
 				std::vector<Bytes> stale_reverse_entries;
@@ -485,6 +493,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 							if (path_request_conditions) {
 								if (path_requests.count(link_entry._destination_hash) == 0) {
+									// CBA ACCUMULATES
 									path_requests.insert(link_entry._destination_hash);
 								}
 
@@ -607,9 +616,9 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 					TRACE("Removed " + std::to_string(count) + " tunnels");
 				}
 
-#ifndef NDEBUG
+//#ifndef NDEBUG
 				dump_stats();
-#endif
+//#endif
 
 				_tables_last_culled = OS::time();
 			}
@@ -996,6 +1005,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 #if defined(INTERFACES_SET)
 											const_cast<Interface&>(interface).add_announce(entry);
 #else
+											// CBA ACCUMULATES
 											interface.add_announce(entry);
 #endif
 
@@ -1039,6 +1049,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				if (should_transmit) {
 					TRACE("Transport::outbound: Packet transmission allowed");
 					if (!stored_hash) {
+						// CBA ACCUMULATES
 						_packet_hashlist.insert(packet.packet_hash());
 						stored_hash = true;
 					}
@@ -1081,6 +1092,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 			PacketReceipt receipt(packet);
 			packet.receipt(receipt);
+			// CBA ACCUMULATES
 			_receipts.push_back(receipt);
 		}
 		
@@ -1321,6 +1333,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	}
 	if (accept) {
 		TRACE("Transport::inbound: Packet accepted by filter");
+		// CBA ACCUMULATES
 		_packet_hashlist.insert(packet.packet_hash());
 		cache_packet(packet);
 		
@@ -1504,6 +1517,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								false,
 								proof_timeout
 							);
+							// CBA ACCUMULATES
 							_link_table.insert({packet.getTruncatedHash(), link_entry});
 						}
 						else {
@@ -1513,6 +1527,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 								outbound_interface,
 								OS::time()
 							);
+							// CBA ACCUMULATES
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
 						}
 						TRACE("Transport::outbound: Sending packet to next hop...");
@@ -1846,6 +1861,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 									block_rebroadcasts,
 									attached_interface
 								);
+								// CBA ACCUMULATES
 								_announce_table.insert({packet.destination_hash(), announce_entry});
 							}
 						}
@@ -1873,6 +1889,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 									block_rebroadcasts,
 									attached_interface
 								);
+								// CBA ACCUMULATES
 								_announce_table.insert({packet.destination_hash(), announce_entry});
 							}
 						}
@@ -1968,6 +1985,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 						}
 						//TRACE("Adding packet " + packet.get_hash().toHex() + " to packet table");
 						//PacketEntry packet_entry(packet);
+						// CBA ACCUMULATES
 						//_packet_table.insert({packet.get_hash(), packet_entry});
 						TRACE("Adding destination " + packet.destination_hash().toHex() + " to path table");
 						DestinationEntry destination_table_entry(
@@ -1982,6 +2000,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							//packet
 							packet.get_hash()
 						);
+						// CBA ACCUMULATES
 						if (_destination_table.insert({packet.destination_hash(), destination_table_entry}).second) {
 							++_destinations_added;
 							cull_path_table();
@@ -2440,6 +2459,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			}
 		}
 
+		// CBA ACCUMULATES
 		_destinations.insert(destination);
 #elif defined(DESTINATIONS_MAP)
 		auto iter = _destinations.find(destination.hash());
@@ -2448,6 +2468,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			throw std::runtime_error("Attempt to register an already registered destination.");
 		}
 
+		// CBA ACCUMULATES
 		_destinations.insert({destination.hash(), destination});
 #endif
 
@@ -2495,9 +2516,11 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*
 	TRACE("Transport: Registering link " + link.toString());
 	if (link.initiator()) {
+		// CBA ACCUMULATES
 		_pending_links.insert(link);
 	}
 	else {
+		// CBA ACCUMULATES
 		_active_links.insert(link);
 	}
 */
@@ -2512,6 +2535,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			throw std::runtime_error("Invalid link state for link activation: " + link.status_string());
 		}
 		_pending_links.erase(link);
+		// CBA ACCUMULATES
 		_active_links.insert(link);
 		link.status(Type::Link::ACTIVE);
 	}
@@ -2626,8 +2650,9 @@ Deregisters an announce handler.
 		std::string packet_cache_path = Reticulum::_cachepath + "/" + packet_hash.toHex();
 		//return Persistence::deserialize(packet_cache_path.c_str());
 		Packet packet({Type::NONE});
-		Persistence::deserialize(packet, packet_cache_path.c_str());
-		packet.update_hash();
+		if (Persistence::deserialize(packet, packet_cache_path.c_str())) {
+			packet.update_hash();
+		}
 		return packet;
 	}
 	catch (std::exception& e) {
@@ -2882,6 +2907,7 @@ will announce it.
 				//TRACE("Transport::path_request_handler: unique_tag: " + unique_tag.toHex());
 
 				if (_discovery_pr_tags.find(unique_tag) == _discovery_pr_tags.end()) {
+					// CBA ACCUMULATES
 					_discovery_pr_tags.insert(unique_tag);
 
 					path_request(
@@ -2930,6 +2956,7 @@ will announce it.
 			DestinationEntry& destination_entry = (*iter).second;
 			if (is_local_client_interface(destination_entry.receiving_interface())) {
 				destination_exists_on_local_client = true;
+				// CBA ACCUMULATES
 				_pending_local_path_requests.insert({destination_hash, attached_interface});
 			}
 		}
@@ -3008,10 +3035,12 @@ will announce it.
 				auto announce_iter = _announce_table.find(announce_packet.destination_hash());
 				if (announce_iter != _announce_table.end()) {
 					AnnounceEntry& held_entry = (*announce_iter).second;
+					// CBA ACCUMULATES
 					_held_announces.insert({announce_packet.destination_hash(), held_entry});
 				}
 
 /*
+				// CBA ACCUMULATES
 				_announce_table.insert({announce_packet.destination_hash(), {
 					now,
 					retransmit_timeout,
@@ -3039,6 +3068,7 @@ will announce it.
 					block_rebroadcasts,
 					attached_interface
 				);
+				// CBA ACCUMULATES
 				_announce_table.insert({announce_packet.destination_hash(), announce_entry});
 			}
 		}
@@ -3071,6 +3101,7 @@ will announce it.
 			DEBUG("Attempting to discover unknown path to destination " + destination_hash.toHex() + " on behalf of path request" + interface_str);
 			//p pr_entry = { "destination_hash": destination_hash, "timeout": time.time()+Transport.PATH_REQUEST_TIMEOUT, "requesting_interface": attached_interface }
 			//p _discovery_path_requests[destination_hash] = pr_entry;
+			// CBA ACCUMULATES
 			_discovery_path_requests.insert({destination_hash, {
 				destination_hash,
 				OS::time() + Type::Transport::PATH_REQUEST_TIMEOUT,
@@ -3339,10 +3370,16 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 #ifndef NDEBUG
 						TRACE("Transport::start: entry: " + destination_hash.toHex() + " = " + destination_entry.debugString());
 #endif
-						// CBA TODO If announce packet load fails then remove destination entry (it's useless without announce packet)
+						// CBA If announce packet load fails then remove destination entry (it's useless without announce packet)
 						if (!destination_entry.announce_packet()) {
 							// remove destination
-							RNS::warning("Transport::start: removing invalid path to " + destination_hash.toHex());
+							RNS::warning("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing announce packet");
+							invalid_paths.push_back(destination_hash);
+						}
+						// CBA If receiving interface is not found then remove destination entry (it's useless without interface)
+						if (!destination_entry.receiving_interface()) {
+							// remove destination
+							RNS::warning("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing receiving interface");
 							invalid_paths.push_back(destination_hash);
 						}
 					}
@@ -3358,7 +3395,7 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 			else {
 				TRACE("Transport::start: destination table read failed");
 			}
-			verbose("Loaded " + std::to_string(_destination_table.size()) + " path table entries from storage");
+			verbose("Loaded " + std::to_string(_destination_table.size()) + " valid path table entries from storage");
 
 		}
 		catch (std::exception& e) {
@@ -3656,7 +3693,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 /*static*/ void Transport::clean_caches() {
 	TRACE("Transport::clean_caches()");
 	// CBA Remove cached packets no longer in path list
-    std::list<std::string> files = OS::list_directory(Reticulum::_cachepath.c_str());
+	std::list<std::string> files = OS::list_directory(Reticulum::_cachepath.c_str());
     for (auto& file : files) {
 		TRACE("Transport::clean_caches: Checking for use of cached packet " + file);
 		bool found = false;
@@ -3676,7 +3713,13 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 
 /*static*/ void Transport::dump_stats() {
 
-#ifndef NDEBUG
+	size_t memory = OS::memory_available();
+	size_t flash = OS::storage_available();
+
+	if (_last_memory == 0) {
+		_last_memory = memory;
+	}
+
 	// memory
 	// storage
 	// _destinations
@@ -3684,23 +3727,34 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	head("mem: " + std::to_string(OS::memory_available()) + " flash: " + std::to_string(OS::storage_available()) + " paths: " + std::to_string(_destination_table.size()) + " dsts: " + std::to_string(_destinations.size()) + " revr: " + std::to_string(_reverse_table.size()) + " annc: " + std::to_string(_announce_table.size()) + " held: " + std::to_string(_held_announces.size()), LOG_EXTREME);
+	head("mem: " + std::to_string(memory) + " (" + std::to_string((int)memory - (int)_last_memory) + ") flash: " + std::to_string(flash) + " paths: " + std::to_string(_destination_table.size()) + " dsts: " + std::to_string(_destinations.size()) + " revr: " + std::to_string(_reverse_table.size()) + " annc: " + std::to_string(_announce_table.size()) + " held: " + std::to_string(_held_announces.size()), LOG_VERBOSE);
+
 	// _path_requests
 	// _discovery_path_requests
 	// _pending_local_path_requests
 	// _discovery_pr_tags
 	// _control_destinations
 	// _control_hashes
-	TRACE("preqs: " + std::to_string(_path_requests.size()) + " dpreqs: " + std::to_string(_discovery_path_requests.size()) + " ppreqs: " + std::to_string(_pending_local_path_requests.size()) + " dprt: " + std::to_string(_discovery_pr_tags.size()) + " cdsts: " + std::to_string(_control_destinations.size()) + " chshs: " + std::to_string(_control_hashes.size()));
+	verbose("preqs: " + std::to_string(_path_requests.size()) + " dpreqs: " + std::to_string(_discovery_path_requests.size()) + " ppreqs: " + std::to_string(_pending_local_path_requests.size()) + " dprt: " + std::to_string(_discovery_pr_tags.size()) + " cdsts: " + std::to_string(_control_destinations.size()) + " chshs: " + std::to_string(_control_hashes.size()));
+
 	// _packet_hashlist
 	// _receipts
 	// _link_table
 	// _pending_links
 	// _active_links
 	// _tunnels
-	TRACE("phl: " + std::to_string(_packet_hashlist.size()) + " rcp: " + std::to_string(_receipts.size()) + " lt: " + std::to_string(_link_table.size()) + " pl: " + std::to_string(_pending_links.size()) + " al: " + std::to_string(_active_links.size()) + " tun: " + std::to_string(_tunnels.size()));
-	TRACE("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + "\r\n");
-#endif
+	uint32_t destination_path_responses = 0;
+	for (auto& [destination_hash, destination] : _destinations) {
+		destination_path_responses += destination.path_responses().size();
+	}
+	uint32_t interface_announces = 0;
+	for (auto& [interface_hash, interface] : _interfaces) {
+		interface_announces += interface.announce_queue().size();
+	}
+	verbose("phl: " + std::to_string(_packet_hashlist.size()) + " rcp: " + std::to_string(_receipts.size()) + " lt: " + std::to_string(_link_table.size()) + " pl: " + std::to_string(_pending_links.size()) + " al: " + std::to_string(_active_links.size()) + " tun: " + std::to_string(_tunnels.size()));
+	verbose("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + " dpr: " + std::to_string(destination_path_responses) + " ikd: " + std::to_string(Identity::_known_destinations.size()) + " ia: " + std::to_string(interface_announces) + "\r\n");
+
+	_last_memory = memory;
 
 }
 
@@ -3732,6 +3786,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 }
 
 /*static*/ void Transport::cull_path_table() {
+	TRACE("Transport::cull_path_table()");
 	if (_destination_table.size() > _path_table_maxsize) {
 		// TODO prune by age, or better yet by last use
 /*

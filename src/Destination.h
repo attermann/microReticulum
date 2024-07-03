@@ -173,6 +173,7 @@ namespace RNS {
 		inline Type::Link::status status() const { assert(_object); return _object->_status; }
 		inline const Callbacks& callbacks() const { assert(_object); return _object->_callbacks; }
 		inline const Identity& identity() const { assert(_object); return _object->_identity; }
+		inline const std::map<Bytes, PathResponse>& path_responses() { assert(_object); return _object->_path_responses; }
 
 		inline std::string toString() const { if (!_object) return ""; return "{Destination:" + _object->_hash.toHex() + "}"; }
 

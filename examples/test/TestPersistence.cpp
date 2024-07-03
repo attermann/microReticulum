@@ -559,7 +559,7 @@ void testSerializeDestinationTable() {
 	RNS::Transport::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;
-	entry_one._receiving_interface = test_interface;
+	entry_one._receiving_interface = test_interface.get_hash();
 	entry_one._random_blobs = blobs;
 	RNS::Bytes one;
 	one.assignHex("1111111111111111");
@@ -568,7 +568,7 @@ void testSerializeDestinationTable() {
 	RNS::Transport::DestinationEntry entry_two;
 	entry_two._timestamp = 2.0;
 	entry_two._received_from = received;
-	entry_two._receiving_interface = test_interface;
+	entry_two._receiving_interface = test_interface.get_hash();
 	entry_two._random_blobs = blobs;
 	RNS::Bytes two;
 	two.assignHex("2222222222222222");
@@ -578,7 +578,7 @@ void testSerializeDestinationTable() {
 		RNS::Transport::DestinationEntry entry;
 		entry._timestamp = 1.0;
 		entry._received_from = received;
-		entry._receiving_interface = test_interface;
+		entry._receiving_interface = test_interface.get_hash();
 		entry._random_blobs = blobs;
 		RNS::Bytes hash;
 		hash.assign(std::to_string(1000000000000001 + n).c_str());

@@ -1,5 +1,6 @@
 //#include <unity.h>
 
+#include <Utilities/OS.h>
 #include "Bytes.h"
 #include "Log.h"
 
@@ -363,10 +364,20 @@ void testBytesResize() {
 
 void testBytes() {
 	RNS::head("Running testBytes...", RNS::LOG_EXTREME);
+
+	size_t pre_memory = RNS::Utilities::OS::memory_available();
+	TRACE("testBytes: pre-mem: " + std::to_string(pre_memory));
+
 	testBytesMain();
 	testCowBytes();
 	testBytesConversion();
 	testBytesResize();
+
+	size_t post_memory = RNS::Utilities::OS::memory_available();
+	size_t diff_memory = (int)pre_memory - (int)post_memory;
+	TRACE("testBytes: post-mem: " + std::to_string(post_memory));
+	TRACE("testBytes: diff-mem: " + std::to_string(diff_memory));
+	assert(diff_memory == 0);
 }
 
 /*

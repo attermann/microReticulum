@@ -7,3 +7,5 @@ void testCollections();
 void testReference();
 void testCrypto();
 void testPersistence();
+void testFilesystem();
+void testReticulum();

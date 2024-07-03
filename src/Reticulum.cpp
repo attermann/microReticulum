@@ -292,6 +292,9 @@ void Reticulum::clean_caches() {
 
 	Transport::clean_caches();
 
+	// CBA
+	Identity::cull_known_destinations();
+
 }
 
 void Reticulum::clear_caches() {

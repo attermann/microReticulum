@@ -95,6 +95,7 @@ namespace RNS {
 		void process_announce_queue();
 		inline void detach() {}
 
+		// CBA ACCUMULATES
 		inline void add_announce(AnnounceEntry& entry) { assert(_object); _object->_announce_queue.push_back(entry); }
 
 	protected:

@@ -450,6 +450,7 @@ namespace RNS {
 		static uint32_t _packets_sent;
 		static uint32_t _packets_received;
 		static uint32_t _destinations_added;
+		static size_t _last_memory;
 	};
 
 	template <typename M, typename S> 

@@ -76,53 +76,11 @@ namespace RNS { namespace Utilities {
 		static bool create_directory(const char* directory_path);
 		static bool remove_directory(const char* directory_path);
 		static std::list<std::string> list_directory(const char* directory_path);
+		static size_t storage_size();
+		static size_t storage_available();
 
-		static inline int storage_size() {
-			return -1;
-		}
-
-		static inline int storage_available() {
-			return -1;
-		}
-
-		static inline uint32_t memory_size() {
-		}
-
-/*
-		static inline uint32_t memory_available()
-		{
-			uint32_t  i;
-			uint32_t  len;
-			uint8_t*  ptr;
-
-			for(i=1;;i++) {
-				len = i * 512;
-				ptr = (uint8_t*)malloc(len);
-				if (ptr == nullptr) {
-					break;
-				}
-				free(ptr);
-			}
-
-			len -= 512; //(i-1)*512 is aviliable size
-
-			return len;
-		}
-*/
-
-		static inline size_t memory_available()
-		{
-			const size_t block_size = 256;
-			size_t block_count;
-			for(block_count = 1; ; block_count++) {
-				void* ptr = malloc(block_count * block_size);
-				if (ptr == nullptr) {
-					break;
-				}
-				free(ptr);
-			}
-			return (block_count - 1) * block_size;
-		}
+		static size_t memory_size();
+		static size_t memory_available();
 
     };
 

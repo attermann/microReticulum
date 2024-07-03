@@ -11,6 +11,7 @@
 #include "Cryptography/Fernet.h"
 #include "Cryptography/Random.h"
 
+#include <algorithm>
 #include <string.h>
 
 using namespace RNS;
@@ -20,6 +21,9 @@ using namespace RNS::Utilities;
 
 /*static*/ std::map<Bytes, Identity::IdentityEntry> Identity::_known_destinations;
 /*static*/ bool Identity::_saving_known_destinations = false;
+// CBA
+/*static*/ //uint16_t Identity::_known_destinations_maxsize = 100;
+/*static*/ uint16_t Identity::_known_destinations_maxsize = 20;
 
 Identity::Identity(bool create_keys /*= true*/) : _object(new Object()) {
 	if (create_keys) {
@@ -185,7 +189,8 @@ Can be used to load previously created and saved identities into Reticulum.
 		throw std::invalid_argument("Can't remember " + destination_hash.toHex() + ", the public key size of " + std::to_string(public_key.size()) + " is not valid.");
 	}
 	else {
-		//_known_destinations[destination_hash] = {OS::time(), packet_hash, public_key, app_data};
+		//p _known_destinations[destination_hash] = {OS::time(), packet_hash, public_key, app_data};
+		// CBA ACCUMULATES
 		_known_destinations.insert({destination_hash, {OS::time(), packet_hash, public_key, app_data}});
 	}
 }
@@ -283,6 +288,7 @@ Recall last heard app_data for a destination hash.
 			if (_known_destinations.find(destination_hash) == _known_destinations.end()) {
 				//_known_destinations[destination_hash] = storage_known_destinations[destination_hash];
 				//_known_destinations[destination_hash] = identity_entry;
+				// CBA ACCUMULATES
 				_known_destinations.insert({destination_hash, identity_entry});
 			}
 		}
@@ -338,6 +344,36 @@ Recall last heard app_data for a destination hash.
 		RNS.log("Destinations file does not exist, no known destinations loaded", RNS.LOG_VERBOSE)
 */
 
+}
+
+/*static*/ void Identity::cull_known_destinations() {
+	TRACE("Transport::cull_path_table()");
+	if (_known_destinations.size() > _known_destinations_maxsize) {
+		// prune by age
+		uint16_t count = 0;
+		std::vector<std::pair<Bytes, IdentityEntry>> sorted_pairs;
+		// Copy key/value pairs from map into vector
+		std::for_each(_known_destinations.begin(), _known_destinations.end(), [&](const std::pair<const Bytes, IdentityEntry>& ref) {
+			sorted_pairs.push_back(ref);
+		});
+		// Sort vector using specified comparator
+		std::sort(sorted_pairs.begin(), sorted_pairs.end(), [](const std::pair<Bytes, IdentityEntry> &left, const std::pair<Bytes, IdentityEntry> &right) {
+			return left.second._timestamp < right.second._timestamp;
+		});
+		// Iterate vector of sorted values
+		for (auto& [destination_hash, identity_entry] : sorted_pairs) {
+			TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from known destinations");
+			// Remove destination from known destinations
+			if (_known_destinations.erase(destination_hash) < 1) {
+				warning("Failed to remove destination " + destination_hash.toHex() + " from known destinations");
+			}
+			++count;
+			if (_known_destinations.size() <= _known_destinations_maxsize) {
+				break;
+			}
+		}
+		DEBUG("Removed " + std::to_string(count) + " path(s) from known destinations");
+	}
 }
 
 /*static*/ bool Identity::validate_announce(const Packet& packet) {

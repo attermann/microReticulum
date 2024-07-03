@@ -506,7 +506,9 @@ void Packet::update_hash() {
 const Bytes Packet::get_hash() const {
 	assert(_object);
 	Bytes hashable_part = get_hashable_part();
-	return Identity::full_hash(hashable_part);
+	// CBA MCU
+	//return Identity::full_hash(hashable_part);
+	return Identity::truncated_hash(hashable_part);
 }
 
 const Bytes Packet::getTruncatedHash() const {

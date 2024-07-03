@@ -107,3 +107,6 @@ void RNS::head(const char* msg, LogLevel level) {
 #endif
 	doLog(msg, level);
 }
+
+void RNS::doLog(LogLevel level, const char* msg, ...) {
+}

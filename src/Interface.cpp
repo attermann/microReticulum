@@ -9,12 +9,16 @@ using namespace RNS::Type::Interface;
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
 Interface::Interface() : _object(new Object(this)), _creator(true) {
-	_object->_hash = Identity::full_hash({toString()});
+	// CBA MCU
+	//_object->_hash = Identity::full_hash({toString()});
+	_object->_hash = Identity::truncated_hash({toString()});
 	MEM("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 Interface::Interface(const char* name) : _object(new Object(this, name)), _creator(true) {
-	_object->_hash = Identity::full_hash({toString()});
+	// CBA MCU
+	//_object->_hash = Identity::full_hash({toString()});
+	_object->_hash = Identity::truncated_hash({toString()});
 	MEM("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
@@ -37,7 +41,9 @@ Interface::Interface(const char* name) : _object(new Object(this, name)), _creat
 
 const Bytes Interface::get_hash() const {
 	assert(_object);
-	//return Identity::full_hash({toString()});
+	// CBA MCU
+	////return Identity::full_hash({toString()});
+	//return Identity::truncated_hash({toString()});
 	return _object->_hash;
 }
 

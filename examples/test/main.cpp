@@ -1,6 +1,6 @@
 //#define NDEBUG
 
-#include "TestFilesystem.h"
+#include "Filesystem.h"
 
 #include "Test.h"
 
@@ -22,20 +22,25 @@
 #include <map>
 #include <functional>
 
-TestFilesystem filesystem;
+Filesystem filesystem;
 
 void setup() {
 
 #ifdef ARDUINO
 	Serial.begin(115200);
-	Serial.print("Hello from T-Beam on PlatformIO!\n");
+	while (!Serial) {
+		if (millis() > 2000)
+			break;
+	}
+  	Serial.print("Hello from T-Beam on PlatformIO!\n");
 #endif
 
 	RNS::loglevel(RNS::LOG_EXTREME);
 	//RNS::loglevel(RNS::LOG_MEM);
 
 	if (filesystem) {
-		RNS::info("TestFilesystem exists");
+		RNS::info("Filesystem exists");
+		filesystem.init();
 	}
 	RNS::Utilities::OS::register_filesystem(filesystem);
 
@@ -54,6 +59,8 @@ void setup() {
 		//testCrypto();
 		//testPersistence();
 		testBytes();
+		//testFilesystem();
+		//testReticulum();
 
 		RNS::loglevel(loglevel);
 		TRACE("Finished running tests");

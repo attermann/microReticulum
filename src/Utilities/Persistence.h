@@ -384,7 +384,10 @@ namespace RNS { namespace Persistence {
 			if (!error) {
 				TRACE("Persistence::deserialize: successfully deserialized");
 				obj = _document.as<T>();
-				return true;
+				if (obj) {
+					return true;
+				}
+				TRACE("Persistence::deserialize: failed to compose object");
 			}
 			else {
 				TRACE("Persistence::deserialize: failed to deserialize");

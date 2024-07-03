@@ -283,6 +283,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 			announce_data << new_app_data;
 		}
 
+		// CBA ACCUMULATES
 		_object->_path_responses.insert({tag, {OS::time(), announce_data}});
 	}
 	//TRACE("Destination::announce: announce_data:" + announce_data.toHex());
