@@ -5,10 +5,10 @@
 
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
-#include <FS.h>
+//#include <FS.h>
 #include <SPIFFS.h>
 #elif BOARD_NRF52
-#include <Adafruit_LittleFS.h>
+//#include <Adafruit_LittleFS.h>
 #include <InternalFileSystem.h>
 using namespace Adafruit_LittleFS_Namespace;
 #endif
@@ -76,12 +76,12 @@ bool Filesystem::init() {
 	Serial.println(" MB");
 	// ensure filesystem is writable and format if not
 	RNS::Bytes test;
-	if (!OS::write_file("/test", test)) {
+	if (!write_file("/test", test)) {
 		RNS::info("SPIFFS filesystem is being formatted, please wait...");
 		SPIFFS.format();
 	}
 	else {
-		OS::remove_file("/test");
+		remove_file("/test");
 	}
 	DEBUG("SPIFFS filesystem is ready");
 #elif BOARD_NRF52
@@ -257,7 +257,7 @@ bool Filesystem::init() {
 	RNS::extreme("directory_exists: checking for existence of directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
-	File file = LittleFS.open(directory_path, FILE_READ);
+	File file = SPIFFS.open(directory_path, FILE_READ);
 	if (file) {
 		bool is_directory = file.isDirectory();
 		file.close();
@@ -316,7 +316,7 @@ bool Filesystem::init() {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	//if (!LittleFS.rmdir_r(directory_path)) {
-	if (!LittleFS.rmdir(directory_path)) {
+	if (!SPIFFS.rmdir(directory_path)) {
 		RNS::error("remove_directory: failed to remove directorty " + std::string(directory_path));
 		return false;
 	}
@@ -341,7 +341,7 @@ bool Filesystem::init() {
 	std::list<std::string> files;
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
-	File root = LittleFS.open(dir);
+	File root = SPIFFS.open(directory_path);
 #elif BOARD_NRF52
 	File root = InternalFS.open(directory_path);
 #endif
@@ -353,10 +353,6 @@ bool Filesystem::init() {
 	while (file) {
 		if (!file.isDirectory()) {
 			char* name = (char*)file.name();
-			// CBA Adafruit LittleFS appears to returning improperly terminated file name at max size
-			if (strlen(name) >= LFS_NAME_MAX) {
-				name[LFS_NAME_MAX] = 0;
-			}
 			files.push_back(name);
 		}
 		// CBA Following close required to avoid leaking memory
@@ -378,11 +374,11 @@ bool Filesystem::init() {
 #ifdef BOARD_ESP32
 
 /*virtual*/ size_t Filesystem::storage_size() {
-	return 0;
+	return SPIFFS.totalBytes();
 }
 
 /*virtual*/ size_t Filesystem::storage_available() {
-	return 0;
+	return (SPIFFS.totalBytes() - SPIFFS.usedBytes());
 }
 
 #elif BOARD_NRF52

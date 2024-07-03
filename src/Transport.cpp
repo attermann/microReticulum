@@ -106,6 +106,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ uint32_t Transport::_packets_received = 0;
 /*static*/ uint32_t Transport::_destinations_added = 0;
 /*static*/ size_t Transport::_last_memory = 0;
+/*static*/ size_t Transport::_last_flash = 0;
 
 /*static*/ void Transport::start(const Reticulum& reticulum_instance) {
 	info("Transport starting...");
@@ -3713,11 +3714,20 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 
 /*static*/ void Transport::dump_stats() {
 
-	size_t memory = OS::memory_available();
+#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+	if (loglevel() == LOG_EXTREME) {
+		dbgMemInfo();
+	}
+#endif
+
+	size_t memory = OS::heap_available();
 	size_t flash = OS::storage_available();
 
 	if (_last_memory == 0) {
 		_last_memory = memory;
+	}
+	if (_last_flash == 0) {
+		_last_flash = flash;
 	}
 
 	// memory
@@ -3727,7 +3737,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	head("mem: " + std::to_string(memory) + " (" + std::to_string((int)memory - (int)_last_memory) + ") flash: " + std::to_string(flash) + " paths: " + std::to_string(_destination_table.size()) + " dsts: " + std::to_string(_destinations.size()) + " revr: " + std::to_string(_reverse_table.size()) + " annc: " + std::to_string(_announce_table.size()) + " held: " + std::to_string(_held_announces.size()), LOG_VERBOSE);
+	head("mem: " + std::to_string(memory) + " (" + std::to_string((int)((double)memory / (double)OS::heap_size() * 100.0)) + "%) [" + std::to_string((int)memory - (int)_last_memory) + "] flash: " + std::to_string(flash) + " (" + std::to_string((int)((double)flash / (double)OS::storage_size() * 100.0)) + "%) [" + std::to_string((int)flash - (int)_last_flash) + "] paths: " + std::to_string(_destination_table.size()) + " dsts: " + std::to_string(_destinations.size()) + " revr: " + std::to_string(_reverse_table.size()) + " annc: " + std::to_string(_announce_table.size()) + " held: " + std::to_string(_held_announces.size()), LOG_VERBOSE);
 
 	// _path_requests
 	// _discovery_path_requests
@@ -3755,6 +3765,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	verbose("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + " dpr: " + std::to_string(destination_path_responses) + " ikd: " + std::to_string(Identity::_known_destinations.size()) + " ia: " + std::to_string(interface_announces) + "\r\n");
 
 	_last_memory = memory;
+	_last_flash = flash;
 
 }
 

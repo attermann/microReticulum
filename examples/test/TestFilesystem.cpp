@@ -10,7 +10,7 @@ using namespace RNS::Utilities;
 
 void testListDirectory() {
 
-	size_t pre_memory = OS::memory_available();
+	size_t pre_memory = OS::heap_available();
 	info("testListDirectory: pre-mem: " + std::to_string(pre_memory));
 
 	for (int i = 0; i < 1; i++) {
@@ -21,7 +21,7 @@ void testListDirectory() {
 		}
 	}
 
-	size_t post_memory = OS::memory_available();
+	size_t post_memory = OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
 	info("testListDirectory: post-mem: " + std::to_string(post_memory));
 	info("testListDirectory: diff-mem: " + std::to_string(diff_memory));

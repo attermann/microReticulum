@@ -365,7 +365,7 @@ void testBytesResize() {
 void testBytes() {
 	RNS::head("Running testBytes...", RNS::LOG_EXTREME);
 
-	size_t pre_memory = RNS::Utilities::OS::memory_available();
+	size_t pre_memory = RNS::Utilities::OS::heap_available();
 	TRACE("testBytes: pre-mem: " + std::to_string(pre_memory));
 
 	testBytesMain();
@@ -373,7 +373,7 @@ void testBytes() {
 	testBytesConversion();
 	testBytesResize();
 
-	size_t post_memory = RNS::Utilities::OS::memory_available();
+	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
 	TRACE("testBytes: post-mem: " + std::to_string(post_memory));
 	TRACE("testBytes: diff-mem: " + std::to_string(diff_memory));

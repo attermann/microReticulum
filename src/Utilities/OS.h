@@ -20,12 +20,12 @@ namespace RNS { namespace Utilities {
 	class OS {
 
 	private:
-		static Filesystem filesystem;
-		static uint64_t timeOffset;
+		static Filesystem _filesystem;
+		static uint64_t _time_offset;
 
 	public:
-		static inline uint64_t getTimeOffset() { return timeOffset; }
-		static inline void setTimeOffset(uint64_t offset) { timeOffset = offset; }
+		static inline uint64_t getTimeOffset() { return _time_offset; }
+		static inline void setTimeOffset(uint64_t offset) { _time_offset = offset; }
 
 #ifdef ARDUINO
         // return current time in milliseconds since startup
@@ -35,7 +35,7 @@ namespace RNS { namespace Utilities {
 			uint32_t new_low32 = millis();
 			if (new_low32 < low32) high32++;
 			low32 = new_low32;
-			return ((uint64_t)high32 << 32 | low32) + timeOffset;
+			return ((uint64_t)high32 << 32 | low32) + _time_offset;
 		}
 #else
         // return current time in milliseconds since 00:00:00, January 1, 1970 (Unix Epoch)
@@ -79,8 +79,8 @@ namespace RNS { namespace Utilities {
 		static size_t storage_size();
 		static size_t storage_available();
 
-		static size_t memory_size();
-		static size_t memory_available();
+		static size_t heap_size();
+		static size_t heap_available();
 
     };
 

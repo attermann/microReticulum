@@ -39,6 +39,9 @@ pass any traffic before being instantiated.
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
+	info("Total memory: " + std::to_string(OS::heap_available()));
+	info("Total flash: " + std::to_string(OS::storage_available()));
+
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
 	RNG.begin("Reticulum");
@@ -211,6 +214,21 @@ void Reticulum::loop() {
 void Reticulum::jobs() {
 
 	double now = OS::time();
+
+	// CBA Detect low-memory condition and reset
+	if (OS::heap_size() > 0) {
+		uint8_t remaining = (uint8_t)((double)OS::heap_available() / (double)OS::heap_size() * 100.0);
+		if (remaining <= 10) {
+			head("DETECTED LOW-MEMORY CONDITION (" + std::to_string(remaining) + "%), RESETTING!!!", LOG_WARNING);
+			persist_data();
+#if defined(ESP32)
+			ESP.restart();
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+			//dbgDumpMemory();
+			NVIC_SystemReset();
+#endif
+		}
+	}
 
 	if (now > _object->_last_cache_clean + CLEAN_INTERVAL) {
 		clean_caches();
