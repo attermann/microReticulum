@@ -13,7 +13,7 @@ void testDestinationTable() {
 }
 
 void testReticulum() {
-	RNS::head("Running testReticulum...", RNS::LOG_EXTREME);
+	HEAD("Running testReticulum...", RNS::LOG_TRACE);
 
     reticulum = RNS::Reticulum();
 	reticulum.transport_enabled(true);

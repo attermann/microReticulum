@@ -6,9 +6,17 @@
 
 #include <string>
 
+#define LOG(msg, level) (RNS::log(msg, level))
+#define HEAD(msg, level) (RNS::head(msg, level))
+#define CRITICAL(msg) (RNS::critical(msg))
+#define ERROR(msg) (RNS::error(msg))
+#define WARNING(msg) (RNS::warning(msg))
+#define NOTICE(msg) (RNS::notice(msg))
+#define INFO(msg) (RNS::info(msg))
+#define VERBOSE(msg) (RNS::verbose(msg))
 #ifndef NDEBUG
 	#define DEBUG(msg) (RNS::debug(msg))
-	#define TRACE(msg) (RNS::extreme(msg))
+	#define TRACE(msg) (RNS::trace(msg))
 	//#define MEM(msg) (RNS::mem(msg))
 	#define MEM(ignore) ((void)0)
 #else
@@ -28,7 +36,7 @@ namespace RNS {
 		LOG_INFO     = 5,
 		LOG_VERBOSE  = 6,
 		LOG_DEBUG    = 7,
-		LOG_EXTREME  = 8,
+		LOG_TRACE    = 8,
 		LOG_MEM      = 9
 	};
 
@@ -52,6 +60,9 @@ namespace RNS {
 #endif
 	inline void log(const std::string& msg, LogLevel level = LOG_NOTICE) { doLog(msg.c_str(), level); }
 
+	void head(const char* msg, LogLevel level = LOG_NOTICE);
+	inline void head(const std::string& msg, LogLevel level = LOG_NOTICE) { head(msg.c_str(), level); }
+
 	inline void critical(const char* msg) { doLog(msg, LOG_CRITICAL); }
 	inline void critical(const std::string& msg) { doLog(msg.c_str(), LOG_CRITICAL); }
 
@@ -73,13 +84,10 @@ namespace RNS {
 	inline void debug(const char* msg) { doLog(msg, LOG_DEBUG); }
 	inline void debug(const std::string& msg) { doLog(msg.c_str(), LOG_DEBUG); }
 
-	inline void extreme(const char* msg) { doLog(msg, LOG_EXTREME); }
-	inline void extreme(const std::string& msg) { doLog(msg.c_str(), LOG_EXTREME); }
+	inline void trace(const char* msg) { doLog(msg, LOG_TRACE); }
+	inline void trace(const std::string& msg) { doLog(msg.c_str(), LOG_TRACE); }
 
 	inline void mem(const char* msg) { doLog(msg, LOG_MEM); }
 	inline void mem(const std::string& msg) { doLog(msg.c_str(), LOG_MEM); }
-
-	void head(const char* msg, LogLevel level = LOG_NOTICE);
-	inline void head(const std::string& msg, LogLevel level = LOG_NOTICE) { head(msg.c_str(), level); }
 
 }

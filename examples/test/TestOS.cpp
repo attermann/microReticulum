@@ -34,7 +34,7 @@ void testTime()
 }
 
 void testOS() {
-	RNS::head("Running testOS...", RNS::LOG_EXTREME);
+	HEAD("Running testOS...", RNS::LOG_TRACE);
 	testTime();
 }
 

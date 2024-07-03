@@ -61,9 +61,9 @@ bool Filesystem::init() {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	// Setup filesystem
-	RNS::info("SPIFFS mounting filesystem");
+	INFO("SPIFFS mounting filesystem");
 	if (!SPIFFS.begin(true, "")){
-		RNS::error("SPIFFS filesystem mount failed");
+		ERROR("SPIFFS filesystem mount failed");
 		return false;
 	}
 	uint32_t size = SPIFFS.totalBytes() / (1024 * 1024);
@@ -77,7 +77,7 @@ bool Filesystem::init() {
 	// ensure filesystem is writable and format if not
 	RNS::Bytes test;
 	if (!write_file("/test", test)) {
-		RNS::info("SPIFFS filesystem is being formatted, please wait...");
+		INFO("SPIFFS filesystem is being formatted, please wait...");
 		SPIFFS.format();
 	}
 	else {
@@ -86,9 +86,9 @@ bool Filesystem::init() {
 	DEBUG("SPIFFS filesystem is ready");
 #elif BOARD_NRF52
 	// Initialize Internal File System
-	RNS::info("InternalFS mounting filesystem");
+	INFO("InternalFS mounting filesystem");
 	InternalFS.begin();
-	RNS::info("InternalFS filesystem is ready");
+	INFO("InternalFS filesystem is ready");
 #endif
 	listDir("/");
 #endif
@@ -125,7 +125,7 @@ bool Filesystem::init() {
 		return true;
 	}
 	else {
-		RNS::error("file_exists: failed to open file " + std::string(file_path));
+		ERROR("file_exists: failed to open file " + std::string(file_path));
 		return false;
 	}
 }
@@ -159,7 +159,7 @@ bool Filesystem::init() {
 #endif
 		TRACE("read_file: read " + std::to_string(read) + " RNS::Bytes from file " + std::string(file_path));
 		if (read != size) {
-			RNS::error("read_file: failed to read file " + std::string(file_path));
+			ERROR("read_file: failed to read file " + std::string(file_path));
             data.clear();
 		}
 		//TRACE("read_file: closing input file");
@@ -175,7 +175,7 @@ bool Filesystem::init() {
 #endif
 	}
 	else {
-		RNS::error("read_file: failed to open input file " + std::string(file_path));
+		ERROR("read_file: failed to open input file " + std::string(file_path));
 	}
     return read;
 }
@@ -203,7 +203,7 @@ bool Filesystem::init() {
 #endif
         TRACE("write_file: wrote " + std::to_string(wrote) + " RNS::Bytes to file " + std::string(file_path));
         if (wrote < data.size()) {
-			RNS::warning("write_file: not all data was written to file " + std::string(file_path));
+			WARNING("write_file: not all data was written to file " + std::string(file_path));
 		}
 		//TRACE("write_file: closing output file");
 #ifdef ARDUINO
@@ -218,7 +218,7 @@ bool Filesystem::init() {
 #endif
 	}
 	else {
-		RNS::error("write_file: failed to open output file " + std::string(file_path));
+		ERROR("write_file: failed to open output file " + std::string(file_path));
 	}
     return wrote;
 }
@@ -254,7 +254,7 @@ bool Filesystem::init() {
 }
 
 /*virtua*/ bool Filesystem::directory_exists(const char* directory_path) {
-	RNS::extreme("directory_exists: checking for existence of directory " + std::string(directory_path));
+	TRACE("directory_exists: checking for existence of directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	File file = SPIFFS.open(directory_path, FILE_READ);
@@ -288,13 +288,13 @@ bool Filesystem::init() {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	if (!SPIFFS.mkdir(directory_path)) {
-		RNS::error("create_directory: failed to create directorty " + std::string(directory_path));
+		ERROR("create_directory: failed to create directorty " + std::string(directory_path));
 		return false;
 	}
 	return true;
 #elif BOARD_NRF52
 	if (!InternalFS.mkdir(directory_path)) {
-		RNS::error("create_directory: failed to create directorty " + std::string(directory_path));
+		ERROR("create_directory: failed to create directorty " + std::string(directory_path));
 		return false;
 	}
 	return true;
@@ -312,18 +312,18 @@ bool Filesystem::init() {
 }
 
 /*virtua*/ bool Filesystem::remove_directory(const char* directory_path) {
-	RNS::extreme("remove_directory: removing directory " + std::string(directory_path));
+	TRACE("remove_directory: removing directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	//if (!LittleFS.rmdir_r(directory_path)) {
 	if (!SPIFFS.rmdir(directory_path)) {
-		RNS::error("remove_directory: failed to remove directorty " + std::string(directory_path));
+		ERROR("remove_directory: failed to remove directorty " + std::string(directory_path));
 		return false;
 	}
 	return true;
 #elif BOARD_NRF52
 	if (!InternalFS.rmdir_r(directory_path)) {
-		RNS::error("remove_directory: failed to remove directory " + std::string(directory_path));
+		ERROR("remove_directory: failed to remove directory " + std::string(directory_path));
 		return false;
 	}
 	return true;
@@ -337,7 +337,7 @@ bool Filesystem::init() {
 }
 
 /*virtua*/ std::list<std::string> Filesystem::list_directory(const char* directory_path) {
-	RNS::extreme("list_directory: listing directory " + std::string(directory_path));
+	TRACE("list_directory: listing directory " + std::string(directory_path));
 	std::list<std::string> files;
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -346,7 +346,7 @@ bool Filesystem::init() {
 	File root = InternalFS.open(directory_path);
 #endif
 	if (!root) {
-		RNS::error("list_directory: failed to open directory " + std::string(directory_path));
+		ERROR("list_directory: failed to open directory " + std::string(directory_path));
 		return files;
 	}
 	File file = root.openNextFile();
@@ -359,7 +359,7 @@ bool Filesystem::init() {
 		file.close();
 		file = root.openNextFile();
 	}
-	RNS::extreme("list_directory: returning directory listing");
+	TRACE("list_directory: returning directory listing");
 	root.close();
 	return files;
 #else

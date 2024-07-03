@@ -122,7 +122,7 @@ void testNewMap() {
 }
 
 void testCollections() {
-	RNS::head("Running testCollections...", RNS::LOG_EXTREME);
+	HEAD("Running testCollections...", RNS::LOG_TRACE);
 	testBytesMap();
 	testOldMap();
 	testNewMap();

@@ -420,7 +420,7 @@ bool Packet::send() {
 		return true;
 	}
 	else {
-		error("No interfaces could process the outbound packet");
+		ERROR("No interfaces could process the outbound packet");
 		_object->_sent = false;
 		//z _receipt = None;
 		return false;
@@ -449,7 +449,7 @@ bool Packet::resend() {
 		return true;
 	}
 	else {
-		error("No interfaces could process the outbound packet");
+		ERROR("No interfaces could process the outbound packet");
 		_object->_sent = false;
 		//z self.receipt = None;
 		return false;
@@ -471,7 +471,7 @@ void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
 		_object->_link.prove_packet(*this);
 	}
 	else {
-		error("Could not prove packet associated with neither a destination nor a link");
+		ERROR("Could not prove packet associated with neither a destination nor a link");
 	}
 }
 
@@ -802,8 +802,8 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 						_object->_callbacks._delivery(*this);
 					}
 					catch (std::exception& e) {
-						error("An error occurred while evaluating external delivery callback for " + link.toString());
-						error("The contained exception was: "  + std::string(e.what()));
+						ERROR("An error occurred while evaluating external delivery callback for " + link.toString());
+						ERROR("The contained exception was: "  + std::string(e.what()));
 					}
 				}
 				return true;
@@ -862,7 +862,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 						_object->_callbacks._delivery(*this);
 					}
 					catch (std::exception& e) {
-						error("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
+						ERROR("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
 					}
 				}
 				return true;
@@ -893,7 +893,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 					_object->_callbacks._delivery(*this);
 				}
 				catch (std::exception& e) {
-					error("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
+					ERROR("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
 				}
 			}
 			return true;

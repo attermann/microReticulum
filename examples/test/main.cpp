@@ -35,11 +35,11 @@ void setup() {
   	Serial.print("Hello from T-Beam on PlatformIO!\n");
 #endif
 
-	RNS::loglevel(RNS::LOG_EXTREME);
+	RNS::loglevel(RNS::LOG_TRACE);
 	//RNS::loglevel(RNS::LOG_MEM);
 
 	if (filesystem) {
-		RNS::info("Filesystem exists");
+		INFO("Filesystem exists");
 		filesystem.init();
 	}
 	RNS::Utilities::OS::register_filesystem(filesystem);
@@ -49,7 +49,7 @@ void setup() {
 		TRACE("Running tests...");
 		RNS::LogLevel loglevel = RNS::loglevel();
 		//RNS::loglevel(RNS::LOG_WARNING);
-		RNS::loglevel(RNS::LOG_EXTREME);
+		RNS::loglevel(RNS::LOG_TRACE);
 
 		// all tests
 		//test();
@@ -67,7 +67,7 @@ void setup() {
 		//return;
 	}
 	catch (std::exception& e) {
-		RNS::error(std::string("!!! Exception in test: ") + e.what() + " !!!");
+		ERROR(std::string("!!! Exception in test: ") + e.what() + " !!!");
 	}
 
 #ifdef ARDUINO

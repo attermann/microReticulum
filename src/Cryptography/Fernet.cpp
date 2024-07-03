@@ -110,7 +110,7 @@ const Bytes Fernet::decrypt(const Bytes& token) {
 		return plaintext;
 	}
 	catch (std::exception& e) {
-		warning("Could not decrypt Fernet token");
+		WARNING("Could not decrypt Fernet token");
 		throw std::runtime_error("Could not decrypt Fernet token");
 	}
 }

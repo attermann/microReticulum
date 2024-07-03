@@ -11,7 +11,7 @@ void Bytes::newData(size_t size /*= 0*/) {
 		// CBA Note that this method of construction creates vector with specified and initializes all eleemtnets with default values
 		Data* data = new Data(size);
 		if (data == nullptr) {
-			error("Bytes failed to allocate data buffer");
+			ERROR("Bytes failed to allocate data buffer");
 			throw std::runtime_error("Failed to allocate data buffer");
 		}
 		_data = SharedData(data);
@@ -19,7 +19,7 @@ void Bytes::newData(size_t size /*= 0*/) {
 	else {
 		Data* data = new Data();
 		if (data == nullptr) {
-			error("Bytes failed to allocate empty data buffer");
+			ERROR("Bytes failed to allocate empty data buffer");
 			throw std::runtime_error("Failed to allocate empty data buffer");
 		}
 		_data = SharedData(data);
@@ -42,7 +42,7 @@ void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
 			//TRACE("Bytes is creating a writable copy of its shared data");
 			data = new Data(*_data.get());
 			if (data == nullptr) {
-				error("Bytes failed to duplicate data buffer");
+				ERROR("Bytes failed to duplicate data buffer");
 				throw std::runtime_error("Failed to duplicate data buffer");
 			}
 			if (size > 0) {
@@ -55,7 +55,7 @@ void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
 			//TRACE("Bytes is creating its own data because shared is empty");
 			//data = new Data();
 			//if (data == nullptr) {
-			//	error("Bytes failed to allocate empty data buffer");
+			//	ERROR("Bytes failed to allocate empty data buffer");
 			//	throw std::runtime_error("Failed to allocate empty data buffer");
 			//}
 			//_data = SharedData(data);

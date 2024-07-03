@@ -30,7 +30,7 @@ using namespace RNS::Utilities;
 
 /*static*/ bool OS::file_exists(const char* file_path) {
 	if (!_filesystem) {
-		warning("file_exists: filesystem not registered");
+		WARNING("file_exists: filesystem not registered");
 		throw std::runtime_error("Filesystem has not been registered");
 	}
 	return _filesystem.do_file_exists(file_path);

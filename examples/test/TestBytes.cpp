@@ -363,7 +363,7 @@ void testBytesResize() {
 }
 
 void testBytes() {
-	RNS::head("Running testBytes...", RNS::LOG_EXTREME);
+	HEAD("Running testBytes...", RNS::LOG_TRACE);
 
 	size_t pre_memory = RNS::Utilities::OS::heap_available();
 	TRACE("testBytes: pre-mem: " + std::to_string(pre_memory));

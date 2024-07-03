@@ -109,7 +109,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ size_t Transport::_last_flash = 0;
 
 /*static*/ void Transport::start(const Reticulum& reticulum_instance) {
-	info("Transport starting...");
+	INFO("Transport starting...");
 	_jobs_running = true;
 	_owner = reticulum_instance;
 
@@ -123,7 +123,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 	// ensure required directories exist
 	if (!OS::directory_exists(Reticulum::_cachepath.c_str())) {
-		verbose("No cache directory, creating...");
+		VERBOSE("No cache directory, creating...");
 		OS::create_directory(Reticulum::_cachepath.c_str());
 	}
 
@@ -136,16 +136,16 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			}
 
 			if (!_identity) {
-				verbose("No valid Transport Identity in storage, creating...");
+				VERBOSE("No valid Transport Identity in storage, creating...");
 				_identity = Identity();
 				_identity.to_file(transport_identity_path.c_str());
 			}
 			else {
-				verbose("Loaded Transport Identity from storage");
+				VERBOSE("Loaded Transport Identity from storage");
 			}
 		}
 		catch (std::exception& e) {
-			error("Failed to check for transport identity, the contained exception was: " + std::string(e.what()));
+			ERROR("Failed to check for transport identity, the contained exception was: " + std::string(e.what()));
 		}
 	}
 
@@ -160,7 +160,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 				file.close();
 			}
 			catch (std::exception& e) {
-				error("Could not load packet hashlist from storage, the contained exception was: " + std::string(e.what()));
+				ERROR("Could not load packet hashlist from storage, the contained exception was: " + std::string(e.what()));
 			}
 		}
 	}
@@ -193,7 +193,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	//p thread.start()
 
 	if (Reticulum::transport_enabled()) {
-		info("Transport mode is enabled");
+		INFO("Transport mode is enabled");
 
 		// Read in path table and then write and clean in case any entries are invalid
 		read_path_table();
@@ -209,10 +209,10 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 			probe_destination.set_proof_strategy(Type::Destination::PROVE_ALL);
 			DEBUG("Created probe responder destination " + probe_destination.hash().toHex());
 			probe_destination.announce();
-			notice("Transport Instance will respond to probe requests on " + probe_destination.toString());
+			NOTICE("Transport Instance will respond to probe requests on " + probe_destination.toString());
 		}
 
-		verbose("Transport instance " + _identity.toString() + " started");
+		VERBOSE("Transport instance " + _identity.toString() + " started");
 		_start_time = OS::time();
 	}
 
@@ -636,8 +636,8 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		}
 	}
 	catch (std::exception& e) {
-		error("An exception occurred while running Transport jobs.");
-		error("The contained exception was: " + std::string(e.what()));
+		ERROR("An exception occurred while running Transport jobs.");
+		ERROR("The contained exception was: " + std::string(e.what()));
 	}
 
 	_jobs_running = false;
@@ -711,7 +711,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		}
 	}
 	catch (std::exception& e) {
-		error("Error while transmitting on " + interface.toString() + ". The contained exception was: " + e.what());
+		ERROR("Error while transmitting on " + interface.toString() + ". The contained exception was: " + e.what());
 	}
 }
 
@@ -721,7 +721,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 	if (!packet.destination()) {
 		//throw std::invalid_argument("Can not send packet with no destination.");
-		error("Can not send packet with no destination");
+		ERROR("Can not send packet with no destination");
 		return false;
 	}
 
@@ -1266,7 +1266,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 	}
 
 	if (!_identity) {
-		warning("Transport::inbound: No identity!");
+		WARNING("Transport::inbound: No identity!");
 		return;
 	}
 
@@ -1274,7 +1274,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 	Packet packet({Type::NONE}, raw);
 	if (!packet.unpack()) {
-		warning("Transport::inbound: Packet unpack failed!");
+		WARNING("Transport::inbound: Packet unpack failed!");
 		return;
 	}
 #ifndef NDEBUG
@@ -2057,8 +2057,8 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 									}
 								}
 								catch (std::exception& e) {
-									error("Error while processing external announce callback.");
-									error("The contained exception was: " + std::string(e.what()));
+									ERROR("Error while processing external announce callback.");
+									ERROR("The contained exception was: " + std::string(e.what()));
 								}
 							}
 						}
@@ -2146,7 +2146,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 									}
 								}
 								catch (std::exception& e) {
-									error(std::string("Error while executing proof request callback. The contained exception was: ") + e.what());
+									ERROR(std::string("Error while executing proof request callback. The contained exception was: ") + e.what());
 								}
 							}
 						}
@@ -2197,7 +2197,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 							}
 						}
 						catch (std::exception& e) {
-							error("Error while transporting link request proof. The contained exception was: " + std::string(e.what()));
+							ERROR("Error while transporting link request proof. The contained exception was: " + std::string(e.what()));
 						}
 					}
 					else {
@@ -2541,7 +2541,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 		link.status(Type::Link::ACTIVE);
 	}
 	else {
-		error("Attempted to activate a link that was not in the pending table");
+		ERROR("Attempted to activate a link that was not in the pending table");
 	}
 */
 }
@@ -2619,7 +2619,7 @@ Deregisters an announce handler.
 			return Persistence::serialize(packet, packet_cache_path.c_str());
 		}
 		catch (std::exception& e) {
-			error("Error writing packet to cache. The contained exception was: " + std::string(e.what()));
+			ERROR("Error writing packet to cache. The contained exception was: " + std::string(e.what()));
 		}
 	}
 	return false;
@@ -2657,8 +2657,8 @@ Deregisters an announce handler.
 		return packet;
 	}
 	catch (std::exception& e) {
-		error("Exception occurred while getting cached packet.");
-		error("The contained exception was: " + std::string(e.what()));
+		ERROR("Exception occurred while getting cached packet.");
+		ERROR("The contained exception was: " + std::string(e.what()));
 	}
 	return {Type::NONE};
 }
@@ -2678,8 +2678,8 @@ Deregisters an announce handler.
 		}
 	}
 	catch (std::exception& e) {
-		error("Exception occurred while clearing cached packet.");
-		error("The contained exception was: " + std::string(e.what()));
+		ERROR("Exception occurred while clearing cached packet.");
+		ERROR("The contained exception was: " + std::string(e.what()));
 	}
 	return false;
 }
@@ -2929,7 +2929,7 @@ will announce it.
 		}
 	}
 	catch (std::exception& e) {
-		error("Error while handling path request. The contained exception was: " + std::string(e.what()));
+		ERROR("Error while handling path request. The contained exception was: " + std::string(e.what()));
 	}
 }
 
@@ -3374,13 +3374,13 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 						// CBA If announce packet load fails then remove destination entry (it's useless without announce packet)
 						if (!destination_entry.announce_packet()) {
 							// remove destination
-							RNS::warning("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing announce packet");
+							WARNING("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing announce packet");
 							invalid_paths.push_back(destination_hash);
 						}
 						// CBA If receiving interface is not found then remove destination entry (it's useless without interface)
 						if (!destination_entry.receiving_interface()) {
 							// remove destination
-							RNS::warning("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing receiving interface");
+							WARNING("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing receiving interface");
 							invalid_paths.push_back(destination_hash);
 						}
 					}
@@ -3396,11 +3396,11 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 			else {
 				TRACE("Transport::start: destination table read failed");
 			}
-			verbose("Loaded " + std::to_string(_destination_table.size()) + " valid path table entries from storage");
+			VERBOSE("Loaded " + std::to_string(_destination_table.size()) + " valid path table entries from storage");
 
 		}
 		catch (std::exception& e) {
-			error("Could not load destination table from storage, the contained exception was: " + std::string(e.what()));
+			ERROR("Could not load destination table from storage, the contained exception was: " + std::string(e.what()));
 		}
 	}
 	return false;
@@ -3422,7 +3422,7 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 		while (_saving_path_table) {
 			OS::sleep(wait_interval);
 			if (OS::time() > (wait_start + wait_timeout)) {
-				error("Could not save path table to storage, waiting for previous save operation timed out.");
+				ERROR("Could not save path table to storage, waiting for previous save operation timed out.");
 				return false;
 			}
 		}
@@ -3542,7 +3542,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		}
 	}
 	catch (std::exception& e) {
-		error("Could not save path table to storage, the contained exception was: " + std::string(e.what()));
+		ERROR("Could not save path table to storage, the contained exception was: " + std::string(e.what()));
 	}
 
 	_saving_path_table = false;
@@ -3715,7 +3715,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 /*static*/ void Transport::dump_stats() {
 
 #if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-	if (loglevel() == LOG_EXTREME) {
+	if (loglevel() == LOG_TRACE) {
 		dbgMemInfo();
 	}
 #endif
@@ -3737,7 +3737,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	head("mem: " + std::to_string(memory) + " (" + std::to_string((int)((double)memory / (double)OS::heap_size() * 100.0)) + "%) [" + std::to_string((int)memory - (int)_last_memory) + "] flash: " + std::to_string(flash) + " (" + std::to_string((int)((double)flash / (double)OS::storage_size() * 100.0)) + "%) [" + std::to_string((int)flash - (int)_last_flash) + "] paths: " + std::to_string(_destination_table.size()) + " dsts: " + std::to_string(_destinations.size()) + " revr: " + std::to_string(_reverse_table.size()) + " annc: " + std::to_string(_announce_table.size()) + " held: " + std::to_string(_held_announces.size()), LOG_VERBOSE);
+	HEAD("mem: " + std::to_string(memory) + " (" + std::to_string((int)((double)memory / (double)OS::heap_size() * 100.0)) + "%) [" + std::to_string((int)memory - (int)_last_memory) + "] flash: " + std::to_string(flash) + " (" + std::to_string((int)((double)flash / (double)OS::storage_size() * 100.0)) + "%) [" + std::to_string((int)flash - (int)_last_flash) + "] paths: " + std::to_string(_destination_table.size()) + " dsts: " + std::to_string(_destinations.size()) + " revr: " + std::to_string(_reverse_table.size()) + " annc: " + std::to_string(_announce_table.size()) + " held: " + std::to_string(_held_announces.size()), LOG_VERBOSE);
 
 	// _path_requests
 	// _discovery_path_requests
@@ -3745,7 +3745,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	// _discovery_pr_tags
 	// _control_destinations
 	// _control_hashes
-	verbose("preqs: " + std::to_string(_path_requests.size()) + " dpreqs: " + std::to_string(_discovery_path_requests.size()) + " ppreqs: " + std::to_string(_pending_local_path_requests.size()) + " dprt: " + std::to_string(_discovery_pr_tags.size()) + " cdsts: " + std::to_string(_control_destinations.size()) + " chshs: " + std::to_string(_control_hashes.size()));
+	VERBOSE("preqs: " + std::to_string(_path_requests.size()) + " dpreqs: " + std::to_string(_discovery_path_requests.size()) + " ppreqs: " + std::to_string(_pending_local_path_requests.size()) + " dprt: " + std::to_string(_discovery_pr_tags.size()) + " cdsts: " + std::to_string(_control_destinations.size()) + " chshs: " + std::to_string(_control_hashes.size()));
 
 	// _packet_hashlist
 	// _receipts
@@ -3761,8 +3761,8 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	for (auto& [interface_hash, interface] : _interfaces) {
 		interface_announces += interface.announce_queue().size();
 	}
-	verbose("phl: " + std::to_string(_packet_hashlist.size()) + " rcp: " + std::to_string(_receipts.size()) + " lt: " + std::to_string(_link_table.size()) + " pl: " + std::to_string(_pending_links.size()) + " al: " + std::to_string(_active_links.size()) + " tun: " + std::to_string(_tunnels.size()));
-	verbose("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + " dpr: " + std::to_string(destination_path_responses) + " ikd: " + std::to_string(Identity::_known_destinations.size()) + " ia: " + std::to_string(interface_announces) + "\r\n");
+	VERBOSE("phl: " + std::to_string(_packet_hashlist.size()) + " rcp: " + std::to_string(_receipts.size()) + " lt: " + std::to_string(_link_table.size()) + " pl: " + std::to_string(_pending_links.size()) + " al: " + std::to_string(_active_links.size()) + " tun: " + std::to_string(_tunnels.size()));
+	VERBOSE("pin: " + std::to_string(_packets_received) + " pout: " + std::to_string(_packets_sent) + " dadd: " + std::to_string(_destinations_added) + " dpr: " + std::to_string(destination_path_responses) + " ikd: " + std::to_string(Identity::_known_destinations.size()) + " ia: " + std::to_string(interface_announces) + "\r\n");
 
 	_last_memory = memory;
 	_last_flash = flash;
@@ -3815,11 +3815,11 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			TRACE("Transport::cull_path_table: Removing destination " + announce_packet.destination_hash().toHex() + " from path table");
 			// Remove destination from path table
 			if (_destination_table.erase(announce_packet.destination_hash()) < 1) {
-				warning("Failed to remove destination " + announce_packet.destination_hash().toHex() + " from path table");
+				WARNING("Failed to remove destination " + announce_packet.destination_hash().toHex() + " from path table");
 			}
 			// Remove announce packet from packet table
 			if (_packet_table.erase(destination_entry._announce_packet) < 1) {
-				warning("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
+				WARNING("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
 			}
 			// Remove cached packet file
 			std::string packet_cache_path = Reticulum::_cachepath + "/" + destination_entry._announce_packet.toHex();
@@ -3848,11 +3848,11 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from path table");
 			// Remove destination from path table
 			if (_destination_table.erase(destination_hash) < 1) {
-				warning("Failed to remove destination " + destination_hash.toHex() + " from path table");
+				WARNING("Failed to remove destination " + destination_hash.toHex() + " from path table");
 			}
 			// Remove announce packet from packet table
 			if (_packet_table.erase(destination_entry._announce_packet) < 1) {
-				warning("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
+				WARNING("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
 			}
 			// Remove cached packet file
 			std::string packet_cache_path = Reticulum::_cachepath + "/" + destination_entry._announce_packet.toHex();

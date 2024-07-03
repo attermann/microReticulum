@@ -6,7 +6,7 @@
 #include <assert.h>
 
 void testReference() {
-	RNS::head("Running testReference...", RNS::LOG_EXTREME);
+	HEAD("Running testReference...", RNS::LOG_TRACE);
 
 	RNS::Reticulum reticulum_default;
 	assert(reticulum_default);
@@ -21,7 +21,7 @@ void testReference() {
 	assert(!reticulum_none_copy);
 
 /*
-	RNS::loglevel(RNS::LOG_EXTREME);
+	RNS::loglevel(RNS::LOG_TRACE);
 	TestInterface testinterface;
 
 	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
@@ -35,7 +35,7 @@ void testReference() {
 	return 0;
 */
 /*
-	RNS::loglevel(RNS::LOG_EXTREME);
+	RNS::loglevel(RNS::LOG_TRACE);
 	TestInterface testinterface;
 
 	std::set<std::reference_wrapper<RNS::Interface>, std::less<RNS::Interface>> interfaces;
@@ -48,7 +48,7 @@ void testReference() {
 	return 0;
 */
 /*
-	RNS::loglevel(RNS::LOG_EXTREME);
+	RNS::loglevel(RNS::LOG_TRACE);
 	TestInterface testinterface;
 
 	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
@@ -62,7 +62,7 @@ void testReference() {
 	return 0;
 */
 /*
-	RNS::loglevel(RNS::LOG_EXTREME);
+	RNS::loglevel(RNS::LOG_TRACE);
 	TestInterface testinterface;
 
 	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
@@ -78,7 +78,7 @@ void testReference() {
 /*
 	std::list<std::reference_wrapper<RNS::Interface>> interfaces;
 	{
-		RNS::loglevel(RNS::LOG_EXTREME);
+		RNS::loglevel(RNS::LOG_TRACE);
 		TestInterface testinterface;
 		interfaces.push_back(testinterface);
 		for (auto iter = interfaces.begin(); iter != interfaces.end(); ++iter) {
@@ -97,7 +97,7 @@ void testReference() {
 	return 0;
 */
 /*
-	RNS::head("Testing map...", RNS::LOG_EXTREME);
+	HEAD("Testing map...", RNS::LOG_TRACE);
 	{
 		std::map<RNS::Bytes, RNS::Destination&> destinations;
 		destinations.insert({destination.hash(), destination});

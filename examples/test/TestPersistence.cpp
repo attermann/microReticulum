@@ -686,7 +686,7 @@ void testDeserializeDestinationTable() {
 
 
 void testPersistence() {
-	RNS::head("Running testPersistence...", RNS::LOG_EXTREME);
+	HEAD("Running testPersistence...", RNS::LOG_TRACE);
 	testWrite();
 	testRead();
 	testSerializeObject();

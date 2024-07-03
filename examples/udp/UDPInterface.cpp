@@ -125,7 +125,7 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	if (inet_aton(_local_host.c_str(), &local_addr) == 0) {
 		struct hostent* host_ent = gethostbyname(_local_host.c_str());
 		if (host_ent == nullptr || host_ent->h_addr_list[0] == nullptr) {
-			error("Unable to resolve local host " + std::string(_local_host));
+			ERROR("Unable to resolve local host " + std::string(_local_host));
 			return false;
 		}
 		_local_address = *((in_addr_t*)(host_ent->h_addr_list[0]));
@@ -139,7 +139,7 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	if (inet_aton(_remote_host.c_str(), &remote_addr) == 0) {
 		struct hostent* host_ent = gethostbyname(_remote_host.c_str());
 		if (host_ent == nullptr || host_ent->h_addr_list[0] == nullptr) {
-			error("Unable to resolve remote host " + std::string(_remote_host));
+			ERROR("Unable to resolve remote host " + std::string(_remote_host));
 			return false;
 		}
 		_remote_address = *((in_addr_t*)(host_ent->h_addr_list[0]));
@@ -152,7 +152,7 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	TRACE("Opening UDP socket");
 	_socket = socket( PF_INET, SOCK_DGRAM, 0 );
 	if (_socket < 0) {
-		error("Unable to create socket with error " + std::to_string(errno));
+		ERROR("Unable to create socket with error " + std::to_string(errno));
 		return false;
 	}
 
@@ -161,7 +161,7 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	setsockopt(_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast));
 
 	// bind to udp socket for listening
-	info("Binding UDP socket " + std::to_string(_socket) + " to " + std::string(_local_host) + ":" + std::to_string(_local_port));
+	INFO("Binding UDP socket " + std::to_string(_socket) + " to " + std::string(_local_host) + ":" + std::to_string(_local_port));
 	sockaddr_in bind_addr;
 	bind_addr.sin_family = AF_INET;
 	bind_addr.sin_addr.s_addr = _local_address;
@@ -169,7 +169,7 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	if (bind(_socket, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
 		close(_socket);
 		_socket = -1;
-		error("Unable to bind socket with error " + std::to_string(errno));
+		ERROR("Unable to bind socket with error " + std::to_string(errno));
 		return false;
 	}
 #endif
@@ -246,6 +246,6 @@ void UDPInterface::loop() {
 		Interface::on_outgoing(data);
 	}
 	catch (std::exception& e) {
-		error("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
+		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
 	}
 }

@@ -39,8 +39,8 @@ pass any traffic before being instantiated.
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
-	info("Total memory: " + std::to_string(OS::heap_available()));
-	info("Total flash: " + std::to_string(OS::storage_available()));
+	INFO("Total memory: " + std::to_string(OS::heap_available()));
+	INFO("Total flash: " + std::to_string(OS::storage_available()));
 
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
@@ -98,7 +98,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 		}
 	}
 	catch (std::exception& e) {
-		error("Failed to load time offset, the contained exception was: " + std::string(e.what()));
+		ERROR("Failed to load time offset, the contained exception was: " + std::string(e.what()));
 	}
 #endif
 
@@ -192,7 +192,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 */
 
 void Reticulum::start() {
-	info("Starting Transport...");
+	INFO("Starting Transport...");
 	Transport::start(*this);
 }
 
@@ -219,7 +219,7 @@ void Reticulum::jobs() {
 	if (OS::heap_size() > 0) {
 		uint8_t remaining = (uint8_t)((double)OS::heap_available() / (double)OS::heap_size() * 100.0);
 		if (remaining <= 10) {
-			head("DETECTED LOW-MEMORY CONDITION (" + std::to_string(remaining) + "%), RESETTING!!!", LOG_WARNING);
+			head("DETECTED LOW-MEMORY CONDITION (" + std::to_string(remaining) + "%), RESETTING!!!", LOG_CRITICAL);
 			persist_data();
 #if defined(ESP32)
 			ESP.restart();
@@ -261,7 +261,7 @@ void Reticulum::persist_data() {
 		OS::write_file(time_offset_path.c_str(), buf);
 	}
 	catch (std::exception& e) {
-		error("Failed to write time offset, the contained exception was: " + std::string(e.what()));
+		ERROR("Failed to write time offset, the contained exception was: " + std::string(e.what()));
 	}
 #endif
 
@@ -286,7 +286,7 @@ void Reticulum::clean_caches() {
 			}
 		}
 		catch (std::exception& e) {
-			error("Error while cleaning resources cache, the contained exception was: " + std::string(e.what()));
+			ERROR("Error while cleaning resources cache, the contained exception was: " + std::string(e.what()));
 		}
 	}
 
@@ -303,7 +303,7 @@ void Reticulum::clean_caches() {
 			}
 		}
 		catch (std::exception& e) {
-			error("Error while cleaning packet cache, the contained exception was: " + std::string(e.what()));
+			ERROR("Error while cleaning packet cache, the contained exception was: " + std::string(e.what()));
 		}
 	}
 */
@@ -331,6 +331,6 @@ void Reticulum::clear_caches() {
 #endif
 	}
 	catch (std::exception& e) {
-		error("Failed to clear cache file(s), the contained exception was: " + std::string(e.what()));
+		ERROR("Failed to clear cache file(s), the contained exception was: " + std::string(e.what()));
 	}
 }

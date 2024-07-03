@@ -57,7 +57,7 @@ void Identity::createKeys() {
 
 	update_hashes();
 
-	verbose("Identity keys created for " + _object->_hash.toHex());
+	VERBOSE("Identity keys created for " + _object->_hash.toHex());
 }
 
 /*
@@ -95,8 +95,8 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 	}
 	catch (std::exception& e) {
 		//p raise e
-		error("Failed to load identity key");
-		error("The contained exception was: " + std::string(e.what()));
+		ERROR("Failed to load identity key");
+		ERROR("The contained exception was: " + std::string(e.what()));
 		return false;
 	}
 }
@@ -126,7 +126,7 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 		update_hashes();
 	}
 	catch (std::exception& e) {
-		error("Error while loading public key, the contained exception was: " + std::string(e.what()));
+		ERROR("Error while loading public key, the contained exception was: " + std::string(e.what()));
 	}
 }
 
@@ -142,8 +142,8 @@ bool Identity::load(const char* path) {
 		}
 	}
 	catch (std::exception& e) {
-		error("Error while loading identity from " + std::string(path));
-		error("The contained exception was: " + std::string(e.what()));
+		ERROR("Error while loading identity from " + std::string(path));
+		ERROR("The contained exception was: " + std::string(e.what()));
 	}
 	return false;
 }
@@ -162,8 +162,8 @@ bool Identity::to_file(const char* path) {
 		return (OS::write_file(path, get_private_key()) == get_private_key().size());
 	}
 	catch (std::exception& e) {
-		error("Error while saving identity to " + std::string(path));
-		error("The contained exception was: " + std::string(e.what()));
+		ERROR("Error while saving identity to " + std::string(path));
+		ERROR("The contained exception was: " + std::string(e.what()));
 	}
 	return false;
 }
@@ -263,7 +263,7 @@ Recall last heard app_data for a destination hash.
 			while (_saving_known_destinations) {
 				OS::sleep(wait_interval);
 				if (OS::time() > (wait_start + wait_timeout)) {
-					error("Could not save known destinations to storage, waiting for previous save operation timed out.");
+					ERROR("Could not save known destinations to storage, waiting for previous save operation timed out.");
 					return false;
 				}
 			}
@@ -315,7 +315,7 @@ Recall last heard app_data for a destination hash.
 		success = true;
 	}
 	catch (std::exception& e) {
-		error("Error while saving known destinations to disk, the contained exception was: " + std::string(e.what()));
+		ERROR("Error while saving known destinations to disk, the contained exception was: " + std::string(e.what()));
 	}
 
 	_saving_known_destinations = false;
@@ -365,7 +365,7 @@ Recall last heard app_data for a destination hash.
 			TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from known destinations");
 			// Remove destination from known destinations
 			if (_known_destinations.erase(destination_hash) < 1) {
-				warning("Failed to remove destination " + destination_hash.toHex() + " from known destinations");
+				WARNING("Failed to remove destination " + destination_hash.toHex() + " from known destinations");
 			}
 			++count;
 			if (_known_destinations.size() <= _known_destinations_maxsize) {
@@ -422,8 +422,8 @@ Recall last heard app_data for a destination hash.
 						if (public_key != identity_entry._public_key) {
 							// In reality, this should never occur, but in the odd case
 							// that someone manages a hash collision, we reject the announce.
-							critical("Received announce with valid signature and destination hash, but announced public key does not match already known public key.");
-							critical("This may indicate an attempt to modify network paths, or a random hash collision. The announce was rejected.");
+							CRITICAL("Received announce with valid signature and destination hash, but announced public key does not match already known public key.");
+							CRITICAL("This may indicate an attempt to modify network paths, or a random hash collision. The announce was rejected.");
 							return false;
 						}
 					}
@@ -469,7 +469,7 @@ Recall last heard app_data for a destination hash.
 		}
 	}
 	catch (std::exception& e) {
-		error("Error occurred while validating announce. The contained exception was: " + std::string(e.what()));
+		ERROR("Error occurred while validating announce. The contained exception was: " + std::string(e.what()));
 		return false;
 	}
 	return false;
@@ -595,7 +595,7 @@ const Bytes Identity::sign(const Bytes& message) const {
 		return _object->_sig_prv->sign(message);
 	}
 	catch (std::exception& e) {
-		error("The identity " + toString() + " could not sign the requested message. The contained exception was: " + e.what());
+		ERROR("The identity " + toString() + " could not sign the requested message. The contained exception was: " + e.what());
 		throw e;
 	}
 }

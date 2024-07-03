@@ -129,7 +129,7 @@ void testPKCS7() {
 }
 
 void testCrypto() {
-	RNS::head("Running testCrypto...", RNS::LOG_EXTREME);
+	HEAD("Running testCrypto...", RNS::LOG_TRACE);
 	testCryptoMain();
 	testHMAC();
 	testPKCS7();

@@ -53,35 +53,35 @@ public:
 	ExampleAnnounceHandler(const char* aspect_filter = nullptr) : AnnounceHandler(aspect_filter) {}
 	virtual ~ExampleAnnounceHandler() {}
 	virtual void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) {
-		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-		RNS::info("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
+		INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		INFO("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
 		if (announced_identity) {
-			RNS::info("ExampleAnnounceHandler: announced identity hash: " + announced_identity.hash().toHex());
-			RNS::info("ExampleAnnounceHandler: announced identity app data: " + announced_identity.app_data().toHex());
+			INFO("ExampleAnnounceHandler: announced identity hash: " + announced_identity.hash().toHex());
+			INFO("ExampleAnnounceHandler: announced identity app data: " + announced_identity.app_data().toHex());
 		}
         if (app_data) {
-			RNS::info("ExampleAnnounceHandler: app data text: \"" + app_data.toString() + "\"");
+			INFO("ExampleAnnounceHandler: app data text: \"" + app_data.toString() + "\"");
 		}
-		RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}
 };
 
 // Test packet receive callback
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
-	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	RNS::info("onPacket: data: " + data.toHex());
-	RNS::info("onPacket: text: \"" + data.toString() + "\"");
+	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	INFO("onPacket: data: " + data.toHex());
+	INFO("onPacket: text: \"" + data.toString() + "\"");
 	//TRACE("onPacket: " + packet.debugString());
-	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 // Ping packet receive callback
 void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
-	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	RNS::info("onPingPacket: data: " + data.toHex());
-	RNS::info("onPingPacket: text: \"" + data.toString() + "\"");
+	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	INFO("onPingPacket: data: " + data.toHex());
+	INFO("onPingPacket: text: \"" + data.toString() + "\"");
 	//TRACE("onPingPacket: " + packet.debugString());
-	RNS::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 
@@ -97,7 +97,7 @@ RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler());
 
 void reticulum_announce() {
 	if (destination) {
-		RNS::head("Announcing destination...", RNS::LOG_EXTREME);
+		HEAD("Announcing destination...", RNS::LOG_TRACE);
 		//destination.announce(RNS::bytesFromString(fruits[RNS::Cryptography::randomnum() % 7]));
 		// test path
 		//destination.announce(RNS::bytesFromString(fruits[RNS::Cryptography::randomnum() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
@@ -107,7 +107,7 @@ void reticulum_announce() {
 }
 
 void reticulum_setup() {
-	RNS::info("Setting up Reticulum...");
+	INFO("Setting up Reticulum...");
 
 	try {
 
@@ -119,14 +119,14 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
-		RNS::head("Registering Interface instances with Transport...", RNS::LOG_EXTREME);
+		HEAD("Registering Interface instances with Transport...", RNS::LOG_TRACE);
 		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(lora_interface);
 
-		RNS::head("Starting LoRaInterface...", RNS::LOG_EXTREME);
+		HEAD("Starting LoRaInterface...", RNS::LOG_TRACE);
 		lora_interface.start();
 
-		RNS::head("Creating Reticulum instance...", RNS::LOG_EXTREME);
+		HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
 		//RNS::Reticulum reticulum;
 		reticulum = RNS::Reticulum();
 		reticulum.transport_enabled(true);
@@ -134,7 +134,7 @@ void reticulum_setup() {
 		//return;
 		// 21.9% (+0.1%)
 
-		RNS::head("Creating Identity instance...", RNS::LOG_EXTREME);
+		HEAD("Creating Identity instance...", RNS::LOG_TRACE);
 		// new identity
 		//RNS::Identity identity;
 		//identity = RNS::Identity();
@@ -150,31 +150,31 @@ void reticulum_setup() {
 		identity.load_private_key(prv_bytes);
 		// 22.6% (+0.7%)
 
-		RNS::head("Creating Destination instance...", RNS::LOG_EXTREME);
+		HEAD("Creating Destination instance...", RNS::LOG_TRACE);
 		//RNS::Destination destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "app", "aspects");
 		destination = RNS::Destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "app", "aspects");
 		// 23.0% (+0.4%)
 
 		// Register DATA packet callback
-		RNS::head("Registering packet callback with Destination...", RNS::LOG_EXTREME);
+		HEAD("Registering packet callback with Destination...", RNS::LOG_TRACE);
 		destination.set_packet_callback(onPacket);
 		destination.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
 		{
 			// Register PING packet callback
-			RNS::head("Creating PING Destination instance...", RNS::LOG_EXTREME);
+			HEAD("Creating PING Destination instance...", RNS::LOG_TRACE);
 			RNS::Destination ping_destination(identity, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "example_utilities", "echo.request");
 
-			RNS::head("Registering packet callback with PING Destination...", RNS::LOG_EXTREME);
+			HEAD("Registering packet callback with PING Destination...", RNS::LOG_TRACE);
 			ping_destination.set_packet_callback(onPingPacket);
 			ping_destination.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 		}
 
-		RNS::head("Registering announce handler with Transport...", RNS::LOG_EXTREME);
+		HEAD("Registering announce handler with Transport...", RNS::LOG_TRACE);
 		RNS::Transport::register_announce_handler(announce_handler);
 
 /*
-		RNS::head("Announcing destination...", RNS::LOG_EXTREME);
+		HEAD("Announcing destination...", RNS::LOG_TRACE);
 		//destination.announce(RNS::bytesFromString(fruits[RNS::Cryptography::randomnum() % 7]));
 		// test path
 		//destination.announce(RNS::bytesFromString(fruits[RNS::Cryptography::randomnum() % 7]), true, nullptr, RNS::bytesFromString("test_tag"));
@@ -185,49 +185,49 @@ void reticulum_setup() {
 
 #if defined (RETICULUM_PACKET_TEST)
 		// test data send packet
-		RNS::head("Creating send packet...", RNS::LOG_EXTREME);
+		HEAD("Creating send packet...", RNS::LOG_TRACE);
 		RNS::Packet send_packet(destination, "The quick brown fox jumps over the lazy dog");
 
-		RNS::head("Sending send packet...", RNS::LOG_EXTREME);
+		HEAD("Sending send packet...", RNS::LOG_TRACE);
 		send_packet.pack();
 #ifndef NDEBUG
 		TRACE("Test send_packet: " + send_packet.debugString());
 #endif
 
-		RNS::head("Creating recv packet...", RNS::LOG_EXTREME);
+		HEAD("Creating recv packet...", RNS::LOG_TRACE);
 		RNS::Packet recv_packet({RNS::Type::NONE}, send_packet.raw());
 		recv_packet.unpack();
 #ifndef NDEBUG
 		TRACE("Test recv_packet: " + recv_packet.debugString());
 #endif
 
-		RNS::head("Spoofing recv packet to destination...", RNS::LOG_EXTREME);
+		HEAD("Spoofing recv packet to destination...", RNS::LOG_TRACE);
 		destination.receive(recv_packet);
 #endif
 
-		RNS::head("Ready!", RNS::LOG_EXTREME);
+		HEAD("Ready!", RNS::LOG_TRACE);
 	}
 	catch (std::exception& e) {
-		RNS::error(std::string("!!! Exception in reticulum_setup: ") + e.what() + " !!!");
+		ERROR(std::string("!!! Exception in reticulum_setup: ") + e.what() + " !!!");
 	}
 }
 
 void reticulum_teardown() {
-	RNS::info("Tearing down Reticulum...");
+	INFO("Tearing down Reticulum...");
 
 	RNS::Transport::save_path_table();
 
 	try {
 
-		RNS::head("Deregistering announce handler with Transport...", RNS::LOG_EXTREME);
+		HEAD("Deregistering announce handler with Transport...", RNS::LOG_TRACE);
 		RNS::Transport::deregister_announce_handler(announce_handler);
 
-		RNS::head("Deregistering Interface instances with Transport...", RNS::LOG_EXTREME);
+		HEAD("Deregistering Interface instances with Transport...", RNS::LOG_TRACE);
 		RNS::Transport::deregister_interface(lora_interface);
 
 	}
 	catch (std::exception& e) {
-		RNS::error(std::string("!!! Exception in reticulum_teardown: ") + e.what() + " !!!");
+		ERROR(std::string("!!! Exception in reticulum_teardown: ") + e.what() + " !!!");
 	}
 }
 
@@ -254,14 +254,14 @@ void setup() {
 
 	// Setup filesystem
 	if (!SPIFFS.begin(true, "")){
-		RNS::error("SPIFFS filesystem mount failed");
+		ERROR("SPIFFS filesystem mount failed");
 	}
 	else {
 		DEBUG("SPIFFS filesystem is ready");
 	}
 #endif
 
-	RNS::loglevel(RNS::LOG_EXTREME);
+	RNS::loglevel(RNS::LOG_TRACE);
 	//RNS::loglevel(RNS::LOG_MEM);
 
 /*

@@ -37,7 +37,7 @@ LoRaInterface::LoRaInterface(const char* name /*= "LoRaInterface"*/) : Interface
 
 bool LoRaInterface::start() {
 	online(false);
-	info("LoRa initializing...");
+	INFO("LoRa initializing...");
   
 #ifdef ARDUINO
 	SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
@@ -47,7 +47,7 @@ bool LoRaInterface::start() {
 
 	// initialize radio
 	if (!LoRa.begin(frequency)) {
-		error("LoRa init failed. Check your connections.");
+		ERROR("LoRa init failed. Check your connections.");
 		return false;
 	}
 
@@ -57,7 +57,7 @@ bool LoRaInterface::start() {
 	LoRa.setPreambleLength(20);
 	LoRa.setTxPower(power);
 
-	info("LoRa init succeeded.");
+	INFO("LoRa init succeeded.");
 	TRACE("LoRa bandwidth is " + std::to_string(Utilities::OS::round(bitrate()/1000.0, 2)) + " Kbps");
 #endif
 
@@ -137,6 +137,6 @@ void LoRaInterface::loop() {
 		Interface::on_outgoing(data);
 	}
 	catch (std::exception& e) {
-		error("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
+		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
 	}
 }

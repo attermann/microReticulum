@@ -11,25 +11,25 @@ using namespace RNS::Utilities;
 void testListDirectory() {
 
 	size_t pre_memory = OS::heap_available();
-	info("testListDirectory: pre-mem: " + std::to_string(pre_memory));
+	INFO("testListDirectory: pre-mem: " + std::to_string(pre_memory));
 
 	for (int i = 0; i < 1; i++) {
 		std::list<std::string> files;
 		files = OS::list_directory("/");
 		for (auto& file : files) {
-			info("FILE: " + file);
+			INFO("FILE: " + file);
 		}
 	}
 
 	size_t post_memory = OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
-	info("testListDirectory: post-mem: " + std::to_string(post_memory));
-	info("testListDirectory: diff-mem: " + std::to_string(diff_memory));
+	INFO("testListDirectory: post-mem: " + std::to_string(post_memory));
+	INFO("testListDirectory: diff-mem: " + std::to_string(diff_memory));
 	assert(diff_memory == 0);
 }
 
 void testFilesystem() {
-	RNS::head("Running testFilesystem...", RNS::LOG_EXTREME);
+	HEAD("Running testFilesystem...", RNS::LOG_TRACE);
 
 	testListDirectory();
 

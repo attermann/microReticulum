@@ -9,7 +9,7 @@
 using namespace RNS;
 
 //LogLevel _level = LOG_VERBOSE;
-LogLevel _level = LOG_EXTREME;
+LogLevel _level = LOG_TRACE;
 //LogLevel _level = LOG_MEM;
 RNS::log_callback _on_log = nullptr;
 char _datetime[20];
@@ -30,7 +30,7 @@ const char* RNS::getLevelName(LogLevel level) {
 		return "VRB";
 	case LOG_DEBUG:
 		return "DBG";
-	case LOG_EXTREME:
+	case LOG_TRACE:
 		return "---";
 	case LOG_MEM:
 		return "...";
@@ -96,7 +96,7 @@ void RNS::doLog(const char* msg, LogLevel level) {
 #endif
 }
 
-void RNS::head(const char* msg, LogLevel level) {
+void HEAD(const char* msg, LogLevel level) {
 	if (level > _level) {
 		return;
 	}
