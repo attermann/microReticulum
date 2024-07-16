@@ -85,13 +85,18 @@ namespace RNS { namespace Type {
 		// CBA TEST
 		static const uint16_t CLEAN_INTERVAL   = 60*15;
 		//static const uint16_t CLEAN_INTERVAL   = 60;
-		// CBA TEST
+		// CBA MCU
 		//static const uint16_t PERSIST_INTERVAL = 60*60*12;
+		// CBA TEST
 		static const uint16_t PERSIST_INTERVAL = 60*60;
 		//static const uint16_t PERSIST_INTERVAL = 60;
 		static const uint16_t GRACIOUS_PERSIST_INTERVAL = 60*5;
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes
+
+		// CBA MCU
+		//static const uint8_t FILEPATH_MAXSIZE = 64;
+		static const uint8_t FILEPATH_MAXSIZE = 96;
 
 	}
 

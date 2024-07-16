@@ -1,7 +1,5 @@
 //#define NDEBUG
 
-#include "Filesystem.h"
-
 #include "Test.h"
 
 #include "Log.h"
@@ -22,8 +20,6 @@
 #include <map>
 #include <functional>
 
-Filesystem filesystem;
-
 void setup() {
 
 #ifdef ARDUINO
@@ -38,18 +34,13 @@ void setup() {
 	RNS::loglevel(RNS::LOG_TRACE);
 	//RNS::loglevel(RNS::LOG_MEM);
 
-	if (filesystem) {
-		INFO("Filesystem exists");
-		filesystem.init();
-	}
-	RNS::Utilities::OS::register_filesystem(filesystem);
-
 	try {
 
 		TRACE("Running tests...");
 		RNS::LogLevel loglevel = RNS::loglevel();
 		//RNS::loglevel(RNS::LOG_WARNING);
 		RNS::loglevel(RNS::LOG_TRACE);
+		//RNS::loglevel(RNS::LOG_MEM);
 
 		// all tests
 		//test();
@@ -57,9 +48,9 @@ void setup() {
 		// individiual tests
 		//testReference();
 		//testCrypto();
-		//testPersistence();
 		testBytes();
 		//testFilesystem();
+		//testPersistence();
 		//testReticulum();
 
 		RNS::loglevel(loglevel);
@@ -67,7 +58,7 @@ void setup() {
 		//return;
 	}
 	catch (std::exception& e) {
-		ERROR(std::string("!!! Exception in test: ") + e.what() + " !!!");
+		ERRORF("!!! Exception in test: %s", e.what());
 	}
 
 #ifdef ARDUINO

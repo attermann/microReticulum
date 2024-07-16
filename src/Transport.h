@@ -355,6 +355,8 @@ namespace RNS {
 		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; }
 		inline static uint16_t probe_destination_enabled() { return _path_table_maxpersist; }
 		inline static void path_table_maxpersist(uint16_t path_table_maxpersist) { _path_table_maxpersist = path_table_maxpersist; }
+		// CBA TEST
+		static inline void identity(Identity& identity) { _identity = identity; }
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work

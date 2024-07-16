@@ -15,8 +15,10 @@ using namespace RNS;
 using namespace RNS::Type::Reticulum;
 using namespace RNS::Utilities;
 
-/*static*/ std::string Reticulum::_storagepath;
-/*static*/ std::string Reticulum::_cachepath;
+/*static*/ //std::string Reticulum::_storagepath;
+/*static*/ char Reticulum::_storagepath[FILEPATH_MAXSIZE];
+/*static*/ //std::string Reticulum::_cachepath;
+/*static*/ char Reticulum::_cachepath[FILEPATH_MAXSIZE];
 
 /*static*/ bool Reticulum::__transport_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
@@ -77,20 +79,25 @@ Reticulum::Reticulum() : _object(new Object()) {
 */
 // CBA TEST
 #ifdef ARDUINO
-	_storagepath = "";
-	_cachepath = "/cache";
+	//_storagepath = "";
+	strncpy(_storagepath, "", FILEPATH_MAXSIZE);
+	//_cachepath = "/cache";
+	strncpy(_cachepath, "/cache", FILEPATH_MAXSIZE);
 #else
-	_storagepath = ".";
-	_cachepath = "./cache";
+	//_storagepath = ".";
+	strncpy(_storagepath, ".", FILEPATH_MAXSIZE);
+	//_cachepath = "./cache";
+	strncpy(_cachepath, "./cache", FILEPATH_MAXSIZE);
 #endif
 
 #ifdef ARDUINO
 	// load time offset from file if it exists
 	try {
-		std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
-		if (OS::file_exists(time_offset_path.c_str())) {
+		char time_offset_path[FILEPATH_MAXSIZE];
+		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+		if (OS::file_exists(time_offset_path)) {
 			Bytes buf;
-			if (OS::read_file(time_offset_path.c_str(), buf) == 8) {
+			if (OS::read_file(time_offset_path, buf) == 8) {
 				uint64_t offset = *(uint64_t*)buf.data();
 				DEBUG("Read time offset of " + std::to_string(offset) + " from file");
 				OS::setTimeOffset(offset);
@@ -98,7 +105,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 		}
 	}
 	catch (std::exception& e) {
-		ERROR("Failed to load time offset, the contained exception was: " + std::string(e.what()));
+		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
 	}
 #endif
 
@@ -215,10 +222,11 @@ void Reticulum::jobs() {
 
 	double now = OS::time();
 
+#if 1
 	// CBA Detect low-memory condition and reset
 	if (OS::heap_size() > 0) {
 		uint8_t remaining = (uint8_t)((double)OS::heap_available() / (double)OS::heap_size() * 100.0);
-		if (remaining <= 10) {
+		if (remaining <= 2) {
 			head("DETECTED LOW-MEMORY CONDITION (" + std::to_string(remaining) + "%), RESETTING!!!", LOG_CRITICAL);
 			persist_data();
 #if defined(ESP32)
@@ -229,6 +237,7 @@ void Reticulum::jobs() {
 #endif
 		}
 	}
+#endif
 
 	if (now > _object->_last_cache_clean + CLEAN_INTERVAL) {
 		clean_caches();
@@ -254,14 +263,15 @@ void Reticulum::persist_data() {
 #ifdef ARDUINO
 	// write time offset to file
 	try {
-		std::string time_offset_path = Reticulum::_storagepath + "/time_offset";
+		char time_offset_path[FILEPATH_MAXSIZE];
+		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
 		uint64_t offset = OS::ltime();
-		DEBUG("Writing time offset of " + std::to_string(offset) + " to file");
+		DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
 		Bytes buf((uint8_t*)&offset, sizeof(offset));
-		OS::write_file(time_offset_path.c_str(), buf);
+		OS::write_file(time_offset_path, buf);
 	}
 	catch (std::exception& e) {
-		ERROR("Failed to write time offset, the contained exception was: " + std::string(e.what()));
+		ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
 	}
 #endif
 
@@ -277,7 +287,8 @@ void Reticulum::clean_caches() {
 	for (auto& filename : OS::list_directory(resourcepath) {
 		try {
 			if (filename.length() == (Type::Identity::HASHLENGTH//8)*2) {
-				std::string filepath = _resourcepath + "/" + filename;
+				char filepath[FILEPATH_MAXSIZE];
+				snprintf(filepath, FILEPATH_MAXSIZE, "%s/%s", _resourcepath, filename.c_str());
 				//p mtime = os.path.getmtime(filepath)
 				//p age = now - mtime
 				//p if (age > Types::Reticulum.RESOURCE_CACHE) {
@@ -286,7 +297,7 @@ void Reticulum::clean_caches() {
 			}
 		}
 		catch (std::exception& e) {
-			ERROR("Error while cleaning resources cache, the contained exception was: " + std::string(e.what()));
+			ERROR("Error while cleaning resources cache, the contained exception was: %s", e.what());
 		}
 	}
 
@@ -294,7 +305,8 @@ void Reticulum::clean_caches() {
 	for (auto& filename : OS::list_directory(_cachepath.c_str())) {
 		try {
 			if (filename.length() == (Type::Identity::HASHLENGTH/8)*2) {
-				std::string filepath = _cachepath + "/" + filename;
+				char filepath[FILEPATH_MAXSIZE];
+				snprintf(filepath, FILEPATH_MAXSIZE, "%s/%s", _cachepath, filename.c_str());
 				//p mtime = os.path.getmtime(filepath)
 				//p age = now - mtime
 				//p if (age > Types::Transport::DESTINATION_TIMEOUT) {
@@ -303,7 +315,7 @@ void Reticulum::clean_caches() {
 			}
 		}
 		catch (std::exception& e) {
-			ERROR("Error while cleaning packet cache, the contained exception was: " + std::string(e.what()));
+			ERROR("Error while cleaning packet cache, the contained exception was: %s", e.what());
 		}
 	}
 */
@@ -319,18 +331,19 @@ void Reticulum::clear_caches() {
 	TRACE("Clearing resource and packet caches...");
 
 	try {
-		std::string destination_table_path = _storagepath + "/destination_table";
-		OS::remove_file(destination_table_path.c_str());
+		char destination_table_path[FILEPATH_MAXSIZE];
+		snprintf(destination_table_path, FILEPATH_MAXSIZE, "%s/destination_table", _storagepath);
+		OS::remove_file(destination_table_path);
 
-		std::string packet_cache_path = _cachepath;
-		OS::remove_directory(packet_cache_path.c_str());
+		OS::remove_directory(_cachepath);
 
 #ifdef ARDUINO
-		std::string time_offset_path = _storagepath + "/time_offset";
-		OS::remove_file(time_offset_path.c_str());
+		char time_offset_path[FILEPATH_MAXSIZE];
+		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+		OS::remove_file(time_offset_path);
 #endif
 	}
 	catch (std::exception& e) {
-		ERROR("Failed to clear cache file(s), the contained exception was: " + std::string(e.what()));
+		ERRORF("Failed to clear cache file(s), the contained exception was: %s", e.what());
 	}
 }

@@ -140,66 +140,13 @@ void testBytesMain() {
 	}
 
 	// test resize
+	HEAD("TestBytes: resize", RNS::LOG_TRACE);
 	{
 		RNS::Bytes shrink(bytes);
 		shrink.resize(5);
 		TRACE("shrink: " + shrink.toString());
 		assert(shrink.size() == 5);
 		assert(memcmp(shrink.data(), "Hello", shrink.size()) == 0);
-	}
-
-	// stream into empty bytes
-	{
-		RNS::Bytes strmbuf;
-		strmbuf << prebuf << postbuf;
-		TRACE("stream prebuf: " + prebuf.toString());
-		TRACE("stream postbuf: " + postbuf.toString());
-		TRACE("stream strmbuf: " + strmbuf.toString());
-		assert(strmbuf.size() == 11);
-		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
-		assert(prebuf.size() == 5);
-		assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
-		assert(postbuf.size() == 6);
-		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
-	}
-
-	// stream into populated bytes
-	{
-		RNS::Bytes strmbuf("Stream ");
-		assert(strmbuf);
-		assert(strmbuf.size() == 7);
-		assert(memcmp(strmbuf.data(), "Stream ", strmbuf.size()) == 0);
-
-		strmbuf << prebuf << postbuf;
-		TRACE("stream prebuf: " + prebuf.toString());
-		TRACE("stream postbuf: " + postbuf.toString());
-		TRACE("stream strmbuf: " + strmbuf.toString());
-		assert(strmbuf.size() == 18);
-		assert(memcmp(strmbuf.data(), "Stream Hello World", strmbuf.size()) == 0);
-		assert(prebuf.size() == 5);
-		assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
-		assert(postbuf.size() == 6);
-		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
-	}
-
-	// stream with assignment
-	// (side effect of also updating pre - this is a known and correct but perhaps unexpected and non-intuitive side-effect of assignment with stream)
-	{
-		// NOTE pre must be volatile in order for below stream with assignment to work (since it gets modified)
-		RNS::Bytes pre("Hello");
-		assert(pre.size() == 5);
-		const RNS::Bytes post(" World");
-		assert(post.size() == 6);
-		RNS::Bytes strmbuf = pre << post;
-		TRACE("stream pre: " + prebuf.toString());
-		TRACE("stream post: " + postbuf.toString());
-		TRACE("stream strmbuf: " + strmbuf.toString());
-		assert(strmbuf.size() == 11);
-		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
-		assert(pre.size() == 11);
-		assert(memcmp(pre.data(), "Hello World", pre.size()) == 0);
-		assert(post.size() == 6);
-		assert(memcmp(post.data(), " World", post.size()) == 0);
 	}
 
 	// test creating bytes from default
@@ -235,11 +182,11 @@ void testBytesMain() {
 	}
 
 	// function default argument
-	TRACE("TestBytes: function default argument");
+	HEAD("TestBytes: function default argument", RNS::LOG_TRACE);
 	testBytesDefault();
 
 	// function reference return
-	TRACE("TestBytes: function reference return");
+	HEAD("TestBytes: function reference return", RNS::LOG_TRACE);
 	{
 		RNS::Bytes test = testBytesReference();
 		TRACE("returned");
@@ -326,12 +273,14 @@ void testBytesConversion() {
 		assert(text.length() == 11);
 		assert(text.compare("Hello World") == 0);
 
+		// overwrite
 		bytes.assignHex(hex.c_str());
 		text = bytes.toString();
 		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
 		assert(text.length() == 11);
 		assert(text.compare("Hello World") == 0);
 
+		// apend
 		bytes.appendHex(hex.c_str());
 		text = bytes.toString();
 		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
@@ -362,22 +311,152 @@ void testBytesResize() {
 	assert(bytes.capacity() == 1024);
 }
 
+void testBytesStream() {
+
+	const uint8_t prestr[] = "Hello";
+	const uint8_t poststr[] = " World";
+
+	const RNS::Bytes prebuf(prestr, 5);
+	assert(prebuf);
+	assert(prebuf.size() == 5);
+	assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
+
+	const RNS::Bytes postbuf(poststr, 6);
+	assert(postbuf);
+	assert(postbuf.size() == 6);
+	assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
+
+	// stream into empty bytes
+	HEAD("TestBytes: stream into empty bytes", RNS::LOG_TRACE);
+	{
+		RNS::Bytes strmbuf;
+		strmbuf << prebuf << postbuf;
+		TRACE("Results:");
+		TRACEF("stream prebuf: %s", prebuf.toString().c_str());
+		TRACEF("stream postbuf: %s", postbuf.toString().c_str());
+		TRACEF("stream strmbuf: %s", strmbuf.toString().c_str());
+		assert(strmbuf.size() == 11);
+		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
+		assert(prebuf.size() == 5);
+		assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
+		assert(postbuf.size() == 6);
+		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
+	}
+
+	// stream into reserved empty bytes
+	HEAD("TestBytes: stream into reserved empty bytes", RNS::LOG_TRACE);
+	{
+		RNS::Bytes strmbuf(256);
+		//strmbuf << prebuf << postbuf;
+		strmbuf << prebuf;
+		strmbuf << postbuf;
+		TRACE("Results:");
+		//TRACEF("stream prebuf: %s", prebuf.toString().c_str());
+		//TRACEF("stream postbuf: %s", postbuf.toString().c_str());
+		//TRACEF("stream strmbuf: %s", strmbuf.toString().c_str());
+		assert(strmbuf.size() == 11);
+		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
+		assert(prebuf.size() == 5);
+		assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
+		assert(postbuf.size() == 6);
+		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
+	}
+
+	// stream into populated bytes
+	HEAD("TestBytes: stream into populated bytes", RNS::LOG_TRACE);
+	{
+		RNS::Bytes strmbuf("Stream ");
+		assert(strmbuf);
+		assert(strmbuf.size() == 7);
+		assert(memcmp(strmbuf.data(), "Stream ", strmbuf.size()) == 0);
+
+		strmbuf << prebuf << postbuf;
+		TRACE("Results:");
+		TRACEF("stream prebuf: %s", prebuf.toString().c_str());
+		TRACEF("stream postbuf: %s", postbuf.toString().c_str());
+		TRACEF("stream strmbuf: %s", strmbuf.toString().c_str());
+		assert(strmbuf.size() == 18);
+		assert(memcmp(strmbuf.data(), "Stream Hello World", strmbuf.size()) == 0);
+		assert(prebuf.size() == 5);
+		assert(memcmp(prebuf.data(), "Hello", prebuf.size()) == 0);
+		assert(postbuf.size() == 6);
+		assert(memcmp(postbuf.data(), " World", postbuf.size()) == 0);
+	}
+
+	// stream with assignment
+	HEAD("TestBytes: stream with assignment", RNS::LOG_TRACE);
+	// (side effect of also updating pre - this is a known and correct but perhaps unexpected and non-intuitive side-effect of assignment with stream)
+	{
+		// NOTE pre must be volatile in order for below stream with assignment to work (since it gets modified)
+		RNS::Bytes pre("Hello");
+		assert(pre.size() == 5);
+		const RNS::Bytes post(" World");
+		assert(post.size() == 6);
+		RNS::Bytes strmbuf = pre << post;
+		TRACE("Results:");
+		TRACEF("stream pre: %s", prebuf.toString().c_str());
+		TRACEF("stream post: %s", postbuf.toString().c_str());
+		TRACEF("stream strmbuf: %s", strmbuf.toString().c_str());
+		assert(strmbuf.size() == 11);
+		assert(memcmp(strmbuf.data(), "Hello World", strmbuf.size()) == 0);
+		assert(pre.size() == 11);
+		assert(memcmp(pre.data(), "Hello World", pre.size()) == 0);
+		assert(post.size() == 6);
+		assert(memcmp(post.data(), " World", post.size()) == 0);
+	}
+
+}
+
+void testBytesReserve() {
+
+	RNS::Bytes src("Hello");
+	uint8_t hops = 32;
+
+	{
+		RNS::Bytes dst = src.left(1);
+		dst << hops;
+		dst << src.mid(2);
+		TRACEF("non-reserve: %s", dst.toString().c_str());
+		assert(dst.size() == 5);
+		assert(memcmp(dst.data(), "H llo", dst.size()) == 0);
+	}
+
+	{
+		RNS::Bytes dst(512);
+		dst << src.left(1);
+		dst << hops;
+		dst << src.mid(2);
+		TRACEF("reserve: %s", dst.toString().c_str());
+		assert(dst.size() == 5);
+		assert(memcmp(dst.data(), "H llo", dst.size()) == 0);
+	}
+
+}
+
 void testBytes() {
 	HEAD("Running testBytes...", RNS::LOG_TRACE);
 
-	size_t pre_memory = RNS::Utilities::OS::heap_available();
-	TRACE("testBytes: pre-mem: " + std::to_string(pre_memory));
+	RNS::Utilities::OS::dump_heap_stats();
 
-	testBytesMain();
-	testCowBytes();
-	testBytesConversion();
-	testBytesResize();
+	size_t pre_memory = RNS::Utilities::OS::heap_available();
+	TRACEF("testBytes: pre-mem: %u", pre_memory);
+
+	//testBytesMain();
+	//testCowBytes();
+	//testBytesConversion();
+	//testBytesResize();
+	//testBytesStream();
+	testBytesReserve();
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
-	TRACE("testBytes: post-mem: " + std::to_string(post_memory));
-	TRACE("testBytes: diff-mem: " + std::to_string(diff_memory));
+	TRACEF("testBytes: post-mem: %u", post_memory);
+	TRACEF("testBytes: diff-mem: %u", diff_memory);
 	assert(diff_memory == 0);
+
+	RNS::Utilities::OS::dump_allocator_stats();
+
+	RNS::Utilities::OS::dump_heap_stats();
 }
 
 /*

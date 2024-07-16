@@ -59,7 +59,7 @@ const char* RNS::getTimeString() {
 	}
 	struct tm* tm = localtime(&tv.tv_sec);
 	size_t len = strftime(_datetime, sizeof(_datetime), "%Y-%m-%d %H:%M:%S", tm);
-	sprintf(_datetime+len, ".%03d", millis);
+	snprintf(_datetime+len, sizeof(_datetime)-len, ".%03d", millis);
 	return _datetime;
 #endif
 }
@@ -76,7 +76,7 @@ void RNS::setLogCallback(log_callback on_log /*= nullptr*/) {
 	_on_log = on_log;
 }
 
-void RNS::doLog(const char* msg, LogLevel level) {
+void RNS::doLog(LogLevel level, const char* msg) {
 	if (level > _level) {
 		return;
 	}
@@ -105,8 +105,5 @@ void HEAD(const char* msg, LogLevel level) {
 #else
 	printf("\n");
 #endif
-	doLog(msg, level);
-}
-
-void RNS::doLog(LogLevel level, const char* msg, ...) {
+	doLog(level, msg);
 }

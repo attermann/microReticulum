@@ -96,7 +96,7 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 	catch (std::exception& e) {
 		//p raise e
 		ERROR("Failed to load identity key");
-		ERROR("The contained exception was: " + std::string(e.what()));
+		ERRORF("The contained exception was: %s", e.what());
 		return false;
 	}
 }
@@ -126,7 +126,7 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 		update_hashes();
 	}
 	catch (std::exception& e) {
-		ERROR("Error while loading public key, the contained exception was: " + std::string(e.what()));
+		ERRORF("Error while loading public key, the contained exception was: %s", e.what());
 	}
 }
 
@@ -143,7 +143,7 @@ bool Identity::load(const char* path) {
 	}
 	catch (std::exception& e) {
 		ERROR("Error while loading identity from " + std::string(path));
-		ERROR("The contained exception was: " + std::string(e.what()));
+		ERRORF("The contained exception was: %s", e.what());
 	}
 	return false;
 }
@@ -162,8 +162,8 @@ bool Identity::to_file(const char* path) {
 		return (OS::write_file(path, get_private_key()) == get_private_key().size());
 	}
 	catch (std::exception& e) {
-		ERROR("Error while saving identity to " + std::string(path));
-		ERROR("The contained exception was: " + std::string(e.what()));
+		ERRORF("Error while saving identity to %s", path);
+		ERRORF("The contained exception was: %s", e.what());
 	}
 	return false;
 }
@@ -315,7 +315,7 @@ Recall last heard app_data for a destination hash.
 		success = true;
 	}
 	catch (std::exception& e) {
-		ERROR("Error while saving known destinations to disk, the contained exception was: " + std::string(e.what()));
+		ERRORF("Error while saving known destinations to disk, the contained exception was: %s", e.what());
 	}
 
 	_saving_known_destinations = false;

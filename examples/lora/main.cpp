@@ -208,7 +208,7 @@ void reticulum_setup() {
 		HEAD("Ready!", RNS::LOG_TRACE);
 	}
 	catch (std::exception& e) {
-		ERROR(std::string("!!! Exception in reticulum_setup: ") + e.what() + " !!!");
+		ERRORF("!!! Exception in reticulum_setup: %s", e.what());
 	}
 }
 
@@ -227,7 +227,7 @@ void reticulum_teardown() {
 
 	}
 	catch (std::exception& e) {
-		ERROR(std::string("!!! Exception in reticulum_teardown: ") + e.what() + " !!!");
+		ERRORF("!!! Exception in reticulum_teardown: %s", e.what());
 	}
 }
 

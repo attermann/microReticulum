@@ -3,56 +3,67 @@
 using namespace RNS;
 
 // Creates new shared data for instance
-// - If size is specified (>0) then create shared data with initial size
-// - If size is not specified (<=0) then create empty shared data
-void Bytes::newData(size_t size /*= 0*/) {
-	MEM("Bytes is creating its own data");
-	if (size > 0) {
-		// CBA Note that this method of construction creates vector with specified and initializes all eleemtnets with default values
-		Data* data = new Data(size);
-		if (data == nullptr) {
-			ERROR("Bytes failed to allocate data buffer");
-			throw std::runtime_error("Failed to allocate data buffer");
-		}
-		_data = SharedData(data);
+// - If capacity is specified (>0) then create empty shared data with initial reserved capacity
+// - If capacity is not specified (<=0) then create empty shared data with no initial capacity
+void Bytes::newData(size_t capacity /*= 0*/) {
+	MEMF("Bytes is creating own data with capacity %u", capacity);
+MEM("newData: Creating new data...");
+	Data* data = new Data();
+	if (data == nullptr) {
+		ERROR("Bytes failed to allocate empty data buffer");
+		throw std::runtime_error("Failed to allocate empty data buffer");
 	}
-	else {
-		Data* data = new Data();
-		if (data == nullptr) {
-			ERROR("Bytes failed to allocate empty data buffer");
-			throw std::runtime_error("Failed to allocate empty data buffer");
-		}
-		_data = SharedData(data);
+MEM("newData: Created new data");
+	if (capacity > 0) {
+MEM("newData: Reserving data capacity...");
+		data->reserve(capacity);
+MEM("newData: Reserved data capacity");
 	}
+MEM("newData: Assigning data to shared data pointer...");
+	_data = SharedData(data);
+MEM("newData: Assigned data to shared data pointer");
 	_exclusive = true;
 }
 
 // Ensures that instance has exclusive shared data
 // - If instance has no shared data then create new shared data
-// - If instance does not have exclusive on shared data that is not empty then make a copy of shared data (if requests) and resize (if requested)
+// - If instance does not have exclusive on shared data that is not empty then make a copy of shared data (if requests) and reserve capacity (if requested)
 // - If instance does not have exclusive on shared data that is empty then then create new shared data
-// - If instance already has exclusive on shared data then do nothing except resize (if requested)
-void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
+// - If instance already has exclusive on shared data then do nothing except reserve capacity (if requested)
+void Bytes::exclusiveData(bool copy /*= true*/, size_t capacity /*= 0*/) {
 	if (!_data) {
-		newData(size);
+		newData(capacity);
 	}
 	else if (!_exclusive) {
-		Data *data;
 		if (copy && !_data->empty()) {
 			//TRACE("Bytes is creating a writable copy of its shared data");
-			data = new Data(*_data.get());
+			//Data* data = new Data(*_data.get());
+MEM("exclusiveData: Creating new data...");
+			Data* data = new Data();
 			if (data == nullptr) {
 				ERROR("Bytes failed to duplicate data buffer");
 				throw std::runtime_error("Failed to duplicate data buffer");
 			}
-			if (size > 0) {
-				data->resize(size);
+MEM("exclusiveData: Created new data");
+			if (capacity > 0) {
+MEM("exclusiveData: Reserving data capacity...");
+				// if requested capacity < existing size then reserve capacity for existing size instead
+				data->reserve((capacity > _data->size()) ? capacity : _data->size());
+MEM("exclusiveData: Reserved data capacity");
 			}
+			else {
+				data->reserve(_data->size());
+			}
+MEM("exclusiveData: Copying existing data...");
+			data->insert(data->begin(), _data->begin(), _data->end());
+MEM("exclusiveData: Copied existing data");
+MEM("exclusiveData: Assigning data to shared data pointer...");
 			_data = SharedData(data);
+MEM("exclusiveData: Assigned data to shared data pointer");
 			_exclusive = true;
 		}
 		else {
-			//TRACE("Bytes is creating its own data because shared is empty");
+			//MEM("Bytes is creating its own data because shared is empty");
 			//data = new Data();
 			//if (data == nullptr) {
 			//	ERROR("Bytes failed to allocate empty data buffer");
@@ -60,11 +71,13 @@ void Bytes::exclusiveData(bool copy /*= true*/, size_t size /*= 0*/) {
 			//}
 			//_data = SharedData(data);
 			//_exclusive = true;
-			newData(size);
+MEM("exclusiveData: Creating new empty data...");
+			newData(capacity);
+MEM("exclusiveData: Created new empty data");
 		}
 	}
-	else if (size > 0) {
-		_data->resize(size);
+	else if (capacity > 0 && capacity > size()) {
+		reserve(capacity);
 	}
 }
 
@@ -96,9 +109,11 @@ void Bytes::assignHex(const char* hex) {
 		_exclusive = true;
 		return;
 	}
-	newData();
-	size_t len = strlen(hex);
-	for (size_t i = 0; i < len; i += 2) {
+	size_t hex_size = strlen(hex);
+	exclusiveData(false, hex_size / 2);
+	// need to clear data since we're appending below
+	_data->clear();
+	for (size_t i = 0; i < hex_size; i += 2) {
 		uint8_t byte = (hex[i] % 32 + 9) % 25 * 16 + (hex[i+1] % 32 + 9) % 25;
 		_data->push_back(byte);
 	}
@@ -109,9 +124,9 @@ void Bytes::appendHex(const char* hex) {
 	if (hex == nullptr || hex[0] == 0) {
 		return;
 	}
-	exclusiveData();
-	size_t len = strlen(hex);
-	for (size_t i = 0; i < len; i += 2) {
+	size_t hex_size = strlen(hex);
+	exclusiveData(true, size() + (hex_size / 2));
+	for (size_t i = 0; i < hex_size; i += 2) {
 		uint8_t byte = (hex[i] % 32 + 9) % 25 * 16 + (hex[i+1] % 32 + 9) % 25;
 		_data->push_back(byte);
 	}

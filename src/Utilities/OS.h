@@ -3,6 +3,8 @@
 #include "../Filesystem.h"
 #include "../Bytes.h"
 
+#include "tlsf.h"
+
 #include <cmath>
 #include <unistd.h>
 #include <time.h>
@@ -22,6 +24,9 @@ namespace RNS { namespace Utilities {
 	private:
 		static Filesystem _filesystem;
 		static uint64_t _time_offset;
+
+	public:
+		static tlsf_t _tlsf;
 
 	public:
 		static inline uint64_t getTimeOffset() { return _time_offset; }
@@ -64,6 +69,10 @@ namespace RNS { namespace Utilities {
 		//static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 		static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 
+#if defined(RNS_USE_ALLOCATOR)
+		static void dump_allocator_stats();
+#endif
+
 		static void register_filesystem(Filesystem& filesystem);
 		static void deregister_filesystem();
 
@@ -81,7 +90,8 @@ namespace RNS { namespace Utilities {
 
 		static size_t heap_size();
 		static size_t heap_available();
-
+		static void dump_heap_stats();
+	
     };
 
 } }

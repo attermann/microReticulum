@@ -372,6 +372,7 @@ namespace RNS { namespace Persistence {
 		}
 		return true;
 	}
+
 	template <typename T> bool deserialize(T& obj, const char* file_path) {
 		if (RNS::Utilities::OS::read_file(file_path, _buffer) > 0) {
 			TRACE("Persistence::deserialize: read: " + std::to_string(_buffer.size()) + " bytes");

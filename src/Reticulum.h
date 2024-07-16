@@ -25,9 +25,11 @@ namespace RNS {
 		//z configdir        = None
 		//z configpath       = ""
 		//p storagepath      = ""
-		static std::string _storagepath;
+		//static std::string _storagepath;
+		static char _storagepath[Type::Reticulum::FILEPATH_MAXSIZE];
 		//p cachepath        = ""
-		static std::string _cachepath;
+		//static std::string _cachepath;
+		static char _cachepath[Type::Reticulum::FILEPATH_MAXSIZE];
 
 		static bool __transport_enabled;
 		static bool __use_implicit_proof;

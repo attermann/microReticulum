@@ -20,7 +20,7 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 #ifdef ARDUINO
-void listDir(const char* dir){
+void Filesystem::listDir(const char* dir) {
 	Serial.print("DIR: ");
 	Serial.println(dir);
 #ifdef BOARD_ESP32
@@ -30,8 +30,13 @@ void listDir(const char* dir){
 		return;
 	}
 	File file = root.openNextFile();
-	while(file){
-		Serial.print("  FILE: ");
+	while (file) {
+		if (file.isDirectory()) {
+			Serial.print("  DIR: ");
+		}
+		else {
+			Serial.print("  FILE: ");
+		}
 		Serial.println(file.name());
 		file.close();
 		file = root.openNextFile();
@@ -44,14 +49,22 @@ void listDir(const char* dir){
 		return;
 	}
 	File file = root.openNextFile();
-	while(file){
-		Serial.print("  FILE: ");
+	while (file) {
+		if (file.isDirectory()) {
+			Serial.print("  DIR: ");
+		}
+		else {
+			Serial.print("  FILE: ");
+		}
 		Serial.println(file.name());
 		file.close();
 		file = root.openNextFile();
 	}
 	root.close();
 #endif
+}
+#else
+void Filesystem::listDir(const char* dir) {
 }
 #endif
 
@@ -75,8 +88,8 @@ bool Filesystem::init() {
 	Serial.print(used);
 	Serial.println(" MB");
 	// ensure filesystem is writable and format if not
-	RNS::Bytes test;
-	if (!write_file("/test", test)) {
+	RNS::Bytes test("test");
+	if (write_file("/test", test) < 4) {
 		INFO("SPIFFS filesystem is being formatted, please wait...");
 		SPIFFS.format();
 	}
@@ -90,7 +103,6 @@ bool Filesystem::init() {
 	InternalFS.begin();
 	INFO("InternalFS filesystem is ready");
 #endif
-	listDir("/");
 #endif
 	return true;
 }
@@ -157,7 +169,7 @@ bool Filesystem::init() {
 		//size_t read = fread(data.writable(size), size, 1, file);
 		size_t read = fread(data.writable(size), 1, size, file);
 #endif
-		TRACE("read_file: read " + std::to_string(read) + " RNS::Bytes from file " + std::string(file_path));
+		TRACE("read_file: read " + std::to_string(read) + " bytes from file " + std::string(file_path));
 		if (read != size) {
 			ERROR("read_file: failed to read file " + std::string(file_path));
             data.clear();
@@ -181,6 +193,8 @@ bool Filesystem::init() {
 }
 
 /*virtual*/ size_t Filesystem::write_file(const char* file_path, const RNS::Bytes& data) {
+	// CBA TODO Replace remove with working truncation
+	remove_file(file_path);
     size_t wrote = 0;
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -201,7 +215,7 @@ bool Filesystem::init() {
         //size_t wrote = fwrite(data.data(), data.size(), 1, file);
         size_t wrote = fwrite(data.data(), 1, data.size(), file);
 #endif
-        TRACE("write_file: wrote " + std::to_string(wrote) + " RNS::Bytes to file " + std::string(file_path));
+        TRACE("write_file: wrote " + std::to_string(wrote) + " bytes to file " + std::string(file_path));
         if (wrote < data.size()) {
 			WARNING("write_file: not all data was written to file " + std::string(file_path));
 		}

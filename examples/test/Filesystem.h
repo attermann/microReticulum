@@ -8,6 +8,9 @@ class Filesystem : public RNS::Filesystem {
 public:
 	bool init();
 
+public:
+	static void listDir(const char* dir);
+
 protected:
 	virtual bool file_exists(const char* file_path);
 	virtual size_t read_file(const char* file_path, RNS::Bytes& data);

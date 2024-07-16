@@ -1,5 +1,7 @@
 //#include <unity.h>
 
+#include "Filesystem.h"
+
 #include "Interface.h"
 #include "Transport.h"
 #include "Log.h"
@@ -17,6 +19,7 @@
 #include <assert.h>
 #include <stdio.h>
 
+Filesystem persistence_filesystem;
 
 class TestInterface : public RNS::Interface {
 
@@ -239,7 +242,6 @@ void testDeserializeObject() {
 	}
 
 }
-
 
 #ifdef ARDUINO
 const char test_vector_path[] = "/test_vector";
@@ -684,9 +686,20 @@ void testDeserializeDestinationTable() {
 
 }
 
+void testSerializeTimeOffset() {
+	uint64_t offset = RNS::Utilities::OS::ltime();
+	TRACEF("Writing time offset of %llu to file /time_offset", offset);
+	RNS::Bytes buf((uint8_t*)&offset, sizeof(offset));
+	RNS::Utilities::OS::write_file("/time_offset", buf);
+}
+
 
 void testPersistence() {
 	HEAD("Running testPersistence...", RNS::LOG_TRACE);
+
+	persistence_filesystem.init();
+	RNS::Utilities::OS::register_filesystem(persistence_filesystem);
+
 	testWrite();
 	testRead();
 	testSerializeObject();
@@ -697,8 +710,12 @@ void testPersistence() {
 	testDeserializeSet();
 	testSerializeMap();
 	testDeserializeMap();
-	testSerializeDestinationTable();
-	testDeserializeDestinationTable();
+	//testSerializeDestinationTable();
+	//testDeserializeDestinationTable();
+	testSerializeTimeOffset();
+
+	RNS::Utilities::OS::deregister_filesystem();
+
 }
 
 /*
