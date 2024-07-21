@@ -91,6 +91,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 #endif
 
 #ifdef ARDUINO
+#if defined(RNS_USE_FS)
 	// load time offset from file if it exists
 	try {
 		char time_offset_path[FILEPATH_MAXSIZE];
@@ -107,6 +108,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	catch (std::exception& e) {
 		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
 	}
+#endif
 #endif
 
 	// Initialize time-based variables *after* time offset update
@@ -261,6 +263,7 @@ void Reticulum::persist_data() {
 	Identity::persist_data();
 
 #ifdef ARDUINO
+#if defined(RNS_USE_FS)
 	// write time offset to file
 	try {
 		char time_offset_path[FILEPATH_MAXSIZE];
@@ -274,6 +277,7 @@ void Reticulum::persist_data() {
 		ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
 	}
 #endif
+#endif
 
 	_object->_last_data_persist = OS::time();
 }
@@ -282,6 +286,7 @@ void Reticulum::clean_caches() {
 	TRACE("Cleaning resource and packet caches...");
 	double now = OS::time();
 
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 /*
 	// Clean resource caches
 	for (auto& filename : OS::list_directory(resourcepath) {
@@ -324,6 +329,7 @@ void Reticulum::clean_caches() {
 
 	// CBA
 	Identity::cull_known_destinations();
+#endif
 
 }
 

@@ -132,6 +132,7 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 
 bool Identity::load(const char* path) {
 	TRACE("Reading identity key from storage...");
+#if defined(RNS_USE_FS)
 	try {
 		Bytes prv_bytes;
 		if (OS::read_file(path, prv_bytes) > 0) {
@@ -145,6 +146,7 @@ bool Identity::load(const char* path) {
 		ERROR("Error while loading identity from " + std::string(path));
 		ERRORF("The contained exception was: %s", e.what());
 	}
+#endif
 	return false;
 }
 
@@ -158,6 +160,7 @@ communication for the identity. Be very careful with this method.
 */
 bool Identity::to_file(const char* path) {
 	TRACE("Writing identity key to storage...");
+#if defined(RNS_USE_FS)
 	try {
 		return (OS::write_file(path, get_private_key()) == get_private_key().size());
 	}
@@ -165,6 +168,7 @@ bool Identity::to_file(const char* path) {
 		ERRORF("Error while saving identity to %s", path);
 		ERRORF("The contained exception was: %s", e.what());
 	}
+#endif
 	return false;
 }
 

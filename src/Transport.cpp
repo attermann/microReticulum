@@ -2628,6 +2628,7 @@ Deregisters an announce handler.
 // the packet cache.
 /*static*/ bool Transport::cache_packet(const Packet& packet, bool force_cache /*= false*/) {
 	TRACE("Checking to see if packet " + packet.get_hash().toHex() + " should be cached");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	if (should_cache_packet(packet) || force_cache) {
 		TRACE("Saving packet " + packet.get_hash().toHex() + " to storage");
 		try {
@@ -2639,11 +2640,13 @@ Deregisters an announce handler.
 			ERROR("Error writing packet to cache. The contained exception was: " + std::string(e.what()));
 		}
 	}
+#endif
 	return false;
 }
 
 /*static*/ Packet Transport::get_cached_packet(const Bytes& packet_hash) {
 	TRACE("Loading packet " + packet_hash.toHex() + " from cache storage");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	try {
 /*p
 		packet_hash = RNS.hexrep(packet_hash, delimit=False)
@@ -2678,11 +2681,13 @@ Deregisters an announce handler.
 		ERROR("Exception occurred while getting cached packet.");
 		ERRORF("The contained exception was: %s", e.what());
 	}
+#endif
 	return {Type::NONE};
 }
 
 /*static*/ bool Transport::clear_cached_packet(const Bytes& packet_hash) {
 	TRACE("Clearing packet " + packet_hash.toHex() + " from cache storage");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	try {
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
@@ -2700,6 +2705,7 @@ Deregisters an announce handler.
 		ERROR("Exception occurred while clearing cached packet.");
 		ERRORF("The contained exception was: %s", e.what());
 	}
+#endif
 	return false;
 }
 
@@ -3281,6 +3287,7 @@ will announce it.
 }
 
 /*static*/ void Transport::write_packet_hashlist() {
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 // TODO
 /*
 	if not Transport.owner.is_connected_to_shared_instance:
@@ -3320,10 +3327,12 @@ will announce it.
 
 		Transport.saving_packet_hashlist = False
 */
+#endif
 }
 
 /*static*/ bool Transport::read_path_table() {
 	DEBUG("Transport::read_path_table");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
 	snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
 	if (!_owner.is_connected_to_shared_instance() && OS::file_exists(destination_table_path)) {
@@ -3422,6 +3431,7 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 			ERRORF("Could not load destination table from storage, the contained exception was: %s", e.what());
 		}
 	}
+#endif
 	return false;
 }
 
@@ -3434,6 +3444,7 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 	}
 
 	bool success = false;
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	if (_saving_path_table) {
 		double wait_interval = 0.2;
 		double wait_timeout = 5;
@@ -3563,6 +3574,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	catch (std::exception& e) {
 		ERRORF("Could not save path table to storage, the contained exception was: %s", e.what());
 	}
+#endif
 
 	_saving_path_table = false;
 
@@ -3571,6 +3583,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 
 /*static*/ void Transport::read_tunnel_table() {
 	DEBUG("Transport::read_tunnel_table");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 // TODO
 /*
 		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
@@ -3622,9 +3635,11 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			except Exception as e:
 				RNS.log("Could not load tunnel table from storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
 */
+#endif
 }
 
 /*static*/ void Transport::write_tunnel_table() {
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 // TODO
 /*
 	if not Transport.owner.is_connected_to_shared_instance:
@@ -3701,6 +3716,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 
 		Transport.saving_tunnel_table = False
 */
+#endif
 }
 
 /*static*/ void Transport::persist_data() {
@@ -3712,6 +3728,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 
 /*static*/ void Transport::clean_caches() {
 	TRACE("Transport::clean_caches()");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	// CBA Remove cached packets no longer in path list
 	std::list<std::string> files = OS::list_directory(Reticulum::_cachepath);
     for (auto& file : files) {
@@ -3730,6 +3747,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			OS::remove_file(packet_cache_path);
 		}
 	}
+#endif
 }
 
 /*static*/ void Transport::dump_stats() {
@@ -3837,12 +3855,14 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			//if (_packet_table.erase(destination_entry._announce_packet) < 1) {
 			//	WARNING("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
 			//}
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 			// Remove cached packet file
 			char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, destination_entry._announce_packet.toHex().c_str());
 			if (OS::file_exists(packet_cache_path)) {
 				OS::remove_file(packet_cache_path);
 			}
+#endif
 			++count;
 			if (_destination_table.size() <= _path_table_maxsize) {
 				break;
@@ -3871,12 +3891,14 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			//if (_packet_table.erase(destination_entry._announce_packet) < 1) {
 			//	WARNING("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
 			//}
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 			// Remove cached packet file
 			char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, destination_entry._announce_packet.toHex().c_str());
 			if (OS::file_exists(packet_cache_path)) {
 				OS::remove_file(packet_cache_path);
 			}
+#endif
 			++count;
 			if (_destination_table.size() <= _path_table_maxsize) {
 				break;
