@@ -440,7 +440,7 @@ namespace RNS {
 		static uint16_t _path_table_maxpersist;
 		static double _last_saved;
 		static float _save_interval;
-		static uint8_t _destination_table_crc;
+		static uint32_t _destination_table_crc;
 
 		static Reticulum _owner;
 		static Identity _identity;
@@ -469,5 +469,4 @@ namespace RNS {
 			s.push_back(*it);
 		}
 	}
-
 }

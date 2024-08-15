@@ -33,9 +33,31 @@ void testTime()
 
 }
 
+void testConvert() {
+	//uint64_t time = ltime();
+	//printf("time: %lld\n", time);
+
+	uint64_t num = 1234567890;
+	//TEST_ASSERT_EQUAL_UINT64(1234567890, num);
+	assert(1234567890 == num);
+
+	char str[16];
+	snprintf(str, 16, "%lld", num);
+	//TEST_ASSERT_EQUAL_STRING("1234567890", str);
+	assert(strncmp("1234567890", str, sizeof(str)) == 0);
+
+	char* buf = (char*)&num;
+
+	//uint64_t newnum = (uint64_t)(*buf);
+	uint64_t newnum = *(uint64_t*)buf;
+	//TEST_ASSERT_EQUAL_UINT64(1234567890, newnum);
+	assert(1234567890 == newnum);
+}
+
 void testOS() {
 	HEAD("Running testOS...", RNS::LOG_TRACE);
 	testTime();
+	testConvert();
 }
 
 /*

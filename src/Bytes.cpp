@@ -81,7 +81,7 @@ MEM("exclusiveData: Created new empty data");
 	}
 }
 
-int8_t Bytes::compare(const Bytes& bytes) const {
+int Bytes::compare(const Bytes& bytes) const {
 	if (_data == bytes._data) {
 		return 0;
 	}
@@ -102,14 +102,30 @@ int8_t Bytes::compare(const Bytes& bytes) const {
 	}
 }
 
-void Bytes::assignHex(const char* hex) {
+int Bytes::compare(const uint8_t* buf, size_t size) const {
+	if (!_data && size == 0) {
+		return 0;
+	}
+	else if (!_data) {
+		return -1;
+	}
+	int cmp = memcmp(_data->data(), buf, (_data->size() < size) ? _data->size() : size);
+	if (cmp == 0 && _data->size() < size) {
+		return -1;
+	}
+	else if (cmp == 0 && _data->size() > size) {
+		return 1;
+	}
+	return cmp;
+}
+
+void Bytes::assignHex(const uint8_t* hex, size_t hex_size) {
 	// if assignment is empty then clear data and don't bother creating new
-	if (hex == nullptr || hex[0] == 0) {
+	if (hex == nullptr || hex_size <= 0) {
 		_data = nullptr;
 		_exclusive = true;
 		return;
 	}
-	size_t hex_size = strlen(hex);
 	exclusiveData(false, hex_size / 2);
 	// need to clear data since we're appending below
 	_data->clear();
@@ -119,12 +135,11 @@ void Bytes::assignHex(const char* hex) {
 	}
 }
 
-void Bytes::appendHex(const char* hex) {
+void Bytes::appendHex(const uint8_t* hex, size_t hex_size) {
 	// if append is empty then do nothing
-	if (hex == nullptr || hex[0] == 0) {
+	if (hex == nullptr || hex_size <= 0) {
 		return;
 	}
-	size_t hex_size = strlen(hex);
 	exclusiveData(true, size() + (hex_size / 2));
 	for (size_t i = 0; i < hex_size; i += 2) {
 		uint8_t byte = (hex[i] % 32 + 9) % 25 * 16 + (hex[i+1] % 32 + 9) % 25;

@@ -8,7 +8,7 @@ void test() {
 	testReference();
 	testCrypto();
 	testPersistence();
-	testFilesystem();
+	testFileSystem();
 	testReticulum();
 
 }

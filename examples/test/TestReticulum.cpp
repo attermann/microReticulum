@@ -6,67 +6,36 @@
 
 #include <assert.h>
 
-class TestInterface : public RNS::Interface {
-
+class InInterface : public RNS::InterfaceImpl {
 public:
-	TestInterface(const char* name = "TestInterface") : Interface(name) {}
-	virtual ~TestInterface() {}
-
-	virtual inline std::string toString() const { return "TestInterface[" + name() + "]"; }
-
-private:
-	virtual void on_incoming(const RNS::Bytes& data) {
-		RNS::debug(toString() + ".on_incoming: data: " + data.toHex());
-		Interface::on_incoming(data);
-	}
-	virtual void on_outgoing(const RNS::Bytes& data) {
-		RNS::debug(toString() + ".on_outgoing: data: " + data.toHex());
-		Interface::on_outgoing(data);
-	}
-
-};
-
-class InInterface : public RNS::Interface {
-public:
-	InInterface() : RNS::Interface("InInterface") {
-		OUT(false);
-		IN(true);
-	}
-	InInterface(const char *name) : RNS::Interface(name) {
-		OUT(false);
-		IN(true);
+	InInterface(const char *name = "InInterface") : RNS::InterfaceImpl(name) {
+		_OUT = false;
+		_IN = true;
 	}
 	virtual ~InInterface() {
-		name("(deleted)");
+		_name = "(deleted)";
 	}
-	virtual void on_incoming(const RNS::Bytes &data) {
-		HEAD("InInterface.on_incoming: data: " + data.toHex(), RNS::LOG_TRACE);
-		RNS::Interface::on_incoming(data);
+	virtual void handle_incoming(const RNS::Bytes &data) {
+		HEAD("InInterface.handle_incoming: data: " + data.toHex(), RNS::LOG_TRACE);
 	}
-	virtual inline std::string toString() const { return "InInterface[" + name() + "]"; }
 };
 
-class OutInterface : public RNS::Interface {
+class OutInterface : public RNS::InterfaceImpl {
 public:
-	OutInterface(InInterface& in_interface) : RNS::Interface("OutInterface"), _in_interface(in_interface) {
-		OUT(true);
-		IN(false);
-	}
-	OutInterface(InInterface& in_interface, const char *name) : RNS::Interface(name), _in_interface(in_interface) {
-		OUT(true);
-		IN(false);
+	OutInterface(RNS::Interface& in_interface, const char *name = "OutInterface") : RNS::InterfaceImpl(name), _in_interface(in_interface) {
+		_OUT = true;
+		_IN = false;
 	}
 	virtual ~OutInterface() {
-		name("(deleted)");
+		_name = "(deleted)";
 	}
-	virtual void on_outgoing(const RNS::Bytes &data) {
-		HEAD("OutInterface.on_outgoing: data: " + data.toHex(), RNS::LOG_TRACE);
-		_in_interface.on_incoming(data);
-		RNS::Interface::on_outgoing(data);
+	virtual void send_outgoing(const RNS::Bytes &data) {
+		HEAD("OutInterface.send_outgoing: data: " + data.toHex(), RNS::LOG_TRACE);
+		_in_interface.handle_incoming(data);
+		InterfaceImpl::send_outgoing(data);
 	}
-	virtual inline std::string toString() const { return "OutInterface[" + name() + "]"; }
 private:
-	InInterface& _in_interface;
+	RNS::Interface& _in_interface;
 };
 
 // Test AnnounceHandler
@@ -114,8 +83,8 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 RNS::Reticulum reticulum({RNS::Type::NONE});
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
-InInterface in_interface;
-OutInterface out_interface(in_interface);
+RNS::Interface in_interface(new InInterface());
+RNS::Interface out_interface(new OutInterface(in_interface));
 
 void testReticulum() {
 	HEAD("Running testReticulum...", RNS::LOG_TRACE);

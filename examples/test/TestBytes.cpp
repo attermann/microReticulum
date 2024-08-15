@@ -433,6 +433,18 @@ void testBytesReserve() {
 
 }
 
+void testFind() {
+	RNS::Bytes src("Hello");
+	assert(0 == src.find("H"));
+	assert(-1 == src.find(1, "H"));
+	assert(2 == src.find("ll"));
+	assert(2 == src.find(1, "ll"));
+	assert(2 == src.find(2, "ll"));
+	assert(-1 == src.find(3, "ll"));
+	assert(-1 == src.find(32, "ll"));
+	assert(-1 == src.find("foo"));
+}
+
 void testBytes() {
 	HEAD("Running testBytes...", RNS::LOG_TRACE);
 
@@ -441,12 +453,13 @@ void testBytes() {
 	size_t pre_memory = RNS::Utilities::OS::heap_available();
 	TRACEF("testBytes: pre-mem: %u", pre_memory);
 
-	//testBytesMain();
-	//testCowBytes();
-	//testBytesConversion();
-	//testBytesResize();
-	//testBytesStream();
+	testBytesMain();
+	testCowBytes();
+	testBytesConversion();
+	testBytesResize();
+	testBytesStream();
 	testBytesReserve();
+	testFind();
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
@@ -454,7 +467,9 @@ void testBytes() {
 	TRACEF("testBytes: diff-mem: %u", diff_memory);
 	assert(diff_memory == 0);
 
+#if defined(RNS_USE_ALLOCATOR)
 	RNS::Utilities::OS::dump_allocator_stats();
+#endif
 
 	RNS::Utilities::OS::dump_heap_stats();
 }

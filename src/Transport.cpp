@@ -18,9 +18,6 @@ using namespace RNS;
 using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
 
-// Imported from Crypto.cpp
-extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
-
 #if defined(INTERFACES_SET)
 ///*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_interfaces;
 /*static*/ std::set<std::reference_wrapper<Interface>, std::less<Interface>> Transport::_interfaces;
@@ -80,20 +77,24 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 /*static*/ //float Transport::_tables_cull_interval		= 5.0;
 /*static*/ float Transport::_tables_cull_interval		= 60.0;
 /*static*/ bool Transport::_saving_path_table			= false;
+// CBA ACCUMULATES
 // CBA MCU
 /*static*/ //uint16_t Transport::_hashlist_maxsize		= 1000000;
 /*static*/ //uint16_t Transport::_hashlist_maxsize		= 100;
-/*static*/ uint16_t Transport::_hashlist_maxsize		= 20;
+/*static*/ uint16_t Transport::_hashlist_maxsize		= 100;
+// CBA ACCUMULATES
 // CBA MCU
 /*static*/ //uint16_t Transport::_max_pr_tags			= 32000;
 /*static*/ uint16_t Transport::_max_pr_tags				= 32;
 
 // CBA
-/*static*/ uint16_t Transport::_path_table_maxsize		= 20;
-/*static*/ uint16_t Transport::_path_table_maxpersist	= 20;
+// CBA ACCUMULATES
+/*static*/ uint16_t Transport::_path_table_maxsize		= 100;
+// CBA ACCUMULATES
+/*static*/ uint16_t Transport::_path_table_maxpersist	= 100;
 /*static*/ double Transport::_last_saved				= 0.0;
 /*static*/ float Transport::_save_interval				= 3600.0;
-/*static*/ uint8_t Transport::_destination_table_crc	= 0;
+/*static*/ uint32_t Transport::_destination_table_crc	= 0;
 
 /*static*/ Reticulum Transport::_owner({Type::NONE});
 /*static*/ Identity Transport::_identity({Type::NONE});
@@ -708,8 +709,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 */
 		}
 		else {
-			//interface.on_outgoing(raw);
-			interface.process_outgoing(raw);
+			interface.send_outgoing(raw);
 		}
 	}
 	catch (std::exception& e) {
@@ -1000,7 +1000,7 @@ extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 											}
 										}
 										if (should_queue) {
-											Interface::AnnounceEntry entry(
+											RNS::AnnounceEntry entry(
 												packet.destination_hash(),
 												outbound_time,
 												packet.hops(),
@@ -2634,7 +2634,7 @@ Deregisters an announce handler.
 		try {
 			char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet.get_hash().toHex().c_str());
-			return Persistence::serialize(packet, packet_cache_path);
+			return (Persistence::serialize(packet, packet_cache_path) > 0);
 		}
 		catch (std::exception& e) {
 			ERROR("Error writing packet to cache. The contained exception was: " + std::string(e.what()));
@@ -2670,9 +2670,8 @@ Deregisters an announce handler.
 */
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
-		//return Persistence::deserialize(packet_cache_path.c_str());
 		Packet packet({Type::NONE});
-		if (Persistence::deserialize(packet, packet_cache_path)) {
+		if (Persistence::deserialize(packet, packet_cache_path) > 0) {
 			packet.update_hash();
 		}
 		return packet;
@@ -3330,6 +3329,8 @@ will announce it.
 #endif
 }
 
+//#define CUSTOM 1
+
 /*static*/ bool Transport::read_path_table() {
 	DEBUG("Transport::read_path_table");
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
@@ -3373,13 +3374,14 @@ will announce it.
 */
 
 		try {
-TRACE("Transport::start: buffer capacity " + std::to_string(Persistence::_buffer.capacity()) + " bytes");
+#if CUSTOM
+TRACEF("Transport::start: buffer capacity %d bytes", Persistence::_buffer.capacity());
 			if (RNS::Utilities::OS::read_file(destination_table_path, Persistence::_buffer) > 0) {
-				TRACE("Transport::start: read: " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				TRACEF("Transport::start: read: %d bytes", Persistence::_buffer.size());
 #ifndef NDEBUG
 				// CBA DEBUG Dump path table
-TRACE("Transport::start: buffer addr: " + std::to_string((long)Persistence::_buffer.data()));
-TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.size()) + " bytes");
+TRACEF("Transport::start: buffer addr: 0x%X", Persistence::_buffer.data());
+TRACEF("Transport::start: buffer size %d bytes", Persistence::_buffer.size());
 				//TRACE("SERIALIZED: destination_table");
 				//TRACE(Persistence::_buffer.toString());
 #endif
@@ -3388,27 +3390,32 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 #else
 				DeserializationError error = deserializeJson(Persistence::_document, Persistence::_buffer.data());
 #endif
-				TRACE("Transport::start: doc size: " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				TRACEF("Transport::start: doc size: %d bytes", Persistence::_buffer.size());
 				if (!error) {
-					_destination_table = Persistence::_document.as<std::map<Bytes, DestinationEntry>>();
-					TRACE("Transport::start: successfully deserialized path table with " + std::to_string(_destination_table.size()) + " entries");
 					// Calculate crc for dirty-checking before write
-					_destination_table_crc = crypto_crc8(0, Persistence::_buffer.data(), Persistence::_buffer.size());
+					_destination_table_crc = Crc::crc32(0, Persistence::_buffer.data(), Persistence::_buffer.size());
+					_destination_table = Persistence::_document.as<std::map<Bytes, DestinationEntry>>();
+#else	// CUSTOM
+				// Calculate crc for dirty-checking before write
+				if (Persistence::deserialize(_destination_table, destination_table_path, _destination_table_crc) > 0) {
+#endif	// CUSTOM
+
+					TRACEF("Transport::start: successfully deserialized path table with %d entries", _destination_table.size());
 					std::vector<Bytes> invalid_paths;
 					for (auto& [destination_hash, destination_entry] : _destination_table) {
 #ifndef NDEBUG
-						TRACE("Transport::start: entry: " + destination_hash.toHex() + " = " + destination_entry.debugString());
+						TRACEF("Transport::start: entry: %s = %s", destination_hash.toHex().c_str(), destination_entry.debugString().c_str());
 #endif
 						// CBA If announce packet load fails then remove destination entry (it's useless without announce packet)
 						if (!destination_entry.announce_packet()) {
 							// remove destination
-							WARNING("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing announce packet");
+							WARNINGF("Transport::start: removing invalid path to %s due to missing announce packet", destination_hash.toHex().c_str());
 							invalid_paths.push_back(destination_hash);
 						}
 						// CBA If receiving interface is not found then remove destination entry (it's useless without interface)
 						if (!destination_entry.receiving_interface()) {
 							// remove destination
-							WARNING("Transport::start: removing invalid path to " + destination_hash.toHex() + " due to missing receiving interface");
+							WARNINGF("Transport::start: removing invalid path to %s due to missing receiving interface", destination_hash.toHex().c_str());
 							invalid_paths.push_back(destination_hash);
 						}
 					}
@@ -3420,11 +3427,15 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 				else {
 					TRACE("Transport::start: failed to deserialize");
 				}
+#if CUSTOM
 			}
 			else {
 				TRACE("Transport::start: destination table read failed");
 			}
-			VERBOSE("Loaded " + std::to_string(_destination_table.size()) + " valid path table entries from storage");
+#else	// CUSTOM
+#endif	// CUSTOM
+
+			VERBOSEF("Loaded %d valid path table entries from storage", _destination_table.size());
 
 		}
 		catch (std::exception& e) {
@@ -3437,7 +3448,6 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 
 /*static*/ bool Transport::write_path_table() {
 	DEBUG("Transport::write_path_table");
-//return false;
 
 	if (Transport::_owner.is_connected_to_shared_instance()) {
 		return true;
@@ -3461,7 +3471,7 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 	try {
 		_saving_path_table = true;
 		double save_start = OS::time();
-		DEBUG("Saving " + std::to_string(_destination_table.size()) + " path table entries to storage...");
+		DEBUGF("Saving %d path table entries to storage...", _destination_table.size());
 
 /*p
 		serialised_destinations = []
@@ -3504,9 +3514,10 @@ TRACE("Transport::start: buffer size " + std::to_string(Persistence::_buffer.siz
 		file.close()
 */
 
+#if CUSTOM
 		{
 			Persistence::_document.set(_destination_table);
-			TRACE("Transport::write_path_table: doc size " + std::to_string(Persistence::_document.memoryUsage()) + " bytes");
+			TRACEF("Transport::write_path_table: doc size %d bytes", Persistence::_document.memoryUsage());
 
 			//size_t size = 8192;
 			size_t size = Persistence::_buffer.capacity();
@@ -3518,7 +3529,7 @@ TRACE("Transport::write_path_table: buffer addr: " + std::to_string((long)buffer
 #else
 			size_t length = serializeJson(Persistence::_document, buffer, size);
 #endif
-			TRACE("Transport::write_path_table: serialized " + std::to_string(length) + " bytes");
+			TRACEF("Transport::write_path_table: serialized %d bytes", length);
 			if (length < size) {
 				Persistence::_buffer.resize(length);
 			}
@@ -3534,12 +3545,12 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			//TRACE(Persistence::_buffer.toString());
 #endif
 			// Check crc to see if data has changed before writing
-			uint8_t crc = crypto_crc8(0, Persistence::_buffer.data(), Persistence::_buffer.size());
+			uint32_t crc = Crc::crc32(0, Persistence::_buffer.data(), Persistence::_buffer.size());
 			if (_destination_table_crc > 0 && crc == _destination_table_crc) {
 				TRACE("Transport::write_path_table: no change detected, skipping write");
 			}
 			else if (RNS::Utilities::OS::write_file(destination_table_path, Persistence::_buffer) == Persistence::_buffer.size()) {
-				TRACE("Transport::write_path_table: wrote " + std::to_string(_destination_table.size()) + " entries, " + std::to_string(Persistence::_buffer.size()) + " bytes");
+				TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _destination_table.size(), Persistence::_buffer.size());
 				_destination_table_crc = crc;
 				success = true;
 
@@ -3558,16 +3569,31 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		else {
 			TRACE("Transport::write_path_table: failed to serialize");
 		}
+#else	// CUSTOM
+		uint32_t crc = Persistence::crc(_destination_table);
+		if (_destination_table_crc > 0 && crc == _destination_table_crc) {
+			TRACE("Transport::write_path_table: no change detected, skipping write");
+		}
+		else {
+			TRACE("Transport::write_path_table: change detected, writing...");
+			char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
+			snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
+			if (Persistence::serialize(_destination_table, destination_table_path, _destination_table_crc) > 0) {
+				TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _destination_table.size(), Persistence::_buffer.size());
+				success = true;
+			}
+		}
+#endif	// CUSTOM
 
 		if (success) {
 			double save_time = OS::time() - save_start;
 			if (save_time < 1.0) {
 				//DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time * 1000, 1)) + " ms");
-				DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string((int)(save_time*1000)) + " ms");
+				DEBUGF("Saved %d path table entries in %d ms", _destination_table.size(), (int)(save_time*1000));
 			}
 			else {
 				//DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(OS::round(save_time, 1)) + " s");
-				DEBUG("Saved " + std::to_string(_destination_table.size()) + " path table entries in " + std::to_string(save_time) + " s");
+				DEBUGF("Saved %d path table entries in %d s", _destination_table.size(), save_time);
 			}
 		}
 	}

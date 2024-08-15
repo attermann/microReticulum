@@ -1,26 +1,49 @@
-#include "Filesystem.h"
+#include "FileSystem.h"
 
 #include <Utilities/OS.h>
 #include <Log.h>
 
-#ifdef ARDUINO
-#ifdef BOARD_ESP32
-//#include <FS.h>
-#include <SPIFFS.h>
-#elif BOARD_NRF52
-//#include <Adafruit_LittleFS.h>
-#include <InternalFileSystem.h>
-using namespace Adafruit_LittleFS_Namespace;
-#endif
-#else
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#endif
+bool FileSystem::init() {
+	TRACE("FileSystem initializing...");
 
 #ifdef ARDUINO
-void Filesystem::listDir(const char* dir) {
+#ifdef BOARD_ESP32
+	// Setup FileSystem
+	INFO("SPIFFS mounting FileSystem");
+	if (!SPIFFS.begin(true, "")){
+		ERROR("SPIFFS FileSystem mount failed");
+		return false;
+	}
+	uint32_t size = SPIFFS.totalBytes() / (1024 * 1024);
+	Serial.print("size: ");
+	Serial.print(size);
+	Serial.println(" MB");
+	uint32_t used = SPIFFS.usedBytes() / (1024 * 1024);
+	Serial.print("used: ");
+	Serial.print(used);
+	Serial.println(" MB");
+	// ensure FileSystem is writable and format if not
+	RNS::Bytes test("test");
+	if (write_file("/test", test) < 4) {
+		INFO("SPIFFS FileSystem is being formatted, please wait...");
+		SPIFFS.format();
+	}
+	else {
+		remove_file("/test");
+	}
+	DEBUG("SPIFFS FileSystem is ready");
+#elif BOARD_NRF52
+	// Initialize Internal File System
+	INFO("InternalFS mounting FileSystem");
+	InternalFS.begin();
+	INFO("InternalFS FileSystem is ready");
+#endif
+#endif
+	return true;
+}
+
+#ifdef ARDUINO
+void FileSystem::listDir(const char* dir) {
 	Serial.print("DIR: ");
 	Serial.println(dir);
 #ifdef BOARD_ESP32
@@ -64,50 +87,11 @@ void Filesystem::listDir(const char* dir) {
 #endif
 }
 #else
-void Filesystem::listDir(const char* dir) {
+void FileSystem::listDir(const char* dir) {
 }
 #endif
 
-bool Filesystem::init() {
-	TRACE("Filesystem initializing...");
-
-#ifdef ARDUINO
-#ifdef BOARD_ESP32
-	// Setup filesystem
-	INFO("SPIFFS mounting filesystem");
-	if (!SPIFFS.begin(true, "")){
-		ERROR("SPIFFS filesystem mount failed");
-		return false;
-	}
-	uint32_t size = SPIFFS.totalBytes() / (1024 * 1024);
-	Serial.print("size: ");
-	Serial.print(size);
-	Serial.println(" MB");
-	uint32_t used = SPIFFS.usedBytes() / (1024 * 1024);
-	Serial.print("used: ");
-	Serial.print(used);
-	Serial.println(" MB");
-	// ensure filesystem is writable and format if not
-	RNS::Bytes test("test");
-	if (write_file("/test", test) < 4) {
-		INFO("SPIFFS filesystem is being formatted, please wait...");
-		SPIFFS.format();
-	}
-	else {
-		remove_file("/test");
-	}
-	DEBUG("SPIFFS filesystem is ready");
-#elif BOARD_NRF52
-	// Initialize Internal File System
-	INFO("InternalFS mounting filesystem");
-	InternalFS.begin();
-	INFO("InternalFS filesystem is ready");
-#endif
-#endif
-	return true;
-}
-
-/*virtual*/ bool Filesystem::file_exists(const char* file_path) {
+/*virtual*/ bool FileSystem::file_exists(const char* file_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	File file = SPIFFS.open(file_path, FILE_READ);
@@ -142,7 +126,7 @@ bool Filesystem::init() {
 	}
 }
 
-/*virtual*/ size_t Filesystem::read_file(const char* file_path, RNS::Bytes& data) {
+/*virtual*/ size_t FileSystem::read_file(const char* file_path, RNS::Bytes& data) {
 	size_t read = 0;
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -151,8 +135,10 @@ bool Filesystem::init() {
 		size_t size = file.size();
 		read = file.readBytes((char*)data.writable(size), size);
 #elif BOARD_NRF52
-	File file(InternalFS);
-	if (file.open(file_path, FILE_O_READ)) {
+	//File file(InternalFS);
+	//if (file.open(file_path, FILE_O_READ)) {
+	File file = InternalFS.open(file_path, FILE_O_READ);
+	if (file) {
 		size_t size = file.size();
 		read = file.readBytes((char*)data.writable(size), size);
 #else
@@ -167,7 +153,7 @@ bool Filesystem::init() {
         size_t size = ftell(file);
         rewind(file);
 		//size_t read = fread(data.writable(size), size, 1, file);
-		size_t read = fread(data.writable(size), 1, size, file);
+		read = fread(data.writable(size), 1, size, file);
 #endif
 		TRACE("read_file: read " + std::to_string(read) + " bytes from file " + std::string(file_path));
 		if (read != size) {
@@ -192,7 +178,7 @@ bool Filesystem::init() {
     return read;
 }
 
-/*virtual*/ size_t Filesystem::write_file(const char* file_path, const RNS::Bytes& data) {
+/*virtual*/ size_t FileSystem::write_file(const char* file_path, const RNS::Bytes& data) {
 	// CBA TODO Replace remove with working truncation
 	remove_file(file_path);
     size_t wrote = 0;
@@ -213,7 +199,7 @@ bool Filesystem::init() {
 	FILE* file = fopen(file_path, "w");
 	if (file != nullptr) {
         //size_t wrote = fwrite(data.data(), data.size(), 1, file);
-        size_t wrote = fwrite(data.data(), 1, data.size(), file);
+        wrote = fwrite(data.data(), 1, data.size(), file);
 #endif
         TRACE("write_file: wrote " + std::to_string(wrote) + " bytes to file " + std::string(file_path));
         if (wrote < data.size()) {
@@ -237,7 +223,101 @@ bool Filesystem::init() {
     return wrote;
 }
 
-/*virtual*/ bool Filesystem::remove_file(const char* file_path) {
+/*virtual*/ RNS::FileStream FileSystem::open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+	TRACEF("open_file: opening file %s", file_path);
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
+	const char* mode;
+	if (file_mode == RNS::FileStream::MODE_READ) {
+		mode = FILE_READ;
+	}
+	else if (file_mode == RNS::FileStream::MODE_WRITE) {
+		mode = FILE_WRITE;
+	}
+	else if (file_mode == RNS::FileStream::MODE_APPEND) {
+		mode = FILE_APPEND;
+	}
+	else {
+		ERRORF("open_file: unsupported mode %d", file_mode);
+		return {RNS::Type::NONE};
+	}
+	TRACEF("open_file: opening file %s in mode %s", file_path, mode);
+	//// Using copy constructor to create a File* instead of local
+	//File file = SPIFFS.open(file_path, mode);
+	//if (!file) {
+	File* file = new File(SPIFFS.open(file_path, mode));
+	if (file == null || !(*file)) {
+		ERRORF("open_file: failed to open output file %s", file_path);
+		return {RNS::Type::NONE};
+	}
+	TRACEF("open_file: successfully opened file %s", file_path);
+	return RNS::FileStream(new FileStreamImpl(file));
+#elif BOARD_NRF52
+	//File file = File(InternalFS);
+	File* file = new File(InternalFS);
+	int mode;
+	if (file_mode == RNS::FileStream::MODE_READ) {
+		mode = FILE_O_READ;
+	}
+	else if (file_mode == RNS::FileStream::MODE_WRITE) {
+		mode = FILE_O_WRITE;
+		// CBA TODO Replace remove with working truncation
+		if (InternalFS.exists(file_path)) {
+			InternalFS.remove(file_path);
+		}
+	}
+	else if (file_mode == RNS::FileStream::MODE_APPEND) {
+		// CBA This is the default write mode for nrf52 littlefs
+		mode = FILE_O_WRITE;
+	}
+	else {
+		ERRORF("open_file: unsupported mode %d", file_mode);
+		return {RNS::Type::NONE};
+	}
+	if (!file->open(file_path, mode)) {
+		ERRORF("open_file: failed to open output file %s", file_path);
+		return {RNS::Type::NONE};
+	}
+
+	// Seek to beginning to overwrite (this is failing on nrf52)
+	//if (file_mode == RNS::FileStream::MODE_WRITE) {
+	//	file->seek(0);
+	//	file->truncate(0);
+	//}
+	TRACEF("open_file: successfully opened file %s", file_path);
+	return RNS::FileStream(new FileStreamImpl(file));
+#else
+	#warning("unsuppoprted");
+	return RNS::FileStream(RNS::Type::NONE);
+#endif
+#else	// ARDUINO
+	// Native
+	const char* mode;
+	if (file_mode == RNS::FileStream::MODE_READ) {
+		mode = "r";
+	}
+	else if (file_mode == RNS::FileStream::MODE_WRITE) {
+		mode = "w";
+	}
+	else if (file_mode == RNS::FileStream::MODE_APPEND) {
+		mode = "a";
+	}
+	else {
+		ERRORF("open_file: unsupported mode %d", file_mode);
+		return {RNS::Type::NONE};
+	}
+	TRACEF("open_file: opening file %s in mode %s", file_path, mode);
+	FILE* file = fopen(file_path, mode);
+	if (file == nullptr) {
+		ERRORF("open_file: failed to open output file %s", file_path);
+		return {RNS::Type::NONE};
+	}
+	TRACEF("open_file: successfully opened file %s", file_path);
+	return RNS::FileStream(new FileStreamImpl(file));
+#endif
+}
+
+/*virtual*/ bool FileSystem::remove_file(const char* file_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	return SPIFFS.remove(file_path);
@@ -252,7 +332,7 @@ bool Filesystem::init() {
 #endif
 }
 
-/*virtual*/ bool Filesystem::rename_file(const char* from_file_path, const char* to_file_path) {
+/*virtual*/ bool FileSystem::rename_file(const char* from_file_path, const char* to_file_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	return SPIFFS.rename(from_file_path, to_file_path);
@@ -267,7 +347,7 @@ bool Filesystem::init() {
 #endif
 }
 
-/*virtua*/ bool Filesystem::directory_exists(const char* directory_path) {
+/*virtua*/ bool FileSystem::directory_exists(const char* directory_path) {
 	TRACE("directory_exists: checking for existence of directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -298,7 +378,7 @@ bool Filesystem::init() {
 #endif
 }
 
-/*virtual*/ bool Filesystem::create_directory(const char* directory_path) {
+/*virtual*/ bool FileSystem::create_directory(const char* directory_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	if (!SPIFFS.mkdir(directory_path)) {
@@ -325,7 +405,7 @@ bool Filesystem::init() {
 #endif
 }
 
-/*virtua*/ bool Filesystem::remove_directory(const char* directory_path) {
+/*virtua*/ bool FileSystem::remove_directory(const char* directory_path) {
 	TRACE("remove_directory: removing directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -350,7 +430,7 @@ bool Filesystem::init() {
 #endif
 }
 
-/*virtua*/ std::list<std::string> Filesystem::list_directory(const char* directory_path) {
+/*virtua*/ std::list<std::string> FileSystem::list_directory(const char* directory_path) {
 	TRACE("list_directory: listing directory " + std::string(directory_path));
 	std::list<std::string> files;
 #ifdef ARDUINO
@@ -387,11 +467,11 @@ bool Filesystem::init() {
 
 #ifdef BOARD_ESP32
 
-/*virtual*/ size_t Filesystem::storage_size() {
+/*virtual*/ size_t FileSystem::storage_size() {
 	return SPIFFS.totalBytes();
 }
 
-/*virtual*/ size_t Filesystem::storage_available() {
+/*virtual*/ size_t FileSystem::storage_available() {
 	return (SPIFFS.totalBytes() - SPIFFS.usedBytes());
 }
 
@@ -420,23 +500,25 @@ static int usedBytes() {
 	return config->block_size * usedBlockCount;
 }
 
-/*virtual*/ size_t Filesystem::storage_size() {
-	return totalBytes();
+/*virtual*/ size_t FileSystem::storage_size() {
+	//return totalBytes();
+	return InternalFS.totalBytes();
 }
 
-/*virtual*/ size_t Filesystem::storage_available() {
-	return (totalBytes() - usedBytes());
+/*virtual*/ size_t FileSystem::storage_available() {
+	//return (totalBytes() - usedBytes());
+	return (InternalFS.totalBytes() - InternalFS.usedBytes());
 }
 
 #endif
 
 #else
 
-/*virtual*/ size_t Filesystem::storage_size() {
+/*virtual*/ size_t FileSystem::storage_size() {
 	return 0;
 }
 
-/*virtual*/ size_t Filesystem::storage_available() {
+/*virtual*/ size_t FileSystem::storage_available() {
 	return 0;
 }
 

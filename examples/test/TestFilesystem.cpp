@@ -1,13 +1,17 @@
 //#include <unity.h>
 
-#include "Filesystem.h"
+#include "FileSystem.h"
 
 #include <Utilities/OS.h>
-#include "Log.h"
+#include <Utilities/Crc.h>
+#include <Log.h>
 
 #include <assert.h>
+#include <fstream>
+#include <ostream>
+#include <iostream>
 
-Filesystem test_filesystem;
+RNS::FileSystem test_filesystem(RNS::Type::NONE);
 
 void testListDirectory() {
 
@@ -39,7 +43,7 @@ void testWriteFile(const char* file_path) {
 	{
 		RNS::Bytes data("test");
 		size_t wrote = RNS::Utilities::OS::write_file(file_path, data);
-		//assert(wrote == 4);
+		assert(wrote == 4);
 	}
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
@@ -59,12 +63,41 @@ void testReadFile(const char* file_path) {
 		RNS::Bytes data;
 		size_t read = RNS::Utilities::OS::read_file(file_path, data);
 		assert(read == 4);
+		assert(data.toString().compare("test") == 0);
 	}
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
 	TRACEF("testReadFile: post-mem: %u", post_memory);
 	TRACEF("testReadFile: diff-mem: %u", diff_memory);
+	assert(diff_memory == 0);
+
+}
+
+void testOverwriteFile(const char* file_path) {
+
+	size_t pre_memory = RNS::Utilities::OS::heap_available();
+	TRACEF("testOverwriteFile: pre-mem: %u", pre_memory);
+
+	// overwrite
+	{
+		RNS::Bytes data("test");
+		size_t wrote = RNS::Utilities::OS::write_file(file_path, data);
+		assert(wrote == 4);
+	}
+
+	// read
+	{
+		RNS::Bytes data;
+		size_t read = RNS::Utilities::OS::read_file(file_path, data);
+		assert(read == 4);
+		assert(data.toString().compare("test") == 0);
+	}
+
+	size_t post_memory = RNS::Utilities::OS::heap_available();
+	size_t diff_memory = (int)pre_memory - (int)post_memory;
+	TRACEF("testOverwriteFile: post-mem: %u", post_memory);
+	TRACEF("testOverwriteFile: diff-mem: %u", diff_memory);
 	assert(diff_memory == 0);
 
 }
@@ -91,7 +124,7 @@ void testReadNonexistantFile() {
 
 	{
 		RNS::Bytes data;
-		size_t read = RNS::Utilities::OS::read_file("/foo", data);
+		size_t read = RNS::Utilities::OS::read_file("./foo", data);
 		assert(read == 0);
 	}
 
@@ -122,47 +155,139 @@ void testWriteFail() {
 
 }
 
-void testFilesystem() {
-	HEAD("Running testFilesystem...", RNS::LOG_TRACE);
-
-	test_filesystem.init();
-	test_filesystem.listDir("/");
-	test_filesystem.listDir("/cache");
-	RNS::Utilities::OS::register_filesystem(test_filesystem);
-
+void testWriteFileStream(const char* file_path) {
 
 	size_t pre_memory = RNS::Utilities::OS::heap_available();
-	TRACEF("testFilesystem: pre-mem: %u", pre_memory);
+	TRACEF("testWriteFileStream: pre-mem: %u", pre_memory);
 
-	// CBA Seems that first call to write_file allocates some memory (at least with NRF52 LittleFS) so get that out of the way first
 	{
-		RNS::Bytes data("foo");
-		RNS::Utilities::OS::write_file("/foo", data);
-		RNS::Utilities::OS::remove_file("/foo");
+		RNS::Bytes data("stream");
+		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_WRITE);
+		assert(stream);
+		TRACE("testWriteFileStream: writing to file...");
+		size_t wrote = stream.write(data.data(), data.size());
+		TRACEF("testWriteFileStream: wrote: %u", wrote);
+		// Auto-closes
+		//stream.close();
+		assert(wrote == 6);
+		uint32_t crc = RNS::Utilities::Crc::crc32(0, data.data(), data.size());
+		TRACEF("testWriteFileStream: crc: 0x%X", crc);
+		TRACEF("testWriteFileStream: stream crc: 0x%X", stream.crc());
+		assert(crc == stream.crc());
 	}
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
-	TRACEF("testFilesystem: post-mem: %u", post_memory);
-	TRACEF("testFilesystem: diff-mem: %u", diff_memory);
+	TRACEF("testWriteFileStream: post-mem: %u", post_memory);
+	TRACEF("testWriteFileStream: diff-mem: %u", diff_memory);
+	assert(diff_memory == 0);
 
+}
 
-	testListDirectory();
-	testWriteFile("/test1");
-	testReadFile("/test1");
-	//testRemoveFile("/test1");
-	testReadNonexistantFile();
-	//testWriteFail();
+void testReadFileStream(const char* file_path) {
+
+	size_t pre_memory = RNS::Utilities::OS::heap_available();
+	TRACEF("testReadFileStream: pre-mem: %u", pre_memory);
+
+	{
+		RNS::Bytes data;
+		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_READ);
+		assert(stream);
+		size_t size = stream.size();
+		TRACEF("testReadFileStream: size: %u", size);
+		TRACE("testReadFileStream: reading from file...");
+		size_t read = stream.readBytes(data.writable(size), size);
+		TRACEF("testReadFileStream: read: %u", read);
+		// Auto-closes
+		//stream.close();
+		assert(read == 6);
+		assert(data.compare("stream") == 0);
+		uint32_t crc = RNS::Utilities::Crc::crc32(0, data.data(), data.size());
+		TRACEF("testWriteFileStream: crc: 0x%X", crc);
+		TRACEF("testWriteFileStream: stream crc: 0x%X", stream.crc());
+		assert(crc == stream.crc());
+	}
+
+	size_t post_memory = RNS::Utilities::OS::heap_available();
+	size_t diff_memory = (int)pre_memory - (int)post_memory;
+	TRACEF("testReadFileStream: post-mem: %u", post_memory);
+	TRACEF("testReadFileStream: diff-mem: %u", diff_memory);
+	assert(diff_memory == 0);
+
+}
+
+void testStdStream() {
+	std::ofstream file("./stream");
+ 	if(file.is_open()) {
+		file << "Hello world!" << std::endl;
+		file.flush();
+		file.close();
+	}
+	assert(RNS::Utilities::OS::file_exists("./stream"));
+	RNS::Utilities::OS::remove_file("./stream");
+}
+
+void testCacheWrite() {
 
 	// CBA Attempt to reproduce failure to open file for write that is leaking mmeory
 	if (!RNS::Utilities::OS::directory_exists("/cache")) {
 		RNS::Utilities::OS::create_directory("/cache");
 	}
-	testWriteFile("/cache/test");
-	testWriteFile("/cache/45c50662af11f1b26889efaab547942b");
-	testWriteFile("/cache/40fe4ab8105b591cca1ef159d476a7b4");
-	testWriteFile("/cache/c755609f4d0ab75b5119905a032eeb33");
-	testWriteFile("/cache/426f66f9aadf866933358b71295f59d0");
+	testWriteFile("./cache/test");
+	testWriteFile("./cache/45c50662af11f1b26889efaab547942b45c50662af11f1b26889efaab547942b");
+	testWriteFile("./cache/40fe4ab8105b591cca1ef159d476a7b440fe4ab8105b591cca1ef159d476a7b4");
+	testWriteFile("./cache/c755609f4d0ab75b5119905a032eeb33c755609f4d0ab75b5119905a032eeb33");
+	testWriteFile("./cache/426f66f9aadf866933358b71295f59d0426f66f9aadf866933358b71295f59d0");
+
+}
+
+void testFilesystemSize() {
+
+	TRACEF("testFilesystemSize: size: %u", test_filesystem.storage_size());
+	TRACEF("testFilesystemSize: available: %u", test_filesystem.storage_available());
+
+}
+
+
+void testFileSystem() {
+	HEAD("Running testFileSystem...", RNS::LOG_TRACE);
+
+	test_filesystem = new FileSystem();
+	((FileSystem*)test_filesystem.get())->init();
+	FileSystem::listDir("/");
+	FileSystem::listDir("/cache");
+	RNS::Utilities::OS::register_filesystem(test_filesystem);
+
+
+	size_t pre_memory = RNS::Utilities::OS::heap_available();
+	TRACEF("testFileSystem: pre-mem: %u", pre_memory);
+
+	// CBA Seems that first call to write_file allocates some memory (at least with NRF52 LittleFS) so get that out of the way first
+	{
+		RNS::Bytes data("foo");
+		RNS::Utilities::OS::write_file("./foo", data);
+		RNS::Utilities::OS::remove_file("./foo");
+	}
+
+	size_t post_memory = RNS::Utilities::OS::heap_available();
+	size_t diff_memory = (int)pre_memory - (int)post_memory;
+	TRACEF("testFileSystem: post-mem: %u", post_memory);
+	TRACEF("testFileSystem: diff-mem: %u", diff_memory);
+
+
+	testListDirectory();
+	testWriteFile("./test1");
+	testReadFile("./test1");
+	testOverwriteFile("./test1");
+	testRemoveFile("./test1");
+	testReadNonexistantFile();
+	//testWriteFail();
+	testWriteFileStream("./stream1");
+	testReadFileStream("./stream1");
+	testRemoveFile("./stream1");
+	//testStdStream();
+	//testCacheWrite();
+	testFilesystemSize();
 
 	RNS::Utilities::OS::deregister_filesystem();
 

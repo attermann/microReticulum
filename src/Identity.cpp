@@ -22,8 +22,9 @@ using namespace RNS::Utilities;
 /*static*/ std::map<Bytes, Identity::IdentityEntry> Identity::_known_destinations;
 /*static*/ bool Identity::_saving_known_destinations = false;
 // CBA
+// CBA ACCUMULATES
 /*static*/ //uint16_t Identity::_known_destinations_maxsize = 100;
-/*static*/ uint16_t Identity::_known_destinations_maxsize = 20;
+/*static*/ uint16_t Identity::_known_destinations_maxsize = 100;
 
 Identity::Identity(bool create_keys /*= true*/) : _object(new Object()) {
 	if (create_keys) {

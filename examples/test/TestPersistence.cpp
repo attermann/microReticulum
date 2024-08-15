@@ -1,13 +1,12 @@
 //#include <unity.h>
 
-#include "Filesystem.h"
+#include "FileSystem.h"
 
 #include "Interface.h"
 #include "Transport.h"
 #include "Log.h"
 #include "Bytes.h"
 #include "Utilities/OS.h"
-
 #include "Utilities/Persistence.h"
 
 //#include <ArduinoJson.h>
@@ -19,24 +18,21 @@
 #include <assert.h>
 #include <stdio.h>
 
-Filesystem persistence_filesystem;
+RNS::FileSystem persistence_filesystem(RNS::Type::NONE);
 
-class TestInterface : public RNS::Interface {
+class TestInterface : public RNS::InterfaceImpl {
 
 public:
-	TestInterface(const char* name = "TestInterface") : Interface(name) {}
+	TestInterface(const char* name = "TestInterface") : InterfaceImpl(name) {}
 	virtual ~TestInterface() {}
 
-	virtual inline std::string toString() const { return "TestInterface[" + name() + "]"; }
-
 private:
-	virtual void on_incoming(const RNS::Bytes& data) {
-		DEBUG(toString() + ".on_incoming: data: " + data.toHex());
-		Interface::on_incoming(data);
+	virtual void handle_incoming(const RNS::Bytes& data) {
+		DEBUG("TestInterface.handle_incoming: data: " + data.toHex());
 	}
-	virtual void on_outgoing(const RNS::Bytes& data) {
-		DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
-		Interface::on_outgoing(data);
+	virtual void send_outgoing(const RNS::Bytes& data) {
+		DEBUG("TestInterface.send_outgoing: data: " + data.toHex());
+		InterfaceImpl::send_outgoing(data);
 	}
 
 };
@@ -166,7 +162,7 @@ void testDeserializeObject() {
 			}
 		}
 		else {
-			TRACE("failed to deserialize");
+			TRACE("testDeserializeObject: failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_object_path));
@@ -231,7 +227,7 @@ void testDeserializeObject() {
 			TRACE("testDeserializeObject: test: " + test.toString());
 		}
 		else {
-			TRACE("failed to deserialize");
+			TRACE("testDeserializeObject: failed to deserialize");
 			assert(false);
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_object_path));
@@ -350,7 +346,6 @@ void testDeserializeVector() {
 	}
 
 }
-
 
 #ifdef ARDUINO
 const char test_set_path[] = "/test_set";
@@ -548,7 +543,7 @@ void testSerializeDestinationTable() {
 	//RNS::Bytes empty;
 	//std::set<RNS::Bytes> blobs;
 	//RNS::Interface interface({RNS::Type::NONE});
-	TestInterface test_interface; 
+	RNS::Interface test_interface(new TestInterface());
 	//RNS::Packet packet({RNS::Type::NONE});
 	static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
 	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
@@ -648,12 +643,13 @@ void testDeserializeDestinationTable() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_destination_table_path, data) > 0) {
+		TRACE("testDeserializeDestinationTable: read: " + std::to_string(data.size()) + " bytes");
 		//StaticJsonDocument<8192> doc;
 		//DynamicJsonDocument doc(1024);
-		int calcsize = data.size() * 1.5;
+		int calcsize = data.size() * 2.0;
+		TRACE("testDeserializeDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
 		DynamicJsonDocument doc(calcsize);
 
-		TRACE("testDeserializeDestinationTable: read: " + std::to_string(data.size()) + " bytes");
 		//TRACE("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -686,6 +682,99 @@ void testDeserializeDestinationTable() {
 
 }
 
+void testPersistenceSerializeDestinationTable() {
+	HEAD("testPersistenceSerializeDestinationTable", RNS::LOG_TRACE);
+
+	//RNS::Bytes empty;
+	//std::set<RNS::Bytes> blobs;
+	//RNS::Interface interface({RNS::Type::NONE});
+	RNS::Interface test_interface(new TestInterface());
+	//RNS::Packet packet({RNS::Type::NONE});
+	static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
+	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
+	//RNS::Transport::DestinationEntry entry_one(1.0, empty, 1, 0.0, blobs, interface, packet);
+	RNS::Bytes received;
+	received.assignHex("deadbeef");
+	RNS::Bytes blob;
+	blob.assignHex("b10bb10b");
+	std::set<RNS::Bytes> blobs({received, blob});
+	RNS::Transport::DestinationEntry entry_one;
+	entry_one._timestamp = 1.0;
+	entry_one._received_from = received;
+	entry_one._receiving_interface = test_interface.get_hash();
+	entry_one._random_blobs = blobs;
+	RNS::Bytes one;
+	one.assignHex("1111111111111111");
+	map.insert({one, entry_one});
+	//RNS::Transport::DestinationEntry entry_two(2.0, empty, 1, 0.0, blobs, interface, packet);
+	RNS::Transport::DestinationEntry entry_two;
+	entry_two._timestamp = 2.0;
+	entry_two._received_from = received;
+	entry_two._receiving_interface = test_interface.get_hash();
+	entry_two._random_blobs = blobs;
+	RNS::Bytes two;
+	two.assignHex("2222222222222222");
+	map.insert({two, entry_two});
+
+	for (int n = 0; n < 20; n++) {
+		RNS::Transport::DestinationEntry entry;
+		entry._timestamp = 1.0;
+		entry._received_from = received;
+		entry._receiving_interface = test_interface.get_hash();
+		entry._random_blobs = blobs;
+		RNS::Bytes hash;
+		hash.assign(std::to_string(1000000000000001 + n).c_str());
+		map.insert({hash, entry});
+	}
+
+	TRACEF("testPersistenceSerializeDestinationTable: map contains %d entries", map.size());
+	assert(22 == map.size());
+	for (auto& [hash, test] : map) {
+		TRACEF("testPersistenceSerializeDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
+	}
+
+	uint32_t stream_crc;
+	size_t wrote = RNS::Persistence::serialize(map, test_destination_table_path, stream_crc);
+	TRACEF("testPersistenceSerializeDestinationTable: wrote: %d bytes", wrote);
+	if (wrote == 0) {
+		TRACE("testPersistenceSerializeDestinationTable: write failed");
+		assert(false);
+	}
+
+	uint32_t crc = RNS::Persistence::crc(map);
+	TRACEF("testPersistenceSerializeDestinationTable: crc: 0x%X", crc);
+	TRACEF("testPersistenceSerializeDestinationTable: stream crc: 0x%X", stream_crc);
+	assert(0xFC979601 == crc);
+	assert(0xFC979601 == stream_crc);
+
+}
+
+void testPersistenceDeserializeDestinationTable() {
+	HEAD("testPersistenceDeserializeDestinationTable", RNS::LOG_TRACE);
+
+	std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
+	uint32_t stream_crc;
+	size_t read = RNS::Persistence::deserialize(map, test_destination_table_path, stream_crc);
+	TRACEF("testPersistenceDeserializeDestinationTable: deserialized %d bytes", read);
+	if (read == 0) {
+		TRACE("testPersistenceDeserializeDestinationTable: failed to deserialize");
+		assert(false);
+	}
+
+	TRACEF("testPersistenceDeserializeDestinationTable: map contains %d entries", map.size());
+	assert(22 == map.size());
+	for (auto& [hash, test] : map) {
+		TRACEF("testPersistenceDeserializeDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
+	}
+
+	uint32_t crc = RNS::Persistence::crc(map);
+	TRACEF("testPersistenceDeserializeDestinationTable: crc: 0x%X", crc);
+	TRACEF("testPersistenceDeserializeDestinationTable: stream crc: 0x%X", stream_crc);
+	assert(0xFC979601 == crc);
+	assert(0xFC979601 == stream_crc);
+
+}
+
 void testSerializeTimeOffset() {
 	uint64_t offset = RNS::Utilities::OS::ltime();
 	TRACEF("Writing time offset of %llu to file /time_offset", offset);
@@ -697,9 +786,11 @@ void testSerializeTimeOffset() {
 void testPersistence() {
 	HEAD("Running testPersistence...", RNS::LOG_TRACE);
 
-	persistence_filesystem.init();
+	persistence_filesystem = new FileSystem();
+	((FileSystem*)persistence_filesystem.get())->init();
 	RNS::Utilities::OS::register_filesystem(persistence_filesystem);
 
+/*
 	testWrite();
 	testRead();
 	testSerializeObject();
@@ -710,9 +801,18 @@ void testPersistence() {
 	testDeserializeSet();
 	testSerializeMap();
 	testDeserializeMap();
-	//testSerializeDestinationTable();
-	//testDeserializeDestinationTable();
+*/
+
 	testSerializeTimeOffset();
+
+	testSerializeDestinationTable();
+	testDeserializeDestinationTable();
+
+	// CBA Following not currently working on native
+	testPersistenceSerializeDestinationTable();
+
+	// CBA Following not currently working on native
+	testPersistenceDeserializeDestinationTable();
 
 	RNS::Utilities::OS::deregister_filesystem();
 

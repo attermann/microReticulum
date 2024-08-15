@@ -1,5 +1,6 @@
 #include "OS.h"
 
+#include "../Type.h"
 #include "../Log.h"
 
 using namespace RNS;
@@ -10,14 +11,19 @@ using namespace RNS::Utilities;
 
 #if defined(RNS_USE_TLSF)
 #if defined(ESP32)
-	#define BUFFER_SIZE 1024 * 80
+	//#define BUFFER_SIZE 1024 * 80
+	#define BUFFER_SIZE 0
 	#define BUFFER_FRACTION 0.8
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-	#define BUFFER_SIZE 1024 * 80
+	//#define BUFFER_SIZE 1024 * 80
+	#define BUFFER_SIZE 0
 	#define BUFFER_FRACTION 0.8
+#else
+	#define BUFFER_SIZE 1024 * 1000
+	#define BUFFER_FRACTION 0
 #endif
 
-boolean tlsf_init = false;
+bool tlsf_init = false;
 size_t _buffer_size = BUFFER_SIZE;
 size_t _contiguous_size = 0;
 
@@ -47,7 +53,9 @@ void* operator new(size_t size) {
 #endif
 		TRACEF("contiguous_size: %u", _contiguous_size);
 
-		_buffer_size = (size_t)((_contiguous_size * BUFFER_FRACTION) / 1024) * 1024;
+		if (_buffer_size == 0) {
+			_buffer_size = (size_t)((_contiguous_size * BUFFER_FRACTION) / 1024) * 1024;
+		}
 		TRACEF("buffer_size: %u", _buffer_size);
 
 		//void* raw_buffer = malloc(BUFFER_SIZE);
@@ -206,96 +214,8 @@ size_t maxContiguousAllocation() {
 	return (block_count - 1) * block_size;
 }
 
-/*static*/ Filesystem OS::_filesystem = {Type::NONE};
+/*static*/ FileSystem OS::_filesystem = {Type::NONE};
 /*static*/ uint64_t OS::_time_offset = 0;
-
-/*static*/ void OS::register_filesystem(Filesystem& filesystem) {
-	TRACE("Registering filesystem...");
-	OS::_filesystem = filesystem;
-}
-
-/*static*/ void OS::deregister_filesystem() {
-	TRACE("Deregistering filesystem...");
-	OS::_filesystem = {Type::NONE};
-}
-
-/*static*/ bool OS::file_exists(const char* file_path) {
-	if (!_filesystem) {
-		WARNING("file_exists: filesystem not registered");
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_file_exists(file_path);
-}
-
-/*static*/ size_t OS::read_file(const char* file_path, Bytes& data) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_read_file(file_path, data);
-}
-
-/*static*/ size_t OS::write_file(const char* file_path, const Bytes& data) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_write_file(file_path, data);
-}
-
-/*static*/ bool OS::remove_file(const char* file_path) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_remove_file(file_path);
-}
-
-/*static*/ bool OS::rename_file(const char* from_file_path, const char* to_file_path) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_rename_file(from_file_path, to_file_path);
-}
-
-/*static*/ bool OS::directory_exists(const char* directory_path) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_directory_exists(directory_path);
-}
-
-/*static*/ bool OS::create_directory(const char* directory_path) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_create_directory(directory_path);
-}
-
-/*static*/ bool OS::remove_directory(const char* directory_path) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_remove_directory(directory_path);
-}
-
-/*static*/ std::list<std::string> OS::list_directory(const char* directory_path) {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_list_directory(directory_path);
-}
-
-/*static*/ size_t OS::storage_size() {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_storage_size();
-}
-
-/*static*/ size_t OS::storage_available() {
-	if (!_filesystem) {
-		throw std::runtime_error("Filesystem has not been registered");
-	}
-	return _filesystem.do_storage_available();
-}
 
 /*static*/ size_t OS::heap_size() {
 #if defined(ESP32)

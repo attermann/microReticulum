@@ -8,40 +8,23 @@ using namespace RNS::Type::Interface;
 
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
-Interface::Interface() : _object(new Object(this)), _creator(true) {
-	// CBA MCU SHORTER HASH
-	_object->_hash = Identity::full_hash({toString()});
-	//_object->_hash = Identity::truncated_hash({toString()});
-	MEM("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+/*virtual*/ void InterfaceImpl::send_outgoing(const Bytes& data) {
+	//TRACE("InterfaceImpl.send_outgoing: data: " + data.toHex());
+	TRACE("InterfaceImpl.send_outgoing");
+	_txb += data.size();
 }
 
-Interface::Interface(const char* name) : _object(new Object(this, name)), _creator(true) {
-	// CBA MCU SHORTER HASH
-	_object->_hash = Identity::full_hash({toString()});
-	//_object->_hash = Identity::truncated_hash({toString()});
-	MEM("Interface object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
-}
-
-/*virtual*/ inline void Interface::on_incoming(const Bytes& data) {
-	//TRACE("Interface.on_incoming: data: " + data.toHex());
-	TRACE("Interface.on_incoming");
-	assert(_object);
-	_object->_rxb += data.size();
+/*virtual*/ //void InterfaceImpl::handle_incoming(const Bytes& data) {
+void Interface::handle_incoming(const Bytes& data) {
+	//TRACE("Interface.handle_incoming: data: " + data.toHex());
+	TRACE("Interface.handle_incoming");
+	assert(_impl);
+	_impl->_rxb += data.size();
 	// CBA TODO implement concept of owner or a callback mechanism for incoming data
-	//_object->_owner.inbound(data, *this);
+	//_impl->_owner.inbound(data, *this);
 	Transport::inbound(data, *this);
-}
-
-/*virtual*/ inline void Interface::on_outgoing(const Bytes& data) {
-	//TRACE("Interface.on_outgoing: data: " + data.toHex());
-	TRACE("Interface.on_outgoing");
-	assert(_object);
-	_object->_txb += data.size();
-}
-
-const Bytes Interface::get_hash() const {
-	assert(_object);
-	return _object->_hash;
+	// CBA This is no good because it frees impl when Interface is destroyed at end of inbound()
+	//Transport::inbound(data, Interface(this));
 }
 
 void Interface::process_announce_queue() {
@@ -69,11 +52,11 @@ void Interface::process_announce_queue() {
 
 				double now = OS::time();
 				uint32_t wait_time = 0;
-				if (_object->_bitrate > 0 && _object->_announce_cap > 0) {
-					uint32_t tx_time = (len(selected["raw"])*8) / _object->_bitrate;
-					wait_time = (tx_time / _object->_announce_cap);
+				if (_impl->_bitrate > 0 && _impl->_announce_cap > 0) {
+					uint32_t tx_time = (len(selected["raw"])*8) / _impl->_bitrate;
+					wait_time = (tx_time / _impl->_announce_cap);
 				}
-				_object->_announce_allowed_at = now + wait_time;
+				_impl->_announce_allowed_at = now + wait_time;
 
 				self.on_outgoing(selected["raw"])
 

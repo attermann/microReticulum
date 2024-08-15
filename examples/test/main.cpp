@@ -29,6 +29,7 @@ void setup() {
 			break;
 	}
   	Serial.print("Hello from T-Beam on PlatformIO!\n");
+	delay(2000);
 #endif
 
 	RNS::loglevel(RNS::LOG_TRACE);
@@ -42,20 +43,26 @@ void setup() {
 		RNS::loglevel(RNS::LOG_TRACE);
 		//RNS::loglevel(RNS::LOG_MEM);
 
+		//UNITY_BEGIN();
+
+		//RUN_TEST(test_request);
+
+		//UNITY_END();
+
 		// all tests
 		//test();
 
 		// individiual tests
 		//testReference();
 		//testCrypto();
-		testBytes();
-		//testFilesystem();
+		//testBytes();
+		testFileSystem();
 		//testPersistence();
 		//testReticulum();
 
+		HEAD("All tests successful!", RNS::LOG_TRACE);
+
 		RNS::loglevel(loglevel);
-		TRACE("Finished running tests");
-		//return;
 	}
 	catch (std::exception& e) {
 		ERRORF("!!! Exception in test: %s", e.what());

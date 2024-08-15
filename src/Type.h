@@ -14,7 +14,9 @@ namespace RNS { namespace Type {
 
 	namespace Persistence {
 
+		//static const uint16_t DOCUMENT_MAXSIZE = 1024;
 		static const uint16_t DOCUMENT_MAXSIZE = 8192;
+		//static const uint16_t DOCUMENT_MAXSIZE = 16384;
 		static const uint16_t BUFFER_MAXSIZE = Persistence::DOCUMENT_MAXSIZE * 1.5;	// Json write buffer of 1.5 times document seems to be sufficient
 
 	}
@@ -80,16 +82,16 @@ namespace RNS { namespace Type {
 
 		static const uint32_t RESOURCE_CACHE   = 60*60*24;
 		// CBA TEST
-		static const uint16_t JOB_INTERVAL     = 60*5;
-		//static const uint16_t JOB_INTERVAL     = 60;
+		//static const uint16_t JOB_INTERVAL     = 60*5;
+		static const uint16_t JOB_INTERVAL     = 60;
 		// CBA TEST
-		static const uint16_t CLEAN_INTERVAL   = 60*15;
-		//static const uint16_t CLEAN_INTERVAL   = 60;
+		//static const uint16_t CLEAN_INTERVAL   = 60*15;
+		static const uint16_t CLEAN_INTERVAL   = 60;
 		// CBA MCU
 		//static const uint16_t PERSIST_INTERVAL = 60*60*12;
 		// CBA TEST
-		static const uint16_t PERSIST_INTERVAL = 60*60;
-		//static const uint16_t PERSIST_INTERVAL = 60;
+		//static const uint16_t PERSIST_INTERVAL = 60*60;
+		static const uint16_t PERSIST_INTERVAL = 60;
 		static const uint16_t GRACIOUS_PERSIST_INTERVAL = 60*5;
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes

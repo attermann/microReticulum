@@ -144,7 +144,8 @@ namespace RNS {
 		}
 		//inline void assign(const std::string& string) { assign(string.c_str()); }
 		inline void assign(const std::string& string) { assign((uint8_t*)string.c_str(), string.length()); }
-		void assignHex(const char* hex);
+		void assignHex(const uint8_t* hex, size_t hex_size);
+		inline void assignHex(const char* hex) { assignHex((uint8_t*)hex, strlen(hex)); }
 
 		inline void append(const Bytes& bytes) {
 			// if append is empty then do nothing
@@ -177,7 +178,8 @@ namespace RNS {
 		}
 		//inline void append(const std::string& string) { append(string.c_str()); }
 		inline void append(const std::string& string) { append((uint8_t*)string.c_str(), string.length()); }
-		void appendHex(const char* hex);
+		void appendHex(const uint8_t* hex, size_t hex_size);
+		inline void appendHex(const char* hex) { appendHex((uint8_t*)hex, strlen(hex)); }
 
 		inline uint8_t* writable(size_t size) {
 			if (size > 0) {
@@ -211,7 +213,9 @@ namespace RNS {
 		}
 
 	public:
-		int8_t compare(const Bytes& bytes) const;
+		int compare(const Bytes& bytes) const;
+		int compare(const uint8_t* buf, size_t size) const;
+		inline int compare(const char* str) const { return compare((const uint8_t*)str, strlen(str)); }
 		inline size_t size() const { if (!_data) return 0; return _data->size(); }
 		inline bool empty() const { if (!_data) return true; return _data->empty(); }
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
@@ -224,6 +228,17 @@ namespace RNS {
 		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
 		inline Bytes right(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data() + (size() - len), len}; }
+		inline int find(int pos, const char* str) {
+			if (!_data || _data->data() == nullptr || pos >= _data->size()) {
+				return -1;
+			}
+			const char* ptr = strnstr((const char*)(_data->data() + pos), str, (_data->size() - pos));
+			if (ptr == nullptr) {
+				return -1;
+			}
+			return (int)((uint8_t*)ptr - _data->data());
+		}
+		inline int find(const char* str) { return find(0, str); }
 
 		// Python array indexing
 		// [8:16]

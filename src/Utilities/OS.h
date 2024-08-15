@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../Filesystem.h"
+#include "../FileSystem.h"
+#include "../FileStream.h"
 #include "../Bytes.h"
 
 #include "tlsf.h"
@@ -22,7 +23,7 @@ namespace RNS { namespace Utilities {
 	class OS {
 
 	private:
-		static Filesystem _filesystem;
+		static FileSystem _filesystem;
 		static uint64_t _time_offset;
 
 	public:
@@ -73,20 +74,105 @@ namespace RNS { namespace Utilities {
 		static void dump_allocator_stats();
 #endif
 
-		static void register_filesystem(Filesystem& filesystem);
-		static void deregister_filesystem();
+		inline static void register_filesystem(FileSystem& filesystem) {
+			TRACE("Registering filesystem...");
+			_filesystem = filesystem;
+		}
 
-		static bool file_exists(const char* file_path);
-		static size_t read_file(const char* file_path, RNS::Bytes& data);
-		static size_t write_file(const char* file_path, const RNS::Bytes& data);
-		static bool remove_file(const char* file_path);
-		static bool rename_file(const char* from_file_path, const char* to_file_path);
-		static bool directory_exists(const char* directory_path);
-		static bool create_directory(const char* directory_path);
-		static bool remove_directory(const char* directory_path);
-		static std::list<std::string> list_directory(const char* directory_path);
-		static size_t storage_size();
-		static size_t storage_available();
+		inline static void register_filesystem(FileSystemImpl* filesystemimpl) {
+			TRACE("Registering filesystem...");
+			_filesystem = filesystemimpl;
+		}
+
+		inline static void deregister_filesystem() {
+			TRACE("Deregistering filesystem...");
+			_filesystem = {Type::NONE};
+		}
+
+		inline static bool file_exists(const char* file_path) {
+			if (!_filesystem) {
+				WARNING("file_exists: filesystem not registered");
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.file_exists(file_path);
+		}
+
+		inline static size_t read_file(const char* file_path, Bytes& data) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.read_file(file_path, data);
+		}
+
+		inline static size_t write_file(const char* file_path, const Bytes& data) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.write_file(file_path, data);
+		}
+
+		inline static FileStream open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.open_file(file_path, file_mode);
+		}
+
+		inline static bool remove_file(const char* file_path) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.remove_file(file_path);
+		}
+
+		inline static bool rename_file(const char* from_file_path, const char* to_file_path) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.rename_file(from_file_path, to_file_path);
+		}
+
+		inline static bool directory_exists(const char* directory_path) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.directory_exists(directory_path);
+		}
+
+		inline static bool create_directory(const char* directory_path) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.create_directory(directory_path);
+		}
+
+		inline static bool remove_directory(const char* directory_path) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.remove_directory(directory_path);
+		}
+
+		inline static std::list<std::string> list_directory(const char* directory_path) {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.list_directory(directory_path);
+		}
+
+		inline static size_t storage_size() {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.storage_size();
+		}
+
+		inline static size_t storage_available() {
+			if (!_filesystem) {
+				throw std::runtime_error("FileSystem has not been registered");
+			}
+			return _filesystem.storage_available();
+		}
 
 		static size_t heap_size();
 		static size_t heap_available();
