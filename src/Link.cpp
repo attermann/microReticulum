@@ -13,6 +13,8 @@ using namespace RNS::Type::Link;
 Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::established established_callback /*= nullptr*/, Callbacks::closed closed_callback /*= nullptr*/, const Destination& owner /*= {Type::NONE}*/, const Bytes& peer_pub_bytes /*= {Bytes::NONE}*/, const Bytes& peer_sig_pub_bytes /*= {Bytes::NONE}*/) : _object(new Object(destination)) {
 	assert(_object);
 
+	MEM("Link object created");
+/*p TODO
 	_object->_owner = owner;
 
 	if (destination && destination.type() != Type::Destination::SINGLE) {
@@ -29,7 +31,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	}
 	else {
 		_object->_initiator = true;
-		_object->_expected_hops = RNS.Transport.hops_to(_object->_destination.hash());
+		_object->_expected_hops = Transport::hops_to(_object->_destination.hash());
 		_object->_establishment_timeout = Reticulum::get_instance().get_first_hop_timeout(destination.hash());
 		_object->_establishment_timeout += Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * max(1, Transport::hops_to(destination.hash()));
 		_object->_prv     = Cryptography::X25519PrivateKey::generate();
@@ -71,10 +73,12 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	}
 
 	MEM("Link object created");
+*/
 }
 
 
-/*static*/ Link::validate_request(owner, data, packet) {
+/*p TODO
+Link::validate_request(owner, data, packet) {
 	if len(data) == (Link.ECPUBSIZE):
 		try:
 			link = Link(owner = owner, peer_pub_bytes=data[:Link.ECPUBSIZE//2], peer_sig_pub_bytes=data[Link.ECPUBSIZE//2:Link.ECPUBSIZE])
@@ -104,6 +108,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		RNS.log("Invalid link request payload size, dropping request", RNS.LOG_DEBUG)
 		return None
 }
+*/
 
 void Link::set_link_id(const Packet& packet) {
 	assert(_object);
@@ -115,7 +120,7 @@ void Link::receive(const Packet& packet) {
 }
 
 void Link::prove() {
-/*
+/*p TODO
 	signed_data = self.link_id+self.pub_bytes+self.sig_pub_bytes
 	signature = self.owner.identity.sign(signed_data)
 
@@ -128,7 +133,7 @@ void Link::prove() {
 }
 
 void Link::prove_packet(const Packet& packet) {
-/*
+/*p TODO
 	signature = self.sign(packet.packet_hash)
 	# TODO: Hardcoded as explicit proof for now
 	# if RNS.Reticulum.should_use_implicit_proof():
@@ -143,6 +148,7 @@ void Link::prove_packet(const Packet& packet) {
 */
 }
 
+/*p TODO
 
 def load_peer(self, peer_pub_bytes, peer_sig_pub_bytes):
 	self.peer_pub_bytes = peer_pub_bytes
@@ -1202,3 +1208,4 @@ def get_response_time(self):
 	else:
 		return None
 
+*/

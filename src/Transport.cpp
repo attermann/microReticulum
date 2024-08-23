@@ -43,6 +43,7 @@ using namespace RNS::Utilities;
 /*static*/ std::map<Bytes, Transport::AnnounceEntry> Transport::_held_announces;
 /*static*/ std::set<HAnnounceHandler> Transport::_announce_handlers;
 /*static*/ std::map<Bytes, Transport::TunnelEntry> Transport::_tunnels;
+/*static*/ std::map<Bytes, Transport::RateEntry> Transport::_announce_rate_table;
 /*static*/ std::map<Bytes, double> Transport::_path_requests;
 
 /*static*/ std::map<Bytes, Transport::PathRequestEntry> Transport::_discovery_path_requests;
@@ -574,51 +575,11 @@ using namespace RNS::Utilities;
 					TRACE("Removed " + std::to_string(count) + " tunnel paths");
 				}
 				
-				count = 0;
-				for (const auto& truncated_packet_hash : stale_reverse_entries) {
-					_reverse_table.erase(truncated_packet_hash);
-					++count;
-				}
-				if (count > 0) {
-					TRACE("Released " + std::to_string(count) + " reverse table entries");
-				}
-
-				count = 0;
-				for (const auto& link_id : stale_links) {
-					_link_table.erase(link_id);
-					++count;
-				}
-				if (count > 0) {
-					TRACE("Released " + std::to_string(count) + " links");
-				}
-
-				count = 0;
-				for (const auto& destination_hash : stale_paths) {
-					//_destination_table.erase(destination_hash);
-					remove_path(destination_hash);
-					++count;
-				}
-				if (count > 0) {
-					TRACE("Removed " + std::to_string(count) + " paths");
-				}
-
-				count = 0;
-				for (const auto& destination_hash : stale_discovery_path_requests) {
-					_discovery_path_requests.erase(destination_hash);
-					++count;
-				}
-				if (count > 0) {
-					TRACE("Removed " + std::to_string(count) + " waiting path requests");
-				}
-
-				count = 0;
-				for (const auto& tunnel_id : stale_tunnels) {
-					_tunnels.erase(tunnel_id);
-					++count;
-				}
-				if (count > 0) {
-					TRACE("Removed " + std::to_string(count) + " tunnels");
-				}
+				remove_reverse_entries(stale_reverse_entries);
+				remove_links(stale_links);
+				remove_paths(stale_paths);
+				remove_discovery_path_requests(stale_discovery_path_requests);
+				remove_tunnels(stale_tunnels);
 
 //#ifndef NDEBUG
 				dump_stats();
@@ -2809,6 +2770,55 @@ Deregisters an announce handler.
 	}
 }
 
+/*static*/ uint32_t Transport::next_hop_interface_bitrate(const Bytes& destination_hash) {
+	const Interface& interface = next_hop_interface(destination_hash);
+	if (interface) {
+		return interface.bitrate();
+	}
+	else {
+		0;
+	}
+}
+
+/*static*/ double Transport::next_hop_per_bit_latency(const Bytes& destination_hash) {
+	uint32_t bitrate = next_hop_interface_bitrate(destination_hash);
+	if (bitrate > 0) {
+		return (1.0/(double)bitrate);
+	}
+	else {
+		return 0.0;
+	}
+}
+
+/*static*/ double Transport::next_hop_per_byte_latency(const Bytes& destination_hash) {
+	double per_bit_latency = next_hop_per_bit_latency(destination_hash);
+	if (per_bit_latency > 0.0) {
+		return per_bit_latency*8.0;
+	}
+	else {
+		return 0.0;
+	}
+}
+
+/*static*/ double Transport::first_hop_timeout(const Bytes& destination_hash) {
+	double latency = next_hop_per_byte_latency(destination_hash);
+	if (latency > 0.0) {
+		return RNS::Type::Reticulum::MTU * latency + RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
+	}
+	else {
+		return RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
+	}
+}
+
+/*static*/ double Transport::extra_link_proof_timeout(const Interface& interface) {
+	if (interface) {
+		return ((1.0/(double)interface.bitrate())*8.0)*RNS::Type::Reticulum::MTU;
+	}
+	else {
+		return 0.0;
+	}
+}
+
 /*static*/ bool Transport::expire_path(const Bytes& destination_hash) {
 	auto iter = _destination_table.find(destination_hash);
 	if (iter != _destination_table.end()) {
@@ -2821,6 +2831,42 @@ Deregisters an announce handler.
 		return false;
 	}
 }
+
+/*p
+
+    @staticmethod
+    def mark_path_unresponsive(destination_hash):
+        if destination_hash in Transport.destination_table:
+            Transport.path_states[destination_hash] = Transport.STATE_UNRESPONSIVE
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def mark_path_responsive(destination_hash):
+        if destination_hash in Transport.destination_table:
+            Transport.path_states[destination_hash] = Transport.STATE_RESPONSIVE
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def mark_path_unknown_state(destination_hash):
+        if destination_hash in Transport.destination_table:
+            Transport.path_states[destination_hash] = Transport.STATE_UNKNOWN
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def path_is_unresponsive(destination_hash):
+        if destination_hash in Transport.path_states:
+            if Transport.path_states[destination_hash] == Transport.STATE_UNRESPONSIVE:
+                return True
+
+        return False
+
+*/
 
 /*
 Requests a path to the destination from the network. If
@@ -3932,4 +3978,65 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		}
 		DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
 	}
+}
+	
+/*static*/ uint16_t Transport::remove_reverse_entries(const std::vector<Bytes>& hashes) {
+	uint16_t count = 0;
+	for (const auto& truncated_packet_hash : hashes) {
+		_reverse_table.erase(truncated_packet_hash);
+		++count;
+	}
+	if (count > 0) {
+		extreme("Released " + std::to_string(count) + " reverse table entries");
+	}
+	return count;
+}
+
+/*static*/ uint16_t Transport::remove_links(const std::vector<Bytes>& hashes) {
+	uint16_t count = 0;
+	for (const auto& link_id : hashes) {
+		_link_table.erase(link_id);
+		++count;
+	}
+	if (count > 0) {
+		extreme("Released " + std::to_string(count) + " links");
+	}
+	return count;
+}
+
+/*static*/ uint16_t Transport::remove_paths(const std::vector<Bytes>& hashes) {
+	uint16_t count = 0;
+	for (const auto& destination_hash : hashes) {
+		//_destination_table.erase(destination_hash);
+		remove_path(destination_hash);
+		++count;
+	}
+	if (count > 0) {
+		extreme("Removed " + std::to_string(count) + " paths");
+	}
+	return count;
+}
+
+/*static*/ uint16_t Transport::remove_discovery_path_requests(const std::vector<Bytes>& hashes) {
+	uint16_t count = 0;
+	for (const auto& destination_hash : hashes) {
+		_discovery_path_requests.erase(destination_hash);
+		++count;
+	}
+	if (count > 0) {
+		extreme("Removed " + std::to_string(count) + " waiting path requests");
+	}
+	return count;
+}
+
+/*static*/ uint16_t Transport::remove_tunnels(const std::vector<Bytes>& hashes) {
+	uint16_t count = 0;
+	for (const auto& tunnel_id : hashes) {
+		_tunnels.erase(tunnel_id);
+		++count;
+	}
+	if (count > 0) {
+		extreme("Removed " + std::to_string(count) + " tunnels");
+	}
+	return count;
 }

@@ -5,6 +5,7 @@
 #include "Utilities/OS.h"
 
 #include <vector>
+#include <map>
 #include <string>
 #include <memory>
 #include <cassert>
@@ -73,6 +74,18 @@ namespace RNS {
 		void persist_data();
 		void clean_caches();
 		void clear_caches();
+		//void __create_default_config();
+		//void rpc_loop();
+		//void get_interface_stats();
+		const std::map<Bytes, Transport::DestinationEntry>& get_path_table();
+		const std::map<Bytes, Transport::RateEntry>& get_rate_table();
+		bool drop_path(const Bytes& destination);
+		uint16_t drop_all_via(const Bytes& transport_hash);
+		void drop_announce_queues();
+		std::string get_next_hop_if_name(const Bytes& destination);
+		double get_first_hop_timeout(const Bytes& destination);
+		Bytes get_next_hop(const Bytes& destination);
+		size_t get_link_count();
 
 		/*
 		Returns whether proofs sent are explicit or implicit.

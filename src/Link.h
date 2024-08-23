@@ -37,24 +37,21 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			typedef void (*established)(Link *link);
-			typedef void (*closed)(Link *link);
-		};
-		class Callbacks {
-		public:
 			using established = void(*)(const Link& link);
 			using closed = void(*)(const Link& link);
+			using packet = void(*)(const Bytes& plaintext, const Packet& packet);
+			using remote_identified = void(*)(const Link& link, const Identity& remote_identity);
+			//using resource = void(*)(const ResourceAdvertisement& resource_advertisement);
+			//using resource_started = void(*)(const Resource& resource);
+			//using resource_concluded = void(*)(const Resource& resource);
 		public:
 			established _established = nullptr;
 			closed _closed = nullptr;
-
-			boolean _link_established = false;
-			boolean _link_closed = false;
-			Packet _packet = {Type::NONE};
-			//z Resource _resource = {Type::NONE};
-			boolean _resource_started = false;
-			boolean _resource_concluded = false;
-			boolean _remote_identified = false;
+			packet _packet = nullptr;
+			remote_identified _remote_identified = nullptr;
+			//resource _resource = nullptr;
+			//resource_started _resource_started = nullptr;
+			//resource_concluded _resource_concluded = nullptr;
 
 		friend class Link;
 		};
@@ -130,16 +127,16 @@ namespace RNS {
 			uint16_t _keepalive_timeout_factor = Type::Link::KEEPALIVE_TIMEOUT_FACTOR;
 			uint16_t _keepalive = Type::Link::KEEPALIVE;
 			uint16_t _stale_time = Type::Link::STALE_TIME;
-			boolean _watchdog_lock = false;
+			bool _watchdog_lock = false;
 			double _activated_at = 0.0;
 			Type::Destination::types _type = Type::Destination::LINK;
 			const Destination _destination = {Type::NONE};
-			const Destination _owner = {Type::NONE};
-			boolean _initiator = false;
+			Destination _owner = {Type::NONE};
+			bool _initiator = false;
 			uint8_t _expected_hops = 0;
 			const Interface _attached_interface = {Type::NONE};
 			const Identity ___remote_identity = {Type::NONE};
-			boolean ___track_phy_stats = false;
+			bool ___track_phy_stats = false;
 			//z const Channel __channel = {Type::NONE};
 
 			Cryptography::X25519PrivateKey::Ptr _prv;
