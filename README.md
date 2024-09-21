@@ -38,11 +38,13 @@ Instructions for command line builds and building of individual example applicat
 - [x] Support for Links and Resources in Transport
 - [x] Implement Packet proofs
 - [x] Successful testing of Transport of both Packets and Links
-- [ ] Implement memory management appropriate for memory constricted MCUs
-- [ ] Implement Link, Resource, Channel and Buffer
+- [x] Implement memory management appropriate for memory constricted MCUs
+- [ ] Implement Link, Resource
+- [ ] Implement Channel and Buffer
 - [ ] Add example applications utilizing the C++ API
-- [ ] Configure PlatformIO to easily build and upload test applications to board
-- [ ] Add buid tagets for all boards currently supported by RNode
+- [x] Configure PlatformIO to easily build and upload test applications to board
+- [x] Add build tagets for all boards currently supported by RNode
+- [ ] Implement new combination caching/storage manager for managing persistent data
 
 Please open an Issue if you have trouble building ior using the API, and feel free to start a new Discussion for anything else.
 
