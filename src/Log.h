@@ -5,6 +5,7 @@
 #endif
 
 #include <string>
+#include <cstdarg> // va_start, va_end
 
 #define LOG(msg, level) (RNS::log(msg, level))
 #define LOGF(level, msg, ...) (RNS::logf(level, msg, __VA_ARGS__))

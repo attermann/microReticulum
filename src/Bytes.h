@@ -8,9 +8,33 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
+
 #include <vector>
 #include <string>
 #include <memory>
+
+/**
+ * The `strnstr()` function locates the first occurrence of the 
+ * null-terminated string `little` in the string `big`, where not more 
+ * than `len` characters are searched.
+ * Characters that appear after a `\0' character are not searched.
+ *
+ * Implementation of FreeBSD-specific function.
+ */
+inline char* strnstr(const char* big, const char* little, size_t len) {
+    // isn't safe if little isn't null terminated
+    size_t little_len = strnlen(little, len);
+
+    for (size_t pos = 0; pos < len-little_len; pos++) {
+        static const char* curr = (big + pos);
+
+        if (strncmp(curr, little, little_len) == 0) {
+            return const_cast<char*>(curr);
+        }
+    }
+
+    return NULL;
+}
 
 namespace RNS {
 
