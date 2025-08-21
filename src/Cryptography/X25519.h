@@ -14,6 +14,9 @@ namespace RNS { namespace Cryptography {
 	class X25519PublicKey {
 
 	public:
+		using Ptr = std::shared_ptr<X25519PublicKey>;
+
+	public:
 /*
 		X25519PublicKey(const Bytes& x) {
 			_x = x;
@@ -23,8 +26,6 @@ namespace RNS { namespace Cryptography {
 			_publicKey = publicKey;
 		}
 		~X25519PublicKey() {}
-
-		using Ptr = std::shared_ptr<X25519PublicKey>;
 
 	public:
 		// creates a new instance with specified seed
@@ -62,6 +63,8 @@ namespace RNS { namespace Cryptography {
 		//z T_CLEAR = None
 		const uint8_t T_MAX = 0;
 
+		using Ptr = std::shared_ptr<X25519PrivateKey>;
+
 	public:
 /*
 		X25519PrivateKey(const Bytes& a) {
@@ -86,8 +89,6 @@ namespace RNS { namespace Cryptography {
 			}
 		}
 		~X25519PrivateKey() {}
-
-		using Ptr = std::shared_ptr<X25519PrivateKey>;
 
 	public:
 		// creates a new instance with a random seed

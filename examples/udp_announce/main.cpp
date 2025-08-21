@@ -3,16 +3,16 @@
 #include "UDPInterface.h"
 #include "FileSystem.h"
 
-#include "Reticulum.h"
-#include "Identity.h"
-#include "Destination.h"
-#include "Packet.h"
-#include "Transport.h"
-#include "Interface.h"
-#include "Log.h"
-#include "Bytes.h"
-#include "Type.h"
-#include "Utilities/OS.h"
+#include <Reticulum.h>
+#include <Identity.h>
+#include <Destination.h>
+#include <Packet.h>
+#include <Transport.h>
+#include <Interface.h>
+#include <Log.h>
+#include <Bytes.h>
+#include <Type.h>
+#include <Utilities/OS.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -124,12 +124,13 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
+		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
 		test_filesystem_impl = new FileSystem();
 		test_filesystem = test_filesystem_impl;
 		((FileSystem*)test_filesystem.get())->init();
 		RNS::Utilities::OS::register_filesystem(test_filesystem);
 
-		HEAD("Registering Interface instances with Transport...", RNS::LOG_TRACE);
+		HEAD("Registering UDPInterface instances with Transport...", RNS::LOG_TRACE);
 		udp_interface_impl = new UDPInterface();
 		udp_interface = udp_interface_impl;
 		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
@@ -227,7 +228,7 @@ void reticulum_setup() {
 void reticulum_teardown() {
 	INFO("Tearing down Reticulum...");
 
-	//zzzCBA RNS::Transport::save_path_table();
+	RNS::Transport::persist_data();
 
 	try {
 
@@ -273,8 +274,13 @@ void setup() {
 	}
 #endif
 
-	RNS::loglevel(RNS::LOG_TRACE);
-	//RNS::loglevel(RNS::LOG_MEM);
+#if defined(MEM_LOG)
+		RNS::loglevel(RNS::LOG_MEM);
+#else
+		//RNS::loglevel(RNS::LOG_WARNING);
+		//RNS::loglevel(RNS::LOG_DEBUG);
+		RNS::loglevel(RNS::LOG_TRACE);
+#endif
 
 /*
 	{

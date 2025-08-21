@@ -63,11 +63,6 @@ void Reticulum::sigterm_handler(signal, frame):
 	RNS.exit()
 */
 
-// Return the currently running Reticulum instance
-/*static*/ const Reticulum& Reticulum::get_instance() {
-	return _instance;
-}
-
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -379,11 +374,11 @@ void Reticulum::__create_default_config() {
 void Reticulum::rpc_loop() {
 }
 
-void Reticulum::get_interface_stats() {
+void Reticulum::get_interface_stats() const {
 }
 */
 
-const std::map<Bytes, Transport::DestinationEntry>& Reticulum::get_path_table() {
+const std::map<Bytes, Transport::DestinationEntry>& Reticulum::get_path_table() const {
 /*
 	path_table = []
 	for dst_hash in Transport::destination_table:
@@ -402,7 +397,7 @@ const std::map<Bytes, Transport::DestinationEntry>& Reticulum::get_path_table() 
 	return Transport::get_destination_table();
 }
 
-const std::map<Bytes, Transport::RateEntry>& Reticulum::get_rate_table() {
+const std::map<Bytes, Transport::RateEntry>& Reticulum::get_rate_table() const {
 /*
 	rate_table = []
 	for dst_hash in Transport::announce_rate_table:
@@ -440,38 +435,38 @@ void Reticulum::drop_announce_queues() {
 	Transport::drop_announce_queues();
 }
 
-std::string Reticulum::get_next_hop_if_name(const Bytes& destination) {
+const std::string Reticulum::get_next_hop_if_name(const Bytes& destination) const {
 	return Transport::next_hop_interface(destination).name();
 }
 
-double Reticulum::get_first_hop_timeout(const Bytes& destination) {
+double Reticulum::get_first_hop_timeout(const Bytes& destination) const {
 	return Transport::first_hop_timeout(destination);
 }
 
-Bytes Reticulum::get_next_hop(const Bytes& destination) {
+const Bytes Reticulum::get_next_hop(const Bytes& destination) const {
 	return Transport::next_hop(destination);
 }
 
-size_t Reticulum::get_link_count() {
+size_t Reticulum::get_link_count() const {
 	return Transport::get_link_table().size();
 }
 
 /*p
-void Reticulum::get_packet_rssi(const Bytes& packet_hash) {
+void Reticulum::get_packet_rssi(const Bytes& packet_hash) const {
 	for entry in Transport::local_client_rssi_cache:
 		if entry[0] == packet_hash:
 			return entry[1]
 
 	return None
 
-void Reticulum::get_packet_snr(const Bytes& packet_hash) {
+void Reticulum::get_packet_snr(const Bytes& packet_hash) const {
 	for entry in Transport::local_client_snr_cache:
 		if entry[0] == packet_hash:
 			return entry[1]
 
 	return None
 
-void Reticulum::get_packet_q(const Bytes& packet_hash) {
+void Reticulum::get_packet_q(const Bytes& packet_hash) const {
 	for entry in Transport::local_client_q_cache:
 		if entry[0] == packet_hash:
 			return entry[1]

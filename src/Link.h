@@ -1,8 +1,6 @@
 #pragma once
 
-#include "Packet.h"
 #include "Destination.h"
-#include "Bytes.h"
 #include "Type.h"
 
 #include <memory>
@@ -10,29 +8,106 @@
 
 namespace RNS {
 
+	class ResourceRequest;
+	class ResourceResponse;
+	class RequestReceipt;
+	class Link;
+
+	class LinkData;
+	class RequestReceiptData;
+	class Resource;
 	class Packet;
+	class Destination;
+	class ResourceAdvertisement;
+	class PacketReceipt;
 
-
-	class RequestReceiptCallbacks {
-	private:
-		//z self.response = None
-		//z self.failed   = None
-		//z self.progress = None
+	class ResourceRequest {
+	public:
+		double _requested_at = 0.0;
+		Bytes _path_hash;
+		Bytes _request_data;
 	};
 
-	class Link {
+	class ResourceResponse {
+		Bytes request_id;
+		Bytes response_data;
+	};
 
 /*
-		This class is used to establish and manage links to other peers. When a
-		link instance is created, Reticulum will attempt to establish verified
-		and encrypted connectivity with the specified destination.
-
-		:param destination: A :ref:`RNS.Destination<api-destination>` instance which to establish a link to.
-		:param established_callback: An optional function or method with the signature *callback(link)* to be called when the link has been established.
-		:param closed_callback: An optional function or method with the signature *callback(link)* to be called when the link is closed.
+	An instance of this class is returned by the ``request`` method of ``RNS.Link``
+	instances. It should never be instantiated manually. It provides methods to
+	check status, response time and response data when the request concludes.
 */
+	class RequestReceipt {
 
-		static uint8_t resource_strategies;
+	public:
+		class Callbacks {
+		public:
+			using response = void(*)(const RequestReceipt& packet_receipt);
+			using failed = void(*)(const RequestReceipt& packet_receipt);
+			using progress = void(*)(const RequestReceipt& packet_receipt);
+		public:
+			response _response = nullptr;
+			failed _failed = nullptr;
+			progress _progress = nullptr;
+		friend class RequestReceipt;
+		};
+
+	public:
+		RequestReceipt(Type::NoneConstructor none) {}
+		RequestReceipt(const RequestReceipt& request_receipt) : _object(request_receipt._object) {}
+		//RequestReceipt(const Link& link, const PacketReceipt& packet_receipt = {Type::NONE}, const Resource& resource = {Type::NONE}, RequestReceipt::Callbacks::response response_callback = nullptr, RequestReceipt::Callbacks::failed failed_callback = nullptr, RequestReceipt::Callbacks::progress progress_callback = nullptr, double timeout = 0.0, int request_size = 0);
+		RequestReceipt(const Link& link, const PacketReceipt& packet_receipt, const Resource& resource, RequestReceipt::Callbacks::response response_callback = nullptr, RequestReceipt::Callbacks::failed failed_callback = nullptr, RequestReceipt::Callbacks::progress progress_callback = nullptr, double timeout = 0.0, int request_size = 0);
+
+		inline RequestReceipt& operator = (const RequestReceipt& packet_receipt) {
+			_object = packet_receipt._object;
+			return *this;
+		}
+		inline operator bool() const {
+			return _object.get() != nullptr;
+		}
+		inline bool operator < (const RequestReceipt& packet_receipt) const {
+			return _object.get() < packet_receipt._object.get();
+		}
+
+	public:
+		void request_resource_concluded(const Resource& resource);
+		void __response_timeout_job();
+		void request_timed_out(const PacketReceipt& packet_receipt);
+		void response_resource_progress(const Resource& resource);
+		void response_received(const Bytes& response);
+		const Bytes& get_request_id() const;
+		Type::RequestReceipt::status get_status() const;
+		float get_progress() const;
+		const Bytes get_response() const;
+		double get_response_time() const;
+
+		std::string toString() const;
+
+		// getters
+		const Bytes& hash() const;
+		const Bytes& request_id() const;
+		const size_t response_transfer_size() const;
+
+		// setters
+		void response_size(size_t size);
+		void response_transfer_size(size_t size);
+
+	private:
+		std::shared_ptr<RequestReceiptData> _object;
+
+	};
+
+/*
+	This class is used to establish and manage links to other peers. When a
+	link instance is created, Reticulum will attempt to establish verified
+	and encrypted connectivity with the specified destination.
+
+	:param destination: A :ref:`RNS.Destination<api-destination>` instance which to establish a link to.
+	:param established_callback: An optional function or method with the signature *callback(link)* to be called when the link has been established.
+	:param closed_callback: An optional function or method with the signature *callback(link)* to be called when the link is closed.
+*/
+	class Link {
 
 	public:
 		class Callbacks {
@@ -41,20 +116,22 @@ namespace RNS {
 			using closed = void(*)(const Link& link);
 			using packet = void(*)(const Bytes& plaintext, const Packet& packet);
 			using remote_identified = void(*)(const Link& link, const Identity& remote_identity);
-			//using resource = void(*)(const ResourceAdvertisement& resource_advertisement);
-			//using resource_started = void(*)(const Resource& resource);
-			//using resource_concluded = void(*)(const Resource& resource);
+			using resource = void(*)(const ResourceAdvertisement& resource_advertisement);
+			using resource_started = void(*)(const Resource& resource);
+			using resource_concluded = void(*)(const Resource& resource);
 		public:
 			established _established = nullptr;
 			closed _closed = nullptr;
 			packet _packet = nullptr;
 			remote_identified _remote_identified = nullptr;
-			//resource _resource = nullptr;
-			//resource_started _resource_started = nullptr;
-			//resource_concluded _resource_concluded = nullptr;
-
+			resource _resource = nullptr;
+			resource_started _resource_started = nullptr;
+			resource_concluded _resource_concluded = nullptr;
 		friend class Link;
 		};
+
+	public:
+		static uint8_t resource_strategies;
 
 	public:
 		Link(Type::NoneConstructor none) {
@@ -64,96 +141,99 @@ namespace RNS {
 			MEM("Link object copy created");
 		}
 		Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE});
+		//Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE});
 		virtual ~Link(){
 			MEM("Link object destroyed");
 		}
 
-		inline Link& operator = (const Link& link) {
+		Link& operator = (const Link& link) {
 			_object = link._object;
 			return *this;
 		}
-		inline operator bool() const {
+		operator bool() const {
 			return _object.get() != nullptr;
 		}
-		inline bool operator < (const Link& link) const {
+		bool operator < (const Link& link) const {
 			return _object.get() < link._object.get();
 		}
 
 	public:
+		static Link validate_request( const Destination& owner, const Bytes& data, const Packet& packet);
+		void load_peer(const Bytes& peer_pub_bytes, const Bytes& peer_sig_pub_bytes);
 		void set_link_id(const Packet& packet);
-		void receive(const Packet& packet);
-
+		void handshake();
 		void prove();
 		void prove_packet(const Packet& packet);
+		void validate_proof(const Packet& packet);
+		void identify(const Identity& identity);
+		const RequestReceipt request(const Bytes& path, const Bytes& data = {Bytes::NONE}, RequestReceipt::Callbacks::response response_callback = nullptr, RequestReceipt::Callbacks::failed failed_callback = nullptr, RequestReceipt::Callbacks::progress progress_callback = nullptr, double timeout = 0.0);
+		void rtt_packet(const Packet& packet);
+		float get_establishment_rate();
+		const Bytes& get_salt();
+		const Bytes get_context();
+		double no_inbound_for();
+		double no_outbound_for();
+		double no_data_for();
+		double inactive_for();
+		const Identity& get_remote_identity();
+		void had_outbound(bool is_keepalive = false);
+		void teardown();
+		void teardown_packet(const Packet& packet);
+		void link_closed();
+		void start_watchdog();
+	void __watchdog_job();
+		void send_keepalive();
+		void handle_request(const Bytes& request_id, const ResourceRequest& unpacked_request);
+		void handle_response(const Bytes& request_id, const Bytes& response_data, size_t response_size, size_t response_transfer_size);
+		void request_resource_concluded(const Resource& resource);
+		void response_resource_concluded(const Resource& resource);
+		//z const Channel& get_channel();
+		void receive(const Packet& packet);
+		const Bytes encrypt(const Bytes& plaintext);
+		const Bytes decrypt(const Bytes& ciphertext);
+		const Bytes sign(const Bytes& message);
+		bool validate(const Bytes& signature, const Bytes& message);
+		void set_link_established_callback(Callbacks::established callback);
+		void set_link_closed_callback(Callbacks::closed callback);
+		void set_packet_callback(Callbacks::packet callback);
+		void set_remote_identified_callback(Callbacks::remote_identified callback);
+		void set_resource_callback(Callbacks::resource callback);
+		void set_resource_started_callback(Callbacks::resource_started callback);
+		void set_resource_concluded_callback(Callbacks::resource_concluded callback);
+		void resource_concluded(const Resource& resource);
+		void set_resource_strategy(Type::Link::resource_strategy strategy);
+		void register_outgoing_resource(const Resource& resource);
+		void register_incoming_resource(const Resource& resource);
+		bool has_incoming_resource(const Resource& resource);
+		void cancel_outgoing_resource(const Resource& resource);
+		void cancel_incoming_resource(const Resource& resource);
+		bool ready_for_new_resource();
 
-		// getters/setters
-		inline const Destination& destination() const { assert(_object); return _object->_destination; }
-		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
-		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
-		inline Type::Link::status status() const { assert(_object); return _object->_status; }
+		//void __str__();
+		std::string toString() const;
 
-		inline std::string toString() const { if (!_object) return ""; return "{Link: unknown}"; }
+		// getters
+		const Destination& destination() const;
+		const Interface& attached_interface() const;
+		const Bytes& link_id() const;
+		const Bytes& hash() const;
+		Type::Link::status status() const;
+		double establishment_timeout() const;
+		uint16_t establishment_cost() const;
+		double request_time() const;
+		double last_inbound() const;
+		std::set<RequestReceipt>& pending_requests() const;
 
-	private:
-		class Object {
-		public:
-			Object(const Destination& destination) : _destination(destination) {}
-			virtual ~Object() {}
-		private:
-			Destination _destination = {Type::NONE};
-			Bytes _link_id;
-			Bytes _hash;
-			Type::Link::status _status = Type::Link::PENDING;
+		// setters
+		void destination(const Destination& destination);
+		void attached_interface(const Interface& interface);
+		void establishment_timeout(double timeout);
+		void establishment_cost(uint16_t cost);
+		void request_time(double time);
+		void last_inbound(double time);
 
-			//z _rtt = None
-			//z _establishment_cost = 0
-			Callbacks _callbacks;
-			Type::Link::resource_strategy _resource_strategy = Type::Link::ACCEPT_NONE;
-			//z _outgoing_resources = []
-			//z _incoming_resources = []
-			//z _pending_requests   = []
-			double _last_inbound = 0.0;
-			double _last_outbound = 0.0;
-			double _last_proof = 0.0;
-			double _last_data = 0.0;
-			uint16_t _tx = 0;
-			uint16_t _rx = 0;
-			uint16_t _txbytes = 0;
-			uint16_t _rxbytes = 0;
-			float _rssi = 0.0;
-			float _snr = 0.0;
-			float _q = 0.0;
-			uint16_t _traffic_timeout_factor = Type::Link::TRAFFIC_TIMEOUT_FACTOR;
-			uint16_t _keepalive_timeout_factor = Type::Link::KEEPALIVE_TIMEOUT_FACTOR;
-			uint16_t _keepalive = Type::Link::KEEPALIVE;
-			uint16_t _stale_time = Type::Link::STALE_TIME;
-			bool _watchdog_lock = false;
-			double _activated_at = 0.0;
-			Type::Destination::types _type = Type::Destination::LINK;
-			const Destination _destination = {Type::NONE};
-			Destination _owner = {Type::NONE};
-			bool _initiator = false;
-			uint8_t _expected_hops = 0;
-			const Interface _attached_interface = {Type::NONE};
-			const Identity ___remote_identity = {Type::NONE};
-			bool ___track_phy_stats = false;
-			//z const Channel __channel = {Type::NONE};
-
-			Cryptography::X25519PrivateKey::Ptr _prv;
-			Bytes _prv_bytes;
-
-			Cryptography::Ed25519PrivateKey::Ptr _sig_prv;
-			Bytes _sig_prv_bytes;
-
-			Cryptography::X25519PublicKey::Ptr _pub;
-			Bytes _pub_bytes;
-
-			Cryptography::Ed25519PublicKey::Ptr _sig_pub;
-			Bytes _sig_pub_bytes;
-
-		friend class Link;
-		};
-		std::shared_ptr<Object> _object;
+	protected:
+		std::shared_ptr<LinkData> _object;
 
 	};
 

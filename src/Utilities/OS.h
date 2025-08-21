@@ -79,10 +79,12 @@ namespace RNS { namespace Utilities {
 			_filesystem = filesystem;
 		}
 
+/*
 		inline static void register_filesystem(FileSystemImpl* filesystemimpl) {
 			TRACE("Registering filesystem...");
 			_filesystem = filesystemimpl;
 		}
+*/
 
 		inline static void deregister_filesystem() {
 			TRACE("Deregistering filesystem...");

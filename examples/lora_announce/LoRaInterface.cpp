@@ -6,7 +6,6 @@
 #include <memory>
 
 using namespace RNS;
-using namespace RNS::Interfaces;
 
 /*
 @staticmethod
@@ -22,12 +21,12 @@ def get_broadcast_for_if(name):
 	return ifaddr[netinfo.AF_INET][0]["broadcast"]
 */
 
-LoRaInterface::LoRaInterface(const char* name /*= "LoRaInterface"*/) : Interface(name) {
+LoRaInterface::LoRaInterface(const char* name /*= "LoRaInterface"*/) : RNS::InterfaceImpl(name) {
 
-	IN(true);
-	OUT(true);
+	_IN = true;
+	_OUT = true;
 	//p self.bitrate = self.r_sf * ( (4.0/self.r_cr) / (math.pow(2,self.r_sf)/(self.r_bandwidth/1000)) ) * 1000
-	bitrate((double)spreading * ( (4.0/coding) / (pow(2, spreading)/(bandwidth/1000.0)) ) * 1000.0);
+	_bitrate = (double)spreading * ( (4.0/coding) / (pow(2, spreading)/(bandwidth/1000.0)) ) * 1000.0;
 
 }
 
@@ -36,7 +35,7 @@ LoRaInterface::LoRaInterface(const char* name /*= "LoRaInterface"*/) : Interface
 }
 
 bool LoRaInterface::start() {
-	online(false);
+	_online = false;
 	INFO("LoRa initializing...");
   
 #ifdef ARDUINO
@@ -61,7 +60,7 @@ bool LoRaInterface::start() {
 	TRACE("LoRa bandwidth is " + std::to_string(Utilities::OS::round(bitrate()/1000.0, 2)) + " Kbps");
 #endif
 
-	online(true);
+	_online = true;
 	return true;
 }
 
@@ -70,12 +69,12 @@ void LoRaInterface::stop() {
 #ifdef ARDUINO
 #endif
 
-	online(false);
+	_online = false;
 }
 
 void LoRaInterface::loop() {
 
-	if (online()) {
+	if (_online) {
 		// Check for incoming packet
 #ifdef ARDUINO
 		int available = LoRa.parsePacket();
@@ -102,15 +101,10 @@ void LoRaInterface::loop() {
 	}
 }
 
-/*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
-	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
-	Interface::on_incoming(data);
-}
-
-/*virtual*/ void LoRaInterface::on_outgoing(const Bytes& data) {
+/*virtual*/ void LoRaInterface::send_outgoing(const Bytes& data) {
 	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
-		if (online()) {
+		if (_online) {
 			TRACE("LoRaInterface: sending " + std::to_string(data.size()) + " bytes...");
 			// Send packet
 #ifdef ARDUINO
@@ -134,9 +128,17 @@ void LoRaInterface::loop() {
 #endif
 			TRACE("LoRaInterface: sent bytes");
 		}
-		Interface::on_outgoing(data);
+
+		// Perform post-send housekeeping
+		InterfaceImpl::handle_outgoing(data);
 	}
 	catch (std::exception& e) {
 		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
 	}
+}
+
+/*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
+	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
+	// Pass received data on to transport
+	InterfaceImpl::handle_incoming(data);
 }

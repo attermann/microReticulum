@@ -158,12 +158,12 @@ using namespace RNS::Utilities;
 	if (!owner.is_connected_to_shared_instance()) {
 		if (os.path.isfile(packet_hashlist_path)) {
 			try {
-				file = open(packet_hashlist_path, "rb");
-				packet_hashlist = umsgpack.unpackb(file.read());
-				file.close();
+				//p file = open(packet_hashlist_path, "rb")
+				//p Transport.packet_hashlist = umsgpack.unpackb(file.read())
+				//p file.close()
 			}
 			catch (std::exception& e) {
-				ERROR("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
+				ERRORF("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
 			}
 		}
 	}
@@ -1239,7 +1239,7 @@ using namespace RNS::Utilities;
 
 	_jobs_locked = true;
 
-	Packet packet({Type::NONE}, raw);
+	Packet packet(RNS::Destination(RNS::Type::NONE), raw);
 	if (!packet.unpack()) {
 		WARNING("Transport::inbound: Packet unpack failed!");
 		return;
@@ -3657,7 +3657,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 	DEBUG("Transport::read_tunnel_table");
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 // TODO
-/*
+/*p
 		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
 		if os.path.isfile(tunnel_table_path) and not Transport.owner.is_connected_to_shared_instance:
 			serialised_tunnels = []
@@ -3987,7 +3987,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		++count;
 	}
 	if (count > 0) {
-		extreme("Released " + std::to_string(count) + " reverse table entries");
+		TRACEF("Released %u reverse table entries", count);
 	}
 	return count;
 }
@@ -3999,7 +3999,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		++count;
 	}
 	if (count > 0) {
-		extreme("Released " + std::to_string(count) + " links");
+		TRACEF("Released %u links", count);
 	}
 	return count;
 }
@@ -4012,7 +4012,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		++count;
 	}
 	if (count > 0) {
-		extreme("Removed " + std::to_string(count) + " paths");
+		TRACEF("Released %u paths", count);
 	}
 	return count;
 }
@@ -4024,7 +4024,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		++count;
 	}
 	if (count > 0) {
-		extreme("Removed " + std::to_string(count) + " waiting path requests");
+		TRACEF("Released %u waiting path requests", count);
 	}
 	return count;
 }
@@ -4036,7 +4036,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		++count;
 	}
 	if (count > 0) {
-		extreme("Removed " + std::to_string(count) + " tunnels");
+		TRACEF("Released %u tunnels", count);
 	}
 	return count;
 }

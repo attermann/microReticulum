@@ -1,17 +1,18 @@
 //#define NDEBUG
 
 #include "LoRaInterface.h"
+#include "FileSystem.h"
 
-#include "Reticulum.h"
-#include "Identity.h"
-#include "Destination.h"
-#include "Packet.h"
-#include "Transport.h"
-#include "Interface.h"
-#include "Log.h"
-#include "Bytes.h"
-#include "Type.h"
-#include "Utilities/OS.h"
+#include <Reticulum.h>
+#include <Identity.h>
+#include <Destination.h>
+#include <Packet.h>
+#include <Transport.h>
+#include <Interface.h>
+#include <Log.h>
+#include <Bytes.h>
+#include <Type.h>
+#include <Utilities/OS.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -86,10 +87,13 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 
 
 RNS::Reticulum reticulum({RNS::Type::NONE});
+RNS::Interface lora_interface(RNS::Type::NONE);
+RNS::FileSystem test_filesystem(RNS::Type::NONE);
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
 
-RNS::Interfaces::LoRaInterface lora_interface;
+LoRaInterface* lora_interface_impl = nullptr;
+FileSystem* test_filesystem_impl = nullptr;
 
 //ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
 //RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
@@ -119,12 +123,21 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
-		HEAD("Registering Interface instances with Transport...", RNS::LOG_TRACE);
+
+		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
+		test_filesystem_impl = new FileSystem();
+		test_filesystem = test_filesystem_impl;
+		((FileSystem*)test_filesystem.get())->init();
+		RNS::Utilities::OS::register_filesystem(test_filesystem);
+
+		HEAD("Registering LoRaInterface instances with Transport...", RNS::LOG_TRACE);
+		lora_interface_impl = new LoRaInterface();
+		lora_interface = lora_interface_impl;
 		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(lora_interface);
 
 		HEAD("Starting LoRaInterface...", RNS::LOG_TRACE);
-		lora_interface.start();
+		lora_interface_impl->start();
 
 		HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
 		//RNS::Reticulum reticulum;
@@ -215,7 +228,7 @@ void reticulum_setup() {
 void reticulum_teardown() {
 	INFO("Tearing down Reticulum...");
 
-	RNS::Transport::save_path_table();
+	RNS::Transport::persist_data();
 
 	try {
 
@@ -281,7 +294,7 @@ void setup() {
 void loop() {
 
 	reticulum.loop();
-	lora_interface.loop();
+	lora_interface_impl->loop();
 
 #ifdef ARDUINO
 /*

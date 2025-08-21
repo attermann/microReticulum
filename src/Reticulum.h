@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Transport.h"
 #include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
@@ -40,7 +41,8 @@ namespace RNS {
 		static bool panic_on_interface_error;
 
 	public:
-		static const Reticulum& get_instance();
+		// Return the currently running Reticulum instance
+		inline static const Reticulum& get_instance() { return _instance; }
 
 	public:
 		Reticulum(Type::NoneConstructor none) {
@@ -76,16 +78,19 @@ namespace RNS {
 		void clear_caches();
 		//void __create_default_config();
 		//void rpc_loop();
-		//void get_interface_stats();
-		const std::map<Bytes, Transport::DestinationEntry>& get_path_table();
-		const std::map<Bytes, Transport::RateEntry>& get_rate_table();
+		//void get_interface_stats() const;
+		const std::map<Bytes, Transport::DestinationEntry>& get_path_table() const;
+		const std::map<Bytes, Transport::RateEntry>& get_rate_table() const;
 		bool drop_path(const Bytes& destination);
 		uint16_t drop_all_via(const Bytes& transport_hash);
 		void drop_announce_queues();
-		std::string get_next_hop_if_name(const Bytes& destination);
-		double get_first_hop_timeout(const Bytes& destination);
-		Bytes get_next_hop(const Bytes& destination);
-		size_t get_link_count();
+		const std::string get_next_hop_if_name(const Bytes& destination) const;
+		double get_first_hop_timeout(const Bytes& destination) const;
+		const Bytes get_next_hop(const Bytes& destination) const;
+		size_t get_link_count() const;
+		//void get_packet_rssi(const Bytes& packet_hash) const;
+		//void get_packet_snr(const Bytes& packet_hash) const;
+		//void get_packet_q(const Bytes& packet_hash) const;
 
 		/*
 		Returns whether proofs sent are explicit or implicit.

@@ -9,3 +9,4 @@ void testCrypto();
 void testPersistence();
 void testFileSystem();
 void testReticulum();
+void testObjects();

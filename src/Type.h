@@ -194,6 +194,7 @@ namespace RNS { namespace Type {
 		};
 
 		enum teardown_reason {
+			TEARDOWN_NONE      = 0x00,
 			TIMEOUT            = 0x01,
 			INITIATOR_CLOSED   = 0x02,
 			DESTINATION_CLOSED = 0x03,
@@ -203,6 +204,18 @@ namespace RNS { namespace Type {
 			ACCEPT_NONE = 0x00,
 			ACCEPT_APP  = 0x01,
 			ACCEPT_ALL  = 0x02,
+		};
+
+	}
+
+	namespace RequestReceipt {
+
+		enum status {
+			FAILED    = 0x00,
+			SENT      = 0x01,
+			DELIVERED = 0x02,
+			RECEIVING = 0x03,
+			READY     = 0x04,
 		};
 
 	}
@@ -357,6 +370,106 @@ namespace RNS { namespace Type {
 		static const uint32_t ROAMING_PATH_TIME = 60*60*1;    // Path expiration of 1 hour for Roaming paths
 
 		static const uint16_t LOCAL_CLIENT_CACHE_MAXSIZE = 512;
+	}
+
+	namespace Resource {
+
+		// The initial window size at beginning of transfer
+		static const uint8_t WINDOW               = 4;
+
+		// Absolute minimum window size during transfer
+		static const uint8_t WINDOW_MIN           = 1;
+
+		// The maximum window size for transfers on slow links
+		static const uint8_t WINDOW_MAX_SLOW      = 10;
+
+		// The maximum window size for transfers on fast links
+		static const uint8_t WINDOW_MAX_FAST      = 75;
+		
+		// For calculating maps and guard segments, this
+		// must be set to the global maximum window.
+		static const uint8_t WINDOW_MAX           = WINDOW_MAX_FAST;
+		
+		// If the fast rate is sustained for this many request
+		// rounds, the fast link window size will be allowed.
+		static const uint8_t FAST_RATE_THRESHOLD  = WINDOW_MAX_SLOW - WINDOW - 2;
+
+		// If the RTT rate is higher than this value,
+		// the max window size for fast links will be used.
+		// The default is 50 Kbps (the value is stored in
+		// bytes per second, hence the "/ 8").
+		static const uint16_t RATE_FAST            = (50*1000) / 8;
+
+		// The minimum allowed flexibility of the window size.
+		// The difference between window_max and window_min
+		// will never be smaller than this value.
+		static const uint8_t WINDOW_FLEXIBILITY   = 4;
+
+		// Number of bytes in a map hash
+		static const uint8_t MAPHASH_LEN          = 4;
+		static const uint16_t SDU                 = Packet::MDU;
+		static const uint8_t RANDOM_HASH_SIZE     = 4;
+
+		// This is an indication of what the
+		// maximum size a resource should be, if
+		// it is to be handled within reasonable
+		// time constraint, even on small systems.
+		#
+		// A small system in this regard is
+		// defined as a Raspberry Pi, which should
+		// be able to compress, encrypt and hash-map
+		// the resource in about 10 seconds.
+		#
+		// This constant will be used when determining
+		// how to sequence the sending of large resources.
+		#
+		// Capped at 16777215 (0xFFFFFF) per segment to
+		// fit in 3 bytes in resource advertisements.
+		static const uint32_t MAX_EFFICIENT_SIZE      = 16 * 1024 * 1024 - 1;
+		static const uint8_t RESPONSE_MAX_GRACE_TIME = 10;
+		
+		// The maximum size to auto-compress with
+		// bz2 before sending.
+		static const uint32_t AUTO_COMPRESS_MAX_SIZE = MAX_EFFICIENT_SIZE;
+
+		static const uint8_t PART_TIMEOUT_FACTOR           = 4;
+		static const uint8_t PART_TIMEOUT_FACTOR_AFTER_RTT = 2;
+		static const uint8_t MAX_RETRIES                   = 8;
+		static const uint8_t MAX_ADV_RETRIES               = 4;
+		static const uint8_t SENDER_GRACE_TIME             = 10;
+		static const float RETRY_GRACE_TIME              = 0.25;
+		static const float PER_RETRY_DELAY               = 0.5;
+
+		static const uint8_t WATCHDOG_MAX_SLEEP            = 1;
+
+		static const uint8_t HASHMAP_IS_NOT_EXHAUSTED = 0x00;
+		static const uint8_t HASHMAP_IS_EXHAUSTED = 0xFF;
+
+		// Status constants
+		enum status {
+			NONE            = 0x00,
+			QUEUED          = 0x01,
+			ADVERTISED      = 0x02,
+			TRANSFERRING    = 0x03,
+			AWAITING_PROOF  = 0x04,
+			ASSEMBLING      = 0x05,
+			COMPLETE        = 0x06,
+			FAILED          = 0x07,
+			CORRUPT         = 0x08
+		};
+
+		namespace ResourceAdvertisement {
+			static const uint8_t OVERHEAD             = 134;
+			static const uint16_t HASHMAP_MAX_LEN      = floor((Link::MDU-OVERHEAD)/Resource::MAPHASH_LEN);
+			//static const uint16_t HASHMAP_MAX_LEN      = ((Link::MDU-OVERHEAD)/Resource::MAPHASH_LEN);
+			static const uint16_t COLLISION_GUARD_SIZE = 2*Resource::WINDOW_MAX+HASHMAP_MAX_LEN;
+
+			//assert HASHMAP_MAX_LEN > 0, "The configured MTU is too small to include any map hashes in resource advertisments"
+		}
+
+	}
+
+	namespace Channel {
 	}
 
 } }

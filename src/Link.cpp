@@ -1,20 +1,34 @@
 #include "Link.h"
 
+#include "LinkData.h"
+#include "Resource.h"
 #include "Reticulum.h"
 #include "Transport.h"
 #include "Packet.h"
 #include "Log.h"
+#include "Cryptography/Ed25519.h"
+#include "Cryptography/X25519.h"
+#include "Cryptography/HKDF.h"
+#include "Cryptography/Fernet.h"
+#include "Cryptography/Random.h"
+
+#define MSGPACK_DEBUGLOG_ENABLE 0
+#include <MsgPack.h>
+
+#include <algorithm>
 
 using namespace RNS;
 using namespace RNS::Type::Link;
+using namespace RNS::Cryptography;
+using namespace RNS::Utilities;
 
-/*static*/ uint8_t Link::resource_strategies = Type::Link::ACCEPT_NONE | Type::Link::ACCEPT_APP | Type::Link::ACCEPT_ALL;
+/*static*/ uint8_t Link::resource_strategies = ACCEPT_NONE | ACCEPT_APP | ACCEPT_ALL;
 
-Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::established established_callback /*= nullptr*/, Callbacks::closed closed_callback /*= nullptr*/, const Destination& owner /*= {Type::NONE}*/, const Bytes& peer_pub_bytes /*= {Bytes::NONE}*/, const Bytes& peer_sig_pub_bytes /*= {Bytes::NONE}*/) : _object(new Object(destination)) {
+Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::established established_callback /*= nullptr*/, Callbacks::closed closed_callback /*= nullptr*/, const Destination& owner /*= {Type::NONE}*/, const Bytes& peer_pub_bytes /*= {Bytes::NONE}*/, const Bytes& peer_sig_pub_bytes /*= {Bytes::NONE}*/) :
+	_object(new LinkData(destination))
+{
 	assert(_object);
 
-	MEM("Link object created");
-/*p TODO
 	_object->_owner = owner;
 
 	if (destination && destination.type() != Type::Destination::SINGLE) {
@@ -33,82 +47,105 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		_object->_initiator = true;
 		_object->_expected_hops = Transport::hops_to(_object->_destination.hash());
 		_object->_establishment_timeout = Reticulum::get_instance().get_first_hop_timeout(destination.hash());
-		_object->_establishment_timeout += Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * max(1, Transport::hops_to(destination.hash()));
 		_object->_prv     = Cryptography::X25519PrivateKey::generate();
 		_object->_sig_prv = Cryptography::Ed25519PrivateKey::generate();
-
-	self.fernet  = None
-	
-	self.pub = self.prv.public_key()
-	self.pub_bytes = self.pub.public_bytes()
-
-	self.sig_pub = self.sig_prv.public_key()
-	self.sig_pub_bytes = self.sig_pub.public_bytes()
-
-	if peer_pub_bytes == None:
-		self.peer_pub = None
-		self.peer_pub_bytes = None
-	else:
-		self.load_peer(peer_pub_bytes, peer_sig_pub_bytes)
-
-	if established_callback != None:
-		self.set_link_established_callback(established_callback)
-
-	if closed_callback != None:
-		self.set_link_closed_callback(closed_callback)
-
-	if (self.initiator) {
-		self.request_data = self.pub_bytes+self.sig_pub_bytes
-		self.packet = RNS.Packet(destination, self.request_data, packet_type=RNS.Packet.LINKREQUEST)
-		self.packet.pack()
-		self.establishment_cost += len(self.packet.raw)
-		self.set_link_id(self.packet)
-		RNS.Transport.register_link(self)
-		self.request_time = time.time()
-		self.start_watchdog()
-		self.packet.send()
-		self.had_outbound()
-		RNS.log("Link request "+RNS.prettyhexrep(self.link_id)+" sent to "+str(self.destination), RNS.LOG_DEBUG)
-		RNS.log(f"Establishment timeout is {RNS.prettytime(self.establishment_timeout)} for link request "+RNS.prettyhexrep(self.link_id), RNS.LOG_EXTREME)
 	}
 
+	_object->_pub           = _object->_prv->public_key();
+	_object->_pub_bytes     = _object->_pub->public_bytes();
+	TRACEF("Link::load_private_key: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
+
+	_object->_sig_pub       = _object->_sig_prv->public_key();
+	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
+	TRACEF("Link::load_private_key: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
+
+	if (!peer_pub_bytes) {
+		_object->_peer_pub = nullptr;
+		_object->_peer_pub_bytes = nullptr;
+	}
+	else {
+		load_peer(peer_pub_bytes, peer_sig_pub_bytes);
+	}
+
+	if (established_callback) {
+		set_link_established_callback(established_callback);
+	}
+
+	if (closed_callback) {
+		set_link_closed_callback(closed_callback);
+	}
+
+	if (_object->_initiator) {
+		_object->_request_data = _object->_pub_bytes + _object->_sig_pub_bytes;
+		_object->_packet = Packet(destination, _object->_request_data, RNS::Type::Packet::LINKREQUEST);
+		_object->_packet.pack();
+		_object->_establishment_cost += _object->_packet.raw().size();
+		set_link_id(_object->_packet);
+		Transport::register_link(*this);
+		_object->_request_time = OS::time();
+		start_watchdog();
+		_object->_packet.send();
+		had_outbound();
+		DEBUGF("Link request %s sent to %s", _object->_link_id.toHex().c_str(), _object->_destination.toString().c_str());
+		TRACEF("Establishment timeout is %f for link request %s", _object->_establishment_timeout, _object->_link_id.toHex().c_str());
+	}
+
+	// CBA LINK
+	_object->_link_destination = Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::LINK, hash());
+	_object->_link_destination.link_id(_object->_link_id);
+
 	MEM("Link object created");
-*/
 }
 
 
-/*p TODO
-Link::validate_request(owner, data, packet) {
-	if len(data) == (Link.ECPUBSIZE):
-		try:
-			link = Link(owner = owner, peer_pub_bytes=data[:Link.ECPUBSIZE//2], peer_sig_pub_bytes=data[Link.ECPUBSIZE//2:Link.ECPUBSIZE])
-			link.set_link_id(packet)
-			link.destination = packet.destination
-			link.establishment_timeout = Link.ESTABLISHMENT_TIMEOUT_PER_HOP * max(1, packet.hops) + Link.KEEPALIVE
-			link.establishment_cost += len(packet.raw)
-			RNS.log("Validating link request "+RNS.prettyhexrep(link.link_id), RNS.LOG_VERBOSE)
-			RNS.log(f"Establishment timeout is {RNS.prettytime(link.establishment_timeout)} for incoming link request "+RNS.prettyhexrep(link.link_id), RNS.LOG_EXTREME)
-			link.handshake()
-			link.attached_interface = packet.receiving_interface
-			link.prove()
-			link.request_time = time.time()
-			RNS.Transport.register_link(link)
-			link.last_inbound = time.time()
-			link.start_watchdog()
+/*static*/ Link Link::validate_request( const Destination& owner, const Bytes& data, const Packet& packet) {
+	if (data.size() == ECPUBSIZE) {
+		try {
+			Link link({Type::NONE}, nullptr, nullptr, owner, data.left(ECPUBSIZE/2), data.mid(ECPUBSIZE/2, ECPUBSIZE/2));
+			link.set_link_id(packet);
+			link.destination(packet.destination());
+			link.establishment_timeout(ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, packet.hops()) + KEEPALIVE);
+			link.establishment_cost(link.establishment_cost() + packet.raw().size());
+			VERBOSEF("Validating link request %s", link.link_id().toHex().c_str());
+			TRACEF("Establishment timeout is %f for incoming link request %s", link.establishment_timeout(), link.link_id().toHex().c_str());
+			link.handshake();
+			link.attached_interface(packet.receiving_interface());
+			link.prove();
+			link.request_time(OS::time());
+			Transport::register_link(link);
+			link.last_inbound(OS::time());
+			link.start_watchdog();
 			
-			RNS.log("Incoming link request "+str(link)+" accepted", RNS.LOG_DEBUG)
-			return link
-
-		except Exception as e:
-			RNS.log("Validating link request failed", RNS.LOG_VERBOSE)
-			RNS.log("exc: "+str(e))
-			return None
-
-	else:
-		RNS.log("Invalid link request payload size, dropping request", RNS.LOG_DEBUG)
-		return None
+			DEBUGF("Incoming link request %s accepted", link.toString().c_str());
+			return link;
+		}
+		catch (std::exception& e) {
+			VERBOSEF("Validating link request failed, exception: %s", e.what());
+			return {Type::NONE};
+		}
+	}
+	else {
+		DEBUG("Invalid link request payload size, dropping request");
+		return {Type::NONE};
+	}
 }
+
+void Link::load_peer(const Bytes& peer_pub_bytes, const Bytes& peer_sig_pub_bytes) {
+	assert(_object);
+	_object->_peer_pub_bytes = peer_pub_bytes;
+	_object->_peer_pub = Cryptography::X25519PublicKey::from_public_bytes(_object->_peer_pub_bytes);
+
+	_object->_peer_sig_pub_bytes = peer_sig_pub_bytes;
+	_object->_peer_sig_pub = Cryptography::Ed25519PublicKey::from_public_bytes(_object->_peer_sig_pub_bytes);
+
+	// CBA TODO Determine the purpose of the following.
+	// X25519PublicKey does not have a member "curve" and this is not accessed anywhere
+/*
+	if not hasattr(self.peer_pub, "curve") {
+		self.peer_pub.curve = CURVE;
+	}
 */
+}
 
 void Link::set_link_id(const Packet& packet) {
 	assert(_object);
@@ -116,1096 +153,1414 @@ void Link::set_link_id(const Packet& packet) {
 	_object->_hash = _object->_link_id;
 }
 
-void Link::receive(const Packet& packet) {
+void Link::handshake() {
+	assert(_object);
+	if (_object->_status == Type::Link::PENDING && _object->_prv) {
+		_object->_status = Type::Link::HANDSHAKE;
+		_object->_shared_key = _object->_prv->exchange(_object->_peer_pub_bytes);
+
+		_object->_derived_key = Cryptography::hkdf(
+			32,
+			_object->_shared_key,
+			get_salt(),
+			get_context()
+		);
+	}
+	else {
+		ERRORF("Handshake attempt on %s with invalid state %d", toString().c_str(), _object->_status);
+	}
 }
 
 void Link::prove() {
-/*p TODO
-	signed_data = self.link_id+self.pub_bytes+self.sig_pub_bytes
-	signature = self.owner.identity.sign(signed_data)
+	assert(_object);
+	Bytes signed_data =_object->_link_id + _object->_pub_bytes + _object->_sig_pub_bytes;
+	const Bytes signature(_object->_owner.identity().sign(signed_data));
 
-	proof_data = signature+self.pub_bytes
-	proof = RNS.Packet(self, proof_data, packet_type=RNS.Packet.PROOF, context=RNS.Packet.LRPROOF)
-	proof.send()
-	self.establishment_cost += len(proof.raw)
-	self.had_outbound()
-*/
+	Bytes proof_data = signature + _object->_pub_bytes;
+	// CBA LINK
+	//Packet proof(_object->_link_destination, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+	Packet proof(_object->_link_destination, *this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+	proof.send();
+	_object->_establishment_cost += proof.raw().size();
+	had_outbound();
 }
 
 void Link::prove_packet(const Packet& packet) {
-/*p TODO
-	signature = self.sign(packet.packet_hash)
-	# TODO: Hardcoded as explicit proof for now
-	# if RNS.Reticulum.should_use_implicit_proof():
-	#   proof_data = signature
-	# else:
-	#   proof_data = packet.packet_hash + signature
-	proof_data = packet.packet_hash + signature
+	assert(_object);
+	const Bytes signature(sign(packet.packet_hash()));
+	// TODO: Hardcoded as explicit proof for now
+	// if RNS.Reticulum.should_use_implicit_proof():
+	//   proof_data = signature
+	// else:
+	//   proof_data = packet.packet_hash + signature
+	Bytes proof_data = packet.packet_hash() + signature;
 
-	proof = RNS.Packet(self, proof_data, RNS.Packet.PROOF)
-	proof.send()
-	self.had_outbound()
+	Packet proof(_object->_link_destination, proof_data, Type::Packet::PROOF);
+	proof.send();
+	had_outbound();
+}
+
+void Link::validate_proof(const Packet& packet) {
+	assert(_object);
+	try {
+		if (_object->_status == Type::Link::PENDING) {
+			//p if _object->_initiator and len(packet.data) == RNS.Identity.SIGLENGTH//8+ECPUBSIZE//2:
+			if (_object->_initiator && packet.data().size() == Type::Identity::SIGLENGTH/8+ECPUBSIZE/2) {
+				//p peer_pub_bytes = packet.data[RNS.Identity.SIGLENGTH//8:RNS.Identity.SIGLENGTH//8+ECPUBSIZE//2]
+				const Bytes peer_pub_bytes(packet.data().mid(Type::Identity::SIGLENGTH/8, ECPUBSIZE/2));
+				//p peer_sig_pub_bytes = _object->_destination.identity.get_public_key()[ECPUBSIZE//2:ECPUBSIZE]
+				const Bytes peer_sig_pub_bytes(_object->_destination.identity().get_public_key().mid(ECPUBSIZE/2, ECPUBSIZE/2));
+				load_peer(peer_pub_bytes, peer_sig_pub_bytes);
+				handshake();
+
+				_object->_establishment_cost += packet.raw().size();
+				Bytes signed_data = _object->_link_id + _object->_peer_pub_bytes + _object->_peer_sig_pub_bytes;
+				const Bytes signature(packet.data().left(Type::Identity::SIGLENGTH/8));
+				
+				if (_object->_destination.identity().validate(signature, signed_data)) {
+					if (_object->_status != Type::Link::HANDSHAKE) {
+						throw std::runtime_error("Invalid link state for proof validation: " + _object->_status);
+					}
+					_object->_rtt = OS::time() - _object->_request_time;
+					_object->_attached_interface = packet.receiving_interface();
+					_object->__remote_identity = _object->_destination.identity();
+					_object->_status = Type::Link::ACTIVE;
+					_object->_activated_at = OS::time();
+					_object->_last_proof = _object->_activated_at;
+					Transport::activate_link(*this);
+					VERBOSEF("Link %s established with %s, RTT is %f s", toString().c_str(), _object->_destination.toString().c_str(), OS::round(_object->_rtt, 3));
+					
+					//p if _object->_rtt != None and _object->_establishment_cost != None and _object->_rtt > 0 and _object->_establishment_cost > 0:
+					if (_object->_rtt != 0.0 && _object->_establishment_cost != 0 && _object->_rtt > 0 and _object->_establishment_cost > 0) {
+						_object->_establishment_rate = _object->_establishment_cost / _object->_rtt;
+					}
+
+                    //p rtt_data = umsgpack.packb(self.rtt)
+					MsgPack::Packer packer;
+					packer.serialize(_object->_rtt);
+					Bytes rtt_data(packer.data(), packer.size());
+                    //p rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
+					Packet rtt_packet(_object->_link_destination, rtt_data, Type::Packet::DATA, Type::Packet::LRRTT);
+					rtt_packet.send();
+					had_outbound();
+
+					if (_object->_callbacks._established != nullptr) {
+						//p thread = threading.Thread(target=_object->_callbacks.link_established, args=(self,))
+						//p thread.daemon = True
+						//p thread.start()
+						_object->_callbacks._established(*this);
+					}
+				}
+				else {
+					DEBUGF("Invalid link proof signature received by %s. Ignoring.", toString().c_str());
+				}
+			}
+		}
+	}
+	catch (std::exception& e) {
+		_object->_status = Type::Link::CLOSED;
+		ERRORF("An error ocurred while validating link request proof on %s.", toString().c_str());
+		ERRORF("The contained exception was: %s", e.what());
+	}
+}
+
+
+/*
+Identifies the initiator of the link to the remote peer. This can only happen
+once the link has been established, and is carried out over the encrypted link.
+The identity is only revealed to the remote peer, and initiator anonymity is
+thus preserved. This method can be used for authentication.
+
+:param identity: An RNS.Identity instance to identify as.
 */
+void Link::identify(const Identity& identity) {
+	assert(_object);
+	if (_object->_initiator && _object->_status == Type::Link::ACTIVE) {
+		const Bytes signed_data(_object->_link_id + identity.get_public_key());
+		const Bytes signature(identity.sign(signed_data));
+		const Bytes proof_data(identity.get_public_key() + signature);
+
+		Packet proof(_object->_link_destination, proof_data, Type::Packet::DATA, Type::Packet::LINKIDENTIFY);
+		proof.send();
+		had_outbound();
+	}
+}
+
+/*
+Sends a request to the remote peer.
+
+:param path: The request path.
+:param response_callback: An optional function or method with the signature *response_callback(request_receipt)* to be called when a response is received. See the :ref:`Request Example<example-request>` for more info.
+:param failed_callback: An optional function or method with the signature *failed_callback(request_receipt)* to be called when a request fails. See the :ref:`Request Example<example-request>` for more info.
+:param progress_callback: An optional function or method with the signature *progress_callback(request_receipt)* to be called when progress is made receiving the response. Progress can be accessed as a float between 0.0 and 1.0 by the *request_receipt.progress* property.
+:param timeout: An optional timeout in seconds for the request. If *None* is supplied it will be calculated based on link RTT.
+:returns: A :ref:`RNS.RequestReceipt<api-requestreceipt>` instance if the request was sent, or *False* if it was not.
+*/
+const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*= {Bytes::NONE}*/, RequestReceipt::Callbacks::response response_callback /*= nullptr*/, RequestReceipt::Callbacks::failed failed_callback /*= nullptr*/, RequestReceipt::Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/) {
+	assert(_object);
+	const Bytes request_path_hash(Identity::truncated_hash(path));
+
+	//p unpacked_request = [OS::time(), request_path_hash, data]
+	//p packed_request = umsgpack.packb(unpacked_request)
+    MsgPack::Packer packer;
+	packer.to_array(OS::time(), request_path_hash, data);
+	Bytes packed_request(packer.data(), packer.size());
+
+	if (timeout == 0.0) {
+		timeout = _object->_rtt * _object->_traffic_timeout_factor + Type::Resource::RESPONSE_MAX_GRACE_TIME * 1.125;
+	}
+
+	if (packed_request.size() <= MDU) {
+		Packet request_packet(_object->_link_destination, packed_request, Type::Packet::DATA, Type::Packet::REQUEST);
+		PacketReceipt packet_receipt = request_packet.send();
+
+		if (!packet_receipt) {
+			return {Type::NONE};
+		}
+		else {
+			packet_receipt.set_timeout(timeout);
+			return RequestReceipt(
+				*this,
+				packet_receipt,
+				{Type::NONE},
+				response_callback,
+				failed_callback,
+				progress_callback,
+				timeout,
+				packed_request.size()
+			);
+		}
+	}
+	else {
+		const Bytes request_id(Identity::truncated_hash(packed_request));
+		DEBUGF("Sending request %s as resource.", request_id.toHex().c_str());
+		Resource request_resource(packed_request, *this, request_id, false, timeout);
+
+		return RequestReceipt(
+			*this,
+			{Type::NONE},
+			request_resource,
+			response_callback,
+			failed_callback,
+			progress_callback,
+			timeout,
+			packed_request.size()
+		);
+	}
+}
+
+
+void Link::rtt_packet(const Packet& packet) {
+	assert(_object);
+	try {
+		double measured_rtt = OS::time() - _object->_request_time;
+		const Bytes plaintext(decrypt(packet.data()));
+		if (plaintext) {
+			//p rtt = umsgpack.unpackb(plaintext)
+			MsgPack::Unpacker unpacker;
+			unpacker.feed(plaintext.data(), plaintext.size());
+			double rtt = 0.0;
+			unpacker.deserialize(rtt);
+			_object->_rtt = std::max(measured_rtt, rtt);
+			_object->_status = Type::Link::ACTIVE;
+			_object->_activated_at = OS::time();
+
+			//p if _object->_rtt != None and _object->_establishment_cost != None and _object->_rtt > 0 and _object->_establishment_cost > 0:
+			if (_object->_rtt != 0.0 && _object->_establishment_cost != 0.0 && _object->_rtt > 0 and _object->_establishment_cost > 0) {
+				_object->_establishment_rate = _object->_establishment_cost / _object->_rtt;
+			}
+
+			try {
+				if (_object->_owner.callbacks()._link_established != nullptr) {
+					_object->_owner.callbacks()._link_established(*this);
+				}
+			}
+			catch (std::exception& e) {
+				ERRORF("Error occurred in external link establishment callback. The contained exception was: %s", e.what());
+			}
+		}
+	}
+	catch (std::exception& e) {
+		ERRORF("Error occurred while processing RTT packet, tearing down link. The contained exception was: %s", e.what());
+		teardown();
+	}
+}
+
+/*
+:returns: The data transfer rate at which the link establishment procedure ocurred, in bits per second.
+*/
+float Link::get_establishment_rate() {
+	assert(_object);
+	//p if _object->_establishment_rate != None:
+	//p 	return _object->_establishment_rate*8
+	//p else:
+	//p 	return None
+	return _object->_establishment_rate*8;
+}
+
+const Bytes& Link::get_salt() {
+	assert(_object);
+	return _object->_link_id;
+}
+
+const Bytes Link::get_context() {
+	return {Bytes::NONE};
+}
+
+/*
+:returns: The time in seconds since last inbound packet on the link. This includes keepalive packets.
+*/
+double Link::no_inbound_for() {
+	assert(_object);
+	//p activated_at = _object->_activated_at if _object->_activated_at != None else 0
+	double activated_at = _object->_activated_at;
+	double last_inbound = std::max(_object->_last_inbound, activated_at);
+	return (OS::time() - last_inbound);
+}
+
+/*
+:returns: The time in seconds since last outbound packet on the link. This includes keepalive packets.
+*/
+double Link::no_outbound_for() {
+	assert(_object);
+	return OS::time() - _object->_last_outbound;
+}
+
+/*
+:returns: The time in seconds since payload data traversed the link. This excludes keepalive packets.
+*/
+double Link::no_data_for() {
+	assert(_object);
+	return OS::time() - _object->_last_data;
+}
+
+/*
+:returns: The time in seconds since activity on the link. This includes keepalive packets.
+*/
+double Link::inactive_for() {
+	assert(_object);
+	return std::min(no_inbound_for(), no_outbound_for());
+}
+
+/*
+:returns: The identity of the remote peer, if it is known. Calling this method will not query the remote initiator to reveal its identity. Returns ``None`` if the link initiator has not already independently called the ``identify(identity)`` method.
+*/
+const Identity& Link::get_remote_identity() {
+	assert(_object);
+	return _object->__remote_identity;
+}
+
+void Link::had_outbound(bool is_keepalive /*= false*/) {
+	assert(_object);
+	_object->_last_outbound = OS::time();
+	if (!is_keepalive) {
+		_object->_last_data = _object->_last_outbound;
+	}
+}
+
+/*
+Closes the link and purges encryption keys. New keys will
+be used if a new link to the same destination is established.
+*/
+void Link::teardown() {
+	assert(_object);
+	if (_object->_status != Type::Link::PENDING && _object->_status != Type::Link::CLOSED) {
+		Packet teardown_packet(_object->_link_destination, _object->_link_id, Type::Packet::DATA, Type::Packet::LINKCLOSE);
+		teardown_packet.send();
+		had_outbound();
+	}
+	_object->_status = Type::Link::CLOSED;
+	if (_object->_initiator) {
+		_object->_teardown_reason = Type::Link::INITIATOR_CLOSED;
+	}
+	else {
+		_object->_teardown_reason = Type::Link::DESTINATION_CLOSED;
+	}
+	link_closed();
+}
+
+void Link::teardown_packet(const Packet& packet) {
+	assert(_object);
+	try {
+		Bytes plaintext = decrypt(packet.data());
+		if (plaintext == _object->_link_id) {
+			_object->_status = Type::Link::CLOSED;
+			if (_object->_initiator) {
+				_object->_teardown_reason = Type::Link::DESTINATION_CLOSED;
+			}
+			else {
+				_object->_teardown_reason = Type::Link::INITIATOR_CLOSED;
+			}
+			link_closed();
+		}
+	}
+	catch (std::exception& e) {
+	}
+}
+
+void Link::link_closed() {
+	assert(_object);
+	for (auto& resource : _object->_incoming_resources) {
+		const_cast<Resource&>(resource).cancel();
+	}
+	for (auto& resource : _object->_outgoing_resources) {
+		const_cast<Resource&>(resource).cancel();
+	}
+	if (_object->_channel) {
+		_object->_channel._shutdown();
+	}
+
+	_object->_prv.reset();
+	_object->_pub.reset();
+	_object->_pub_bytes.clear();
+	_object->_shared_key.clear();
+	_object->_derived_key.clear();
+
+	if (_object->_destination) {
+		if (_object->_destination.direction() == Type::Destination::IN) {
+			if (_object->_destination.has_link(*this)) {
+				_object->_destination.remove_link(*this);
+			}
+		}
+	}
+
+	if (_object->_callbacks._closed) {
+		try {
+			_object->_callbacks._closed(*this);
+		}
+		catch (std::exception& e) {
+			ERRORF("Error while executing link closed callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+		}
+	}
+}
+
+// CBA TODO Implement watchdog
+void Link::start_watchdog() {
+	//z thread = threading.Thread(target=_object->___watchdog_job)
+	//z thread.daemon = True
+	//z thread.start()
 }
 
 /*p TODO
 
-def load_peer(self, peer_pub_bytes, peer_sig_pub_bytes):
-	self.peer_pub_bytes = peer_pub_bytes
-	self.peer_pub = X25519PublicKey.from_public_bytes(self.peer_pub_bytes)
-
-	self.peer_sig_pub_bytes = peer_sig_pub_bytes
-	self.peer_sig_pub = Ed25519PublicKey.from_public_bytes(self.peer_sig_pub_bytes)
-
-	if not hasattr(self.peer_pub, "curve"):
-		self.peer_pub.curve = Link.CURVE
-
-def set_link_id(self, packet):
-	self.link_id = packet.getTruncatedHash()
-	self.hash = self.link_id
-
-def handshake(self):
-	if self.status == Link.PENDING and self.prv != None:
-		self.status = Link.HANDSHAKE
-		self.shared_key = self.prv.exchange(self.peer_pub)
-
-		self.derived_key = RNS.Cryptography.hkdf(
-			length=32,
-			derive_from=self.shared_key,
-			salt=self.get_salt(),
-			context=self.get_context(),
-		)
-	else:
-		RNS.log("Handshake attempt on "+str(self)+" with invalid state "+str(self.status), RNS.LOG_ERROR)
-
-
-def prove(self):
-	signed_data = self.link_id+self.pub_bytes+self.sig_pub_bytes
-	signature = self.owner.identity.sign(signed_data)
-
-	proof_data = signature+self.pub_bytes
-	proof = RNS.Packet(self, proof_data, packet_type=RNS.Packet.PROOF, context=RNS.Packet.LRPROOF)
-	proof.send()
-	self.establishment_cost += len(proof.raw)
-	self.had_outbound()
-
-
-def prove_packet(self, packet):
-	signature = self.sign(packet.packet_hash)
-	# TODO: Hardcoded as explicit proof for now
-	# if RNS.Reticulum.should_use_implicit_proof():
-	#   proof_data = signature
-	# else:
-	#   proof_data = packet.packet_hash + signature
-	proof_data = packet.packet_hash + signature
-
-	proof = RNS.Packet(self, proof_data, RNS.Packet.PROOF)
-	proof.send()
-	self.had_outbound()
-
-def validate_proof(self, packet):
-	try:
-		if self.status == Link.PENDING:
-			if self.initiator and len(packet.data) == RNS.Identity.SIGLENGTH//8+Link.ECPUBSIZE//2:
-				peer_pub_bytes = packet.data[RNS.Identity.SIGLENGTH//8:RNS.Identity.SIGLENGTH//8+Link.ECPUBSIZE//2]
-				peer_sig_pub_bytes = self.destination.identity.get_public_key()[Link.ECPUBSIZE//2:Link.ECPUBSIZE]
-				self.load_peer(peer_pub_bytes, peer_sig_pub_bytes)
-				self.handshake()
-
-				self.establishment_cost += len(packet.raw)
-				signed_data = self.link_id+self.peer_pub_bytes+self.peer_sig_pub_bytes
-				signature = packet.data[:RNS.Identity.SIGLENGTH//8]
-				
-				if self.destination.identity.validate(signature, signed_data):
-					if self.status != Link.HANDSHAKE:
-						raise IOError("Invalid link state for proof validation: "+str(self.status))
-
-					self.rtt = time.time() - self.request_time
-					self.attached_interface = packet.receiving_interface
-					self.__remote_identity = self.destination.identity
-					self.status = Link.ACTIVE
-					self.activated_at = time.time()
-					self.last_proof = self.activated_at
-					RNS.Transport.activate_link(self)
-					RNS.log("Link "+str(self)+" established with "+str(self.destination)+", RTT is "+str(round(self.rtt, 3))+"s", RNS.LOG_VERBOSE)
-					
-					if self.rtt != None and self.establishment_cost != None and self.rtt > 0 and self.establishment_cost > 0:
-						self.establishment_rate = self.establishment_cost/self.rtt
-
-					rtt_data = umsgpack.packb(self.rtt)
-					rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
-					rtt_packet.send()
-					self.had_outbound()
-
-					if self.callbacks.link_established != None:
-						thread = threading.Thread(target=self.callbacks.link_established, args=(self,))
-						thread.daemon = True
-						thread.start()
-				else:
-					RNS.log("Invalid link proof signature received by "+str(self)+". Ignoring.", RNS.LOG_DEBUG)
-	
-	except Exception as e:
-		self.status = Link.CLOSED
-		RNS.log("An error ocurred while validating link request proof on "+str(self)+".", RNS.LOG_ERROR)
-		RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-
-def identify(self, identity):
-	"""
-	Identifies the initiator of the link to the remote peer. This can only happen
-	once the link has been established, and is carried out over the encrypted link.
-	The identity is only revealed to the remote peer, and initiator anonymity is
-	thus preserved. This method can be used for authentication.
-
-	:param identity: An RNS.Identity instance to identify as.
-	"""
-	if self.initiator and self.status == Link.ACTIVE:
-		signed_data = self.link_id + identity.get_public_key()
-		signature = identity.sign(signed_data)
-		proof_data = identity.get_public_key() + signature
-
-		proof = RNS.Packet(self, proof_data, RNS.Packet.DATA, context = RNS.Packet.LINKIDENTIFY)
-		proof.send()
-		self.had_outbound()
-
-
-def request(self, path, data = None, response_callback = None, failed_callback = None, progress_callback = None, timeout = None):
-	"""
-	Sends a request to the remote peer.
-
-	:param path: The request path.
-	:param response_callback: An optional function or method with the signature *response_callback(request_receipt)* to be called when a response is received. See the :ref:`Request Example<example-request>` for more info.
-	:param failed_callback: An optional function or method with the signature *failed_callback(request_receipt)* to be called when a request fails. See the :ref:`Request Example<example-request>` for more info.
-	:param progress_callback: An optional function or method with the signature *progress_callback(request_receipt)* to be called when progress is made receiving the response. Progress can be accessed as a float between 0.0 and 1.0 by the *request_receipt.progress* property.
-	:param timeout: An optional timeout in seconds for the request. If *None* is supplied it will be calculated based on link RTT.
-	:returns: A :ref:`RNS.RequestReceipt<api-requestreceipt>` instance if the request was sent, or *False* if it was not.
-	"""
-	request_path_hash = RNS.Identity.truncated_hash(path.encode("utf-8"))
-	unpacked_request  = [time.time(), request_path_hash, data]
-	packed_request    = umsgpack.packb(unpacked_request)
-
-	if timeout == None:
-		timeout = self.rtt * self.traffic_timeout_factor + RNS.Resource.RESPONSE_MAX_GRACE_TIME*1.125
-
-	if len(packed_request) <= Link.MDU:
-		request_packet   = RNS.Packet(self, packed_request, RNS.Packet.DATA, context = RNS.Packet.REQUEST)
-		packet_receipt   = request_packet.send()
-
-		if packet_receipt == False:
-			return False
-		else:
-			packet_receipt.set_timeout(timeout)
-			return RequestReceipt(
-				self,
-				packet_receipt = packet_receipt,
-				response_callback = response_callback,
-				failed_callback = failed_callback,
-				progress_callback = progress_callback,
-				timeout = timeout,
-				request_size = len(packed_request),
-			)
-		
-	else:
-		request_id = RNS.Identity.truncated_hash(packed_request)
-		RNS.log("Sending request "+RNS.prettyhexrep(request_id)+" as resource.", RNS.LOG_DEBUG)
-		request_resource = RNS.Resource(packed_request, self, request_id = request_id, is_response = False, timeout = timeout)
-
-		return RequestReceipt(
-			self,
-			resource = request_resource,
-			response_callback = response_callback,
-			failed_callback = failed_callback,
-			progress_callback = progress_callback,
-			timeout = timeout,
-			request_size = len(packed_request),
-		)
-
-
-def rtt_packet(self, packet):
-	try:
-		measured_rtt = time.time() - self.request_time
-		plaintext = self.decrypt(packet.data)
-		if plaintext != None:
-			rtt = umsgpack.unpackb(plaintext)
-			self.rtt = max(measured_rtt, rtt)
-			self.status = Link.ACTIVE
-			self.activated_at = time.time()
-
-			if self.rtt != None and self.establishment_cost != None and self.rtt > 0 and self.establishment_cost > 0:
-				self.establishment_rate = self.establishment_cost/self.rtt
-
-			try:
-				if self.owner.callbacks.link_established != None:
-						self.owner.callbacks.link_established(self)
-			except Exception as e:
-				RNS.log("Error occurred in external link establishment callback. The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-	except Exception as e:
-		RNS.log("Error occurred while processing RTT packet, tearing down link. The contained exception was: "+str(e), RNS.LOG_ERROR)
-		self.teardown()
-
-def track_phy_stats(self, track):
-	"""
-	You can enable physical layer statistics on a per-link basis. If this is enabled,
-	and the link is running over an interface that supports reporting physical layer
-	statistics, you will be able to retrieve stats such as *RSSI*, *SNR* and physical
-	*Link Quality* for the link.
-
-	:param track: Whether or not to keep track of physical layer statistics. Value must be ``True`` or ``False``.
-	"""
-	if track:
-		self.__track_phy_stats = True
-	else:
-		self.__track_phy_stats = False
-
-def get_rssi(self):
-	"""
-	:returns: The physical layer *Received Signal Strength Indication* if available, otherwise ``None``. Physical layer statistics must be enabled on the link for this method to return a value.
-	"""
-	return self.rssi
-
-def get_snr(self):
-	"""
-	:returns: The physical layer *Signal-to-Noise Ratio* if available, otherwise ``None``. Physical layer statistics must be enabled on the link for this method to return a value.
-	"""
-	return self.rssi
-
-def get_q(self):
-	"""
-	:returns: The physical layer *Link Quality* if available, otherwise ``None``. Physical layer statistics must be enabled on the link for this method to return a value.
-	"""
-	return self.rssi
-
-def get_establishment_rate(self):
-	"""
-	:returns: The data transfer rate at which the link establishment procedure ocurred, in bits per second.
-	"""
-	if self.establishment_rate != None:
-		return self.establishment_rate*8
-	else:
-		return None
-
-def get_salt(self):
-	return self.link_id
-
-def get_context(self):
-	return None
-
-def no_inbound_for(self):
-	"""
-	:returns: The time in seconds since last inbound packet on the link. This includes keepalive packets.
-	"""
-	activated_at = self.activated_at if self.activated_at != None else 0
-	last_inbound = max(self.last_inbound, activated_at)
-	return time.time() - last_inbound
-
-def no_outbound_for(self):
-	"""
-	:returns: The time in seconds since last outbound packet on the link. This includes keepalive packets.
-	"""
-	return time.time() - self.last_outbound
-
-def no_data_for(self):
-	"""
-	:returns: The time in seconds since payload data traversed the link. This excludes keepalive packets.
-	"""
-	return time.time() - self.last_data
-
-def inactive_for(self):
-	"""
-	:returns: The time in seconds since activity on the link. This includes keepalive packets.
-	"""
-	return min(self.no_inbound_for(), self.no_outbound_for())
-
-def get_remote_identity(self):
-	"""
-	:returns: The identity of the remote peer, if it is known. Calling this method will not query the remote initiator to reveal its identity. Returns ``None`` if the link initiator has not already independently called the ``identify(identity)`` method.
-	"""
-	return self.__remote_identity
-
-def had_outbound(self, is_keepalive=False):
-	self.last_outbound = time.time()
-	if not is_keepalive:
-		self.last_data = self.last_outbound
-
-def teardown(self):
-	"""
-	Closes the link and purges encryption keys. New keys will
-	be used if a new link to the same destination is established.
-	"""
-	if self.status != Link.PENDING and self.status != Link.CLOSED:
-		teardown_packet = RNS.Packet(self, self.link_id, context=RNS.Packet.LINKCLOSE)
-		teardown_packet.send()
-		self.had_outbound()
-	self.status = Link.CLOSED
-	if self.initiator:
-		self.teardown_reason = Link.INITIATOR_CLOSED
-	else:
-		self.teardown_reason = Link.DESTINATION_CLOSED
-	self.link_closed()
-
-def teardown_packet(self, packet):
-	try:
-		plaintext = self.decrypt(packet.data)
-		if plaintext == self.link_id:
-			self.status = Link.CLOSED
-			if self.initiator:
-				self.teardown_reason = Link.DESTINATION_CLOSED
-			else:
-				self.teardown_reason = Link.INITIATOR_CLOSED
-			self.__update_phy_stats(packet)
-			self.link_closed()
-	except Exception as e:
-		pass
-
-def link_closed(self):
-	for resource in self.incoming_resources:
-		resource.cancel()
-	for resource in self.outgoing_resources:
-		resource.cancel()
-	if self._channel:
-		self._channel._shutdown()
-		
-	self.prv = None
-	self.pub = None
-	self.pub_bytes = None
-	self.shared_key = None
-	self.derived_key = None
-
-	if self.destination != None:
-		if self.destination.direction == RNS.Destination.IN:
-			if self in self.destination.links:
-				self.destination.links.remove(self)
-
-	if self.callbacks.link_closed != None:
-		try:
-			self.callbacks.link_closed(self)
-		except Exception as e:
-			RNS.log("Error while executing link closed callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-
-def start_watchdog(self):
-	thread = threading.Thread(target=self.__watchdog_job)
-	thread.daemon = True
-	thread.start()
-
-def __watchdog_job(self):
-	while not self.status == Link.CLOSED:
-		while (self.watchdog_lock):
+void Link::__watchdog_job() {
+	assert(_object);
+	while not _object->_status == Type::Link::CLOSED:
+		while (_object->_watchdog_lock):
 			rtt_wait = 0.025
-			if hasattr(self, "rtt") and self.rtt:
-				rtt_wait = self.rtt
+			if hasattr(self, "rtt") and _object->_rtt:
+				rtt_wait = _object->_rtt
 
 			sleep(max(rtt_wait, 0.025))
 
-		if not self.status == Link.CLOSED:
+		if not _object->_status == Type::Link::CLOSED:
 			# Link was initiated, but no response
 			# from destination yet
-			if self.status == Link.PENDING:
-				next_check = self.request_time + self.establishment_timeout
-				sleep_time = next_check - time.time()
-				if time.time() >= self.request_time + self.establishment_timeout:
+			if _object->_status == PENDING:
+				next_check = _object->_request_time + _object->_establishment_timeout
+				sleep_time = next_check - OS::time()
+				if OS::time() >= _object->_request_time + _object->_establishment_timeout:
 					RNS.log("Link establishment timed out", RNS.LOG_VERBOSE)
-					self.status = Link.CLOSED
-					self.teardown_reason = Link.TIMEOUT
-					self.link_closed()
+					_object->_status = Type::Link::CLOSED
+					_object->_teardown_reason = TIMEOUT
+					link_closed()
 					sleep_time = 0.001
 
-			elif self.status == Link.HANDSHAKE:
-				next_check = self.request_time + self.establishment_timeout
-				sleep_time = next_check - time.time()
-				if time.time() >= self.request_time + self.establishment_timeout:
-					self.status = Link.CLOSED
-					self.teardown_reason = Link.TIMEOUT
-					self.link_closed()
+			elif _object->_status == Type::Link::HANDSHAKE:
+				next_check = _object->_request_time + _object->_establishment_timeout
+				sleep_time = next_check - OS::time()
+				if OS::time() >= _object->_request_time + _object->_establishment_timeout:
+					_object->_status = Type::Link::CLOSED
+					_object->_teardown_reason = TIMEOUT
+					link_closed()
 					sleep_time = 0.001
 
-					if self.initiator:
+					if _object->_initiator:
 						RNS.log("Timeout waiting for link request proof", RNS.LOG_DEBUG)
 					else:
 						RNS.log("Timeout waiting for RTT packet from link initiator", RNS.LOG_DEBUG)
 
-			elif self.status == Link.ACTIVE:
-				activated_at = self.activated_at if self.activated_at != None else 0
-				last_inbound = max(max(self.last_inbound, self.last_proof), activated_at)
+			elif _object->_status == Type::Link::ACTIVE:
+				activated_at = _object->_activated_at if _object->_activated_at != None else 0
+				last_inbound = max(max(_object->_last_inbound, _object->_last_proof), activated_at)
 
-				if time.time() >= last_inbound + self.keepalive:
-					if self.initiator:
-						self.send_keepalive()
+				if OS::time() >= last_inbound + _object->_keepalive:
+					if _object->_initiator:
+						send_keepalive()
 
-					if time.time() >= last_inbound + self.stale_time:
-						sleep_time = self.rtt * self.keepalive_timeout_factor + Link.STALE_GRACE
-						self.status = Link.STALE
+					if OS::time() >= last_inbound + _object->_stale_time:
+						sleep_time = _object->_rtt * _object->_keepalive_timeout_factor + STALE_GRACE
+						_object->_status = STALE
 					else:
-						sleep_time = self.keepalive
+						sleep_time = _object->_keepalive
 				
 				else:
-					sleep_time = (last_inbound + self.keepalive) - time.time()
+					sleep_time = (last_inbound + _object->_keepalive) - OS::time()
 
-			elif self.status == Link.STALE:
+			elif _object->_status == STALE:
 				sleep_time = 0.001
-				self.status = Link.CLOSED
-				self.teardown_reason = Link.TIMEOUT
-				self.link_closed()
+				_object->_status = Type::Link::CLOSED
+				_object->_teardown_reason = TIMEOUT
+				link_closed()
 
 
 			if sleep_time == 0:
 				RNS.log("Warning! Link watchdog sleep time of 0!", RNS.LOG_ERROR)
 			if sleep_time == None or sleep_time < 0:
 				RNS.log("Timing error! Tearing down link "+str(self)+" now.", RNS.LOG_ERROR)
-				self.teardown()
+				teardown()
 				sleep_time = 0.1
 
 			sleep(sleep_time)
 
+*/
 
-def __update_phy_stats(self, packet, query_shared = True):
-	if self.__track_phy_stats:
-		if query_shared:
-			reticulum = RNS.Reticulum.get_instance()
-			if packet.rssi == None: packet.rssi = reticulum.get_packet_rssi(packet.packet_hash)
-			if packet.snr  == None: packet.snr  = reticulum.get_packet_snr(packet.packet_hash)
-			if packet.q    == None: packet.q    = reticulum.get_packet_q(packet.packet_hash)
+void Link::send_keepalive() {
+	assert(_object);
+    //p keepalive_packet = RNS.Packet(self, bytes([0xFF]), context=RNS.Packet.KEEPALIVE)
+	RNS::Packet keepalive_packet(_object->_link_destination, Bytes("\xFF"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
+	keepalive_packet.send();
+	had_outbound(true);
+}
 
-		if packet.rssi != None:
-			self.rssi = packet.rssi
-		if packet.snr != None:
-			self.snr = packet.snr
-		if packet.q != None:
-			self.q = packet.q
+void Link::handle_request(const Bytes& request_id, const ResourceRequest& resource_request) {
+	if (_object->_status == Type::Link::ACTIVE) {
+		//p requested_at = unpacked_request[0]
+		//p path_hash    = unpacked_request[1]
+		//p request_data = unpacked_request[2]
 
-def send_keepalive(self):
-	keepalive_packet = RNS.Packet(self, bytes([0xFF]), context=RNS.Packet.KEEPALIVE)
-	keepalive_packet.send()
-	self.had_outbound(is_keepalive = True)
+		auto handler_iter = _object->_destination.request_handlers().find(resource_request._path_hash);
+		if (handler_iter != _object->_destination.request_handlers().end()) {
+			TRACE("Link::handle_request: Found handler");
+			RequestHandler request_handler = (*handler_iter).second;
 
-def handle_request(self, request_id, unpacked_request):
-	if self.status == Link.ACTIVE:
-		requested_at = unpacked_request[0]
-		path_hash    = unpacked_request[1]
-		request_data = unpacked_request[2]
+			bool allowed = false;
+			if (request_handler._allow != Type::Destination::ALLOW_NONE) {
+				if (request_handler._allow == Type::Destination::ALLOW_LIST) {
+					if (_object->__remote_identity && request_handler._allowed_list.count(_object->__remote_identity.hash()) > 0) {
+						allowed = true;
+					}
+				}
+				else if (request_handler._allow == Type::Destination::ALLOW_ALL) {
+					allowed = true;
+				}
+			}
 
-		if path_hash in self.destination.request_handlers:
-			request_handler = self.destination.request_handlers[path_hash]
-			path               = request_handler[0]
-			response_generator = request_handler[1]
-			allow              = request_handler[2]
-			allowed_list       = request_handler[3]
+			if (allowed) {
+				DEBUGF("Handling request %s for: %s", request_id.toHex().c_str(), request_handler._path.toString().c_str());
+				//p if len(inspect.signature(response_generator).parameters) == 5:
+				//p 	response = response_generator(path, request_data, request_id, _object->__remote_identity, requested_at)
+				//p elif len(inspect.signature(response_generator).parameters) == 6:
+				//p 	response = response_generator(path, request_data, request_id, _object->_link_id, _object->__remote_identity, requested_at)
+				//p else:
+				//p 	raise TypeError("Invalid signature for response generator callback")
+				Bytes response(request_handler._response_generator(request_handler._path, resource_request._request_data, request_id, _object->_link_id, _object->__remote_identity, resource_request._requested_at));
 
-			allowed = False
-			if not allow == RNS.Destination.ALLOW_NONE:
-				if allow == RNS.Destination.ALLOW_LIST:
-					if self.__remote_identity != None and self.__remote_identity.hash in allowed_list:
-						allowed = True
-				elif allow == RNS.Destination.ALLOW_ALL:
-					allowed = True
+				if (response) {
+					//p packed_response = umsgpack.packb([request_id, response])
+					MsgPack::Packer packer;
+					packer.to_array(request_id, response);
+					Bytes packed_response(packer.data(), packer.size());
 
-			if allowed:
-				RNS.log("Handling request "+RNS.prettyhexrep(request_id)+" for: "+str(path), RNS.LOG_DEBUG)
-				if len(inspect.signature(response_generator).parameters) == 5:
-					response = response_generator(path, request_data, request_id, self.__remote_identity, requested_at)
-				elif len(inspect.signature(response_generator).parameters) == 6:
-					response = response_generator(path, request_data, request_id, self.link_id, self.__remote_identity, requested_at)
-				else:
-					raise TypeError("Invalid signature for response generator callback")
+					if (packed_response.size() <= MDU) {
+						//p RNS.Packet(self, packed_response, Type::Packet::DATA, context = Type::Packet::RESPONSE).send()
+						RNS::Packet response_packet(_object->_link_destination, packed_response, Type::Packet::DATA, Type::Packet::RESPONSE);
+						response_packet.send();
+					}
+					else {
+						// CBA TODO Determine why unused Resource is created here
+						Resource response_resource = RNS::Resource(packed_response, *this, request_id, true);
+					}
+				}
+			}
+			else {
+				std::string identity_string;
+				if (get_remote_identity()) {
+					identity_string = get_remote_identity().toString();
+				}
+				else {
+					identity_string = "<Unknown>";
+				}
+				DEBUGF("Request %s from %s not allowed for: %s", request_id.toHex().c_str(), identity_string.c_str(), request_handler._path.toString().c_str());
+			}
+		}
+	}
+}
 
-				if response != None:
-					packed_response = umsgpack.packb([request_id, response])
+void Link::handle_response(const Bytes& request_id, const Bytes& response_data, size_t response_size, size_t response_transfer_size) {
+	assert(_object);
+	if (_object->_status == Type::Link::ACTIVE) {
+		RNS::RequestReceipt remove = {Type::NONE};
+		for (RNS::RequestReceipt pending_request : _object->_pending_requests) {
+			if (pending_request.request_id() == request_id) {
+				remove = pending_request;
+				try {
+					pending_request.response_size(response_size);
+					//if (pending_request.response_transfer_size == 0) {
+					//	pending_request.response_transfer_size = 0;
+					//}
+					pending_request.response_transfer_size(pending_request.response_transfer_size() + response_transfer_size);
+					pending_request.response_received(response_data);
+				}
+				catch (std::exception& e) {
+					ERRORF("Error occurred while handling response. The contained exception was: %s", e.what());
+				}
+				break;
+			}
+		}
+		if (remove) {
+			if (_object->_pending_requests.count(remove) > 0) {
+				_object->_pending_requests.erase(remove);
+			}
+		}
+	}
+}
 
-					if len(packed_response) <= Link.MDU:
-						RNS.Packet(self, packed_response, RNS.Packet.DATA, context = RNS.Packet.RESPONSE).send()
-					else:
-						response_resource = RNS.Resource(packed_response, self, request_id = request_id, is_response = True)
-			else:
-				identity_string = str(self.get_remote_identity()) if self.get_remote_identity() != None else "<Unknown>"
-				RNS.log("Request "+RNS.prettyhexrep(request_id)+" from "+identity_string+" not allowed for: "+str(path), RNS.LOG_DEBUG)
+void Link::request_resource_concluded(const Resource& resource) {
+	assert(_object);
+	if (resource.status() == Type::Resource::COMPLETE) {
+		//p packed_request = resource.data().read()
+		Bytes packed_request = resource.data();
+		//p unpacked_request = umsgpack.unpackb(packed_request)
+		MsgPack::Unpacker unpacker;
+		unpacker.feed(packed_request.data(), packed_request.size());
+		// CBA TODO OPTIMIZE MSGPACK
+		double requested_at;
+		MsgPack::bin_t<uint8_t> path_hash;
+		MsgPack::bin_t<uint8_t> request_data;
+		unpacker.from_array(requested_at, path_hash, request_data);
+		ResourceRequest resource_request;
+		resource_request._requested_at = requested_at;
+		resource_request._path_hash = path_hash;
+		resource_request._request_data = request_data;
+        //p request_id        = RNS.Identity.truncated_hash(packed_request)
+		Bytes request_id(Identity::truncated_hash(resource.data()));
+		//p request_data = unpacked_request
 
-def handle_response(self, request_id, response_data, response_size, response_transfer_size):
-	if self.status == Link.ACTIVE:
-		remove = None
-		for pending_request in self.pending_requests:
-			if pending_request.request_id == request_id:
-				remove = pending_request
-				try:
-					pending_request.response_size = response_size
-					if pending_request.response_transfer_size == None:
-						pending_request.response_transfer_size = 0
-					pending_request.response_transfer_size += response_transfer_size
-					pending_request.response_received(response_data)
-				except Exception as e:
-					RNS.log("Error occurred while handling response. The contained exception was: "+str(e), RNS.LOG_ERROR)
+		//p handle_request(request_id, request_data)
+		handle_request(request_id, resource_request);
+	}
+	else {
+		DEBUGF("Incoming request resource failed with status: %d", resource.status());
+	}
+}
 
-				break
+void Link::response_resource_concluded(const Resource& resource) {
+	assert(_object);
+	if (resource.status() == Type::Resource::COMPLETE) {
+		//p packed_response = resource.data.read()
+		Bytes packed_response = resource.data();
+		//p unpacked_response = umsgpack.unpackb(packed_response)
+		//p request_id        = unpacked_response[0]
+		//p response_data     = unpacked_response[1]
+		MsgPack::Unpacker unpacker;
+		unpacker.feed(packed_response.data(), packed_response.size());
+		MsgPack::bin_t<uint8_t> request_id;
+		MsgPack::bin_t<uint8_t> response_data;
+		unpacker.from_array(request_id, response_data);
 
-		if remove != None:
-			if remove in self.pending_requests:
-				self.pending_requests.remove(remove)
+		handle_response(request_id, response_data, resource.total_size(), resource.size());
+	}
+	else {
+		DEBUGF("Incoming response resource failed with status: %d", resource.status());
+		for (RNS::RequestReceipt pending_request : _object->_pending_requests) {
+			if (pending_request.request_id() == resource.request_id()) {
+				pending_request.request_timed_out({Type::NONE});
+			}
+		}
+	}
+}
 
-def request_resource_concluded(self, resource):
-	if resource.status == RNS.Resource.COMPLETE:
-		packed_request    = resource.data.read()
-		unpacked_request  = umsgpack.unpackb(packed_request)
-		request_id        = RNS.Identity.truncated_hash(packed_request)
-		request_data      = unpacked_request
 
-		self.handle_request(request_id, request_data)
-	else:
-		RNS.log("Incoming request resource failed with status: "+RNS.hexrep([resource.status]), RNS.LOG_DEBUG)
+/*z
+"""
+Get the ``Channel`` for this link.
 
-def response_resource_concluded(self, resource):
-	if resource.status == RNS.Resource.COMPLETE:
-		packed_response   = resource.data.read()
-		unpacked_response = umsgpack.unpackb(packed_response)
-		request_id        = unpacked_response[0]
-		response_data     = unpacked_response[1]
+:return: ``Channel`` object
+"""
+void Link::get_channel() {
+	assert(_object);
+	if _object->_channel is None:
+		_object->_channel = Channel(LinkChannelOutlet(self))
+	return _object->_channel
+*/
 
-		self.handle_response(request_id, response_data, resource.total_size, resource.size)
-	else:
-		RNS.log("Incoming response resource failed with status: "+RNS.hexrep([resource.status]), RNS.LOG_DEBUG)
-		for pending_request in self.pending_requests:
-			if pending_request.request_id == resource.request_id:
-				pending_request.request_timed_out(None)
+/*
+void Link::receive(const Packet& packet) {
+}
+*/
+void Link::receive(const Packet& packet) {
+	assert(_object);
+	_object->_watchdog_lock = true;
+	if (_object->_status != Type::Link::CLOSED && !(_object->_initiator && packet.context() == Type::Packet::KEEPALIVE && packet.data() == "\xFF")) {
+		if (packet.receiving_interface() != _object->_attached_interface) {
+			ERROR("Link-associated packet received on unexpected interface! Someone might be trying to manipulate your communication!");
+		}
+		else {
+			_object->_last_inbound = OS::time();
+			if (packet.context() != Type::Packet::KEEPALIVE) {
+				_object->_last_data = _object->_last_inbound;
+			}
+			_object->_rx += 1;
+			_object->_rxbytes += packet.data().size();
+			if (_object->_status == STALE) {
+				_object->_status = Type::Link::ACTIVE;
+			}
 
-def get_channel(self):
-	"""
-	Get the ``Channel`` for this link.
-
-	:return: ``Channel`` object
-	"""
-	if self._channel is None:
-		self._channel = Channel(LinkChannelOutlet(self))
-	return self._channel
-
-def receive(self, packet):
-	self.watchdog_lock = True
-	if not self.status == Link.CLOSED and not (self.initiator and packet.context == RNS.Packet.KEEPALIVE and packet.data == bytes([0xFF])):
-		if packet.receiving_interface != self.attached_interface:
-			RNS.log("Link-associated packet received on unexpected interface! Someone might be trying to manipulate your communication!", RNS.LOG_ERROR)
-		else:
-			self.last_inbound = time.time()
-			if packet.context != RNS.Packet.KEEPALIVE:
-				self.last_data = self.last_inbound
-			self.rx += 1
-			self.rxbytes += len(packet.data)
-			if self.status == Link.STALE:
-				self.status = Link.ACTIVE
-
-			if packet.packet_type == RNS.Packet.DATA:
-				should_query = False
-				if packet.context == RNS.Packet.NONE:
-					plaintext = self.decrypt(packet.data)
-					if plaintext != None:
-						if self.callbacks.packet != None:
-							thread = threading.Thread(target=self.callbacks.packet, args=(plaintext, packet))
-							thread.daemon = True
-							thread.start()
+			if (packet.packet_type() == Type::Packet::DATA) {
+				bool should_query = false;
+				switch (packet.context()) {
+				case Type::Packet::CONTEXT_NONE:
+				{
+					const Bytes plaintext = decrypt(packet.data());
+					if (plaintext) {
+						if (_object->_callbacks._packet) {
+							//z thread = threading.Thread(target=_object->_callbacks.packet, args=(plaintext, packet))
+							//z thread.daemon = True
+							//z thread.start()
+							try {
+								_object->_callbacks._packet(plaintext, packet);
+							}
+							catch (std::exception& e) {
+								ERRORF("Error while executing packet callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+							}
+						}
 						
-						if self.destination.proof_strategy == RNS.Destination.PROVE_ALL:
-							packet.prove()
-							should_query = True
+						if (_object->_destination.proof_strategy() == Type::Destination::PROVE_ALL) {
+							const_cast<Packet&>(packet).prove();
+							should_query = true;
+						}
+						else if (_object->_destination.proof_strategy() == Type::Destination::PROVE_APP) {
+							if (_object->_destination.callbacks()._proof_requested) {
+								try {
+									if (_object->_destination.callbacks()._proof_requested(packet)) {
+										const_cast<Packet&>(packet).prove();
+										should_query = true;
+									}
+								}
+								catch (std::exception& e) {
+									ERRORF("Error while executing proof request callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+								}
+							}
+						}
+					}
+					break;
+				}
+				case Type::Packet::LINKIDENTIFY:
+				{
+					const Bytes plaintext = decrypt(packet.data());
+					if (plaintext) {
+						if (_object->_initiator && plaintext.size() == Type::Identity::KEYSIZE/8 + Type::Identity::SIGLENGTH/8) {
+							const Bytes public_key   = plaintext.left(Type::Identity::KEYSIZE/8);
+							const Bytes signed_data  = _object->_link_id + public_key;
+							const Bytes signature    = plaintext.mid(Type::Identity::KEYSIZE/8, Type::Identity::SIGLENGTH/8);
+							Identity identity(false);
+							identity.load_public_key(public_key);
 
-						elif self.destination.proof_strategy == RNS.Destination.PROVE_APP:
-							if self.destination.callbacks.proof_requested:
-								try:
-									if self.destination.callbacks.proof_requested(packet):
-										packet.prove()
-										should_query = True
-								except Exception as e:
-									RNS.log("Error while executing proof request callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-						self.__update_phy_stats(packet, query_shared=should_query)
-
-				elif packet.context == RNS.Packet.LINKIDENTIFY:
-					plaintext = self.decrypt(packet.data)
-					if plaintext != None:
-						if not self.initiator and len(plaintext) == RNS.Identity.KEYSIZE//8 + RNS.Identity.SIGLENGTH//8:
-							public_key   = plaintext[:RNS.Identity.KEYSIZE//8]
-							signed_data  = self.link_id+public_key
-							signature    = plaintext[RNS.Identity.KEYSIZE//8:RNS.Identity.KEYSIZE//8+RNS.Identity.SIGLENGTH//8]
-							identity     = RNS.Identity(create_keys=False)
-							identity.load_public_key(public_key)
-
-							if identity.validate(signature, signed_data):
-								self.__remote_identity = identity
-								if self.callbacks.remote_identified != None:
-									try:
-										self.callbacks.remote_identified(self, self.__remote_identity)
-									except Exception as e:
-										RNS.log("Error while executing remote identified callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-							
-								self.__update_phy_stats(packet, query_shared=True)
-
-				elif packet.context == RNS.Packet.REQUEST:
-					try:
-						request_id = packet.getTruncatedHash()
-						packed_request = self.decrypt(packet.data)
-						if packed_request != None:
-							unpacked_request = umsgpack.unpackb(packed_request)
-							self.handle_request(request_id, unpacked_request)
-							self.__update_phy_stats(packet, query_shared=True)
-					except Exception as e:
-						RNS.log("Error occurred while handling request. The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-				elif packet.context == RNS.Packet.RESPONSE:
-					try:
-						packed_response = self.decrypt(packet.data)
-						if packed_response != None:
-							unpacked_response = umsgpack.unpackb(packed_response)
-							request_id = unpacked_response[0]
-							response_data = unpacked_response[1]
-							transfer_size = len(umsgpack.packb(response_data))-2
-							self.handle_response(request_id, response_data, transfer_size, transfer_size)
-							self.__update_phy_stats(packet, query_shared=True)
-					except Exception as e:
-						RNS.log("Error occurred while handling response. The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-				elif packet.context == RNS.Packet.LRRTT:
-					if not self.initiator:
-						self.rtt_packet(packet)
-						self.__update_phy_stats(packet, query_shared=True)
-
-				elif packet.context == RNS.Packet.LINKCLOSE:
-					self.teardown_packet(packet)
-					self.__update_phy_stats(packet, query_shared=True)
-
-				elif packet.context == RNS.Packet.RESOURCE_ADV:
-					packet.plaintext = self.decrypt(packet.data)
-					if packet.plaintext != None:
-						self.__update_phy_stats(packet, query_shared=True)
-
-						if RNS.ResourceAdvertisement.is_request(packet):
-							RNS.Resource.accept(packet, callback=self.request_resource_concluded)
-						elif RNS.ResourceAdvertisement.is_response(packet):
-							request_id = RNS.ResourceAdvertisement.read_request_id(packet)
-							for pending_request in self.pending_requests:
-								if pending_request.request_id == request_id:
-									response_resource = RNS.Resource.accept(packet, callback=self.response_resource_concluded, progress_callback=pending_request.response_resource_progress, request_id = request_id)
-									if response_resource != None:
-										if pending_request.response_size == None:
-											pending_request.response_size = RNS.ResourceAdvertisement.read_size(packet)
-										if pending_request.response_transfer_size == None:
-											pending_request.response_transfer_size = 0
-										pending_request.response_transfer_size += RNS.ResourceAdvertisement.read_transfer_size(packet)
-										if pending_request.started_at == None:
-											pending_request.started_at = time.time()
-										pending_request.response_resource_progress(response_resource)
-
-						elif self.resource_strategy == Link.ACCEPT_NONE:
-							pass
-						elif self.resource_strategy == Link.ACCEPT_APP:
-							if self.callbacks.resource != None:
-								try:
-									resource_advertisement = RNS.ResourceAdvertisement.unpack(packet.plaintext)
-									resource_advertisement.link = self
-									if self.callbacks.resource(resource_advertisement):
-										RNS.Resource.accept(packet, self.callbacks.resource_concluded)
-								except Exception as e:
-									RNS.log("Error while executing resource accept callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-						elif self.resource_strategy == Link.ACCEPT_ALL:
-							RNS.Resource.accept(packet, self.callbacks.resource_concluded)
-
-				elif packet.context == RNS.Packet.RESOURCE_REQ:
-					plaintext = self.decrypt(packet.data)
-					if plaintext != None:
-						self.__update_phy_stats(packet, query_shared=True)
+							if (identity.validate(signature, signed_data)) {
+								_object->__remote_identity = identity;
+								if (_object->_callbacks._remote_identified) {
+									try {
+										_object->_callbacks._remote_identified(*this, _object->__remote_identity);
+									}
+									catch (std::exception& e) {
+										ERRORF("Error while executing remote identified callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+									}
+								}
+							}
+						}
+					}
+					break;
+				}
+				case Type::Packet::REQUEST:
+				{
+					try {
+						const Bytes request_id = packet.getTruncatedHash();
+						const Bytes packed_request = decrypt(packet.data());
+						if (packed_request) {
+                            //p unpacked_request = umsgpack.unpackb(packed_request)
+							MsgPack::Unpacker unpacker;
+							unpacker.feed(packed_request.data(), packed_request.size());
+							// CBA TODO OPTIMIZE MSGPACK
+							double requested_at;
+							MsgPack::bin_t<uint8_t> path_hash;
+							MsgPack::bin_t<uint8_t> request_data;
+							unpacker.from_array(requested_at, path_hash, request_data);
+							ResourceRequest resource_request;
+							resource_request._requested_at = requested_at;
+							resource_request._path_hash = path_hash;
+							resource_request._request_data = request_data;
+							handle_request(request_id, resource_request);
+						}
+					}
+					catch (std::exception& e) {
+						ERRORF("Error occurred while handling request. The contained exception was: %s", e.what());
+					}
+					break;
+				}
+				case Type::Packet::RESPONSE:
+				{
+					try {
+						const Bytes packed_response = decrypt(packet.data());
+						if (packed_response) {
+							//p unpacked_response = umsgpack.unpackb(packed_response)
+							//p request_id = unpacked_response[0]
+							//p response_data = unpacked_response[1]
+                            //p transfer_size = len(umsgpack.packb(response_data))-2
+							MsgPack::Unpacker unpacker;
+							unpacker.feed(packed_response.data(), packed_response.size());
+							MsgPack::bin_t<uint8_t> request_id;
+							MsgPack::bin_t<uint8_t> response_data;
+							unpacker.from_array(request_id, response_data);
+							MsgPack::Packer packer;
+							packer.serialize(response_data);
+							size_t transfer_size = packer.size() - 2;
+							handle_response(Bytes(request_id.data(), request_id.size()), Bytes(response_data.data(), response_data.size()), transfer_size, transfer_size);
+						}
+					}
+					catch (std::exception& e) {
+						ERRORF("Error occurred while handling response. The contained exception was: %s", e.what());
+					}
+					break;
+				}
+				case Type::Packet::LRRTT:
+				{
+					if (!_object->_initiator) {
+						rtt_packet(packet);
+					}
+				}
+				case Type::Packet::LINKCLOSE:
+				{
+					teardown_packet(packet);
+					break;
+				}
+/*z
+				case Type::Packet::RESOURCE_ADV:
+				{
+					//p packet.plaintext = decrypt(packet.data)
+					const Bytes plaintext = decrypt(packet.data());
+					if (plaintext) {
+						const_cast<Packet&>(packet).plaintext(plaintext);
+						if (ResourceAdvertisement::is_request(packet)) {
+							Resource::accept(packet, callback=_object->_request_resource_concluded);
+						}
+						else if (ResourceAdvertisement::is_response(packet)) {
+							Bytes request_id = ResourceAdvertisement::read_request_id(packet)
+							for (auto& pending_request : _object->_pending_requests) {
+								if (pending_request.request_id == request_id) {
+									const Bytes response_resource = Resource::accept(packet, callback=_object->_response_resource_concluded, progress_callback=pending_request.response_resource_progress, request_id = request_id);
+									if (response_resource) {
+										//p if pending_request.response_size == None:
+										if (pending_request.response_size == 0) {
+											pending_request.response_size = ResourceAdvertisement::read_size(packet);
+										}
+										//p if pending_request.response_transfer_size == None:
+										if (pending_request.response_transfer_size == 0) {
+											pending_request.response_transfer_size = 0;
+										}
+										pending_request.response_transfer_size += ResourceAdvertisement::read_transfer_size(packet);
+										//p if pending_request.started_at == None:
+										if (pending_request.started_at == 0.0) {
+											pending_request.started_at = OS::time();
+										}
+										pending_request.response_resource_progress(response_resource);
+									}
+								}
+							}
+						}
+						else if (_object->_resource_strategy == ACCEPT_NONE) {
+							//p pass
+						}
+						else if (_object->_resource_strategy == ACCEPT_APP) {
+							if (_object->_callbacks.resource) {
+								try {
+									resource_advertisement = RNS.ResourceAdvertisement.unpack(packet.plaintext());
+									resource_advertisement.link = *this;
+									if (_object->_callbacks.resource(resource_advertisement)) {
+										Resource::accept(packet, _object->_callbacks.resource_concluded);
+									}
+								}
+								catch (std::exception& e) {
+									ERRORF("Error while executing resource accept callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+								}
+						elif _object->_resource_strategy == ACCEPT_ALL:
+							RNS.Resource.accept(packet, _object->_callbacks.resource_concluded)
+					break;
+				}
+				case Type::Packet::RESOURCE_REQ:
+				{
+					const Bytes plaintext = decrypt(packet.data());
+					if (plaintext) {
 						if ord(plaintext[:1]) == RNS.Resource.HASHMAP_IS_EXHAUSTED:
-							resource_hash = plaintext[1+RNS.Resource.MAPHASH_LEN:RNS.Identity.HASHLENGTH//8+1+RNS.Resource.MAPHASH_LEN]
+							resource_hash = plaintext[1+RNS.Resource.MAPHASH_LEN:Type::Identity::HASHLENGTH//8+1+RNS.Resource.MAPHASH_LEN]
 						else:
-							resource_hash = plaintext[1:RNS.Identity.HASHLENGTH//8+1]
+							resource_hash = plaintext[1:Type::Identity::HASHLENGTH//8+1]
 
-						for resource in self.outgoing_resources:
+						for resource in _object->_outgoing_resources:
 							if resource.hash == resource_hash:
-								# We need to check that this request has not been
-								# received before in order to avoid sequencing errors.
+								// We need to check that this request has not been
+								// received before in order to avoid sequencing errors.
 								if not packet.packet_hash in resource.req_hashlist:
 									resource.req_hashlist.append(packet.packet_hash)
 									resource.request(plaintext)
-
-				elif packet.context == RNS.Packet.RESOURCE_HMU:
-					plaintext = self.decrypt(packet.data)
-					if plaintext != None:
-						self.__update_phy_stats(packet, query_shared=True)
-						resource_hash = plaintext[:RNS.Identity.HASHLENGTH//8]
-						for resource in self.incoming_resources:
+					break;
+				}
+				case Type::Packet::RESOURCE_HMU:
+				{
+					const Bytes plaintext = decrypt(packet.data());
+					if (plaintext) {
+						resource_hash = plaintext[:Type::Identity::HASHLENGTH//8]
+						for resource in _object->_incoming_resources:
 							if resource_hash == resource.hash:
 								resource.hashmap_update_packet(plaintext)
-
-				elif packet.context == RNS.Packet.RESOURCE_ICL:
-					plaintext = self.decrypt(packet.data)
-					if plaintext != None:
-						self.__update_phy_stats(packet)
-						resource_hash = plaintext[:RNS.Identity.HASHLENGTH//8]
-						for resource in self.incoming_resources:
+					break;
+				}
+				case Type::Packet::RESOURCE_ICL:
+				{
+					const Bytes plaintext = decrypt(packet.data());
+					if (plaintext) {
+						resource_hash = plaintext[:Type::Identity::HASHLENGTH//8]
+						for resource in _object->_incoming_resources:
 							if resource_hash == resource.hash:
 								resource.cancel()
-
-				elif packet.context == RNS.Packet.KEEPALIVE:
-					if not self.initiator and packet.data == bytes([0xFF]):
-						keepalive_packet = RNS.Packet(self, bytes([0xFE]), context=RNS.Packet.KEEPALIVE)
-						keepalive_packet.send()
-						self.had_outbound(is_keepalive = True)
-
-
-				# TODO: find the most efficient way to allow multiple
-				# transfers at the same time, sending resource hash on
-				# each packet is a huge overhead. Probably some kind
-				# of hash -> sequence map
-				elif packet.context == RNS.Packet.RESOURCE:
-					for resource in self.incoming_resources:
-						resource.receive_part(packet)
-						self.__update_phy_stats(packet)
-
-				elif packet.context == RNS.Packet.CHANNEL:
-					if not self._channel:
-						RNS.log(f"Channel data received without open channel", RNS.LOG_DEBUG)
-					else:
-						packet.prove()
-						plaintext = self.decrypt(packet.data)
-						if plaintext != None:
-							self.__update_phy_stats(packet)
-							self._channel._receive(plaintext)
-
-			elif packet.packet_type == RNS.Packet.PROOF:
-				if packet.context == RNS.Packet.RESOURCE_PRF:
-					resource_hash = packet.data[0:RNS.Identity.HASHLENGTH//8]
-					for resource in self.outgoing_resources:
-						if resource_hash == resource.hash:
-							resource.validate_proof(packet.data)
-							self.__update_phy_stats(packet, query_shared=True)
-
-	self.watchdog_lock = False
-
-
-def encrypt(self, plaintext):
-	try:
-		if not self.fernet:
-			try:
-				self.fernet = Fernet(self.derived_key)
-			except Exception as e:
-				RNS.log("Could not instantiate Fernet while performin encryption on link "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-				raise e
-
-		return self.fernet.encrypt(plaintext)
-
-	except Exception as e:
-		RNS.log("Encryption on link "+str(self)+" failed. The contained exception was: "+str(e), RNS.LOG_ERROR)
-		raise e
-
-
-def decrypt(self, ciphertext):
-	try:
-		if not self.fernet:
-			self.fernet = Fernet(self.derived_key)
-			
-		return self.fernet.decrypt(ciphertext)
-
-	except Exception as e:
-		RNS.log("Decryption failed on link "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-		return None
-
-
-def sign(self, message):
-	return self.sig_prv.sign(message)
-
-def validate(self, signature, message):
-	try:
-		self.peer_sig_pub.verify(signature, message)
-		return True
-	except Exception as e:
-		return False
-
-def set_link_established_callback(self, callback):
-	self.callbacks.link_established = callback
-
-def set_link_closed_callback(self, callback):
-	"""
-	Registers a function to be called when a link has been
-	torn down.
-
-	:param callback: A function or method with the signature *callback(link)* to be called.
-	"""
-	self.callbacks.link_closed = callback
-
-def set_packet_callback(self, callback):
-	"""
-	Registers a function to be called when a packet has been
-	received over this link.
-
-	:param callback: A function or method with the signature *callback(message, packet)* to be called.
-	"""
-	self.callbacks.packet = callback
-
-def set_resource_callback(self, callback):
-	"""
-	Registers a function to be called when a resource has been
-	advertised over this link. If the function returns *True*
-	the resource will be accepted. If it returns *False* it will
-	be ignored.
-
-	:param callback: A function or method with the signature *callback(resource)* to be called. Please note that only the basic information of the resource is available at this time, such as *get_transfer_size()*, *get_data_size()*, *get_parts()* and *is_compressed()*.
-	"""
-	self.callbacks.resource = callback
-
-def set_resource_started_callback(self, callback):
-	"""
-	Registers a function to be called when a resource has begun
-	transferring over this link.
-
-	:param callback: A function or method with the signature *callback(resource)* to be called.
-	"""
-	self.callbacks.resource_started = callback
-
-def set_resource_concluded_callback(self, callback):
-	"""
-	Registers a function to be called when a resource has concluded
-	transferring over this link.
-
-	:param callback: A function or method with the signature *callback(resource)* to be called.
-	"""
-	self.callbacks.resource_concluded = callback
-
-def set_remote_identified_callback(self, callback):
-	"""
-	Registers a function to be called when an initiating peer has
-	identified over this link.
-
-	:param callback: A function or method with the signature *callback(link, identity)* to be called.
-	"""
-	self.callbacks.remote_identified = callback
-
-def resource_concluded(self, resource):
-	if resource in self.incoming_resources:
-		self.incoming_resources.remove(resource)
-	if resource in self.outgoing_resources:
-		self.outgoing_resources.remove(resource)
-
-def set_resource_strategy(self, resource_strategy):
-	"""
-	Sets the resource strategy for the link.
-
-	:param resource_strategy: One of ``RNS.Link.ACCEPT_NONE``, ``RNS.Link.ACCEPT_ALL`` or ``RNS.Link.ACCEPT_APP``. If ``RNS.Link.ACCEPT_APP`` is set, the `resource_callback` will be called to determine whether the resource should be accepted or not.
-	:raises: *TypeError* if the resource strategy is unsupported.
-	"""
-	if not resource_strategy in Link.resource_strategies:
-		raise TypeError("Unsupported resource strategy")
-	else:
-		self.resource_strategy = resource_strategy
-
-def register_outgoing_resource(self, resource):
-	self.outgoing_resources.append(resource)
-
-def register_incoming_resource(self, resource):
-	self.incoming_resources.append(resource)
-
-def has_incoming_resource(self, resource):
-	for incoming_resource in self.incoming_resources:
-		if incoming_resource.hash == resource.hash:
-			return True
-
-	return False
-
-def cancel_outgoing_resource(self, resource):
-	if resource in self.outgoing_resources:
-		self.outgoing_resources.remove(resource)
-	else:
-		RNS.log("Attempt to cancel a non-existing outgoing resource", RNS.LOG_ERROR)
-
-def cancel_incoming_resource(self, resource):
-	if resource in self.incoming_resources:
-		self.incoming_resources.remove(resource)
-	else:
-		RNS.log("Attempt to cancel a non-existing incoming resource", RNS.LOG_ERROR)
-
-def ready_for_new_resource(self):
-	if len(self.outgoing_resources) > 0:
-		return False
-	else:
-		return True
-
-def __str__(self):
-	return RNS.prettyhexrep(self.link_id)
-
-
-class RequestReceipt():
-"""
-An instance of this class is returned by the ``request`` method of ``RNS.Link``
-instances. It should never be instantiated manually. It provides methods to
-check status, response time and response data when the request concludes.
-"""
-
-FAILED    = 0x00
-SENT      = 0x01
-DELIVERED = 0x02
-RECEIVING = 0x03
-READY     = 0x04
-
-def __init__(self, link, packet_receipt = None, resource = None, response_callback = None, failed_callback = None, progress_callback = None, timeout = None, request_size = None):
-	self.packet_receipt = packet_receipt
-	self.resource = resource
-	self.started_at = None
-
-	if self.packet_receipt != None:
-		self.hash = packet_receipt.truncated_hash
-		self.packet_receipt.set_timeout_callback(self.request_timed_out)
-		self.started_at = time.time()
-
-	elif self.resource != None:
-		self.hash = resource.request_id
-		resource.set_callback(self.request_resource_concluded)
-	
-	self.link                   = link
-	self.request_id             = self.hash
-	self.request_size           = request_size
-
-	self.response               = None
-	self.response_transfer_size = None
-	self.response_size          = None
-	self.status                 = RequestReceipt.SENT
-	self.sent_at                = time.time()
-	self.progress               = 0
-	self.concluded_at           = None
-	self.response_concluded_at  = None
-
-	if timeout != None:
-		self.timeout        = timeout
-	else:
-		raise ValueError("No timeout specified for request receipt")
-
-	self.callbacks          = RequestReceiptCallbacks()
-	self.callbacks.response = response_callback
-	self.callbacks.failed   = failed_callback
-	self.callbacks.progress = progress_callback
-
-	self.link.pending_requests.append(self)
-
-
-def request_resource_concluded(self, resource):
-	if resource.status == RNS.Resource.COMPLETE:
-		RNS.log("Request "+RNS.prettyhexrep(self.request_id)+" successfully sent as resource.", RNS.LOG_DEBUG)
-		if self.started_at == None:
-			self.started_at = time.time()
-		self.status = RequestReceipt.DELIVERED
-		self.__resource_response_timeout = time.time()+self.timeout
-		response_timeout_thread = threading.Thread(target=self.__response_timeout_job)
-		response_timeout_thread.daemon = True
-		response_timeout_thread.start()
-	else:
-		RNS.log("Sending request "+RNS.prettyhexrep(self.request_id)+" as resource failed with status: "+RNS.hexrep([resource.status]), RNS.LOG_DEBUG)
-		self.status = RequestReceipt.FAILED
-		self.concluded_at = time.time()
-		self.link.pending_requests.remove(self)
-
-		if self.callbacks.failed != None:
-			try:
-				self.callbacks.failed(self)
-			except Exception as e:
-				RNS.log("Error while executing request failed callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-
-def __response_timeout_job(self):
-	while self.status == RequestReceipt.DELIVERED:
-		now = time.time()
-		if now > self.__resource_response_timeout:
-			self.request_timed_out(None)
-
-		time.sleep(0.1)
-
-
-def request_timed_out(self, packet_receipt):
-	self.status = RequestReceipt.FAILED
-	self.concluded_at = time.time()
-	self.link.pending_requests.remove(self)
-
-	if self.callbacks.failed != None:
-		try:
-			self.callbacks.failed(self)
-		except Exception as e:
-			RNS.log("Error while executing request timed out callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-
-def response_resource_progress(self, resource):
-	if resource != None:
-		if not self.status == RequestReceipt.FAILED:
-			self.status = RequestReceipt.RECEIVING
-			if self.packet_receipt != None:
-				if self.packet_receipt.status != RNS.PacketReceipt.DELIVERED:
-					self.packet_receipt.status = RNS.PacketReceipt.DELIVERED
-					self.packet_receipt.proved = True
-					self.packet_receipt.concluded_at = time.time()
-					if self.packet_receipt.callbacks.delivery != None:
-						self.packet_receipt.callbacks.delivery(self.packet_receipt)
-
-			self.progress = resource.get_progress()
-			
-			if self.callbacks.progress != None:
-				try:
-					self.callbacks.progress(self)
-				except Exception as e:
-					RNS.log("Error while executing response progress callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-		else:
-			resource.cancel()
-
-
-def response_received(self, response):
-	if not self.status == RequestReceipt.FAILED:
-		self.progress = 1.0
-		self.response = response
-		self.status = RequestReceipt.READY
-		self.response_concluded_at = time.time()
-
-		if self.packet_receipt != None:
-			self.packet_receipt.status = RNS.PacketReceipt.DELIVERED
-			self.packet_receipt.proved = True
-			self.packet_receipt.concluded_at = time.time()
-			if self.packet_receipt.callbacks.delivery != None:
-				self.packet_receipt.callbacks.delivery(self.packet_receipt)
-
-		if self.callbacks.progress != None:
-			try:
-				self.callbacks.progress(self)
-			except Exception as e:
-				RNS.log("Error while executing response progress callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-		if self.callbacks.response != None:
-			try:
-				self.callbacks.response(self)
-			except Exception as e:
-				RNS.log("Error while executing response received callback from "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-
-def get_request_id(self):
-	"""
-	:returns: The request ID as *bytes*.
-	"""
-	return self.request_id
-
-def get_status(self):
-	"""
-	:returns: The current status of the request, one of ``RNS.RequestReceipt.FAILED``, ``RNS.RequestReceipt.SENT``, ``RNS.RequestReceipt.DELIVERED``, ``RNS.RequestReceipt.READY``.
-	"""
-	return self.status
-
-def get_progress(self):
-	"""
-	:returns: The progress of a response being received as a *float* between 0.0 and 1.0.
-	"""
-	return self.progress
-
-def get_response(self):
-	"""
-	:returns: The response as *bytes* if it is ready, otherwise *None*.
-	"""
-	if self.status == RequestReceipt.READY:
-		return self.response
-	else:
-		return None
-
-def get_response_time(self):
-	"""
-	:returns: The response time of the request in seconds.
-	"""
-	if self.status == RequestReceipt.READY:
-		return self.response_concluded_at - self.started_at
-	else:
-		return None
-
+					break;
+				}
 */
+				case Type::Packet::KEEPALIVE:
+				{
+					if (!_object->_initiator && packet.data() == "\xFF") {
+                        //p keepalive_packet = RNS.Packet(self, bytes([0xFE]), context=RNS.Packet.KEEPALIVE)
+						Packet keepalive_packet(_object->_link_destination, Bytes("\xFE"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
+						keepalive_packet.send();
+						had_outbound(true);
+					}
+					break;
+				}
+				// TODO: find the most efficient way to allow multiple
+				// transfers at the same time, sending resource hash on
+				// each packet is a huge overhead. Probably some kind
+				// of hash -> sequence map
+				case Type::Packet::RESOURCE:
+				{
+					for (auto& resource : _object->_incoming_resources) {
+						//z resource.receive_part(packet);
+					}
+					break;
+				}
+/*z
+				case Type::Packet::CHANNEL:
+				{
+					//z if (!_object->_channel) {
+					if (true) {
+						DEBUG(f"Channel data received without open channel")
+					}
+					else {
+						//z packet.prove();
+						//z plaintext = decrypt(packet.data());
+						//z if (plaintext) {
+						//z 	_object->_channel._receive(plaintext);
+						//z }
+					}
+					break;
+				}
+*/
+				}
+			}
+			else if (packet.packet_type() == Type::Packet::PROOF) {
+				if (packet.context() == Type::Packet::RESOURCE_PRF) {
+					Bytes resource_hash = packet.data().left(Type::Identity::HASHLENGTH/8);
+					for (const auto& resource : _object->_outgoing_resources) {
+						if (resource_hash == resource.hash()) {
+							//z resource.validate_proof(packet.data());
+						}
+					}
+				}
+			}
+		}
+	}
+
+	_object->_watchdog_lock = false;
+}
+
+const Bytes Link::encrypt(const Bytes& plaintext) {
+	assert(_object);
+	try {
+		if (!_object->_fernet) {
+			try {
+				_object->_fernet.reset(new Fernet(_object->_derived_key));
+			}
+			catch (std::exception& e) {
+				ERRORF("Could not instantiate Fernet while performin encryption on link %s. The contained exception was: %s", toString().c_str(), e.what());
+				throw e;
+			}
+		}
+		return _object->_fernet->encrypt(plaintext);
+	}
+	catch (std::exception& e) {
+		ERRORF("Encryption on link %s failed. The contained exception was: %s", toString().c_str(), e.what());
+		throw e;
+	}
+}
+
+const Bytes Link::decrypt(const Bytes& ciphertext) {
+	assert(_object);
+	try {
+		if (!_object->_fernet) {
+			_object->_fernet.reset(new Fernet(_object->_derived_key));
+		}
+		return _object->_fernet->decrypt(ciphertext);
+	}
+	catch (std::exception& e) {
+		ERRORF("Decryption failed on link %s. The contained exception was: %s", toString().c_str(), e.what());
+		return {Bytes::NONE};
+	}
+}
+
+const Bytes Link::sign(const Bytes& message) {
+	assert(_object);
+	return _object->_sig_prv->sign(message);
+}
+
+bool Link::validate(const Bytes& signature, const Bytes& message) {
+	assert(_object);
+	try {
+		_object->_peer_sig_pub->verify(signature, message);
+		return true;
+	}
+	catch (std::exception& e) {
+		return false;
+	}
+}
+
+void Link::set_link_established_callback(Callbacks::established callback) {
+	assert(_object);
+	_object->_callbacks._established = callback;
+}
+
+void Link::set_link_closed_callback(Callbacks::closed callback) {
+	assert(_object);
+	_object->_callbacks._closed = callback;
+}
+
+void Link::set_packet_callback(Callbacks::packet callback) {
+	assert(_object);
+	_object->_callbacks._packet = callback;
+}
+
+void Link::set_remote_identified_callback(Callbacks::remote_identified callback) {
+	assert(_object);
+	_object->_callbacks._remote_identified = callback;
+}
+
+void Link::set_resource_callback(Callbacks::resource callback) {
+	assert(_object);
+	_object->_callbacks._resource = callback;
+}
+
+void Link::set_resource_started_callback(Callbacks::resource_started callback) {
+	assert(_object);
+	_object->_callbacks._resource_started = callback;
+}
+
+void Link::set_resource_concluded_callback(Callbacks::resource_concluded callback) {
+	assert(_object);
+	_object->_callbacks._resource_concluded = callback;
+}
+
+
+void Link::resource_concluded(const Resource& resource) {
+	assert(_object);
+	if (_object->_incoming_resources.count(resource) > 0) {
+		_object->_incoming_resources.erase(resource);
+	}
+	if (_object->_outgoing_resources.count(resource) > 0) {
+		_object->_outgoing_resources.erase(resource);
+	}
+}
+
+/*
+Sets the resource strategy for the link.
+
+:param resource_strategy: One of ``RNS.ACCEPT_NONE``, ``RNS.ACCEPT_ALL`` or ``RNS.ACCEPT_APP``. If ``RNS.ACCEPT_APP`` is set, the `resource_callback` will be called to determine whether the resource should be accepted or not.
+:raises: *TypeError* if the resource strategy is unsupported.
+*/
+void Link::set_resource_strategy(resource_strategy strategy) {
+	assert(_object);
+	if ((strategy & resource_strategies) > 0) {
+		throw std::runtime_error("Unsupported resource strategy");
+	}
+	else {
+		_object->_resource_strategy = strategy;
+	}
+}
+
+void Link::register_outgoing_resource(const Resource& resource) {
+	assert(_object);
+	_object->_outgoing_resources.insert(resource);
+}
+
+void Link::register_incoming_resource(const Resource& resource) {
+	assert(_object);
+	_object->_incoming_resources.insert(resource);
+}
+
+bool Link::has_incoming_resource(const Resource& resource) {
+	assert(_object);
+	for (const auto& incoming_resource : _object->_incoming_resources) {
+		if (incoming_resource.hash() == resource.hash()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Link::cancel_outgoing_resource(const Resource& resource) {
+	assert(_object);
+	if (_object->_outgoing_resources.count(resource) > 0) {
+		_object->_outgoing_resources.erase(resource);
+	}
+	else {
+		ERROR("Attempt to cancel a non-existing outgoing resource");
+	}
+}
+
+void Link::cancel_incoming_resource(const Resource& resource) {
+	assert(_object);
+	if (_object->_incoming_resources.count(resource)) {
+		_object->_incoming_resources.erase(resource);
+	}
+	else {
+		ERROR("Attempt to cancel a non-existing incoming resource");
+	}
+}
+
+bool Link::ready_for_new_resource() {
+	assert(_object);
+	return (_object->_outgoing_resources.size() > 0);
+}
+
+std::string Link::toString() const {
+	if (!_object) {
+		return "";
+	}
+	return "{Link:" + _object->_link_id.toHex() + "}";
+}
+
+// getters
+
+const Destination& Link::destination() const {
+	assert(_object);
+	return _object->_destination;
+}
+
+const Bytes& Link::link_id() const {
+	assert(_object);
+	return _object->_link_id;
+}
+
+const Bytes& Link::hash() const {
+	assert(_object);
+	return _object->_hash;
+}
+
+Type::Link::status Link::status() const {
+	assert(_object);
+	return _object->_status;
+}
+
+double Link::establishment_timeout() const {
+	assert(_object);
+	return _object->_establishment_timeout;
+}
+
+uint16_t Link::establishment_cost() const {
+	assert(_object);
+	return _object->_establishment_cost;
+}
+
+double Link::request_time() const {
+	assert(_object);
+	return _object->_request_time;
+}
+
+double Link::last_inbound() const {
+	assert(_object);
+	return _object->_last_inbound;
+}
+
+std::set<RNS::RequestReceipt>& Link::pending_requests() const {
+	assert(_object);
+	return _object->_pending_requests;
+}
+
+// setters
+
+void Link::destination(const Destination& destination) {
+	assert(_object);
+	_object->_destination = destination;
+}
+
+void Link::attached_interface(const Interface& interface) {
+	assert(_object);
+	_object->_attached_interface = interface;
+}
+
+void Link::establishment_timeout(double timeout) {
+	assert(_object);
+	_object->_establishment_timeout = timeout;
+}
+
+void Link::establishment_cost(uint16_t cost) {
+	assert(_object);
+	_object->_establishment_cost = cost;
+}
+
+void Link::request_time(double time) {
+	assert(_object);
+	_object->_request_time = time;
+}
+
+void Link::last_inbound(double time) {
+	assert(_object);
+	_object->_last_inbound = time;
+}
+
+
+//RequestReceipt::RequestReceipt(const Link& link, const PacketReceipt& packet_receipt /*= {Type::NONE}*/, const Resource& resource /*= {Type::NONE}*/, RequestReceipt::Callbacks::response response_callback /*= nullptr*/, RequestReceipt::Callbacks::failed failed_callback /*= nullptr*/, RequestReceipt::Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/, int request_size /*= 0*/) :
+RequestReceipt::RequestReceipt(const Link& link, const PacketReceipt& packet_receipt, const Resource& resource, RequestReceipt::Callbacks::response response_callback /*= nullptr*/, RequestReceipt::Callbacks::failed failed_callback /*= nullptr*/, RequestReceipt::Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/, int request_size /*= 0*/) :
+	_object(new RequestReceiptData())
+{
+	assert(_object);
+	_object->_packet_receipt = packet_receipt;
+	_object->_resource = resource;
+	if (_object->_packet_receipt) {
+		_object->_hash = packet_receipt.truncated_hash();
+		//z _object->_packet_receipt.set_timeout_callback(request_timed_out);
+		_object->_started_at = OS::time();
+	}
+	else if (_object->_resource) {
+		_object->_hash = resource.request_id();
+		//const_cast<Resource&>(resource).set_concluded_callback(request_resource_concluded);
+		const_cast<Resource&>(resource).set_concluded_callback(std::bind(&RequestReceipt::request_resource_concluded, this, std::placeholders::_1));
+	}
+	_object->_link = link;
+	_object->_request_id = _object->_hash;
+	_object->_request_size = request_size;
+	_object->_sent_at = OS::time();
+	if (timeout != 0.0) {
+		_object->_timeout = timeout;
+	}
+	else {
+		throw new std::invalid_argument("No timeout specified for request receipt");
+	}
+
+	_object->_callbacks._response = response_callback;
+	_object->_callbacks._failed = failed_callback;
+	_object->_callbacks._progress = progress_callback;
+
+	_object->_link.pending_requests().insert(*this);
+}
+
+void RequestReceipt::request_resource_concluded(const Resource& resource) {
+	assert(_object);
+	if (resource.status() == Type::Resource::COMPLETE) {
+		DEBUGF("Request %s successfully sent as resource.", _object->_request_id.toHex().c_str());
+		if (_object->_started_at == 0.0) {
+			_object->_started_at = OS::time();
+		}
+		_object->_status = Type::RequestReceipt::DELIVERED;
+		_object->_resource_response_timeout = OS::time() + _object->_timeout;
+		//p response_timeout_thread = threading.Thread(target=_object->___response_timeout_job)
+		//p response_timeout_thread.daemon = True
+		//p response_timeout_thread.start()
+	}
+	else {
+		DEBUGF("Sending request %s as resource failed with status: %d", _object->_request_id.toHex().c_str(), resource.status());
+		_object->_status = Type::RequestReceipt::FAILED;
+		_object->_concluded_at = OS::time();
+		_object->_link.pending_requests().erase(*this);
+		if (_object->_callbacks._failed != nullptr) {
+			try {
+				_object->_callbacks._failed(*this);
+			}
+			catch (std::exception& e) {
+				ERRORF("Error while executing request failed callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+			}
+		}
+	}
+}
+
+
+void RequestReceipt::__response_timeout_job() {
+	assert(_object);
+	while (_object->_status == Type::RequestReceipt::DELIVERED) {
+		double now = OS::time();
+		if (now > _object->___resource_response_timeout) {
+			request_timed_out({Type::NONE});
+		}
+
+		OS::sleep(0.1);
+	}
+}
+
+
+void RequestReceipt::request_timed_out(const PacketReceipt& packet_receipt) {
+	assert(_object);
+	_object->_status = Type::RequestReceipt::FAILED;
+	_object->_concluded_at = OS::time();
+	_object->_link.pending_requests().erase(*this);
+
+	if (_object->_callbacks._failed != nullptr) {
+		try {
+			_object->_callbacks._failed(*this);
+		}
+		catch (std::exception& e) {
+			ERRORF("Error while executing request timed out callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+		}
+	}
+}
+
+
+void RequestReceipt::response_resource_progress(const Resource& resource) {
+	assert(_object);
+	if (resource) {
+		if (_object->_status != Type::RequestReceipt::FAILED) {
+			_object->_status = Type::RequestReceipt::RECEIVING;
+			if (_object->_packet_receipt) {
+				if (_object->_packet_receipt.status() != Type::PacketReceipt::DELIVERED) {
+					_object->_packet_receipt.status(Type::PacketReceipt::DELIVERED);
+					_object->_packet_receipt.proved(true);
+					_object->_packet_receipt.concluded_at(OS::time());
+					if (_object->_packet_receipt.callbacks()._delivery != nullptr) {
+						_object->_packet_receipt.callbacks()._delivery(_object->_packet_receipt);
+					}
+				}
+			}
+
+			_object->_progress = resource.get_progress();
+
+			if (_object->_callbacks._progress != nullptr) {
+				try {
+					_object->_callbacks._progress(*this);
+				}
+				catch (std::exception& e) {
+					ERRORF("Error while executing response progress callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+				}
+			}
+		}
+		else {
+			const_cast<Resource&>(resource).cancel();
+		}
+	}
+}
+
+void RequestReceipt::response_received(const Bytes& response) {
+	assert(_object);
+	if (_object->_status != Type::RequestReceipt::FAILED) {
+		_object->_progress = 1.0;
+		_object->_response = response;
+		_object->_status = Type::RequestReceipt::READY;
+		_object->_response_concluded_at = OS::time();
+
+		if (_object->_packet_receipt) {
+			_object->_packet_receipt.status(Type::PacketReceipt::DELIVERED);
+			_object->_packet_receipt.proved(true);
+			_object->_packet_receipt.concluded_at(OS::time());
+			if (_object->_packet_receipt.callbacks()._delivery != nullptr) {
+				_object->_packet_receipt.callbacks()._delivery(_object->_packet_receipt);
+			}
+		}
+		if (_object->_callbacks._progress != nullptr) {
+			try {
+				_object->_callbacks._progress(*this);
+			}
+			catch (std::exception& e) {
+				ERRORF("Error while executing response progress callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+			}
+		}
+		if (_object->_callbacks._response != nullptr) {
+			try {
+				_object->_callbacks._response(*this);
+			}
+			catch (std::exception& e) {
+				ERRORF("Error while executing response received callback from %s. The contained exception was: %s", toString().c_str(), e.what());
+			}
+		}
+	}
+}
+
+// :returns: The request ID as *bytes*.
+const Bytes& RequestReceipt::get_request_id() const {
+	assert(_object);
+	return _object->_request_id;
+}
+
+// :returns: The current status of the request, one of ``RNS.RequestReceipt.FAILED``, ``RNS.RequestReceipt.SENT``, ``RNS.RequestReceipt.DELIVERED``, ``RNS.RequestReceipt.READY``.
+Type::RequestReceipt::status RequestReceipt::get_status() const {
+	assert(_object);
+	return _object->_status;
+}
+
+// :returns: The progress of a response being received as a *float* between 0.0 and 1.0.
+float RequestReceipt::get_progress() const {
+	assert(_object);
+	return _object->_progress;
+}
+
+// :returns: The response as *bytes* if it is ready, otherwise *None*.
+const Bytes RequestReceipt::get_response() const {
+	assert(_object);
+	if (_object->_status == Type::RequestReceipt::READY) {
+		return _object->_response;
+	}
+	else {
+		return Bytes::NONE;
+	}
+}
+
+// :returns: The response time of the request in seconds.
+double RequestReceipt::get_response_time() const {
+	assert(_object);
+	if (_object->_status == Type::RequestReceipt::READY) {
+		return _object->_response_concluded_at - _object->_started_at;
+	}
+	else {
+		return 0.0;
+	}
+}
+
+std::string RequestReceipt::toString() const {
+	if (!_object) {
+		return "";
+	}
+	return "{RequestReceipt:" + _object->_hash.toHex() + "}";
+}
+
+// getters
+
+const Bytes& RequestReceipt::hash() const {
+	assert(_object);
+	return _object->_hash;
+}
+
+const Bytes& RequestReceipt::request_id() const {
+	assert(_object);
+	return _object->_request_id;
+}
+
+const size_t RequestReceipt::response_transfer_size() const {
+	assert(_object);
+	return _object->_response_transfer_size;
+}
+
+// setters
+
+void RequestReceipt::response_size(size_t size) {
+	assert(_object);
+	_object->_response_size = size;
+}
+
+void RequestReceipt::response_transfer_size(size_t size) {
+	assert(_object);
+	_object->_response_transfer_size = size;
+}

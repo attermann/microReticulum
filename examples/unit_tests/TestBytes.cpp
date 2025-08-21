@@ -58,19 +58,20 @@ void testBytesMain() {
 		TRACE("bytess are different");
 	}
 
-	bytes += prebuf + postbuf;
-	assert(bytes.size() == 11);
-	assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
-	TRACE("assign bytes: " + bytes.toString());
-	TRACE("assign prebuf: " + prebuf.toString());
-	TRACE("assign postbuf: " + postbuf.toString());
-
 	// test string assignment
 	bytes = "Foo";
 	assert(bytes.size() == 3);
 	assert(memcmp(bytes.data(), "Foo", bytes.size()) == 0);
 
-	// test string addition
+	// test string concat with addition
+	bytes += prebuf + postbuf;
+	assert(bytes.size() == 14);
+	assert(memcmp(bytes.data(), "FooHello World", bytes.size()) == 0);
+	TRACE("assign bytes: " + bytes.toString());
+	TRACE("assign prebuf: " + prebuf.toString());
+	TRACE("assign postbuf: " + postbuf.toString());
+
+	// test string assignment with addition
 	bytes = prebuf + postbuf;
 	assert(bytes.size() == 11);
 	assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
@@ -167,7 +168,7 @@ void testBytesMain() {
 
 	// test creating bytes from NONE
 	{
-		RNS::Bytes bytes({RNS::Bytes::NONE});
+		RNS::Bytes bytes(RNS::Bytes::NONE);
 		assert(!bytes);
 		assert(bytes.size() == 0);
 		assert(bytes.data() == nullptr);
@@ -385,7 +386,10 @@ void testBytesStream() {
 
 	// stream with assignment
 	HEAD("TestBytes: stream with assignment", RNS::LOG_TRACE);
-	// (side effect of also updating pre - this is a known and correct but perhaps unexpected and non-intuitive side-effect of assignment with stream)
+	// NOTE: This test demonstrates a side-effect of the stream insertion operator!!!
+	//       When pre is volatile (non-const) then it gets updated in the process of inserting both pre and post.
+	//       This is a known and correct but perhaps unexpected and non-intuitive side-effect of assignment with stream.
+	//       To counter this side-effect, intermediate Bytes in a stream insertion chain must be const to avoid being modified.
 	{
 		// NOTE pre must be volatile in order for below stream with assignment to work (since it gets modified)
 		RNS::Bytes pre("Hello");
@@ -434,6 +438,7 @@ void testBytesReserve() {
 }
 
 void testFind() {
+	HEAD("testFind:", RNS::LOG_TRACE);
 	RNS::Bytes src("Hello");
 	assert(0 == src.find("H"));
 	assert(-1 == src.find(1, "H"));
@@ -443,6 +448,104 @@ void testFind() {
 	assert(-1 == src.find(3, "ll"));
 	assert(-1 == src.find(32, "ll"));
 	assert(-1 == src.find("foo"));
+}
+
+void testCompare() {
+	HEAD("testCompare:", RNS::LOG_TRACE);
+	RNS::Bytes bytes("Hello\x20World");
+	//RNS::Bytes bytes("Hello World");
+	TRACEF("testCompare: %s", bytes.toString().c_str());
+	assert(bytes == RNS::Bytes("Hello World"));
+	assert(bytes == RNS::Bytes("Hello\x20World"));
+	assert(bytes == "Hello World");
+	assert(bytes == "Hello\x20World");
+}
+
+void testConcat() {
+	HEAD("testConcat:", RNS::LOG_TRACE);
+
+	const RNS::Bytes bytes1("Hello");
+	const RNS::Bytes bytes2(" World");
+
+	{
+		TRACE("testConcat: prefix");
+		RNS::Bytes bytes("Prefix ");
+	}
+
+	// CBA NOTE: Addition-assignment operator is the only case in this test that involves
+	//           an extra/intermediate object creation and should therfore be avoided.
+	{
+		TRACE("testConcat: prefix addition-assignment with addition");
+		RNS::Bytes bytes("Prefix ");
+		bytes += bytes1 + bytes2;
+		//TRACEF("testConcat: bytes: %s", bytes.toString().c_str());
+		assert(bytes.size() == 18);
+		assert(memcmp(bytes.data(), "Prefix Hello World", bytes.size()) == 0);
+		assert(memcmp(bytes1.data(), "Hello", bytes1.size()) == 0);
+		assert(memcmp(bytes2.data(), " World", bytes2.size()) == 0);
+	}
+
+	// CBA NOTE: Extreme care must be excercised when using stream insertion since intermediate
+	//           Bytes that are volatile (non-const) will be modified in the process!!!
+	{
+		TRACE("testConcat: prefix stream");
+		RNS::Bytes bytes("Prefix ");
+		bytes << bytes1 << bytes2;
+		//TRACEF("testConcat: bytes: %s", bytes.toString().c_str());
+		assert(bytes.size() == 18);
+		assert(memcmp(bytes.data(), "Prefix Hello World", bytes.size()) == 0);
+		assert(memcmp(bytes1.data(), "Hello", bytes1.size()) == 0);
+		assert(memcmp(bytes2.data(), " World", bytes2.size()) == 0);
+	}
+
+	{
+		TRACE("testConcat: assignment with addition");
+		const RNS::Bytes bytes = bytes1 + bytes2;
+		//TRACEF("testConcat: bytes: %s", bytes.toString().c_str());
+		assert(bytes.size() == 11);
+		assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
+		assert(memcmp(bytes1.data(), "Hello", bytes1.size()) == 0);
+		assert(memcmp(bytes2.data(), " World", bytes2.size()) == 0);
+	}
+
+	// CBA NOTE: Following construct with assignment using stream insertion is NOT WORKING!!!
+	//           Using volatile (non-const) Bytes instead does work in this fashion, but that
+	//           has side-effects as stated above.
+	// CBA NOTE: Also curious why Bytes constructor with capacity is being invoked here.
+/*
+	{
+		TRACE("testConcat: assignment with stream");
+		const RNS::Bytes bytes = bytes1 << bytes2;
+		//TRACEF("testConcat: bytes: %s", bytes.toString().c_str());
+		assert(bytes.size() == 11);
+		assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
+		assert(memcmp(bytes1.data(), "Hello", bytes1.size()) == 0);
+		assert(memcmp(bytes2.data(), " World", bytes2.size()) == 0);
+	}
+*/
+
+	{
+		TRACE("testConcat: empty with separate stream");
+		RNS::Bytes bytes;
+		bytes << bytes1;
+		bytes << bytes2;
+		//TRACEF("testConcat: bytes: %s", bytes.toString().c_str());
+		assert(bytes.size() == 11);
+		assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
+		assert(memcmp(bytes1.data(), "Hello", bytes1.size()) == 0);
+		assert(memcmp(bytes2.data(), " World", bytes2.size()) == 0);
+	}
+
+	{
+		TRACE("testConcat: construct with addition");
+		const RNS::Bytes bytes(bytes1 + bytes2);
+		//TRACEF("testConcat: bytes: %s", bytes.toString().c_str());
+		assert(bytes.size() == 11);
+		assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
+		assert(memcmp(bytes1.data(), "Hello", bytes1.size()) == 0);
+		assert(memcmp(bytes2.data(), " World", bytes2.size()) == 0);
+	}
+
 }
 
 void testBytes() {
@@ -460,6 +563,8 @@ void testBytes() {
 	testBytesStream();
 	testBytesReserve();
 	testFind();
+	testCompare();
+	testConcat();
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;

@@ -18,14 +18,18 @@ namespace ArduinoJson {
 	template <typename T>
 	struct Converter<std::vector<T>> {
 		static void toJson(const std::vector<T>& src, JsonVariant dst) {
+			TRACE("<<< Serializing vector");
 			JsonArray array = dst.to<JsonArray>();
 			for (T item : src)
 				array.add(item);
+			TRACE("<<< Finished serializing vector");
 		}
 		static std::vector<T> fromJson(JsonVariantConst src) {
+			TRACE("<<< Deserializing vector");
 			std::vector<T> dst;
 			for (T item : src.as<JsonArrayConst>())
 				dst.push_back(item);
+			TRACE("<<< Finished deserializing vector");
 			return dst;
 		}
 		static bool checkJson(JsonVariantConst src) {
@@ -115,6 +119,28 @@ namespace ArduinoJson {
 	};
 
 /*
+	// ArduinoJSON serialization support for RNS::Bytes
+	template <>
+	struct Converter<RNS::Bytes> {
+		static bool toJson(const RNS::Bytes& src, JsonVariant dst) {
+			//TRACE("<<< Serializing Bytes");
+			//TRACE("<<< Finished serializing Bytes");
+			return true;
+		}
+		static RNS::Bytes fromJson(JsonVariantConst src) {
+			Bytes bytes;
+			//TRACE(">>> Deserializing Bytes");
+			//TRACE(">>> Finished deserializing Bytes");
+			return bytes;
+		}
+		static bool checkJson(JsonVariantConst src) {
+			return
+				src.is<RNS::Bytes>();
+		}
+	};
+*/
+
+/*
 	// ArduinoJSON serialization support for RNS::Interface
 	template <>
 	struct Converter<RNS::Interface> {
@@ -190,10 +216,8 @@ namespace ArduinoJson {
 		static RNS::Packet fromJson(JsonVariantConst src) {
 			//TRACE(">>> Deserializing Packet");
 			RNS::Bytes raw = src["raw"];
-			RNS::Packet packet(
-				{RNS::Type::NONE},
-				raw
-			);
+			//RNS::Bytes raw = src["raw"].as<const RNS::Bytes&>();
+			RNS::Packet packet(RNS::Destination(RNS::Type::NONE), raw);
 			//packet.set_hash(src["hash"]);
 			packet.sent_at(src["sent_at"]);
 			RNS::Bytes destination_hash = src["destination_hash"];

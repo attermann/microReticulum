@@ -2,14 +2,15 @@
 
 #include "FileSystem.h"
 
-#include "Interface.h"
-#include "Transport.h"
-#include "Log.h"
-#include "Bytes.h"
-#include "Utilities/OS.h"
-#include "Utilities/Persistence.h"
+#include <Interface.h>
+#include <Transport.h>
+#include <Log.h>
+#include <Bytes.h>
+#include <Utilities/OS.h>
+#include <Utilities/Persistence.h>
 
 //#include <ArduinoJson.h>
+#include <MsgPack.h>
 
 #include <map>
 #include <vector>
@@ -27,12 +28,15 @@ public:
 	virtual ~TestInterface() {}
 
 private:
-	virtual void handle_incoming(const RNS::Bytes& data) {
-		DEBUG("TestInterface.handle_incoming: data: " + data.toHex());
-	}
 	virtual void send_outgoing(const RNS::Bytes& data) {
 		DEBUG("TestInterface.send_outgoing: data: " + data.toHex());
-		InterfaceImpl::send_outgoing(data);
+		// Perform post-send housekeeping
+		InterfaceImpl::handle_outgoing(data);
+	}
+	void on_incoming(const RNS::Bytes& data) {
+		DEBUG("TestInterface.on_incoming: data: " + data.toHex());
+		// Pass received data on to transport
+		InterfaceImpl::handle_incoming(data);
 	}
 
 };
@@ -107,8 +111,12 @@ void testRead() {
 
 #ifdef ARDUINO
 const char test_object_path[] = "/test_object";
+const char test_array_path[] = "/test_array";
+const char test_series_path[] = "/test_series";
 #else
 const char test_object_path[] = "test_object";
+const char test_array_path[] = "test_array";
+const char test_series_path[] = "test_series";
 #endif
 
 /*
@@ -178,7 +186,7 @@ void testSerializeObject() {
 
 	std::vector<std::string> vec({"one", "two"});
 	TestObject test("test", vec);
-	TRACE("serializeObject: test: " + test.toString());
+	TRACE("testSerializeObject: test: " + test.toString());
 
 	StaticJsonDocument<1024> doc;
 	doc = test;
@@ -190,18 +198,18 @@ void testSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACE("serialized " + std::to_string(length) + " bytes");
+	TRACE("testSerializeObject: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			TRACE("wrote: " + std::to_string(data.size()) + " bytes");
+			TRACE("testSerializeObject: wrote: " + std::to_string(data.size()) + " bytes");
 		}
 		else {
-			TRACE("write failed");
+			TRACE("testSerializeObject: write failed");
 			assert(false);
 		}
 	}
 	else {
-		TRACE("failed to serialize");
+		TRACE("testSerializeObject: failed to serialize");
 		assert(false);
 	}
 
@@ -214,7 +222,7 @@ void testDeserializeObject() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
-		TRACE("read: " + std::to_string(data.size()) + " bytes");
+		TRACE("testDeserializeObject: read: " + std::to_string(data.size()) + " bytes");
 		//TRACE("data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -233,7 +241,7 @@ void testDeserializeObject() {
 		//assert(RNS::Utilities::OS::remove_file(test_object_path));
 	}
 	else {
-		TRACE("read failed");
+		TRACE("testDeserializeObject: read failed");
 		assert(false);
 	}
 
@@ -783,6 +791,381 @@ void testSerializeTimeOffset() {
 }
 
 
+class TestOtherObject {
+public:
+    TestOtherObject() {}
+    TestOtherObject(const char* str, std::vector<std::string>& vec) : _str(str), _vec(vec) {}
+	inline bool operator < (const TestOtherObject& test) const { return _str < test._str; }
+	inline const std::string toString() const { return std::string("TestOtherObject(") + _str + "," + std::to_string(_vec.size()) + ")"; }
+    std::string _str;
+    std::vector<std::string> _vec;
+};
+
+struct TestStruct {
+	int foo;
+	int bar;
+};
+
+
+void testJsonMsgpackSerializeObject() {
+
+	std::vector<std::string> vec({"one", "two"});
+	TestObject test("test", vec);
+	TRACE("testJsonMsgpackSerializeObject: test: " + test.toString());
+
+	StaticJsonDocument<1024> doc;
+	doc = test;
+
+	RNS::Bytes data;
+	size_t size = 1024;
+	size_t length = serializeMsgPack(doc, data.writable(size), size);
+	if (length < size) {
+		data.resize(length);
+	}
+	TRACE("testJsonMsgpackSerializeObject: serialized " + std::to_string(length) + " bytes");
+	if (length > 0) {
+		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
+			TRACE("testJsonMsgpackSerializeObject: wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			TRACE("testJsonMsgpackSerializeObject: write failed");
+			assert(false);
+		}
+	}
+	else {
+		TRACE("testJsonMsgpackSerializeObject: failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testJsonMsgpackDeserializeObject() {
+
+	//StaticJsonDocument<8192> doc;
+	DynamicJsonDocument doc(1024);
+
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
+		TRACE("testJsonMsgpackDeserializeObject: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
+		DeserializationError error = deserializeMsgPack(doc, data.data());
+		if (!error) {
+			//JsonObject root = doc.as<JsonObject>();
+			//for (JsonPair kv : root) {
+			//	TRACE("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
+			//}
+			TestObject test = doc.as<TestObject>();
+			TRACE("testJsonMsgpackDeserializeObject: test: " + test.toString());
+		}
+		else {
+			TRACE("testJsonMsgpackDeserializeObject: failed to deserialize");
+			assert(false);
+		}
+		//assert(RNS::Utilities::OS::remove_file(test_object_path));
+	}
+	else {
+		TRACE("testJsonMsgpackDeserializeObject: read failed");
+		assert(false);
+	}
+
+}
+
+void testJsonMsgpackSerializeArray() {
+
+	// NOTE: Following is creating a msgpack that appears in Python like:
+	// [123.456, [102, 105, 114, 115, 116, 171], [115, 101, 99, 111, 110, 100, 205]]
+
+	double time = 123.456;
+	// CBA Need this version writing byte-arrays to match the python version also writing byte-arrays (25 bytes)
+	const RNS::Bytes one("first\xab");
+	const RNS::Bytes two("second\xcd");
+	//TRACEF("testJsonMsgpackSerializeArray: time=%f one=%s two=%s", time, one.toString().c_str(), two.toString().c_str());
+	// CBA This version writing strings exactly matches the python version also writing strings (23 bytes)
+	//const std::string one("first");
+	//const std::string two("second");
+	//TRACEF("testJsonMsgpackSerializeArray: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
+
+	StaticJsonDocument<1024> doc;
+
+	JsonArray array = doc.to<JsonArray>();
+	array.add(time);
+	//array.add(one);
+	//array.add(two);
+	const JsonArray a_one = doc.createNestedArray();
+	for (uint8_t byte : one.collection()) {
+		a_one.add(byte);
+	}
+	const JsonArray a_two = doc.createNestedArray();
+	for (uint8_t byte : two.collection()) {
+		a_two.add(byte);
+	}
+
+	RNS::Bytes data;
+	size_t size = 1024;
+	size_t length = serializeMsgPack(doc, data.writable(size), size);
+	if (length < size) {
+		data.resize(length);
+	}
+	TRACE("testJsonMsgpackSerializeArray: serialized " + std::to_string(length) + " bytes");
+	if (length > 0) {
+		if (RNS::Utilities::OS::write_file(test_array_path, data) == data.size()) {
+			TRACE("testJsonMsgpackSerializeArray: wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			TRACE("testJsonMsgpackSerializeArray: write failed");
+			assert(false);
+		}
+	}
+	else {
+		TRACE("testJsonMsgpackSerializeArray: failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testJsonMsgpackDeserializeArray() {
+
+	StaticJsonDocument<1024> doc;
+
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_array_path, data) > 0) {
+		TRACE("testJsonMsgpackDeserializeArray: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
+		DeserializationError error = deserializeMsgPack(doc, data.data(), data.size());
+		if (!error) {
+			JsonArray array = doc.as<JsonArray>();
+			double time = array[0].as<double>();
+			//std::string one(array[1].as<std::string>());
+			//RNS::Bytes one(array[1].as<RNS::Bytes>());
+			RNS::Bytes one(array[1].as<std::vector<uint8_t>>());
+			//std::string two(array[2].as<std::string>());
+			//RNS::Bytes two(array[2].as<RNS::Bytes>());
+			RNS::Bytes two(array[2].as<std::vector<uint8_t>>());
+			TRACEF("testJsonMsgpackDeserializeArray: time=%f one=%s two=%s", time, one.toString().c_str(), two.toString().c_str());
+			//TRACEF("testJsonMsgpackDeserializeArray: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
+			assert(one == "first\xab");
+			assert(two == "second\xcd");
+		}
+		else {
+			TRACE("testJsonMsgpackDeserializeArray: failed to deserialize");
+			assert(false);
+		}
+		//assert(RNS::Utilities::OS::remove_file(test_array_path));
+	}
+	else {
+		TRACE("testJsonMsgpackDeserializeArray: read failed");
+		assert(false);
+	}
+
+}
+
+
+void testMsgpackSerializeObject() {
+
+	std::vector<std::string> vec({"one", "two"});
+	TestObject test("test", vec);
+	TRACE("testMsgpackSerializeObject: test: " + test.toString());
+
+	StaticJsonDocument<1024> doc;
+	doc = test;
+
+	RNS::Bytes data;
+	size_t size = 1024;
+	size_t length = serializeMsgPack(doc, data.writable(size), size);
+	if (length < size) {
+		data.resize(length);
+	}
+	TRACE("testMsgpackSerializeObject: serialized " + std::to_string(length) + " bytes");
+	if (length > 0) {
+		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
+			TRACE("testMsgpackSerializeObject: wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			TRACE("testMsgpackSerializeObject: write failed");
+			assert(false);
+		}
+	}
+	else {
+		TRACE("testMsgpackSerializeObject: failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testMsgpackDeserializeObject() {
+
+	//StaticJsonDocument<8192> doc;
+	DynamicJsonDocument doc(1024);
+
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
+		TRACE("testMsgpackDeserializeObject: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
+		DeserializationError error = deserializeMsgPack(doc, data.data());
+		if (!error) {
+			//JsonObject root = doc.as<JsonObject>();
+			//for (JsonPair kv : root) {
+			//	TRACE("key: " + std::string(kv.key().c_str()) + " value: " + kv.value().as<const char*>());
+			//}
+			TestObject test = doc.as<TestObject>();
+			TRACE("testMsgpackDeserializeObject: test: " + test.toString());
+		}
+		else {
+			TRACE("testMsgpackDeserializeObject: failed to deserialize");
+			assert(false);
+		}
+		//assert(RNS::Utilities::OS::remove_file(test_object_path));
+	}
+	else {
+		TRACE("testMsgpackDeserializeObject: read failed");
+		assert(false);
+	}
+
+}
+
+void testMsgpackSerializeArray() {
+
+	// NOTE: Following is creating a msgpack that appears in Python like:
+
+	double time = 123.456;
+	// CBA Need this version writing byte-arrays to match the python version also writing byte-arrays (27 bytes)
+	const RNS::Bytes one("first\xab");
+	const RNS::Bytes two("second\xcd");
+	//MsgPack::bin_t<uint8_t> one("first\xab");
+	//MsgPack::bin_t<uint8_t> two("second\xcd");
+	//TRACEF("testMsgpackSerializeArray: time=%f one=%s two=%s", time, one.toString().c_str(), two.toString().c_str());
+	// CBA This version writing strings exactly matches the python version also writing strings (23 bytes)
+	//const std::string one("first");
+	//const std::string two("second");
+	//TRACEF("testMsgpackSerializeArray: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
+
+    MsgPack::Packer packer;
+	//packer.packArraySize(3);
+	//packer.pack(time);
+	//packer.pack(one);
+	//packer.pack(two);
+	packer.to_array(time, one, two);
+	//packer.to_array(time, one.collection(), two.collection());
+	RNS::Bytes data(packer.data(), packer.size());
+
+	TRACE("testMsgpackSerializeArray: serialized " + std::to_string(data.size()) + " bytes");
+	if (packer.size() > 0) {
+		if (RNS::Utilities::OS::write_file(test_array_path, data) == data.size()) {
+			TRACE("testMsgpackSerializeArray: wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			TRACE("testMsgpackSerializeArray: write failed");
+			assert(false);
+		}
+	}
+	else {
+		TRACE("testMsgpackSerializeArray: failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testMsgpackDeserializeArray() {
+
+	StaticJsonDocument<1024> doc;
+
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_array_path, data) > 0) {
+		TRACE("testMsgpackDeserializeArray: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
+		MsgPack::Unpacker unpacker;
+		unpacker.feed(data.data(), data.size());
+		double time;
+		// CBA NOTE: Can't currently deserialize directly into Bytes
+		//RNS::Bytes one;
+		//RNS::Bytes two;
+		//unpacker.from_array(time, one, two);
+		MsgPack::bin_t<uint8_t> bin_one;
+		MsgPack::bin_t<uint8_t> bin_two;
+		unpacker.from_array(time, bin_one, bin_two);
+		RNS::Bytes one(bin_one);
+		RNS::Bytes two(bin_two);
+		TRACEF("testMsgpackDeserializeArray: time=%f one=%s two=%s", time, one.toString().c_str(), two.toString().c_str());
+		//TRACEF("testMsgpackDeserializeArray: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
+		//assert(RNS::Utilities::OS::remove_file(test_array_path));
+		assert(one == "first\xab");
+		assert(two == "second\xcd");
+	}
+	else {
+		TRACE("testMsgpackDeserializeArray: read failed");
+		assert(false);
+	}
+
+}
+
+void testMsgpackSerializeSeries() {
+
+	// NOTE: Following is creating a msgpack that appears in Python like:
+
+	double time = 123.456;
+	// CBA Need this version writing byte-arrays to match the python version also writing byte-arrays (27 bytes)
+	//const RNS::Bytes one("first\xab");
+	//const RNS::Bytes two("second\xcd");
+	//MsgPack::bin_t<uint8_t> one("first\xab");
+	//MsgPack::bin_t<uint8_t> two("second\xcd");
+	//TRACEF("testMsgpackSerializeSeries: time=%f one=%s two=%s", time, one.toString().c_str(), two.toString().c_str());
+	// CBA This version writing strings exactly matches the python version also writing strings (23 bytes)
+	const std::string one("first");
+	const std::string two("second");
+	//TRACEF("testMsgpackSerializeSeries: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
+
+    MsgPack::Packer packer;
+	packer.serialize(time, one, two);
+	//packer.serialize(time, one.collection(), two.collection());
+	RNS::Bytes data(packer.data(), packer.size());
+
+	TRACE("testMsgpackSerializeSeries: serialized " + std::to_string(data.size()) + " bytes");
+	if (packer.size() > 0) {
+		if (RNS::Utilities::OS::write_file(test_series_path, data) == data.size()) {
+			TRACE("testMsgpackSerializeSeries: wrote: " + std::to_string(data.size()) + " bytes");
+		}
+		else {
+			TRACE("testMsgpackSerializeSeries: write failed");
+			assert(false);
+		}
+	}
+	else {
+		TRACE("testMsgpackSerializeSeries: failed to serialize");
+		assert(false);
+	}
+
+}
+
+void testMsgpackDeserializeSeries() {
+
+	StaticJsonDocument<1024> doc;
+
+	RNS::Bytes data;
+	if (RNS::Utilities::OS::read_file(test_series_path, data) > 0) {
+		TRACE("testMsgpackDeserializeSeries: read: " + std::to_string(data.size()) + " bytes");
+		//TRACE("data: " + data.toString());
+		MsgPack::Unpacker unpacker;
+		unpacker.feed(data.data(), data.size());
+		double time;
+		MsgPack::bin_t<uint8_t> bin_one;
+		MsgPack::bin_t<uint8_t> bin_two;
+		unpacker.deserialize(time, bin_one, bin_two);
+		RNS::Bytes one(bin_one);
+		RNS::Bytes two(bin_two);
+		TRACEF("testMsgpackDeserializeSeries: time=%f one=%s two=%s", time, one.toString().c_str(), two.toString().c_str());
+		//TRACEF("testMsgpackDeserializeSeries: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
+		//assert(RNS::Utilities::OS::remove_file(test_series_path));
+		assert(one == "first\xab");
+		assert(two == "second\xcd");
+	}
+	else {
+		TRACE("testMsgpackDeserializeSeries: read failed");
+		assert(false);
+	}
+
+}
+
+
 void testPersistence() {
 	HEAD("Running testPersistence...", RNS::LOG_TRACE);
 
@@ -803,16 +1186,34 @@ void testPersistence() {
 	testDeserializeMap();
 */
 
+/*
 	testSerializeTimeOffset();
 
 	testSerializeDestinationTable();
 	testDeserializeDestinationTable();
 
-	// CBA Following not currently working on native
+	// CBA Following not currently working on native due to incomplete streaming implementation
+#ifdef ARDUINO
 	testPersistenceSerializeDestinationTable();
+#endif
 
-	// CBA Following not currently working on native
+	// CBA Following not currently working on native due to incomplete streaming implementation
+#ifdef ARDUINO
 	testPersistenceDeserializeDestinationTable();
+#endif
+*/
+
+	//testJsonMsgpackSerializeObject();
+	//testJsonMsgpackDeserializeObject();
+	//testJsonMsgpackSerializeArray();
+	//testJsonMsgpackDeserializeArray();
+
+	//testMsgpackSerializeObject();
+	//testMsgpackDeserializeObject();
+	testMsgpackSerializeArray();
+	testMsgpackDeserializeArray();
+	//testMsgpackSerializeSeries();
+	//testMsgpackDeserializeSeries();
 
 	RNS::Utilities::OS::deregister_filesystem();
 

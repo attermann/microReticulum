@@ -17,12 +17,13 @@ namespace RNS { namespace Cryptography {
 	class Ed25519PublicKey {
 
 	public:
+		using Ptr = std::shared_ptr<Ed25519PublicKey>;
+
+	public:
 		Ed25519PublicKey(const Bytes& publicKey) {
 			_publicKey = publicKey;
 		}
 		~Ed25519PublicKey() {}
-
-		using Ptr = std::shared_ptr<Ed25519PublicKey>;
 
 	public:
 		// creates a new instance with specified seed
@@ -46,6 +47,9 @@ namespace RNS { namespace Cryptography {
 	class Ed25519PrivateKey {
 
 	public:
+		using Ptr = std::shared_ptr<Ed25519PrivateKey>;
+
+	public:
 		Ed25519PrivateKey(const Bytes& privateKey) {
 			if (privateKey) {
 				// use specified private key
@@ -59,8 +63,6 @@ namespace RNS { namespace Cryptography {
 			Ed25519::derivePublicKey(_publicKey.writable(32), _privateKey.data());
 		}
 		~Ed25519PrivateKey() {}
-
-		using Ptr = std::shared_ptr<Ed25519PrivateKey>;
 
 	public:
 		// creates a new instance with a random seed

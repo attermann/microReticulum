@@ -21,6 +21,8 @@ namespace RNS { namespace Cryptography {
 	public:
 		static const uint8_t FERNET_OVERHEAD  = 48; // Bytes
 
+		using Ptr = std::shared_ptr<Fernet>;
+
 	public:
 		static inline const Bytes generate_key() { return random(32); }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Identity.h"
 #include "Log.h"
 #include "Bytes.h"
 #include "Type.h"
@@ -33,19 +34,27 @@ namespace RNS {
 		Bytes _raw;
 	};
 
-	class InterfaceImpl {
+	class InterfaceImpl : public std::enable_shared_from_this<InterfaceImpl> {
 
 	protected:
-		InterfaceImpl() { MEM("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
-		InterfaceImpl(const char* name) : _name(name) { MEM("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+		InterfaceImpl() { MEMF("InterfaceImpl object created, this: 0x%X", this); }
+		InterfaceImpl(const char* name) : _name(name) { MEMF("InterfaceImpl object created, this: 0x%X", this); }
 	public:
-		virtual ~InterfaceImpl() { MEM("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+		virtual ~InterfaceImpl() { MEMF("InterfaceImpl object destroyed, this: 0x%X", this); }
 
 	protected:
-		// CBA send data out on interface
-		virtual void send_outgoing(const Bytes& data);
-		// CBA handle data coming in on interface
-		//virtual void handle_incoming(const Bytes& data);
+
+		// CBA Virtual override method for custom interface to send outgoing data
+		virtual void send_outgoing(const Bytes& data) = 0;
+		
+		// CBA Internal method to handle housekeeping for data going out on interface
+		void handle_outgoing(const Bytes& data);
+		// CBA Internal method to handle data coming in on interface and pass on to transport
+		void handle_incoming(const Bytes& data);
+
+		virtual const Bytes get_hash() const {
+			return Identity::full_hash({toString()});
+		}
 
 		virtual inline std::string toString() const { return "Interface[" + _name + "]"; }
 
@@ -67,7 +76,7 @@ namespace RNS {
 		std::list<AnnounceEntry> _announce_queue;
 		bool _is_connected_to_shared_instance = false;
 		bool _is_local_shared_instance = false;
-		Bytes _hash;
+		//Bytes _hash;
 		HInterface _parent_interface;
 		//Transport& _owner;
 
@@ -83,46 +92,49 @@ namespace RNS {
 
 	public:
 		Interface(Type::NoneConstructor none) {
-			MEM("Interface object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object NONE created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		Interface(const Interface& obj) : _impl(obj._impl) {
-			MEM("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());
+		}
+		Interface(std::shared_ptr<InterfaceImpl>& impl) : _impl(impl) {
+			MEMF("Interface object created with shared impl, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		Interface(InterfaceImpl* impl) : _impl(impl) {
-			MEM("Interface object impl created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object created with new impl, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		virtual ~Interface() {
-			MEM("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object destroyed, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 
 		inline Interface& operator = (const Interface& obj) {
 			_impl = obj._impl;
-			MEM("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline Interface& operator = (InterfaceImpl* impl) {
 			_impl.reset(impl);
-			MEM("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline operator bool() const {
-			MEM("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object bool, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != nullptr;
 		}
 		inline bool operator < (const Interface& obj) const {
-			MEM("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() < obj._impl.get();
 		}
 		inline bool operator > (const Interface& obj) const {
-			MEM("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() > obj._impl.get();
 		}
 		inline bool operator == (const Interface& obj) const {
-			MEM("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object ==, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() == obj._impl.get();
 		}
 		inline bool operator != (const Interface& obj) const {
-			MEM("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object !=, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != obj._impl.get();
 		}
 		inline InterfaceImpl* get() {
@@ -133,7 +145,7 @@ namespace RNS {
 		}
 
 	public:
-		inline const Bytes get_hash() const { assert(_impl); return _impl->_hash; }
+		inline const Bytes get_hash() const { assert(_impl); return _impl->get_hash(); }
 		void process_announce_queue();
 
 		// CBA ACCUMULATES
@@ -143,7 +155,7 @@ namespace RNS {
 		inline void send_outgoing(const Bytes& data) { assert(_impl); _impl->send_outgoing(data); }
 	public:
 		//inline void handle_incoming(const Bytes& data) { assert(_impl); _impl->handle_incoming(data); }
-		// CBA handle data coming in on interface
+		// Public method to handle data coming in on interface and pass on to impl
 		void handle_incoming(const Bytes& data);
 
 		// getters/setters

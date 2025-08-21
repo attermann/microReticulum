@@ -1,5 +1,6 @@
 #include "UDPInterface.h"
 
+#include <Transport.h>
 #include "../src/Log.h"
 
 #include <memory>
@@ -224,11 +225,6 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	}
 }
 
-/*virtual*/ void UDPInterface::on_incoming(const Bytes& data) {
-	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
-	//Interface::on_incoming(data);
-}
-
 /*virtual*/ void UDPInterface::send_outgoing(const Bytes& data) {
 	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
@@ -249,11 +245,16 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 #endif
 		}
 
-		//Interface::on_outgoing(data);
-		// CBA Call base method to handle internal housekeeping
-		InterfaceImpl::send_outgoing(data);
+		// Perform post-send housekeeping
+		InterfaceImpl::handle_outgoing(data);
 	}
 	catch (std::exception& e) {
 		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
 	}
+}
+
+void UDPInterface::on_incoming(const Bytes& data) {
+	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
+	// Pass received data on to transport
+	InterfaceImpl::handle_incoming(data);
 }

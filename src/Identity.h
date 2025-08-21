@@ -95,7 +95,7 @@ namespace RNS {
 		bool load(const char* path);
 		bool to_file(const char* path);
 
-		inline const Bytes get_salt() const { assert(_object); return _object->_hash; }
+		inline const Bytes& get_salt() const { assert(_object); return _object->_hash; }
 		inline const Bytes get_context() const { return {Bytes::NONE}; }
 
 		const Bytes encrypt(const Bytes& plaintext) const;

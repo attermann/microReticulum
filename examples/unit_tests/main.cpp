@@ -39,9 +39,12 @@ void setup() {
 
 		TRACE("Running tests...");
 		RNS::LogLevel loglevel = RNS::loglevel();
+#if defined(MEM_LOG)
+		RNS::loglevel(RNS::LOG_MEM);
+#else
 		//RNS::loglevel(RNS::LOG_WARNING);
 		RNS::loglevel(RNS::LOG_TRACE);
-		//RNS::loglevel(RNS::LOG_MEM);
+#endif
 
 		//UNITY_BEGIN();
 
@@ -56,9 +59,10 @@ void setup() {
 		//testReference();
 		//testCrypto();
 		//testBytes();
-		testFileSystem();
+		//testFileSystem();
 		//testPersistence();
-		//testReticulum();
+		testReticulum();
+		//testObjects();
 
 		HEAD("All tests successful!", RNS::LOG_TRACE);
 

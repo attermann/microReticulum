@@ -17,7 +17,9 @@ ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NO
 {
 }
 
-Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
+Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) :
+	_object(new Object(destination, attached_interface))
+{
 
 	if (_object->_destination) {
 		TRACE("Creating packet with destination...");
@@ -48,6 +50,12 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_create_receipt = false;
 	}
 	MEM("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+}
+
+Packet::Packet(const Destination& destination, const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/) :
+	_object(new Object(destination, link))
+{
+	MEM("Packet link object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 
@@ -278,7 +286,9 @@ void Packet::pack() {
 				// Resource proofs are not encrypted
 				_object->_raw << _object->_data;
 			}
+			// CBA LINK
 			else if (_object->_packet_type == PROOF && _object->_destination.type() == Type::Destination::LINK) {
+			//else if (_object->_packet_type == PROOF && _object->_destination_link) {
 				// Packet proofs over links are not encrypted
 				_object->_raw << _object->_data;
 			}
@@ -299,6 +309,9 @@ void Packet::pack() {
 			else {
 				// In all other cases, we encrypt the packet
 				// with the destination's encryption method
+				// CBA LINK
+				// CBA TODO Determine if we need to use link (_destination_link) to encrypt here
+				//          (if not then likely there is no need for the added _destination_link)
 				_object->_raw << _object->_destination.encrypt(_object->_data);
 				_object->_encrypted = true;
 			}
@@ -389,25 +402,24 @@ Sends the packet.
 
 :returns: A :ref:`RNS.PacketReceipt<api-packetreceipt>` instance if *create_receipt* was set to *True* when the packet was instantiated, if not returns *None*. If the packet could not be sent *False* is returned.
 */
-bool Packet::send() {
+PacketReceipt Packet::send() {
 	assert(_object);
 	TRACE("Packet::send: sending packet...");
 	if (_object->_sent) {
         throw std::logic_error("Packet was already sent");
 	}
-// TODO
-/*
-	if (_destination->type == RNS::Destination::LINK) {
-		if (_destination->status == Type::Link::CLOSED) {
+	// CBA LINK
+	if (_object->_destination.type() == Type::Destination::LINK) {
+	//if (_object->_destination_link) {
+		if (_object->_destination.status() == Type::Link::CLOSED) {
             throw std::runtime_error("Attempt to transmit over a closed link");
 		}
 		else {
-			_destination->last_outbound = time();
-			_destination->tx += 1;
-			_destination->txbytes += _data_len;
+			_object->_destination.last_outbound(OS::time());
+			_object->_destination.increment_tx();
+			_object->_destination.increment_txbytes(_object->_data.size());
 		}
 	}
-*/
 
 	if (!_object->_packed) {
 		pack();
@@ -415,15 +427,15 @@ bool Packet::send() {
 
 	if (Transport::outbound(*this)) {
 		TRACE("Packet::send: successfully sent packet!!!");
-		//z return self.receipt
-		// MOCK
-		return true;
+		//p return self.receipt
+		return _object->_receipt;
 	}
 	else {
 		ERROR("No interfaces could process the outbound packet");
 		_object->_sent = false;
-		//z _receipt = None;
-		return false;
+		_object->_receipt = {Type::NONE};
+		//p return False
+		return {Type::NONE};
 	}
 }
 
@@ -634,7 +646,9 @@ std::string Packet::dumpString() const {
 		if (_object->_context == RESOURCE_PRF) {
 			encrypted = false;
 		}
+		// CBA LINK
 		if (_object->_destination && _object->_destination.type() == Type::Destination::LINK) {
+		//if (_object->_destination && _object->_destination_link) {
 			encrypted = false;
 		}
 		break;
@@ -746,6 +760,7 @@ std::string Packet::dumpString() const {
 }
 #endif
 
+
 PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
 
 	if (!packet.destination()) {
@@ -755,8 +770,10 @@ PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
 	_object->_truncated_hash = packet.getTruncatedHash();
 	_object->_destination    = packet.destination();
 
+	// CBA LINK
 	if (packet.destination().type() == Type::Destination::LINK) {
-		// CBA BUG? Destination does not have rtt or traffic_timeout_factor memebers
+	//if (packet.destination().destination_link()) {
+		// CBA BUG? Destination does not have rtt or traffic_timeout_factor members
 		//z _object->_timeout    = packet.destination().rtt() * packet.destination().traffic_timeout_factor();
 		_object->_timeout    = TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
 	}

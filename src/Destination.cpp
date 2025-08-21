@@ -473,3 +473,13 @@ Signs information for ``RNS.Destination.SINGLE`` type destination.
 	}
 	return {Bytes::NONE};
 }
+
+bool Destination::has_link(const Link& link) {
+	assert(_object);
+	return (_object->_links.count(link) > 0);
+}
+
+void Destination::remove_link(const Link& link) {
+	assert(_object);
+	_object->_links.erase(link);
+}
