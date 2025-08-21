@@ -14,7 +14,6 @@
 #endif
 
 using namespace RNS;
-using namespace RNS::Interfaces;
 
 /*
 @staticmethod
@@ -31,11 +30,11 @@ def get_broadcast_for_if(name):
 */
 
 //p def __init__(self, owner, name, device=None, bindip=None, bindport=None, forwardip=None, forwardport=None):
-UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : Interface(name) {
+UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::InterfaceImpl(name) {
 
-	IN(true);
-	OUT(true);
-	bitrate(BITRATE_GUESS);
+	_IN = true;
+	_OUT = true;
+	_bitrate = BITRATE_GUESS;
 
 }
 
@@ -43,8 +42,14 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : Interface(na
 	stop();
 }
 
-bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int port /*= DEFAULT_UDP_PORT*/, const char* local_host /*=nullptr*/) {
-	online(false);
+//bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int port /*= DEFAULT_UDP_PORT*/, const char* local_host /*= nullptr*/) {
+/*virtual*/ bool UDPInterface::start() {
+	const char* wifi_ssid = "wifi_ssid";
+	const char* wifi_password = "wifi_password";
+	int port = DEFAULT_UDP_PORT;
+	const char* local_host = nullptr;
+
+	_online = false;
  
 	if (wifi_ssid != nullptr) {
 		_wifi_ssid = wifi_ssid;
@@ -57,14 +62,15 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	}
 	_local_port = port;
 	_remote_port = port;
-	TRACE("UDPInterface: wifi ssid: " + _wifi_ssid);
-	TRACE("UDPInterface: wifi password: " + _wifi_password);
 	TRACE("UDPInterface: local host: " + _local_host);
 	TRACE("UDPInterface: local port: " + std::to_string(_local_port));
 	TRACE("UDPInterface: remote host: " + _remote_host);
 	TRACE("UDPInterface: remote port: " + std::to_string(_remote_port));
  
 #ifdef ARDUINO
+	TRACE("UDPInterface: wifi ssid: " + _wifi_ssid);
+	TRACE("UDPInterface: wifi password: " + _wifi_password);
+
 	// Connect to the WiFi network
 	WiFi.begin(_wifi_ssid.c_str(), _wifi_password.c_str());
 	Serial.println("");
@@ -174,12 +180,12 @@ bool UDPInterface::start(const char* wifi_ssid, const char* wifi_password, int p
 	}
 #endif
 
-	online(true);
+	_online = true;
 
 	return true;
 }
 
-void UDPInterface::stop() {
+/*virtual*/ void UDPInterface::stop() {
 #ifdef ARDUINO
 #else
 	if (_socket > -1) {
@@ -188,12 +194,12 @@ void UDPInterface::stop() {
 	}
 #endif
 
-	online(false);
+	_online = false;
 }
 
-void UDPInterface::loop() {
+/*virtual*/ void UDPInterface::loop() {
 
-	if (online()) {
+	if (_online) {
 		// Check for incoming packet
 #ifdef ARDUINO
 		udp.parsePacket();
@@ -220,13 +226,13 @@ void UDPInterface::loop() {
 
 /*virtual*/ void UDPInterface::on_incoming(const Bytes& data) {
 	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
-	Interface::on_incoming(data);
+	//Interface::on_incoming(data);
 }
 
-/*virtual*/ void UDPInterface::on_outgoing(const Bytes& data) {
+/*virtual*/ void UDPInterface::send_outgoing(const Bytes& data) {
 	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
 	try {
-		if (online()) {
+		if (_online) {
 			// Send packet
 #ifdef ARDUINO
 			udp.beginPacket(_remote_host.c_str(), _remote_port);
@@ -243,7 +249,9 @@ void UDPInterface::loop() {
 #endif
 		}
 
-		Interface::on_outgoing(data);
+		//Interface::on_outgoing(data);
+		// CBA Call base method to handle internal housekeeping
+		InterfaceImpl::send_outgoing(data);
 	}
 	catch (std::exception& e) {
 		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());

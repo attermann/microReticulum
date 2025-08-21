@@ -1,6 +1,7 @@
 //#define NDEBUG
 
 #include "UDPInterface.h"
+#include "FileSystem.h"
 
 #include "Reticulum.h"
 #include "Identity.h"
@@ -87,10 +88,13 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 
 
 RNS::Reticulum reticulum({RNS::Type::NONE});
+RNS::Interface udp_interface(RNS::Type::NONE);
+RNS::FileSystem test_filesystem(RNS::Type::NONE);
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
 
-RNS::Interfaces::UDPInterface udp_interface("udp");
+UDPInterface* udp_interface_impl = nullptr;
+FileSystem* test_filesystem_impl = nullptr;
 
 //ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
 //RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
@@ -120,12 +124,19 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
+		test_filesystem_impl = new FileSystem();
+		test_filesystem = test_filesystem_impl;
+		((FileSystem*)test_filesystem.get())->init();
+		RNS::Utilities::OS::register_filesystem(test_filesystem);
+
 		HEAD("Registering Interface instances with Transport...", RNS::LOG_TRACE);
+		udp_interface_impl = new UDPInterface();
+		udp_interface = udp_interface_impl;
 		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(udp_interface);
 
 		HEAD("Starting UDPInterface...", RNS::LOG_TRACE);
-		udp_interface.start("wifi_ssid", "wifi_password", 4242);
+		udp_interface_impl->start();
 
 		HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
 		//RNS::Reticulum reticulum;
@@ -216,7 +227,7 @@ void reticulum_setup() {
 void reticulum_teardown() {
 	INFO("Tearing down Reticulum...");
 
-	RNS::Transport::save_path_table();
+	//zzzCBA RNS::Transport::save_path_table();
 
 	try {
 
@@ -282,7 +293,7 @@ void setup() {
 void loop() {
 
 	reticulum.loop();
-	udp_interface.loop();
+	udp_interface_impl->loop();
 
 #ifdef ARDUINO
 /*

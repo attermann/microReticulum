@@ -47,6 +47,8 @@ namespace RNS {
 		// CBA handle data coming in on interface
 		//virtual void handle_incoming(const Bytes& data);
 
+		virtual inline std::string toString() const { return "Interface[" + _name + "]"; }
+
 	protected:
 		Interface* _parent = nullptr;
 		bool _IN  = false;
@@ -172,7 +174,7 @@ namespace RNS {
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }
 		inline HInterface parent_interface() const { assert(_impl); return _impl->_parent_interface; }
 
-		virtual inline std::string toString() const { if (!_impl) return ""; return "Interface[" + _impl->_name + "]"; }
+		virtual inline std::string toString() const { if (!_impl) return ""; return _impl->toString(); }
 
 #ifndef NDEBUG
 		inline std::string debugString() const {
