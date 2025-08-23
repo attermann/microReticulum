@@ -58,10 +58,10 @@ void setup() {
 		// individiual tests
 		//testReference();
 		//testCrypto();
-		//testBytes();
+		testBytes();
 		//testFileSystem();
 		//testPersistence();
-		testReticulum();
+		//testReticulum();
 		//testObjects();
 
 		HEAD("All tests successful!", RNS::LOG_TRACE);

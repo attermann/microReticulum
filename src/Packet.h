@@ -159,7 +159,8 @@ namespace RNS {
 			Type::Transport::types transport_type = Type::Transport::BROADCAST,
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
-			bool create_receipt = true
+			bool create_receipt = true,
+			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
 		);
 		Packet(
 			const Destination& destination,
@@ -169,15 +170,19 @@ namespace RNS {
 			Type::Transport::types transport_type = Type::Transport::BROADCAST,
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
-			bool create_receipt = true
-		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
+			bool create_receipt = true,
+			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
+		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt, context_flag) {}
+		// CBA LINK
+/*
 		Packet(
-			const Destination& destination,
 			const Link& link,
 			const Bytes& data,
 			Type::Packet::types packet_type = Type::Packet::DATA,
-			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE
+			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
+			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
 		);
+*/
 		virtual ~Packet() {
 			MEM("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}			
@@ -242,6 +247,7 @@ namespace RNS {
 		inline const Bytes& transport_id() const { assert(_object); return _object->_transport_id; }
 		inline const Bytes& raw() const { assert(_object); return _object->_raw; }
 		inline const Bytes& data() const { assert(_object); return _object->_data; }
+		// CBA LINK
 		//inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
 		//CBA Following method is only used by Resource to access decrypted resource advertisement form Link. Consider a better way.
 		inline const Bytes& plaintext() { assert(_object); return _object->_plaintext; }
@@ -268,13 +274,14 @@ namespace RNS {
 		class Object {
 		public:
 			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			Object(const Destination& destination, const Link& destination_link) : _destination(destination), _destination_link(destination_link) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			// CBA LINK
+			//Object(const Destination& destination, const Link& destination_link) : _destination(destination), _destination_link(destination_link) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
 			virtual ~Object() { MEM("Packet::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			Destination _destination = {Type::NONE};
 
 			// CBA LINK
-			Link _destination_link = {Type::NONE};
+			//Link _destination_link = {Type::NONE};
 
 			Link _link = {Type::NONE};
 
@@ -286,6 +293,7 @@ namespace RNS {
 			Type::Destination::types _destination_type = Type::Destination::SINGLE;
 			Type::Packet::types _packet_type = Type::Packet::DATA;
 			Type::Packet::context_types _context = Type::Packet::CONTEXT_NONE;
+			uint8_t _context_flag = Type::Packet::FLAG_UNSET;
 
 			uint8_t _flags = 0;
 			uint8_t _hops = 0;
@@ -299,13 +307,15 @@ namespace RNS {
 			bool _cached = false;		// whether packet has been cached
 			PacketReceipt _receipt = {Type::NONE};
 
-			uint16_t _mtu = Type::Reticulum::MTU;
+			uint16_t _MTU = Type::Reticulum::MTU;
 			double _sent_at = 0;
 
 			float _rssi = 0.0;
 			float _snr = 0.0;
+			float _q = 0.0;
 
 			Bytes _packet_hash;
+			Bytes _ratchet_id;
 			Bytes _destination_hash;
 			Bytes _transport_id;
 

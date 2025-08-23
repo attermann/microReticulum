@@ -118,10 +118,24 @@ MEM("Creating from data-move...");
 			return compare(bytes) > 0;
 		}
 
+		inline uint8_t& operator[](size_t index) {
+			if (!_data || index >= _data->size()) {
+				throw std::out_of_range("Index out of bounds");
+			}
+			return (*_data)[index];
+		}
+
+		inline const uint8_t& operator[](size_t index) const {
+			if (!_data || index >= _data->size()) {
+				throw std::out_of_range("Index out of bounds");
+			}
+			return (*_data)[index];
+		}
+
 		inline operator bool() const {
 			return (_data && !_data->empty());
 		}
-		inline operator Data() const {
+		inline operator const Data() const {
 			if (!_data)
 				return Data();
 			return *_data.get();
@@ -338,7 +352,7 @@ MEM("Creating from data-move...");
 
 	};
 
-	// following array function doesn't work without size since it's past as a pointer to the array sizeof() is of the pointer
+	// following array function doesn't work without size since it's passed as a pointer to the array so sizeof() is of the pointer
 	//inline Bytes bytesFromArray(const uint8_t arr[]) { return Bytes(arr, sizeof(arr)); }
 	//inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return Bytes(ptr, len); }
 	inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return {ptr, len}; }

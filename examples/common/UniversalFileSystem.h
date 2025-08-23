@@ -22,17 +22,16 @@ using namespace Adafruit_LittleFS_Namespace;
 #include <unistd.h>
 #endif
 
-class FileSystem : public RNS::FileSystemImpl {
+class UniversalFileSystem : public RNS::FileSystemImpl {
 
 public:
-	FileSystem() {}
-
-	bool init();
+	UniversalFileSystem() {}
 
 public:
 	static void listDir(const char* dir);
 
 public:
+	virtual bool init();
 	virtual bool file_exists(const char* file_path);
 	virtual size_t read_file(const char* file_path, RNS::Bytes& data);
 	virtual size_t write_file(const char* file_path, const RNS::Bytes& data);
@@ -49,15 +48,15 @@ public:
 protected:
 
 #if defined(BOARD_ESP32) || defined(BOARD_NRF52)
-	class FileStreamImpl : public RNS::FileStreamImpl {
+	class UniversalFileStream : public RNS::FileStreamImpl {
 
 	private:
 		std::unique_ptr<File> _file;
 		bool _closed = false;
 
 	public:
-		FileStreamImpl(File* file) : RNS::FileStreamImpl(), _file(file) {}
-		virtual ~FileStreamImpl() { if (!_closed) close(); }
+		UniversalFileStream(File* file) : RNS::FileStreamImpl(), _file(file) {}
+		virtual ~UniversalFileStream() { if (!_closed) close(); }
 
 	public:
 		inline virtual const char* name() { return _file->name(); }
@@ -76,7 +75,7 @@ protected:
 
 	};
 #else
-	class FileStreamImpl : public RNS::FileStreamImpl {
+	class UniversalFileStream : public RNS::FileStreamImpl {
 
 	private:
 		FILE* _file = nullptr;
@@ -85,10 +84,10 @@ protected:
 		char _filename[1024];
 
 	public:
-		FileStreamImpl(FILE* file) : RNS::FileStreamImpl(), _file(file) {
+		UniversalFileStream(FILE* file) : RNS::FileStreamImpl(), _file(file) {
 			_available = size();
 		}
-		virtual ~FileStreamImpl() { if (!_closed) close(); }
+		virtual ~UniversalFileStream() { if (!_closed) close(); }
 
 	public:
 		inline virtual const char* name() {

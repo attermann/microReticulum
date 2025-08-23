@@ -1,49 +1,10 @@
-#include "FileSystem.h"
+#include "UniversalFileSystem.h"
 
 #include <Utilities/OS.h>
 #include <Log.h>
 
-bool FileSystem::init() {
-	TRACE("FileSystem initializing...");
-
 #ifdef ARDUINO
-#ifdef BOARD_ESP32
-	// Setup FileSystem
-	INFO("SPIFFS mounting FileSystem");
-	if (!SPIFFS.begin(true, "")){
-		ERROR("SPIFFS FileSystem mount failed");
-		return false;
-	}
-	uint32_t size = SPIFFS.totalBytes() / (1024 * 1024);
-	Serial.print("size: ");
-	Serial.print(size);
-	Serial.println(" MB");
-	uint32_t used = SPIFFS.usedBytes() / (1024 * 1024);
-	Serial.print("used: ");
-	Serial.print(used);
-	Serial.println(" MB");
-	// ensure FileSystem is writable and format if not
-	RNS::Bytes test("test");
-	if (write_file("/test", test) < 4) {
-		INFO("SPIFFS FileSystem is being formatted, please wait...");
-		SPIFFS.format();
-	}
-	else {
-		remove_file("/test");
-	}
-	DEBUG("SPIFFS FileSystem is ready");
-#elif BOARD_NRF52
-	// Initialize Internal File System
-	INFO("InternalFS mounting FileSystem");
-	InternalFS.begin();
-	INFO("InternalFS FileSystem is ready");
-#endif
-#endif
-	return true;
-}
-
-#ifdef ARDUINO
-void FileSystem::listDir(const char* dir) {
+void UniversalFileSystem::listDir(const char* dir) {
 	Serial.print("DIR: ");
 	Serial.println(dir);
 #ifdef BOARD_ESP32
@@ -87,11 +48,50 @@ void FileSystem::listDir(const char* dir) {
 #endif
 }
 #else
-void FileSystem::listDir(const char* dir) {
+void UniversalFileSystem::listDir(const char* dir) {
 }
 #endif
 
-/*virtual*/ bool FileSystem::file_exists(const char* file_path) {
+/*virtual*/ bool UniversalFileSystem::init() {
+	TRACE("UniversalFileSystem initializing...");
+
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
+	// Setup FileSystem
+	INFO("SPIFFS mounting FileSystem");
+	if (!SPIFFS.begin(true, "")){
+		ERROR("SPIFFS FileSystem mount failed");
+		return false;
+	}
+	uint32_t size = SPIFFS.totalBytes() / (1024 * 1024);
+	Serial.print("size: ");
+	Serial.print(size);
+	Serial.println(" MB");
+	uint32_t used = SPIFFS.usedBytes() / (1024 * 1024);
+	Serial.print("used: ");
+	Serial.print(used);
+	Serial.println(" MB");
+	// ensure FileSystem is writable and format if not
+	RNS::Bytes test("test");
+	if (write_file("/test", test) < 4) {
+		INFO("SPIFFS FileSystem is being formatted, please wait...");
+		SPIFFS.format();
+	}
+	else {
+		remove_file("/test");
+	}
+	DEBUG("SPIFFS FileSystem is ready");
+#elif BOARD_NRF52
+	// Initialize Internal File System
+	INFO("InternalFS mounting FileSystem");
+	InternalFS.begin();
+	INFO("InternalFS FileSystem is ready");
+#endif
+#endif
+	return true;
+}
+
+/*virtual*/ bool UniversalFileSystem::file_exists(const char* file_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	File file = SPIFFS.open(file_path, FILE_READ);
@@ -126,7 +126,7 @@ void FileSystem::listDir(const char* dir) {
 	}
 }
 
-/*virtual*/ size_t FileSystem::read_file(const char* file_path, RNS::Bytes& data) {
+/*virtual*/ size_t UniversalFileSystem::read_file(const char* file_path, RNS::Bytes& data) {
 	size_t read = 0;
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -178,7 +178,7 @@ void FileSystem::listDir(const char* dir) {
     return read;
 }
 
-/*virtual*/ size_t FileSystem::write_file(const char* file_path, const RNS::Bytes& data) {
+/*virtual*/ size_t UniversalFileSystem::write_file(const char* file_path, const RNS::Bytes& data) {
 	// CBA TODO Replace remove with working truncation
 	remove_file(file_path);
     size_t wrote = 0;
@@ -223,7 +223,7 @@ void FileSystem::listDir(const char* dir) {
     return wrote;
 }
 
-/*virtual*/ RNS::FileStream FileSystem::open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+/*virtual*/ RNS::FileStream UniversalFileSystem::open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
 	TRACEF("open_file: opening file %s", file_path);
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -251,7 +251,7 @@ void FileSystem::listDir(const char* dir) {
 		return {RNS::Type::NONE};
 	}
 	TRACEF("open_file: successfully opened file %s", file_path);
-	return RNS::FileStream(new FileStreamImpl(file));
+	return RNS::FileStream(new UniversalFileStream(file));
 #elif BOARD_NRF52
 	//File file = File(InternalFS);
 	File* file = new File(InternalFS);
@@ -285,7 +285,7 @@ void FileSystem::listDir(const char* dir) {
 	//	file->truncate(0);
 	//}
 	TRACEF("open_file: successfully opened file %s", file_path);
-	return RNS::FileStream(new FileStreamImpl(file));
+	return RNS::FileStream(new UniversalFileStream(file));
 #else
 	#warning("unsuppoprted");
 	return RNS::FileStream(RNS::Type::NONE);
@@ -313,11 +313,11 @@ void FileSystem::listDir(const char* dir) {
 		return {RNS::Type::NONE};
 	}
 	TRACEF("open_file: successfully opened file %s", file_path);
-	return RNS::FileStream(new FileStreamImpl(file));
+	return RNS::FileStream(new UniversalFileStream(file));
 #endif
 }
 
-/*virtual*/ bool FileSystem::remove_file(const char* file_path) {
+/*virtual*/ bool UniversalFileSystem::remove_file(const char* file_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	return SPIFFS.remove(file_path);
@@ -332,7 +332,7 @@ void FileSystem::listDir(const char* dir) {
 #endif
 }
 
-/*virtual*/ bool FileSystem::rename_file(const char* from_file_path, const char* to_file_path) {
+/*virtual*/ bool UniversalFileSystem::rename_file(const char* from_file_path, const char* to_file_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	return SPIFFS.rename(from_file_path, to_file_path);
@@ -347,7 +347,7 @@ void FileSystem::listDir(const char* dir) {
 #endif
 }
 
-/*virtua*/ bool FileSystem::directory_exists(const char* directory_path) {
+/*virtua*/ bool UniversalFileSystem::directory_exists(const char* directory_path) {
 	TRACE("directory_exists: checking for existence of directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -378,7 +378,7 @@ void FileSystem::listDir(const char* dir) {
 #endif
 }
 
-/*virtual*/ bool FileSystem::create_directory(const char* directory_path) {
+/*virtual*/ bool UniversalFileSystem::create_directory(const char* directory_path) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	if (!SPIFFS.mkdir(directory_path)) {
@@ -405,7 +405,7 @@ void FileSystem::listDir(const char* dir) {
 #endif
 }
 
-/*virtua*/ bool FileSystem::remove_directory(const char* directory_path) {
+/*virtua*/ bool UniversalFileSystem::remove_directory(const char* directory_path) {
 	TRACE("remove_directory: removing directory " + std::string(directory_path));
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -430,7 +430,7 @@ void FileSystem::listDir(const char* dir) {
 #endif
 }
 
-/*virtua*/ std::list<std::string> FileSystem::list_directory(const char* directory_path) {
+/*virtua*/ std::list<std::string> UniversalFileSystem::list_directory(const char* directory_path) {
 	TRACE("list_directory: listing directory " + std::string(directory_path));
 	std::list<std::string> files;
 #ifdef ARDUINO
@@ -467,11 +467,11 @@ void FileSystem::listDir(const char* dir) {
 
 #ifdef BOARD_ESP32
 
-/*virtual*/ size_t FileSystem::storage_size() {
+/*virtual*/ size_t UniversalFileSystem::storage_size() {
 	return SPIFFS.totalBytes();
 }
 
-/*virtual*/ size_t FileSystem::storage_available() {
+/*virtual*/ size_t UniversalFileSystem::storage_available() {
 	return (SPIFFS.totalBytes() - SPIFFS.usedBytes());
 }
 
@@ -500,12 +500,12 @@ static int usedBytes() {
 	return config->block_size * usedBlockCount;
 }
 
-/*virtual*/ size_t FileSystem::storage_size() {
+/*virtual*/ size_t UniversalFileSystem::storage_size() {
 	//return totalBytes();
 	return InternalFS.totalBytes();
 }
 
-/*virtual*/ size_t FileSystem::storage_available() {
+/*virtual*/ size_t UniversalFileSystem::storage_available() {
 	//return (totalBytes() - usedBytes());
 	return (InternalFS.totalBytes() - InternalFS.usedBytes());
 }
@@ -514,11 +514,11 @@ static int usedBytes() {
 
 #else
 
-/*virtual*/ size_t FileSystem::storage_size() {
+/*virtual*/ size_t UniversalFileSystem::storage_size() {
 	return 0;
 }
 
-/*virtual*/ size_t FileSystem::storage_available() {
+/*virtual*/ size_t UniversalFileSystem::storage_available() {
 	return 0;
 }
 

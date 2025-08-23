@@ -8,7 +8,7 @@
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/HKDF.h"
-#include "Cryptography/Fernet.h"
+#include "Cryptography/Token.h"
 #include "Cryptography/Random.h"
 
 #include <algorithm>
@@ -513,17 +513,17 @@ const Bytes Identity::encrypt(const Bytes& plaintext) const {
 	TRACE("Identity::encrypt: shared key:           " + shared_key.toHex());
 
 	Bytes derived_key = Cryptography::hkdf(
-		32,
+		DERIVED_KEY_LENGTH,
 		shared_key,
 		get_salt(),
 		get_context()
 	);
 	TRACE("Identity::encrypt: derived key:          " + derived_key.toHex());
 
-	Cryptography::Fernet fernet(derived_key);
-	TRACE("Identity::encrypt: Fernet encrypting data of length " + std::to_string(plaintext.size()));
+	Cryptography::Token token(derived_key);
+	TRACE("Identity::encrypt: Token encrypting data of length " + std::to_string(plaintext.size()));
 	TRACE("Identity::encrypt: plaintext:  " + plaintext.toHex());
-	Bytes ciphertext = fernet.encrypt(plaintext);
+	Bytes ciphertext = token.encrypt(plaintext);
 	TRACE("Identity::encrypt: ciphertext: " + ciphertext.toHex());
 
 	return ephemeral_pub_bytes + ciphertext;
@@ -561,21 +561,21 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		TRACE("Identity::decrypt: shared key:           " + shared_key.toHex());
 
 		Bytes derived_key = Cryptography::hkdf(
-			32,
+			DERIVED_KEY_LENGTH,
 			shared_key,
 			get_salt(),
 			get_context()
 		);
 		TRACE("Identity::decrypt: derived key:          " + derived_key.toHex());
 
-		Cryptography::Fernet fernet(derived_key);
+		Cryptography::Token token(derived_key);
 		//ciphertext = ciphertext_token[Identity.KEYSIZE//8//2:]
 		Bytes ciphertext(ciphertext_token.mid(Type::Identity::KEYSIZE/8/2));
-		TRACE("Identity::decrypt: Fernet decrypting data of length " + std::to_string(ciphertext.size()));
+		TRACE("Identity::decrypt: Token decrypting data of length " + std::to_string(ciphertext.size()));
 		TRACE("Identity::decrypt: ciphertext: " + ciphertext.toHex());
-		plaintext = fernet.decrypt(ciphertext);
+		plaintext = token.decrypt(ciphertext);
 		TRACE("Identity::decrypt: plaintext:  " + plaintext.toHex());
-		//TRACE("Identity::decrypt: Fernet decrypted data of length " + std::to_string(plaintext.size()));
+		//TRACE("Identity::decrypt: Token decrypted data of length " + std::to_string(plaintext.size()));
 	}
 	catch (std::exception& e) {
 		DEBUG("Decryption by " + toString() + " failed: " + e.what());

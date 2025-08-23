@@ -10,7 +10,7 @@
 #include "Destination.h"
 #include "Bytes.h"
 #include "Type.h"
-#include "Cryptography/Fernet.h"
+#include "Cryptography/Token.h"
 
 #include <set>
 
@@ -18,8 +18,12 @@ namespace RNS {
 
 	class LinkData {
 	public:
-		LinkData(const Destination& destination) : _destination(destination) {}
-		virtual ~LinkData() {}
+		LinkData(const Destination& destination) : _destination(destination) {
+			MEM("LinkData object copy created");
+		}
+		virtual ~LinkData() {
+			MEM("LinkData object destroyed");
+		}
 	private:
 		Destination _destination;
 
@@ -30,7 +34,10 @@ namespace RNS {
 		Bytes _hash;
 		Type::Link::status _status = Type::Link::PENDING;
 
+		RNS::Type::Link::link_mode _mode = Link::MODE_DEFAULT;
 		double _rtt = 0.0;
+		uint16_t _mtu = RNS::Type::Reticulum::MTU;
+		uint16_t _mdu = 0;
 		uint16_t _establishment_cost = 0;
 		Link::Callbacks _callbacks;
 		Type::Link::resource_strategy _resource_strategy = Type::Link::ACCEPT_NONE;
@@ -63,9 +70,10 @@ namespace RNS {
 		Packet _packet = {Type::NONE};
 		double _request_time = 0.0;
 		float _establishment_rate = 0.0;
+        float _expected_rate = 0.0;
 		Type::Link::teardown_reason _teardown_reason = Type::Link::TEARDOWN_NONE;
 
-		Cryptography::Fernet::Ptr _fernet;
+		Cryptography::Token::Ptr _token;
 
 		Cryptography::X25519PrivateKey::Ptr _prv;
 		Bytes _prv_bytes;

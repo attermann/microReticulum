@@ -87,7 +87,7 @@ namespace RNS {
 		// getters
 		const Bytes& hash() const;
 		const Bytes& request_id() const;
-		const size_t response_transfer_size() const;
+		size_t response_transfer_size() const;
 
 		// setters
 		void response_size(size_t size);
@@ -112,8 +112,8 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			using established = void(*)(const Link& link);
-			using closed = void(*)(const Link& link);
+			using established = void(*)(Link& link);
+			using closed = void(*)(Link& link);
 			using packet = void(*)(const Bytes& plaintext, const Packet& packet);
 			using remote_identified = void(*)(const Link& link, const Identity& remote_identity);
 			using resource = void(*)(const ResourceAdvertisement& resource_advertisement);
@@ -132,6 +132,8 @@ namespace RNS {
 
 	public:
 		static uint8_t resource_strategies;
+		static std::set<RNS::Type::Link::link_mode> ENABLED_MODES;
+		static RNS::Type::Link::link_mode MODE_DEFAULT;
 
 	public:
 		Link(Type::NoneConstructor none) {
@@ -140,8 +142,8 @@ namespace RNS {
 		Link(const Link& link) : _object(link._object) {
 			MEM("Link object copy created");
 		}
-		Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE});
-		//Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE});
+		Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE}, RNS::Type::Link::link_mode mode = MODE_DEFAULT);
+		//Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE}, RNS::Type::Link::link_mode mode = MODE_DEFAULT);
 		virtual ~Link(){
 			MEM("Link object destroyed");
 		}
@@ -158,7 +160,16 @@ namespace RNS {
 		}
 
 	public:
+		static Bytes signalling_bytes(uint16_t mtu, RNS::Type::Link::link_mode mode);
+		static uint16_t mtu_from_lr_packet(const Packet& packet);
+		static uint16_t mtu_from_lp_packet(const Packet& packet);
+		static uint8_t mode_byte(RNS::Type::Link::link_mode mode);
+		static RNS::Type::Link::link_mode mode_from_lr_packet(const Packet& packet);
+		static RNS::Type::Link::link_mode mode_from_lp_packet(const Packet& packet);
+		static Bytes link_id_from_lr_packet(const Packet& packet);
 		static Link validate_request( const Destination& owner, const Bytes& data, const Packet& packet);
+
+	public:
 		void load_peer(const Bytes& peer_pub_bytes, const Bytes& peer_sig_pub_bytes);
 		void set_link_id(const Packet& packet);
 		void handshake();
@@ -167,10 +178,16 @@ namespace RNS {
 		void validate_proof(const Packet& packet);
 		void identify(const Identity& identity);
 		const RequestReceipt request(const Bytes& path, const Bytes& data = {Bytes::NONE}, RequestReceipt::Callbacks::response response_callback = nullptr, RequestReceipt::Callbacks::failed failed_callback = nullptr, RequestReceipt::Callbacks::progress progress_callback = nullptr, double timeout = 0.0);
+		void update_mdu();
 		void rtt_packet(const Packet& packet);
 		float get_establishment_rate();
+		uint16_t get_mtu();
+		uint16_t get_mdu();
+		float get_expected_rate();
+		RNS::Type::Link::link_mode get_mode();
 		const Bytes& get_salt();
 		const Bytes get_context();
+		double get_age();
 		double no_inbound_for();
 		double no_outbound_for();
 		double no_data_for();
@@ -214,15 +231,20 @@ namespace RNS {
 
 		// getters
 		const Destination& destination() const;
+		// CBA LINK
+		const Destination& link_destination() const;
 		const Interface& attached_interface() const;
 		const Bytes& link_id() const;
 		const Bytes& hash() const;
+		uint16_t mtu() const;
 		Type::Link::status status() const;
 		double establishment_timeout() const;
 		uint16_t establishment_cost() const;
 		double request_time() const;
 		double last_inbound() const;
 		std::set<RequestReceipt>& pending_requests() const;
+		Type::Link::teardown_reason teardown_reason() const;
+		bool initiator() const;
 
 		// setters
 		void destination(const Destination& destination);
@@ -231,6 +253,7 @@ namespace RNS {
 		void establishment_cost(uint16_t cost);
 		void request_time(double time);
 		void last_inbound(double time);
+		void status(Type::Link::status status);
 
 	protected:
 		std::shared_ptr<LinkData> _object;

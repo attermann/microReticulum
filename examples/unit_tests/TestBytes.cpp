@@ -150,6 +150,19 @@ void testBytesMain() {
 		assert(memcmp(shrink.data(), "Hello", shrink.size()) == 0);
 	}
 
+	// test trim
+	HEAD("TestBytes: trim", RNS::LOG_TRACE);
+	{
+		RNS::Bytes bytes("Hello World");
+		TRACE("orig: " + bytes.toString());
+		assert(bytes.size() == 11);
+		assert(memcmp(bytes.data(), "Hello World", bytes.size()) == 0);
+		bytes = bytes.left(5);
+		TRACE("trim: " + bytes.toString());
+		assert(bytes.size() == 5);
+		assert(memcmp(bytes.data(), "Hello", bytes.size()) == 0);
+	}
+
 	// test creating bytes from default
 	{
 		RNS::Bytes bytes;
@@ -548,6 +561,17 @@ void testConcat() {
 
 }
 
+void testIndex() {
+	HEAD("testConcat:", RNS::LOG_TRACE);
+
+	const RNS::Bytes bytes("Hello");
+	assert(bytes[0] == 'H');
+	assert(bytes[1] == 'e');
+	assert(bytes[2] == 'l');
+	assert(bytes[3] == 'l');
+	assert(bytes[4] == '0');
+}
+
 void testBytes() {
 	HEAD("Running testBytes...", RNS::LOG_TRACE);
 
@@ -565,6 +589,7 @@ void testBytes() {
 	testFind();
 	testCompare();
 	testConcat();
+	testIndex();
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;

@@ -36,6 +36,8 @@ namespace RNS {
 		static const Reticulum& _instance;
 
 		static bool __transport_enabled;
+        static bool __link_mtu_discovery;
+        static bool __remote_management_enabled;
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
@@ -111,6 +113,31 @@ namespace RNS {
 		*/
 		inline static bool transport_enabled() { return __transport_enabled; }
 		inline static void transport_enabled(bool transport_enabled) { __transport_enabled = transport_enabled; }
+
+		/*
+		Returns whether link MTU discovery is enabled for the running
+		instance.
+
+		When link MTU discovery is enabled, Reticulum will
+		automatically upgrade link MTUs to the highest supported
+		value, increasing transfer speed and efficiency.
+
+		:returns: True if link MTU discovery is enabled, False if not.
+		*/
+		inline static bool link_mtu_discovery() { return __link_mtu_discovery; }
+		inline static void link_mtu_discovery(bool link_mtu_discovery) { __link_mtu_discovery = link_mtu_discovery; }
+
+		/*
+		Returns whether remote management is enabled for the
+		running instance.
+
+		When remote management is enabled, authenticated peers
+		can remotely query and manage this instance.
+
+		:returns: True if remote management is enabled, False if not.
+		*/
+		inline static bool remote_management_enabled() { return __remote_management_enabled; }
+		inline static void remote_management_enabled(bool remote_management_enabled) { __remote_management_enabled = remote_management_enabled; }
 
 		inline static bool probe_destination_enabled() { return __allow_probes; }
 		inline static void probe_destination_enabled(bool allow_probes) { __allow_probes = allow_probes; }

@@ -58,7 +58,7 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			using link_established = void(*)(const Link& link);
+			using link_established = void(*)(Link& link);
 			//using packet = void(*)(uint8_t* data, uint16_t data_len, Packet *packet);
 			using packet = void(*)(const Bytes& data, const Packet& packet);
 			using proof_requested = bool(*)(const Packet& packet);
@@ -237,7 +237,8 @@ namespace RNS {
 			//z _callback = None
 			//z _proofcallback = None
 
-			// CBA _link_id is expected by packet but only present in Link
+			// CBA LINK
+			// CBA _link_id is expected by Packet but only present in Link
 			// CBA TODO determine if Link needs to inherit from Destination or vice-versa
 			Bytes _link_id;
 

@@ -44,7 +44,6 @@ protected:
 	void on_incoming(const RNS::Bytes& data);
 
 private:
-	const uint16_t HW_MTU = 1064;
 	//uint8_t buffer[Type::Reticulum::MTU] = {0};
 	RNS::Bytes _buffer;
 

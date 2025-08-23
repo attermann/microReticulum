@@ -17,7 +17,7 @@ ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NO
 {
 }
 
-Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) :
+Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, context_flag context_flag /*= FLAG_UNSET*/) :
 	_object(new Object(destination, attached_interface))
 {
 
@@ -33,6 +33,8 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_packet_type = packet_type;
 		_object->_transport_type = transport_type;
 		_object->_context = context;
+        _object->_context_flag = context_flag;
+
 		_object->_transport_id = transport_id;
 		_object->_data = data;
 		if (_object->_data.size() > MDU) {
@@ -40,6 +42,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 			_object->_data.resize(MDU);
 		}
 		_object->_flags = get_packed_flags();
+
 		_object->_create_receipt = create_receipt;
 	}
 	else {
@@ -49,14 +52,32 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_fromPacked = true;
 		_object->_create_receipt = false;
 	}
+
+	/*p TODO
+	if destination and destination.type == RNS.Destination.LINK:
+		self.MTU     = destination.mtu
+	else:
+		self.MTU     = RNS.Reticulum.MTU
+	*/
+	// CBA LINK
+	if (_object->_destination && _object->_destination.type() == Type::Destination::LINK) {
+		// CBA TODO: Determine if this should actually be calling Link::mtu() !!!
+		_object->_MTU = _object->_destination.mtu();
+	}
+
 	MEM("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
-Packet::Packet(const Destination& destination, const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/) :
-	_object(new Object(destination, link))
+// CBA LINK
+//Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/, context_flag context_flag /*= FLAG_UNSET*/) :
+/*
+	_object(new Object(link.destination(), link))
 {
+	TRACE("Creating packet with link...");
+	_object->_MTU = link.mtu();
 	MEM("Packet link object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
+*/
 
 
 uint8_t Packet::get_packed_flags() {
@@ -287,6 +308,7 @@ void Packet::pack() {
 				_object->_raw << _object->_data;
 			}
 			// CBA LINK
+            //p elif self.packet_type == Packet.PROOF and self.destination.type == RNS.Destination.LINK:
 			else if (_object->_packet_type == PROOF && _object->_destination.type() == Type::Destination::LINK) {
 			//else if (_object->_packet_type == PROOF && _object->_destination_link) {
 				// Packet proofs over links are not encrypted
@@ -336,8 +358,8 @@ void Packet::pack() {
 		}
 	}
 
-	if (_object->_raw.size() > _object->_mtu) {
-		throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " exceeds MTU of " + std::to_string(_object->_mtu) +" bytes");
+	if (_object->_raw.size() > _object->_MTU) {
+		throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " exceeds MTU of " + std::to_string(_object->_MTU) +" bytes");
 	}
 
 	_object->_packed = true;
@@ -534,11 +556,11 @@ const Bytes Packet::get_hashable_part() const {
 	Bytes hashable_part;
 	hashable_part << (uint8_t)(_object->_raw.data()[0] & 0b00001111);
 	if (_object->_header_type == HEADER_2) {
-		//hashable_part += self.raw[(RNS.Identity.TRUNCATED_HASHLENGTH//8)+2:]
+		//p hashable_part += self.raw[(RNS.Identity.TRUNCATED_HASHLENGTH//8)+2:]
 		hashable_part << _object->_raw.mid((Type::Identity::TRUNCATED_HASHLENGTH/8)+2);
 	}
 	else {
-		//hashable_part += self.raw[2:];
+		//p hashable_part += self.raw[2:];
 		hashable_part << _object->_raw.mid(2);
 	}
 	return hashable_part;

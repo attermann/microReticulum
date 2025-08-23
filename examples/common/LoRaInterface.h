@@ -32,9 +32,9 @@ public:
 	LoRaInterface(const char* name = "LoRaInterface");
 	virtual ~LoRaInterface();
 
-	bool start();
-	void stop();
-	void loop();
+	virtual bool start();
+	virtual void stop();
+	virtual void loop();
 
 	//virtual inline std::string toString() const { return "LoRaInterface[" + name() + "]"; }
 
@@ -43,7 +43,6 @@ private:
 	void on_incoming(const RNS::Bytes& data);
 
 private:
-	const uint16_t HW_MTU = 508;
 	//uint8_t buffer[Type::Reticulum::MTU] = {0};
 	const uint8_t message_count = 0;
 	RNS::Bytes buffer;

@@ -70,7 +70,15 @@ namespace RNS { namespace Utilities {
 		//static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 		static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 
-#if defined(RNS_USE_ALLOCATOR)
+		static inline uint64_t from_bytes_big_endian(const uint8_t* data, size_t len) {
+			uint64_t result = 0;
+			for (size_t i = 0; i < len; ++i) {
+				result = (result << 8) | data[i];
+			}
+			return result;
+		}
+
+		#if defined(RNS_USE_ALLOCATOR)
 		static void dump_allocator_stats();
 #endif
 

@@ -23,6 +23,8 @@ using namespace RNS::Utilities;
 /*static*/ const Reticulum& Reticulum::_instance = {Type::NONE};
 
 /*static*/ bool Reticulum::__transport_enabled = false;
+/*static*/ bool Reticulum::__link_mtu_discovery = RNS::Type::Reticulum::LINK_MTU_DISCOVERY;
+/*static*/ bool Reticulum::__remote_management_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
 /*static*/ bool Reticulum::panic_on_interface_error = false;

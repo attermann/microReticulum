@@ -9,7 +9,7 @@
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/HKDF.h"
-#include "Cryptography/Fernet.h"
+#include "Cryptography/Token.h"
 #include "Cryptography/Random.h"
 
 #define MSGPACK_DEBUGLOG_ENABLE 0
@@ -24,12 +24,16 @@ using namespace RNS::Utilities;
 
 /*static*/ uint8_t Link::resource_strategies = ACCEPT_NONE | ACCEPT_APP | ACCEPT_ALL;
 
-Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::established established_callback /*= nullptr*/, Callbacks::closed closed_callback /*= nullptr*/, const Destination& owner /*= {Type::NONE}*/, const Bytes& peer_pub_bytes /*= {Bytes::NONE}*/, const Bytes& peer_sig_pub_bytes /*= {Bytes::NONE}*/) :
+/*static*/ std::set<link_mode> Link::ENABLED_MODES = {MODE_AES256_CBC};
+/*static*/ link_mode Link::MODE_DEFAULT = MODE_AES256_CBC;
+
+Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::established established_callback /*= nullptr*/, Callbacks::closed closed_callback /*= nullptr*/, const Destination& owner /*= {Type::NONE}*/, const Bytes& peer_pub_bytes /*= {Bytes::NONE}*/, const Bytes& peer_sig_pub_bytes /*= {Bytes::NONE}*/, link_mode mode /*= MODE_DEFAULT*/) :
 	_object(new LinkData(destination))
 {
 	assert(_object);
 
 	_object->_owner = owner;
+	_object->_mode = mode;
 
 	if (destination && destination.type() != Type::Destination::SINGLE) {
 		throw std::logic_error("Links can only be established to the \"single\" destination type");
@@ -76,7 +80,18 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	}
 
 	if (_object->_initiator) {
-		_object->_request_data = _object->_pub_bytes + _object->_sig_pub_bytes;
+		Bytes signalling_bytes;
+		uint16_t nh_hw_mtu = Transport::next_hop_interface_hw_mtu(destination.hash());
+		if (RNS::Reticulum::link_mtu_discovery() && nh_hw_mtu) {
+			signalling_bytes = Link::signalling_bytes(nh_hw_mtu, _object->_mode);
+			DEBUGF("Signalling link MTU of %d for link", nh_hw_mtu);
+		}
+		else {
+			signalling_bytes = Link::signalling_bytes(RNS::Type::Reticulum::MTU, _object->_mode);
+		}
+		TRACEF("Establishing link with mode %d", _object->_mode);
+        //p self.request_data = self.pub_bytes+self.sig_pub_bytes+signalling_bytes
+		_object->_request_data = _object->_pub_bytes + _object->_sig_pub_bytes + signalling_bytes;
 		_object->_packet = Packet(destination, _object->_request_data, RNS::Type::Packet::LINKREQUEST);
 		_object->_packet.pack();
 		_object->_establishment_cost += _object->_packet.raw().size();
@@ -97,6 +112,65 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	MEM("Link object created");
 }
 
+
+/*static*/ Bytes Link::signalling_bytes(uint16_t mtu, link_mode mode) {
+	//p if not mode in Link.ENABLED_MODES: raise TypeError(f"Requested link mode {Link.MODE_DESCRIPTIONS[mode]} not enabled")
+	//if (!(mode & ENABLED_MODES)) throw std::runtime_error("Requested link mode "+std::to_string(mode)+" not enabled");
+	if (Link::ENABLED_MODES.find(mode) == Link::ENABLED_MODES.end()) throw std::runtime_error("Requested link mode "+std::to_string(mode)+" not enabled");
+	//p signalling_value = (mtu & Link.MTU_BYTEMASK)+(((mode<<5) & Link.MODE_BYTEMASK)<<16)
+	//p return struct.pack(">I", signalling_value)[1:]
+	uint32_t signalling_value = htonl((mtu & MTU_BYTEMASK)+(((mode<<5) & MODE_BYTEMASK)<<16));
+	Bytes data(((uint8_t*)&signalling_value)+1, 3);
+	return data;
+}
+
+/*static*/ uint16_t Link::mtu_from_lr_packet(const Packet& packet) {
+	if (packet.data().size() == ECPUBSIZE+LINK_MTU_SIZE) {
+		return (packet.data()[ECPUBSIZE] << 16) + (packet.data()[ECPUBSIZE+1] << 8) + (packet.data()[ECPUBSIZE+2]) & MTU_BYTEMASK;
+	}
+	return 0;
+}
+
+/*static*/ uint16_t Link::mtu_from_lp_packet(const Packet& packet) {
+	//p if len(packet.data) == RNS.Identity.SIGLENGTH//8+Link.ECPUBSIZE//2+Link.LINK_MTU_SIZE:
+	if (packet.data().size() == RNS::Type::Identity::SIGLENGTH/8+ECPUBSIZE/2+LINK_MTU_SIZE) {
+		Bytes mtu_bytes = packet.data().mid(RNS::Type::Identity::SIGLENGTH/8+ECPUBSIZE/2, LINK_MTU_SIZE);
+		return (mtu_bytes[0] << 16) + (mtu_bytes[1] << 8) + (mtu_bytes[2]) & MTU_BYTEMASK;
+	}
+	return 0;
+}
+
+/*static*/ uint8_t Link::mode_byte(link_mode mode) {
+	//p if mode in Link.ENABLED_MODES: return (mode << 5) & Link.MODE_BYTEMASK
+	if (Link::ENABLED_MODES.find(mode) != Link::ENABLED_MODES.end()) return (mode << 5) & MODE_BYTEMASK;
+	throw std::runtime_error("Requested link mode {mode} not enabled");
+}
+
+/*static*/ link_mode Link::mode_from_lr_packet(const Packet& packet) {
+	if (packet.data().size() > ECPUBSIZE) {
+		link_mode mode = static_cast<link_mode>((packet.data()[ECPUBSIZE] & MODE_BYTEMASK) >> 5);
+		return mode;
+	}
+	return Link::MODE_DEFAULT;
+}
+
+/*static*/ link_mode Link::mode_from_lp_packet(const Packet& packet) {
+	if (packet.data().size() > RNS::Type::Identity::SIGLENGTH/8+ECPUBSIZE/2) {
+		link_mode mode = static_cast<link_mode>(packet.data()[RNS::Type::Identity::SIGLENGTH/8+ECPUBSIZE/2] >> 5);
+		return mode;
+	}
+	return Link::MODE_DEFAULT;
+}
+
+/*static*/ Bytes Link::link_id_from_lr_packet(const Packet& packet) {
+	Bytes hashable_part = packet.get_hashable_part();
+	if (packet.data().size() > ECPUBSIZE) {
+		size_t diff = packet.data().size() - ECPUBSIZE;
+		//p hashable_part = hashable_part[:-diff]
+		hashable_part = hashable_part.left(hashable_part.size() - diff);
+	}
+	return RNS::Identity::truncated_hash(hashable_part);
+}
 
 /*static*/ Link Link::validate_request( const Destination& owner, const Bytes& data, const Packet& packet) {
 	if (data.size() == ECPUBSIZE) {
@@ -149,7 +223,7 @@ void Link::load_peer(const Bytes& peer_pub_bytes, const Bytes& peer_sig_pub_byte
 
 void Link::set_link_id(const Packet& packet) {
 	assert(_object);
-	_object->_link_id = packet.getTruncatedHash();
+	_object->_link_id = Link::link_id_from_lr_packet(packet);
 	_object->_hash = _object->_link_id;
 }
 
@@ -159,8 +233,13 @@ void Link::handshake() {
 		_object->_status = Type::Link::HANDSHAKE;
 		_object->_shared_key = _object->_prv->exchange(_object->_peer_pub_bytes);
 
+		uint16_t derived_key_length;
+		if (_object->_mode == RNS::Type::Link::MODE_AES128_CBC) derived_key_length = 32;
+		else if (_object->_mode == RNS::Type::Link::MODE_AES256_CBC) derived_key_length = 64;
+		else throw new std::invalid_argument("Invalid link mode "+std::to_string(_object->_mode)+" on "+toString());
+
 		_object->_derived_key = Cryptography::hkdf(
-			32,
+			derived_key_length,
 			_object->_shared_key,
 			get_salt(),
 			get_context()
@@ -173,13 +252,15 @@ void Link::handshake() {
 
 void Link::prove() {
 	assert(_object);
+	DEBUGF("Link %s requesting proof", link_id().toHex().c_str());
 	Bytes signed_data =_object->_link_id + _object->_pub_bytes + _object->_sig_pub_bytes;
 	const Bytes signature(_object->_owner.identity().sign(signed_data));
 
 	Bytes proof_data = signature + _object->_pub_bytes;
 	// CBA LINK
-	//Packet proof(_object->_link_destination, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
-	Packet proof(_object->_link_destination, *this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
+	Packet proof(_object->_link_destination, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+	//Packet proof(_object->_link_destination, *this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
 	proof.send();
 	_object->_establishment_cost += proof.raw().size();
 	had_outbound();
@@ -187,6 +268,7 @@ void Link::prove() {
 
 void Link::prove_packet(const Packet& packet) {
 	assert(_object);
+	DEBUGF("Link %s proving packet", link_id().toHex().c_str());
 	const Bytes signature(sign(packet.packet_hash()));
 	// TODO: Hardcoded as explicit proof for now
 	// if RNS.Reticulum.should_use_implicit_proof():
@@ -202,21 +284,41 @@ void Link::prove_packet(const Packet& packet) {
 
 void Link::validate_proof(const Packet& packet) {
 	assert(_object);
+	DEBUGF("Link %s validating proof", link_id().toHex().c_str());
 	try {
 		if (_object->_status == Type::Link::PENDING) {
+			Bytes packet_data(packet.data());
+			TRACEF("Link %s: initiator: %d", toString().c_str(), _object->_initiator);
+			TRACEF("Link %s: size: %d", toString().c_str(), packet_data.size());
+			Bytes signalling_bytes;
+			uint16_t confirmed_mtu = 0;
+			link_mode mode = mode_from_lp_packet(packet);
+			DEBUGF("Validating link request proof with mode %d", mode);
+			if (mode != _object->_mode) throw std::runtime_error("Invalid link mode "+std::to_string(mode)+" in link request proof");
+            //p if len(packet.data) == RNS.Identity.SIGLENGTH//8+Link.ECPUBSIZE//2+Link.LINK_MTU_SIZE:
+			if (packet_data.size() == Type::Identity::SIGLENGTH/8+ECPUBSIZE/2+RNS::Type::Link::LINK_MTU_SIZE) {
+				confirmed_mtu = Link::mtu_from_lp_packet(packet);
+				signalling_bytes = Link::signalling_bytes(confirmed_mtu, mode);
+				// CBA TODO Determine best way to deal with packet.data() being read-only
+				//p packet.data = packet.data[:RNS.Identity.SIGLENGTH//8+Link.ECPUBSIZE//2]
+				packet_data = packet_data.left(RNS::Type::Identity::SIGLENGTH/8+ECPUBSIZE/2);
+				DEBUGF("Destination confirmed link MTU of %d", confirmed_mtu);
+			}
 			//p if _object->_initiator and len(packet.data) == RNS.Identity.SIGLENGTH//8+ECPUBSIZE//2:
-			if (_object->_initiator && packet.data().size() == Type::Identity::SIGLENGTH/8+ECPUBSIZE/2) {
+			if (_object->_initiator && packet_data.size() == Type::Identity::SIGLENGTH/8+ECPUBSIZE/2) {
 				//p peer_pub_bytes = packet.data[RNS.Identity.SIGLENGTH//8:RNS.Identity.SIGLENGTH//8+ECPUBSIZE//2]
-				const Bytes peer_pub_bytes(packet.data().mid(Type::Identity::SIGLENGTH/8, ECPUBSIZE/2));
+				const Bytes peer_pub_bytes(packet_data.mid(Type::Identity::SIGLENGTH/8, ECPUBSIZE/2));
 				//p peer_sig_pub_bytes = _object->_destination.identity.get_public_key()[ECPUBSIZE//2:ECPUBSIZE]
 				const Bytes peer_sig_pub_bytes(_object->_destination.identity().get_public_key().mid(ECPUBSIZE/2, ECPUBSIZE/2));
+				TRACEF("Link %s performing handshake", link_id().toHex().c_str());
 				load_peer(peer_pub_bytes, peer_sig_pub_bytes);
 				handshake();
 
 				_object->_establishment_cost += packet.raw().size();
 				Bytes signed_data = _object->_link_id + _object->_peer_pub_bytes + _object->_peer_sig_pub_bytes;
-				const Bytes signature(packet.data().left(Type::Identity::SIGLENGTH/8));
+				const Bytes signature(packet_data.left(Type::Identity::SIGLENGTH/8));
 				
+				TRACEF("Link %s validating identity", link_id().toHex().c_str());
 				if (_object->_destination.identity().validate(signature, signed_data)) {
 					if (_object->_status != Type::Link::HANDSHAKE) {
 						throw std::runtime_error("Invalid link state for proof validation: " + _object->_status);
@@ -224,6 +326,9 @@ void Link::validate_proof(const Packet& packet) {
 					_object->_rtt = OS::time() - _object->_request_time;
 					_object->_attached_interface = packet.receiving_interface();
 					_object->__remote_identity = _object->_destination.identity();
+					if (confirmed_mtu) _object->_mtu = confirmed_mtu;
+					else _object->_mtu = RNS::Type::Reticulum::MTU;
+					update_mdu();
 					_object->_status = Type::Link::ACTIVE;
 					_object->_activated_at = OS::time();
 					_object->_last_proof = _object->_activated_at;
@@ -239,12 +344,14 @@ void Link::validate_proof(const Packet& packet) {
 					MsgPack::Packer packer;
 					packer.serialize(_object->_rtt);
 					Bytes rtt_data(packer.data(), packer.size());
+TRACEF("***** RTT data size: %d", rtt_data.size());
                     //p rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
 					Packet rtt_packet(_object->_link_destination, rtt_data, Type::Packet::DATA, Type::Packet::LRRTT);
 					rtt_packet.send();
 					had_outbound();
 
 					if (_object->_callbacks._established != nullptr) {
+						VERBOSEF("Link %s is established", link_id().toHex().c_str());
 						//p thread = threading.Thread(target=_object->_callbacks.link_established, args=(self,))
 						//p thread.daemon = True
 						//p thread.start()
@@ -254,6 +361,9 @@ void Link::validate_proof(const Packet& packet) {
 				else {
 					DEBUGF("Invalid link proof signature received by %s. Ignoring.", toString().c_str());
 				}
+			}
+			else {
+				DEBUGF("Failed initiator/size check for link proof signature received by %s. Ignoring.", toString().c_str());
 			}
 		}
 	}
@@ -275,6 +385,7 @@ thus preserved. This method can be used for authentication.
 */
 void Link::identify(const Identity& identity) {
 	assert(_object);
+	DEBUGF("Link %s requesting identity", link_id().toHex().c_str());
 	if (_object->_initiator && _object->_status == Type::Link::ACTIVE) {
 		const Bytes signed_data(_object->_link_id + identity.get_public_key());
 		const Bytes signature(identity.sign(signed_data));
@@ -298,6 +409,7 @@ Sends a request to the remote peer.
 */
 const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*= {Bytes::NONE}*/, RequestReceipt::Callbacks::response response_callback /*= nullptr*/, RequestReceipt::Callbacks::failed failed_callback /*= nullptr*/, RequestReceipt::Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/) {
 	assert(_object);
+	DEBUGF("Link %s sending request", link_id().toHex().c_str());
 	const Bytes request_path_hash(Identity::truncated_hash(path));
 
 	//p unpacked_request = [OS::time(), request_path_hash, data]
@@ -350,6 +462,13 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 }
 
 
+void Link::update_mdu() {
+	assert(_object);
+	_object->_mdu = _object->_mtu - RNS::Type::Reticulum::HEADER_MAXSIZE - RNS::Type::Reticulum::IFAC_MIN_SIZE;
+    //p self.mdu = math.floor((self.mtu-RNS.Reticulum.IFAC_MIN_SIZE-RNS.Reticulum.HEADER_MINSIZE-RNS.Identity.TOKEN_OVERHEAD)/RNS.Identity.AES128_BLOCKSIZE)*RNS.Identity.AES128_BLOCKSIZE - 1
+	_object->_mdu = std::floor((_object->_mtu-RNS::Type::Reticulum::IFAC_MIN_SIZE-RNS::Type::Reticulum::HEADER_MINSIZE-RNS::Type::Identity::TOKEN_OVERHEAD)/RNS::Type::Identity::AES128_BLOCKSIZE)*RNS::Type::Identity::AES128_BLOCKSIZE - 1;
+}
+
 void Link::rtt_packet(const Packet& packet) {
 	assert(_object);
 	try {
@@ -398,6 +517,47 @@ float Link::get_establishment_rate() {
 	return _object->_establishment_rate*8;
 }
 
+/*
+:returns: The MTU of an established link.
+*/
+uint16_t Link::get_mtu() {
+	assert(_object);
+	if (_object->_status == ACTIVE) {
+		return _object->_mtu;
+	}
+	return 0;
+}
+
+/*
+:returns: The packet MDU of an established link.
+*/
+uint16_t Link::get_mdu() {
+	assert(_object);
+	if (_object->_status == ACTIVE) {
+		return _object->_mdu;
+	}
+	return 0;
+}
+
+/*
+:returns: The packet expected in-flight data rate of an established link.
+*/
+float Link::get_expected_rate() {
+	assert(_object);
+	if (_object->_status == ACTIVE) {
+		return _object->_expected_rate;
+	}
+	return 0.0;
+}
+
+/*
+:returns: The mode of an established link.
+*/
+link_mode Link::get_mode() {
+	assert(_object);
+	return _object->_mode;
+}
+
 const Bytes& Link::get_salt() {
 	assert(_object);
 	return _object->_link_id;
@@ -405,6 +565,17 @@ const Bytes& Link::get_salt() {
 
 const Bytes Link::get_context() {
 	return {Bytes::NONE};
+}
+
+/*
+:returns: The time in seconds since this link was established.
+*/
+double Link::get_age() {
+	assert(_object);
+	if (_object->_activated_at) {
+		return OS::time() - _object->_activated_at;
+	}
+	return 0.0;
 }
 
 /*
@@ -624,6 +795,8 @@ void Link::send_keepalive() {
 }
 
 void Link::handle_request(const Bytes& request_id, const ResourceRequest& resource_request) {
+	assert(_object);
+	DEBUGF("Link %s handling request", link_id().toHex().c_str());
 	if (_object->_status == Type::Link::ACTIVE) {
 		//p requested_at = unpacked_request[0]
 		//p path_hash    = unpacked_request[1]
@@ -1085,16 +1258,16 @@ void Link::receive(const Packet& packet) {
 const Bytes Link::encrypt(const Bytes& plaintext) {
 	assert(_object);
 	try {
-		if (!_object->_fernet) {
+		if (!_object->_token) {
 			try {
-				_object->_fernet.reset(new Fernet(_object->_derived_key));
+				_object->_token.reset(new Token(_object->_derived_key));
 			}
 			catch (std::exception& e) {
-				ERRORF("Could not instantiate Fernet while performin encryption on link %s. The contained exception was: %s", toString().c_str(), e.what());
+				ERRORF("Could not instantiate Token while performin encryption on link %s. The contained exception was: %s", toString().c_str(), e.what());
 				throw e;
 			}
 		}
-		return _object->_fernet->encrypt(plaintext);
+		return _object->_token->encrypt(plaintext);
 	}
 	catch (std::exception& e) {
 		ERRORF("Encryption on link %s failed. The contained exception was: %s", toString().c_str(), e.what());
@@ -1105,10 +1278,10 @@ const Bytes Link::encrypt(const Bytes& plaintext) {
 const Bytes Link::decrypt(const Bytes& ciphertext) {
 	assert(_object);
 	try {
-		if (!_object->_fernet) {
-			_object->_fernet.reset(new Fernet(_object->_derived_key));
+		if (!_object->_token) {
+			_object->_token.reset(new Token(_object->_derived_key));
 		}
-		return _object->_fernet->decrypt(ciphertext);
+		return _object->_token->decrypt(ciphertext);
 	}
 	catch (std::exception& e) {
 		ERRORF("Decryption failed on link %s. The contained exception was: %s", toString().c_str(), e.what());
@@ -1186,7 +1359,7 @@ Sets the resource strategy for the link.
 */
 void Link::set_resource_strategy(resource_strategy strategy) {
 	assert(_object);
-	if ((strategy & resource_strategies) > 0) {
+	if (!(strategy & resource_strategies)) {
 		throw std::runtime_error("Unsupported resource strategy");
 	}
 	else {
@@ -1253,6 +1426,12 @@ const Destination& Link::destination() const {
 	return _object->_destination;
 }
 
+// CBA LINK
+const Destination& Link::link_destination() const {
+	assert(_object);
+	return _object->_link_destination;
+}
+
 const Bytes& Link::link_id() const {
 	assert(_object);
 	return _object->_link_id;
@@ -1261,6 +1440,11 @@ const Bytes& Link::link_id() const {
 const Bytes& Link::hash() const {
 	assert(_object);
 	return _object->_hash;
+}
+
+uint16_t Link::mtu() const {
+	assert(_object);
+	return _object->_mtu;
 }
 
 Type::Link::status Link::status() const {
@@ -1293,6 +1477,16 @@ std::set<RNS::RequestReceipt>& Link::pending_requests() const {
 	return _object->_pending_requests;
 }
 
+Type::Link::teardown_reason Link::teardown_reason() const {
+	assert(_object);
+	return _object->_teardown_reason;
+}
+
+bool Link::initiator() const {
+	assert(_object);
+	return _object->_initiator;
+}
+
 // setters
 
 void Link::destination(const Destination& destination) {
@@ -1323,6 +1517,11 @@ void Link::request_time(double time) {
 void Link::last_inbound(double time) {
 	assert(_object);
 	_object->_last_inbound = time;
+}
+
+void Link::status(Type::Link::status status) {
+	assert(_object);
+	_object->_status = status;
 }
 
 
@@ -1548,7 +1747,7 @@ const Bytes& RequestReceipt::request_id() const {
 	return _object->_request_id;
 }
 
-const size_t RequestReceipt::response_transfer_size() const {
+size_t RequestReceipt::response_transfer_size() const {
 	assert(_object);
 	return _object->_response_transfer_size;
 }

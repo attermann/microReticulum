@@ -36,6 +36,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	_IN = true;
 	_OUT = true;
 	_bitrate = BITRATE_GUESS;
+	_HW_MTU = 1064;
 
 }
 
@@ -155,7 +156,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 		_remote_address = remote_addr.s_addr;
 	}
 
-	// open udp socket
+	// create udp socket
 	TRACE("Opening UDP socket");
 	_socket = socket( PF_INET, SOCK_DGRAM, 0 );
 	if (_socket < 0) {
@@ -167,7 +168,14 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	int broadcast = 1;
 	setsockopt(_socket, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast));
 
-	// bind to udp socket for listening
+	// enable ip/port sharing
+    int reuse = 1;
+    setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+#ifdef SO_REUSEPORT
+	setsockopt(_socket, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+#endif
+
+	// bind to interface for listening
 	INFO("Binding UDP socket " + std::to_string(_socket) + " to " + std::string(_local_host) + ":" + std::to_string(_local_port));
 	sockaddr_in bind_addr;
 	bind_addr.sin_family = AF_INET;

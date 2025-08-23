@@ -6,7 +6,7 @@
 #include "Cryptography/Hashes.h"
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
-#include "Cryptography/Fernet.h"
+#include "Cryptography/Token.h"
 
 #include <map>
 #include <string>

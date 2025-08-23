@@ -1,7 +1,7 @@
 //#define NDEBUG
 
-#include "LoRaInterface.h"
-#include "FileSystem.h"
+#include <LoRaInterface.h>
+#include <UniversalFileSystem.h>
 
 #include <Reticulum.h>
 #include <Identity.h>
@@ -88,12 +88,12 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 
 RNS::Reticulum reticulum({RNS::Type::NONE});
 RNS::Interface lora_interface(RNS::Type::NONE);
-RNS::FileSystem test_filesystem(RNS::Type::NONE);
+RNS::FileSystem universal_filesystem(RNS::Type::NONE);
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
 
 LoRaInterface* lora_interface_impl = nullptr;
-FileSystem* test_filesystem_impl = nullptr;
+UniversalFileSystem* universal_filesystem_impl = nullptr;
 
 //ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
 //RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
@@ -125,10 +125,10 @@ void reticulum_setup() {
 
 
 		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
-		test_filesystem_impl = new FileSystem();
-		test_filesystem = test_filesystem_impl;
-		((FileSystem*)test_filesystem.get())->init();
-		RNS::Utilities::OS::register_filesystem(test_filesystem);
+		universal_filesystem_impl = new UniversalFileSystem();
+		universal_filesystem = universal_filesystem_impl;
+		universal_filesystem.init();
+		RNS::Utilities::OS::register_filesystem(universal_filesystem);
 
 		HEAD("Registering LoRaInterface instances with Transport...", RNS::LOG_TRACE);
 		lora_interface_impl = new LoRaInterface();
