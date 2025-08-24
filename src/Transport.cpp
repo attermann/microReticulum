@@ -255,7 +255,8 @@ using namespace RNS::Utilities;
 
 			// Process active and pending link lists
 			if (OS::time() > (_links_last_checked + _links_check_interval)) {
-				for (auto& link : _pending_links) {
+				std::set<Link> pending_links(_pending_links);
+				for (auto& link : pending_links) {
 					if (link.status() == Type::Link::CLOSED) {
 						// If we are not a Transport Instance, finding a pending link
 						// that was never activated will trigger an expiry of the path
@@ -287,7 +288,8 @@ using namespace RNS::Utilities;
 						_pending_links.erase(link);
 					}
 				}
-				for (auto& link : _active_links) {
+				std::set<Link> active_links(_active_links);
+				for (auto& link : active_links) {
 					if (link.status() == Type::Link::CLOSED) {
 						_active_links.erase(link);
 					}
@@ -798,7 +800,8 @@ using namespace RNS::Utilities;
 				bool should_transmit = true;
 
 				if (packet.destination().type() == Type::Destination::LINK) {
-					if (packet.destination().status() == Type::Link::CLOSED) {
+					if (!packet.destination_link()) throw std::invalid_argument("Packet is not associated with a Link");
+					if (packet.destination_link().status() == Type::Link::CLOSED) {
 						TRACE("Transport::outbound: Pscket destination is link-closed, not transmitting");
 						should_transmit = false;
 					}
@@ -2057,6 +2060,7 @@ using namespace RNS::Utilities;
 					auto& destination = (*iter).second;
 					if (destination.type() == packet.destination_type()) {
 #endif
+						TRACE("Transport::inbound: Found local destination for LINKREQUEST");
 						packet.destination(destination);
 						// CBA iterator over std::set is always const so need to make temporarily mutable
 						//destination.receive(packet);
@@ -2076,7 +2080,8 @@ using namespace RNS::Utilities;
 			if (packet.destination_type() == Type::Destination::LINK) {
 				// Data is destined for a link
 				TRACE("Transport::inbound: Packet is DATA for a LINK");
-				for (auto& link : _active_links) {
+				std::set<Link> active_links(_active_links);
+				for (auto& link : active_links) {
 					if (link.link_id() == packet.destination_hash()) {
 						TRACE("Transport::inbound: Packet is DATA for an active LINK");
 						packet.link(link);
@@ -2196,7 +2201,8 @@ using namespace RNS::Utilities;
 			}
 			else if (packet.context() == Type::Packet::RESOURCE_PRF) {
 				TRACE("Transport::inbound: Packet is RESOURCE PROOF");
-				for (auto& link : _active_links) {
+				std::set<Link> active_links(_active_links);
+				for (auto& link : active_links) {
 					if (link.link_id() == packet.destination_hash()) {
 						const_cast<Link&>(link).receive(packet);
 					}
@@ -2205,7 +2211,8 @@ using namespace RNS::Utilities;
 			else {
 				TRACE("Transport::inbound: Packet is regular PROOF");
 				if (packet.destination_type() == Type::Destination::LINK) {
-					for (auto& link : _active_links) {
+					std::set<Link> active_links(_active_links);
+					for (auto& link : active_links) {
 						if (link.link_id() == packet.destination_hash()) {
 							packet.link(link);
 						}

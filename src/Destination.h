@@ -189,23 +189,25 @@ namespace RNS {
 		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
 		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
-		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
 		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
-		inline Type::Link::status status() const { assert(_object); return _object->_status; }
+		// CBA LINK
+		//inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
+		//inline Type::Link::status status() const { assert(_object); return _object->_status; }
 		inline const Callbacks& callbacks() const { assert(_object); return _object->_callbacks; }
 		inline const Identity& identity() const { assert(_object); return _object->_identity; }
 		inline const std::map<Bytes, PathResponse>& path_responses() const { assert(_object); return _object->_path_responses; }
 		inline const std::map<Bytes, RequestHandler>& request_handlers() const { assert(_object); return _object->_request_handlers; }
 
 		// setters
-		// CBA Don't allow changing destination after construction since it's used as key in collections
+		// CBA Don't allow changing destination hash after construction since it's used as key in collections
 		//inline void hash(const Bytes& hash) { assert(_object); _object->_hash = hash; _object->_hexhash = _object->_hash.toHex(); }
 		inline void type(Type::Destination::types type) { assert(_object); _object->_type = type; }
-		inline void link_id(const Bytes& id) { assert(_object); _object->_link_id = id; }
 		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
-		inline void last_outbound(double time) { assert(_object); _object->_last_outbound = time; }
-		inline void increment_tx() { assert(_object); ++_object->_tx; }
-		inline void increment_txbytes(uint16_t bytes) { assert(_object); _object->_txbytes += bytes; }
+		// CBA LINK
+		//inline void link_id(const Bytes& id) { assert(_object); _object->_link_id = id; }
+		//inline void last_outbound(double time) { assert(_object); _object->_last_outbound = time; }
+		//inline void increment_tx() { assert(_object); ++_object->_tx; }
+		//inline void increment_txbytes(uint16_t bytes) { assert(_object); _object->_txbytes += bytes; }
 
 	private:
 		class Object {
@@ -240,13 +242,13 @@ namespace RNS {
 			// CBA LINK
 			// CBA _link_id is expected by Packet but only present in Link
 			// CBA TODO determine if Link needs to inherit from Destination or vice-versa
-			Bytes _link_id;
+			//Bytes _link_id;
 
-			Type::Link::status _status;
+			//Type::Link::status _status;
 
-			double _last_outbound = 0.0;
-			uint16_t _tx = 0;
-			uint32_t _txbytes = 0;
+			//double _last_outbound = 0.0;
+			//uint16_t _tx = 0;
+			//uint32_t _txbytes = 0;
 
 		friend class Destination;
 		};

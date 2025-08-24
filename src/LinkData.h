@@ -28,7 +28,7 @@ namespace RNS {
 		Destination _destination;
 
 		// CBA LINK
-		Destination _link_destination = {Type::NONE};
+		//Destination _link_destination = {Type::NONE};
 
 		Bytes _link_id;
 		Bytes _hash;
@@ -43,6 +43,7 @@ namespace RNS {
 		Type::Link::resource_strategy _resource_strategy = Type::Link::ACCEPT_NONE;
 		double _last_inbound = 0.0;
 		double _last_outbound = 0.0;
+        double _last_keepalive = 0.0;
 		double _last_proof = 0.0;
 		double _last_data = 0.0;
 		uint16_t _tx = 0;
@@ -52,13 +53,14 @@ namespace RNS {
 		float _rssi = 0.0;
 		float _snr = 0.0;
 		float _q = 0.0;
-		uint16_t _traffic_timeout_factor = Type::Link::TRAFFIC_TIMEOUT_FACTOR;
+		uint8_t _traffic_timeout_factor = Type::Link::TRAFFIC_TIMEOUT_FACTOR;
 		uint16_t _keepalive_timeout_factor = Type::Link::KEEPALIVE_TIMEOUT_FACTOR;
 		uint16_t _keepalive = Type::Link::KEEPALIVE;
 		uint16_t _stale_time = Type::Link::STALE_TIME;
 		bool _watchdog_lock = false;
 		double _activated_at = 0.0;
-		Type::Destination::types _type = Type::Destination::LINK;
+		// CBA LINK
+		//Type::Destination::types _type = Type::Destination::LINK;
 		Destination _owner = {Type::NONE};
 		bool _initiator = false;
 		uint8_t _expected_hops = 0;

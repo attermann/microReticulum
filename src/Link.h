@@ -230,9 +230,10 @@ namespace RNS {
 		std::string toString() const;
 
 		// getters
+		double rtt() const;
 		const Destination& destination() const;
 		// CBA LINK
-		const Destination& link_destination() const;
+		//const Destination& link_destination() const;
 		const Interface& attached_interface() const;
 		const Bytes& link_id() const;
 		const Bytes& hash() const;
@@ -240,6 +241,7 @@ namespace RNS {
 		Type::Link::status status() const;
 		double establishment_timeout() const;
 		uint16_t establishment_cost() const;
+		uint8_t traffic_timeout_factor() const;
 		double request_time() const;
 		double last_inbound() const;
 		std::set<RequestReceipt>& pending_requests() const;
@@ -253,6 +255,9 @@ namespace RNS {
 		void establishment_cost(uint16_t cost);
 		void request_time(double time);
 		void last_inbound(double time);
+		void last_outbound(double time);
+		void increment_tx();
+		void increment_txbytes(uint16_t bytes);
 		void status(Type::Link::status status);
 
 	protected:

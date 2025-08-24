@@ -18,9 +18,6 @@ Token::Token(const Bytes& key, token_mode mode /*= AES*/) {
 		throw std::invalid_argument("Token key cannot be None");
 	}
 
-	if (key.size() != 32) {
-		throw std::invalid_argument("Token key must be 32 bytes, not " + std::to_string(key.size()));
-	}
 	if (mode == MODE_AES) {
 		if (key.size() == 32) {
 			_mode = MODE_AES_128_CBC;
@@ -37,7 +34,7 @@ Token::Token(const Bytes& key, token_mode mode /*= AES*/) {
 			_encryption_key = key.mid(32);
 		}
 		else {
-			throw std::invalid_argument("Token key must be 32 bytes, not " + std::to_string(key.size()));
+			throw std::invalid_argument("Token key must be 128 or 256 bits, not " + std::to_string(key.size()*8));
 		}
 	}
 	else {

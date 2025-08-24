@@ -106,8 +106,8 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	}
 
 	// CBA LINK
-	_object->_link_destination = Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::LINK, hash());
-	_object->_link_destination.link_id(_object->_link_id);
+	//_object->_link_destination = Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::LINK, hash());
+	//_object->_link_destination.link_id(_object->_link_id);
 
 	MEM("Link object created");
 }
@@ -259,8 +259,7 @@ void Link::prove() {
 	Bytes proof_data = signature + _object->_pub_bytes;
 	// CBA LINK
 	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
-	Packet proof(_object->_link_destination, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
-	//Packet proof(_object->_link_destination, *this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+	Packet proof(*this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
 	proof.send();
 	_object->_establishment_cost += proof.raw().size();
 	had_outbound();
@@ -277,7 +276,7 @@ void Link::prove_packet(const Packet& packet) {
 	//   proof_data = packet.packet_hash + signature
 	Bytes proof_data = packet.packet_hash() + signature;
 
-	Packet proof(_object->_link_destination, proof_data, Type::Packet::PROOF);
+	Packet proof(*this, proof_data, Type::Packet::PROOF);
 	proof.send();
 	had_outbound();
 }
@@ -346,7 +345,16 @@ void Link::validate_proof(const Packet& packet) {
 					Bytes rtt_data(packer.data(), packer.size());
 TRACEF("***** RTT data size: %d", rtt_data.size());
                     //p rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
-					Packet rtt_packet(_object->_link_destination, rtt_data, Type::Packet::DATA, Type::Packet::LRRTT);
+					Packet rtt_packet(*this, rtt_data, Type::Packet::DATA, Type::Packet::LRRTT);
+TRACEF("***** RTT packet data: %s", rtt_packet.data().toHex().c_str());
+rtt_packet.pack();
+Packet test_packet(RNS::Destination(RNS::Type::NONE), rtt_packet.raw());
+test_packet.unpack();
+TRACEF("***** RTT test packet destination hash: %s", test_packet.destination_hash().toHex().c_str());
+TRACEF("***** RTT test packet data size: %d", test_packet.data().size());
+TRACEF("***** RTT test packet data: %s", test_packet.data().toHex().c_str());
+Bytes plaintext = decrypt(test_packet.data());
+TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 					rtt_packet.send();
 					had_outbound();
 
@@ -391,7 +399,7 @@ void Link::identify(const Identity& identity) {
 		const Bytes signature(identity.sign(signed_data));
 		const Bytes proof_data(identity.get_public_key() + signature);
 
-		Packet proof(_object->_link_destination, proof_data, Type::Packet::DATA, Type::Packet::LINKIDENTIFY);
+		Packet proof(*this, proof_data, Type::Packet::DATA, Type::Packet::LINKIDENTIFY);
 		proof.send();
 		had_outbound();
 	}
@@ -423,7 +431,7 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 	}
 
 	if (packed_request.size() <= MDU) {
-		Packet request_packet(_object->_link_destination, packed_request, Type::Packet::DATA, Type::Packet::REQUEST);
+		Packet request_packet(*this, packed_request, Type::Packet::DATA, Type::Packet::REQUEST);
 		PacketReceipt packet_receipt = request_packet.send();
 
 		if (!packet_receipt) {
@@ -636,7 +644,7 @@ be used if a new link to the same destination is established.
 void Link::teardown() {
 	assert(_object);
 	if (_object->_status != Type::Link::PENDING && _object->_status != Type::Link::CLOSED) {
-		Packet teardown_packet(_object->_link_destination, _object->_link_id, Type::Packet::DATA, Type::Packet::LINKCLOSE);
+		Packet teardown_packet(*this, _object->_link_id, Type::Packet::DATA, Type::Packet::LINKCLOSE);
 		teardown_packet.send();
 		had_outbound();
 	}
@@ -789,7 +797,7 @@ void Link::__watchdog_job() {
 void Link::send_keepalive() {
 	assert(_object);
     //p keepalive_packet = RNS.Packet(self, bytes([0xFF]), context=RNS.Packet.KEEPALIVE)
-	RNS::Packet keepalive_packet(_object->_link_destination, Bytes("\xFF"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
+	RNS::Packet keepalive_packet(*this, Bytes("\xFF"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
 	keepalive_packet.send();
 	had_outbound(true);
 }
@@ -837,7 +845,7 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 
 					if (packed_response.size() <= MDU) {
 						//p RNS.Packet(self, packed_response, Type::Packet::DATA, context = Type::Packet::RESPONSE).send()
-						RNS::Packet response_packet(_object->_link_destination, packed_response, Type::Packet::DATA, Type::Packet::RESPONSE);
+						RNS::Packet response_packet(*this, packed_response, Type::Packet::DATA, Type::Packet::RESPONSE);
 						response_packet.send();
 					}
 					else {
@@ -1203,7 +1211,7 @@ void Link::receive(const Packet& packet) {
 				{
 					if (!_object->_initiator && packet.data() == "\xFF") {
                         //p keepalive_packet = RNS.Packet(self, bytes([0xFE]), context=RNS.Packet.KEEPALIVE)
-						Packet keepalive_packet(_object->_link_destination, Bytes("\xFE"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
+						Packet keepalive_packet(*this, Bytes("\xFE"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
 						keepalive_packet.send();
 						had_outbound(true);
 					}
@@ -1257,13 +1265,14 @@ void Link::receive(const Packet& packet) {
 
 const Bytes Link::encrypt(const Bytes& plaintext) {
 	assert(_object);
+	TRACE("Link::encrypt: encrypting data...");
 	try {
 		if (!_object->_token) {
 			try {
 				_object->_token.reset(new Token(_object->_derived_key));
 			}
 			catch (std::exception& e) {
-				ERRORF("Could not instantiate Token while performin encryption on link %s. The contained exception was: %s", toString().c_str(), e.what());
+				ERRORF("Could not instantiate Token while performing encryption on link %s. The contained exception was: %s", toString().c_str(), e.what());
 				throw e;
 			}
 		}
@@ -1277,6 +1286,7 @@ const Bytes Link::encrypt(const Bytes& plaintext) {
 
 const Bytes Link::decrypt(const Bytes& ciphertext) {
 	assert(_object);
+	TRACE("Link::decrypt: decrypting data...");
 	try {
 		if (!_object->_token) {
 			_object->_token.reset(new Token(_object->_derived_key));
@@ -1421,16 +1431,23 @@ std::string Link::toString() const {
 
 // getters
 
+double Link::rtt() const {
+	assert(_object);
+	return _object->_rtt;
+}
+
 const Destination& Link::destination() const {
 	assert(_object);
 	return _object->_destination;
 }
 
 // CBA LINK
+/*
 const Destination& Link::link_destination() const {
 	assert(_object);
 	return _object->_link_destination;
 }
+*/
 
 const Bytes& Link::link_id() const {
 	assert(_object);
@@ -1460,6 +1477,11 @@ double Link::establishment_timeout() const {
 uint16_t Link::establishment_cost() const {
 	assert(_object);
 	return _object->_establishment_cost;
+}
+
+uint8_t Link::traffic_timeout_factor() const {
+	assert(_object);
+	return _object->_traffic_timeout_factor;
 }
 
 double Link::request_time() const {
@@ -1517,6 +1539,21 @@ void Link::request_time(double time) {
 void Link::last_inbound(double time) {
 	assert(_object);
 	_object->_last_inbound = time;
+}
+
+void Link::last_outbound(double time) {
+	assert(_object);
+	_object->_last_outbound = time;
+}
+
+void Link::increment_tx() {
+	assert(_object);
+	_object->_tx++;
+}
+
+void Link::increment_txbytes(uint16_t bytes) {
+	assert(_object);
+	_object->_txbytes += bytes;
 }
 
 void Link::status(Type::Link::status status) {

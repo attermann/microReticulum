@@ -382,10 +382,11 @@ void Destination::receive(const Packet& packet) {
 void Destination::incoming_link_request(const Bytes& data, const Packet& packet) {
 	assert(_object);
 	if (_object->_accept_link_requests) {
-		//z link = Link::validate_request(data, packet);
-		//z if (link) {
-		//z	_links.append(link);
-		//z }
+TRACE("***** Accepting link request");
+		RNS::Link link = Link::validate_request(*this, data, packet);
+		if (link) {
+			_object->_links.insert(link);
+		}
 	}
 }
 

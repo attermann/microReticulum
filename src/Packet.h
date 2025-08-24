@@ -174,7 +174,6 @@ namespace RNS {
 			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
 		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt, context_flag) {}
 		// CBA LINK
-/*
 		Packet(
 			const Link& link,
 			const Bytes& data,
@@ -182,7 +181,6 @@ namespace RNS {
 			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
 			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
 		);
-*/
 		virtual ~Packet() {
 			MEM("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}			
@@ -248,7 +246,7 @@ namespace RNS {
 		inline const Bytes& raw() const { assert(_object); return _object->_raw; }
 		inline const Bytes& data() const { assert(_object); return _object->_data; }
 		// CBA LINK
-		//inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
+		inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
 		//CBA Following method is only used by Resource to access decrypted resource advertisement form Link. Consider a better way.
 		inline const Bytes& plaintext() { assert(_object); return _object->_plaintext; }
 
@@ -276,12 +274,14 @@ namespace RNS {
 			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
 			// CBA LINK
 			//Object(const Destination& destination, const Link& destination_link) : _destination(destination), _destination_link(destination_link) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			//Object(const Link& link) : _destination(link.destination()), _destination_link(link) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
 			virtual ~Object() { MEM("Packet::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			Destination _destination = {Type::NONE};
 
 			// CBA LINK
-			//Link _destination_link = {Type::NONE};
+			// CBA TODO: Determine if _link (assigned late by Transport) and _destination_link (assigned in constructor) can be one and the same !!!
+			Link _destination_link = {Type::NONE};
 
 			Link _link = {Type::NONE};
 
@@ -323,6 +323,9 @@ namespace RNS {
 			Bytes _data;	// plaintext | ciphertext
 
 			Bytes _plaintext;	// used exclusively to relay decrypted resource advertisement form Link to Resource
+
+			Bytes _header;
+			Bytes _ciphertext;
 
 		friend class Packet;
 		};

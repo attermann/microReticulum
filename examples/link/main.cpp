@@ -68,7 +68,7 @@ void server_packet_received(const RNS::Bytes& message, const RNS::Packet& packet
 	RNS::Bytes reply_data(reply_text);
 	// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
 	//RNS::Packet(RNS::Type::NONE, latest_client_link, reply_data).send();
-	RNS::Packet(latest_client_link.link_destination(), reply_data).send();
+	RNS::Packet(latest_client_link, reply_data).send();
 }
 
 // When a client establishes a link to our server
@@ -120,7 +120,6 @@ void server() {
 
 	// Initialize and start Reticulum
 	RNS::Reticulum reticulum = RNS::Reticulum();
-//reticulum.transport_enabled(true);
 	reticulum.start();
 
 	// Randomly create a new identity for our link example
@@ -161,13 +160,14 @@ void server() {
 	while (true) {
 		reticulum.loop();
 		udp_interface.loop();
-
-/*
-		int c;
-		while ((c = getchar()) != '\n' && c != EOF); 
-		server_destination.announce();
-		RNS::log("Sent announce from "+destination.hash().toHex());
-*/
+		// Non-blocking input
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			if (ch == '\n') {
+				server_destination.announce();
+				RNS::log("Sent announce from "+server_destination.hash().toHex());
+			}
+		}
 	}
 }
 
@@ -251,7 +251,7 @@ void client_loop() {
                 if (data.size() <= RNS::Type::Link::MDU) {
 					// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
 					//RNS::Packet(RNS::Type::NONE, server_link, data).send();
-					RNS::Packet(server_link.link_destination(), data).send();
+					RNS::Packet(server_link, data).send();
 				}
                 else {
                     RNS::log(
@@ -304,7 +304,6 @@ void client(const char* destination_hexhash) {
 
 	// Initialize and start Reticulum
 	RNS::Reticulum reticulum = RNS::Reticulum();
-//reticulum.transport_enabled(true);
 	reticulum.start();
 
     // Check if we know a path to the destination
@@ -353,60 +352,63 @@ void client(const char* destination_hexhash) {
 
 	// Wait for the link to become active
     RNS::log("Waiting for link to become active...");
-    //while (!server_link) {
-    while (true) {
-		printf(".");
+    while (!server_link) {
 		reticulum.loop();
 		udp_interface.loop();
 		RNS::Utilities::OS::sleep(0.1);
 	}
     RNS::log("Link is active");
 
-    bool should_quit = false;
+	std::string text;
+	printf("> ");
+	fflush(STDIN_FILENO);
+	bool should_quit = false;
     while (!should_quit) {
+//printf(".");
 		reticulum.loop();
 		udp_interface.loop();
-/*
-        try {
-            printf("> ");
-			char *line = NULL;
-			size_t size;
-			if (getline(&line, &size, stdin) == -1) {
-				//printf("No line\n");
-				continue;
-			}
-			std::string text(line);
 
-            // Check if we should quit the example
-            if (text == "quit" || text == "q" || text == "exit") {
-                should_quit = true;
-                server_link.teardown();
-			}
+		// Non-blocking input
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			if (ch == '\n') {
+//printf("Text: %s", text.c_str());
 
-            // If not, send the entered text over the link
-            if (text != "") {
-                RNS::Bytes data(text);
-                if (data.size() <= RNS::Type::Link::MDU) {
-					// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
-					RNS::Packet(RNS::Type::NONE, server_link, data).send();
+				// Check if we should quit the example
+				if (text == "quit" || text == "q" || text == "exit") {
+					should_quit = true;
+					server_link.teardown();
 				}
-                else {
-                    RNS::log(
-                        "Cannot send this packet, the data size of "+
-                        std::to_string(data.size())+" bytes exceeds the link packet MDU of "+
-                        std::to_string(RNS::Type::Link::MDU)+" bytes",
-                        RNS::LOG_ERROR
-                    );
+
+				// If not, send the entered text over the link
+				if (text != "") {
+					RNS::Bytes data(text);
+					if (data.size() <= RNS::Type::Link::MDU) {
+printf("(sending data: %s)\n", text.c_str());
+						// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
+						//RNS::Packet(RNS::Type::NONE, server_link, data).send();
+						RNS::Packet(server_link, data).send();
+					}
+					else {
+						RNS::log(
+							"Cannot send this packet, the data size of "+
+							std::to_string(data.size())+" bytes exceeds the link packet MDU of "+
+							std::to_string(RNS::Type::Link::MDU)+" bytes",
+							RNS::LOG_ERROR
+						);
+					}
 				}
+
+				text.clear();
+
+				printf("> ");
+				fflush(STDIN_FILENO);
+			} else {
+				text += ch;
 			}
 		}
-		catch (std::exception& e) {
-            //RNS::log("Error while sending data over the link: "+e.what());
-            RNS::log("Error while sending data over the link: ");
-            should_quit = true;
-            server_link.teardown();
-		}
-*/
+
+		RNS::Utilities::OS::sleep(0.1);
 	}
 }
 
@@ -441,6 +443,10 @@ int main(int argc, char *argv[]) {
 
 	// Register the signal handler for SIGINT
     signal(SIGINT, cleanup_handler);
+
+	// Setup non-blocking input
+	int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
 	if (argc <= 1) {
 		printf("\nMust specify a destination for client mode, or \"-s\" or \"--server\" for server mode.\n\n");
