@@ -15,7 +15,7 @@
 
 // Imported from Crypto.cpp
 // Computes CRC-8/HITAG checksum
-// CBA Doesn't appeart to support incremental checksum building
+// CBA Doesn't appear to support incremental checksum building
 extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
 void testCryptoMain() {

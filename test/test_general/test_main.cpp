@@ -1,6 +1,5 @@
 #include <unity.h>
 
-#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
@@ -8,31 +7,12 @@
 #include <sys/time.h>
 #include <stdio.h>
 
-// Imported from Crypto.cpp
-extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
-
-void setUp(void)
-{
-  // set stuff up here
+void setUp(void) {
+    // set stuff up here before each test
 }
 
-void tearDown(void)
-{
-  // clean stuff up here
-}
-
-void testCrc() {
-	char data[32];
-	uint8_t crc;
-	strcpy(data, "foo");
-	crc = crypto_crc8(0, data, sizeof(data));
-	TEST_ASSERT_EQUAL_UINT8(174, crc);
-	strcpy(data, "bar");
-	crc = crypto_crc8(0, data, sizeof(data));
-	TEST_ASSERT_EQUAL_UINT8(63, crc);
-	strcpy(data, "foo");
-	crc = crypto_crc8(0, data, sizeof(data));
-	TEST_ASSERT_EQUAL_UINT8(174, crc);
+void tearDown(void) {
+    // clean stuff up here after each test
 }
 
 #ifndef ARDUINO
@@ -90,11 +70,31 @@ void testConvert() {
 	TEST_ASSERT_EQUAL_UINT64(1234567890, newnum);
 }
 
-int main(void)
-{
-	UNITY_BEGIN();
-	//RUN_TEST(testCrc);
-	//RUN_TEST(testTime);
-	RUN_TEST(testConvert);
-	return UNITY_END();
+int runUnityTests(void) {
+    UNITY_BEGIN();
+    RUN_TEST(testTime);
+    RUN_TEST(testConvert);
+    return UNITY_END();
+}
+
+// For native dev-platform or for some embedded frameworks
+int main(void) {
+    return runUnityTests();
+}
+
+#ifdef ARDUINO
+// For Arduino framework
+void setup() {
+    // Wait ~2 seconds before the Unity test runner
+    // establishes connection with a board Serial interface
+    delay(2000);
+    
+    runUnityTests();
+}
+void loop() {}
+#endif
+
+// For ESP-IDF framework
+void app_main() {
+    runUnityTests();
 }
