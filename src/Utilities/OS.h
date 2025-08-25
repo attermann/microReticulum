@@ -78,6 +78,42 @@ namespace RNS { namespace Utilities {
 			return result;
 		}
 
+		// Detect endianness at runtime
+		static int is_big_endian(void) {
+			uint16_t test = 0x0102;
+			return ((uint8_t*)&test)[0] == 0x01;
+		}
+
+		// Byte swap functions
+		static uint16_t swap16(uint16_t val) {
+			return (val << 8) | (val >> 8);
+		}
+
+		static uint32_t swap32(uint32_t val) {
+			return ((val << 24) & 0xFF000000) |
+				((val << 8)  & 0x00FF0000) |
+				((val >> 8)  & 0x0000FF00) |
+				((val >> 24) & 0x000000FF);
+		}
+
+		// Platform-independent replacements
+
+		static uint16_t portable_htons(uint16_t val) {
+			return is_big_endian() ? val : swap16(val);
+		}
+
+		static uint32_t portable_htonl(uint32_t val) {
+			return is_big_endian() ? val : swap32(val);
+		}
+
+		static uint16_t portable_ntohs(uint16_t val) {
+			return is_big_endian() ? val : swap16(val);
+		}
+
+		static uint32_t portable_ntohl(uint32_t val) {
+			return is_big_endian() ? val : swap32(val);
+		}
+
 		#if defined(RNS_USE_ALLOCATOR)
 		static void dump_allocator_stats();
 #endif

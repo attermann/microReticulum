@@ -42,6 +42,10 @@
 // them all within the app namespace "example_utilities"
 #define APP_NAME "example_utilities"
 
+RNS::Reticulum reticulum;
+RNS::FileSystem universal_filesystem(RNS::Type::NONE);
+RNS::Interface udp_interface(RNS::Type::NONE);
+
 
 /*
 ##########################################################
@@ -96,31 +100,22 @@ void server_loop(RNS::Destination& destination) {
 	// destination on the network, which will let clients
 	// know how to create messages directed towards it.
 	while (true) {
-		int c;
-		while ((c = getchar()) != '\n' && c != EOF); 
-		destination.announce();
-		RNS::log("Sent announce from "+destination.hash().toHex());
+		reticulum.loop();
+		udp_interface.loop();
+		// Non-blocking input
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			if (ch == '\n') {
+				destination.announce();
+				RNS::log("Sent announce from "+destination.hash().toHex());
+			}
+		}
 	}
 }
 
 // This initialisation is executed when the users chooses
 // to run as a server
 void server() {
-
-	// Initialize and register filesystem
-	RNS::FileSystem universal_filesystem = new UniversalFileSystem();
-	universal_filesystem.init();
-	RNS::Utilities::OS::register_filesystem(universal_filesystem);
-
-	// Initialize and register interface
-	RNS::Interface udp_interface = new UDPInterface();
-	udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
-	RNS::Transport::register_interface(udp_interface);
-	udp_interface.start();
-
-	// Initialize and start Reticulum
-	RNS::Reticulum reticulum = RNS::Reticulum();
-	reticulum.start();
 
 	// Randomly create a new identity for our link example
 	RNS::Identity server_identity = RNS::Identity();
@@ -142,33 +137,7 @@ void server() {
 
 	// Everything's ready!
 	// Let's Wait for client requests or user input
-	//server_loop(server_destination);
-
-	// Let the user know that everything is ready
-	RNS::log(
-		"Link example "+
-		server_destination.hash().toHex()+
-		" running, waiting for a connection."
-	);
-
-	RNS::log("Hit enter to manually send an announce (Ctrl-C to quit)");
-
-	// We enter a loop that runs until the users exits.
-	// If the user hits enter, we will announce our server
-	// destination on the network, which will let clients
-	// know how to create messages directed towards it.
-	while (true) {
-		reticulum.loop();
-		udp_interface.loop();
-		// Non-blocking input
-		char ch;
-		while (read(STDIN_FILENO, &ch, 1) > 0) {
-			if (ch == '\n') {
-				server_destination.announce();
-				RNS::log("Sent announce from "+server_destination.hash().toHex());
-			}
-		}
-	}
+	server_loop(server_destination);
 }
 
 
@@ -221,54 +190,62 @@ void client_packet_received(const RNS::Bytes& message, const RNS::Packet& packet
 }
 
 void client_loop() {
-
-    // Wait for the link to become active
+	// Wait for the link to become active
+    RNS::log("Waiting for link to become active...");
     while (!server_link) {
+		reticulum.loop();
+		udp_interface.loop();
 		RNS::Utilities::OS::sleep(0.1);
 	}
 
-    bool should_quit = false;
+	std::string text;
+	printf("> ");
+	fflush(STDIN_FILENO);
+	bool should_quit = false;
     while (!should_quit) {
-        try {
-            printf("> ");
-			char *line = NULL;
-			size_t size;
-			if (getline(&line, &size, stdin) == -1) {
-				//printf("No line\n");
-				continue;
-			}
-			std::string text(line);
+		reticulum.loop();
+		udp_interface.loop();
 
-            // Check if we should quit the example
-            if (text == "quit" || text == "q" || text == "exit") {
-                should_quit = true;
-                server_link.teardown();
-			}
+		// Non-blocking input
+		char ch;
+		while (read(STDIN_FILENO, &ch, 1) > 0) {
+			if (ch == '\n') {
 
-            // If not, send the entered text over the link
-            if (text != "") {
-                RNS::Bytes data(text);
-                if (data.size() <= RNS::Type::Link::MDU) {
-					// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
-					//RNS::Packet(RNS::Type::NONE, server_link, data).send();
-					RNS::Packet(server_link, data).send();
+				// Check if we should quit the example
+				if (text == "quit" || text == "q" || text == "exit") {
+					should_quit = true;
+					server_link.teardown();
 				}
-                else {
-                    RNS::log(
-                        "Cannot send this packet, the data size of "+
-                        std::to_string(data.size())+" bytes exceeds the link packet MDU of "+
-                        std::to_string(RNS::Type::Link::MDU)+" bytes",
-                        RNS::LOG_ERROR
-                    );
+
+				// If not, send the entered text over the link
+				if (text != "") {
+					RNS::Bytes data(text);
+					if (data.size() <= RNS::Type::Link::MDU) {
+printf("(sending data: %s)\n", text.c_str());
+						// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
+						//RNS::Packet(RNS::Type::NONE, server_link, data).send();
+						RNS::Packet(server_link, data).send();
+					}
+					else {
+						RNS::log(
+							"Cannot send this packet, the data size of "+
+							std::to_string(data.size())+" bytes exceeds the link packet MDU of "+
+							std::to_string(RNS::Type::Link::MDU)+" bytes",
+							RNS::LOG_ERROR
+						);
+					}
 				}
+
+				text.clear();
+
+				printf("> ");
+				fflush(STDIN_FILENO);
+			} else {
+				text += ch;
 			}
 		}
-		catch (std::exception& e) {
-            //RNS::log("Error while sending data over the link: "+e.what());
-            RNS::log("Error while sending data over the link: ");
-            should_quit = true;
-            server_link.teardown();
-		}
+
+		RNS::Utilities::OS::sleep(0.1);
 	}
 }
 
@@ -290,21 +267,6 @@ void client(const char* destination_hexhash) {
 		RNS::log("Invalid destination entered. Check your input!", RNS::LOG_ERROR);
 		return;
 	}
-
-	// Initialize and register filesystem
-	RNS::FileSystem universal_filesystem = new UniversalFileSystem();
-	universal_filesystem.init();
-	RNS::Utilities::OS::register_filesystem(universal_filesystem);
-
-	// Initialize and register interface
-	RNS::Interface udp_interface = new UDPInterface();
-	udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
-	RNS::Transport::register_interface(udp_interface);
-	udp_interface.start();
-
-	// Initialize and start Reticulum
-	RNS::Reticulum reticulum = RNS::Reticulum();
-	reticulum.start();
 
     // Check if we know a path to the destination
     if (!RNS::Transport::has_path(destination_hash)) {
@@ -348,68 +310,7 @@ void client(const char* destination_hexhash) {
 
     // Everything is set up, so let's enter a loop
     // for the user to interact with the example
-    //client_loop();
-
-	// Wait for the link to become active
-    RNS::log("Waiting for link to become active...");
-    while (!server_link) {
-		reticulum.loop();
-		udp_interface.loop();
-		RNS::Utilities::OS::sleep(0.1);
-	}
-    RNS::log("Link is active");
-
-	std::string text;
-	printf("> ");
-	fflush(STDIN_FILENO);
-	bool should_quit = false;
-    while (!should_quit) {
-//printf(".");
-		reticulum.loop();
-		udp_interface.loop();
-
-		// Non-blocking input
-		char ch;
-		while (read(STDIN_FILENO, &ch, 1) > 0) {
-			if (ch == '\n') {
-//printf("Text: %s", text.c_str());
-
-				// Check if we should quit the example
-				if (text == "quit" || text == "q" || text == "exit") {
-					should_quit = true;
-					server_link.teardown();
-				}
-
-				// If not, send the entered text over the link
-				if (text != "") {
-					RNS::Bytes data(text);
-					if (data.size() <= RNS::Type::Link::MDU) {
-printf("(sending data: %s)\n", text.c_str());
-						// CBA TODO: Add Packet constructor that accepts Link but doesn't require Destination
-						//RNS::Packet(RNS::Type::NONE, server_link, data).send();
-						RNS::Packet(server_link, data).send();
-					}
-					else {
-						RNS::log(
-							"Cannot send this packet, the data size of "+
-							std::to_string(data.size())+" bytes exceeds the link packet MDU of "+
-							std::to_string(RNS::Type::Link::MDU)+" bytes",
-							RNS::LOG_ERROR
-						);
-					}
-				}
-
-				text.clear();
-
-				printf("> ");
-				fflush(STDIN_FILENO);
-			} else {
-				text += ch;
-			}
-		}
-
-		RNS::Utilities::OS::sleep(0.1);
-	}
+    client_loop();
 }
 
 
@@ -437,8 +338,8 @@ int main(int argc, char *argv[]) {
 #if defined(MEM_LOG)
 	RNS::loglevel(RNS::LOG_MEM);
 #else
-	//RNS::loglevel(RNS::LOG_NOTICE);
-	RNS::loglevel(RNS::LOG_TRACE);
+	RNS::loglevel(RNS::LOG_NOTICE);
+	//RNS::loglevel(RNS::LOG_TRACE);
 #endif
 
 	// Register the signal handler for SIGINT
@@ -447,6 +348,20 @@ int main(int argc, char *argv[]) {
 	// Setup non-blocking input
 	int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
 	fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+
+	// Initialize and register filesystem
+	universal_filesystem = new UniversalFileSystem();
+	universal_filesystem.init();
+	RNS::Utilities::OS::register_filesystem(universal_filesystem);
+
+	// Initialize and register interface
+	udp_interface = new UDPInterface();
+	udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
+	RNS::Transport::register_interface(udp_interface);
+	udp_interface.start();
+
+	// Initialize and start Reticulum
+	reticulum.start();
 
 	if (argc <= 1) {
 		printf("\nMust specify a destination for client mode, or \"-s\" or \"--server\" for server mode.\n\n");

@@ -48,9 +48,9 @@ namespace RNS {
 		};
 
 	public:
+		PacketReceipt() : _object(new Object()) {}
 		PacketReceipt(Type::NoneConstructor none) {}
 		PacketReceipt(const PacketReceipt& packet_receipt) : _object(packet_receipt._object) {}
-		PacketReceipt() : _object(new Object()) {}
 		PacketReceipt(const Packet& packet);
 
 		inline PacketReceipt& operator = (const PacketReceipt& packet_receipt) {

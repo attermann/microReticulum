@@ -41,7 +41,7 @@ namespace RNS {
 
 	public:
 		FileSystem(Type::NoneConstructor none) {
-			MEMF("FileSystem object NONE created, this: 0x%X, impl: 0x%X", this, _impl.get());
+			MEMF("FileSystem NONE object created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		FileSystem(const FileSystem& obj) : _impl(obj._impl) {
 			MEMF("FileSystem object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());

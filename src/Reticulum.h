@@ -47,13 +47,13 @@ namespace RNS {
 		inline static const Reticulum& get_instance() { return _instance; }
 
 	public:
+		Reticulum();
 		Reticulum(Type::NoneConstructor none) {
-			MEM("Reticulum NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Reticulum empty object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Reticulum(const Reticulum& reticulum) : _object(reticulum._object) {
 			MEM("Reticulum object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Reticulum();
 		virtual ~Reticulum() {
 			MEM("Reticulum object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}

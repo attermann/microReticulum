@@ -246,7 +246,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 	//File file = SPIFFS.open(file_path, mode);
 	//if (!file) {
 	File* file = new File(SPIFFS.open(file_path, mode));
-	if (file == null || !(*file)) {
+	if (file == nullptr || !(*file)) {
 		ERRORF("open_file: failed to open output file %s", file_path);
 		return {RNS::Type::NONE};
 	}

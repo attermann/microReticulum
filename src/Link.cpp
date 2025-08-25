@@ -11,6 +11,7 @@
 #include "Cryptography/HKDF.h"
 #include "Cryptography/Token.h"
 #include "Cryptography/Random.h"
+#include "Utilities/OS.h"
 
 #define MSGPACK_DEBUGLOG_ENABLE 0
 #include <MsgPack.h>
@@ -119,7 +120,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	if (Link::ENABLED_MODES.find(mode) == Link::ENABLED_MODES.end()) throw std::runtime_error("Requested link mode "+std::to_string(mode)+" not enabled");
 	//p signalling_value = (mtu & Link.MTU_BYTEMASK)+(((mode<<5) & Link.MODE_BYTEMASK)<<16)
 	//p return struct.pack(">I", signalling_value)[1:]
-	uint32_t signalling_value = htonl((mtu & MTU_BYTEMASK)+(((mode<<5) & MODE_BYTEMASK)<<16));
+	uint32_t signalling_value = OS::portable_htonl((mtu & MTU_BYTEMASK)+(((mode<<5) & MODE_BYTEMASK)<<16));
 	Bytes data(((uint8_t*)&signalling_value)+1, 3);
 	return data;
 }
@@ -1576,8 +1577,9 @@ RequestReceipt::RequestReceipt(const Link& link, const PacketReceipt& packet_rec
 	}
 	else if (_object->_resource) {
 		_object->_hash = resource.request_id();
-		//const_cast<Resource&>(resource).set_concluded_callback(request_resource_concluded);
-		const_cast<Resource&>(resource).set_concluded_callback(std::bind(&RequestReceipt::request_resource_concluded, this, std::placeholders::_1));
+		// CBA TODO Need to find cross-platform way of passing class method as callback
+		//z const_cast<Resource&>(resource).set_concluded_callback(request_resource_concluded);
+		//z const_cast<Resource&>(resource).set_concluded_callback(std::bind(&RequestReceipt::request_resource_concluded, this, std::placeholders::_1));
 	}
 	_object->_link = link;
 	_object->_request_id = _object->_hash;

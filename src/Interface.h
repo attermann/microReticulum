@@ -98,7 +98,7 @@ namespace RNS {
 
 	public:
 		Interface(Type::NoneConstructor none) {
-			MEMF("Interface object NONE created, this: 0x%X, impl: 0x%X", this, _impl.get());
+			MEMF("Interface NONE object created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		Interface(const Interface& obj) : _impl(obj._impl) {
 			MEMF("Interface object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());

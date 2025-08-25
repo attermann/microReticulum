@@ -44,13 +44,13 @@ namespace RNS {
 		static uint16_t _known_destinations_maxsize;
 
 	public:
+		Identity(bool create_keys = true);
 		Identity(Type::NoneConstructor none) {
 			MEM("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Identity(const Identity& identity) : _object(identity._object) {
 			MEM("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Identity(bool create_keys = true);
 		virtual ~Identity() {
 			MEM("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}

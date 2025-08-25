@@ -19,8 +19,9 @@ namespace RNS {
 	public:
 		class Callbacks {
 		public:
-			//using concluded = void(*)(const Resource& resource);
-			typedef std::function<void(const Resource& resource)> concluded;
+			// CBA std::function apparently not implemented in NRF52 framework
+			//typedef std::function<void(const Resource& resource)> concluded;
+			using concluded = void(*)(const Resource& resource);
 			using progress = void(*)(const Resource& resource);
 		public:
 			concluded _concluded = nullptr;

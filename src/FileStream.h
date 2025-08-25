@@ -55,7 +55,7 @@ namespace RNS {
 
 	public:
 		FileStream(Type::NoneConstructor none) {
-			MEMF("FileStream object NONE created, this: 0x%X, impl: 0x%X", this, _impl.get());
+			MEMF("FileStream NONE object created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		FileStream(const FileStream& obj) : _impl(obj._impl), _crc(obj._crc) {
 			MEMF("FileStream object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());

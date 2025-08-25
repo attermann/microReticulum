@@ -40,6 +40,8 @@ Instructions for command line builds and building of individual example applicat
 - [x] Successful testing of Transport of both Packets and Links
 - [x] Implement memory management appropriate for memory constricted MCUs
 - [x] Implement Link
+- [x] Implement AES256
+- [ ] Implement Ratchets
 - [ ] Implement Resource
 - [ ] Implement Channel and Buffer
 - [x] Add example applications utilizing the C++ API

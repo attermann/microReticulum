@@ -69,9 +69,6 @@ void Reticulum::sigterm_handler(signal, frame):
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 
-	INFO("Total memory: " + std::to_string(OS::heap_size()));
-	INFO("Total flash: " + std::to_string(OS::storage_size()));
-
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
 	RNG.begin("Reticulum");
@@ -198,6 +195,10 @@ Reticulum::Reticulum() : _object(new Object()) {
 }
 
 void Reticulum::start() {
+
+	INFO("Total memory: " + std::to_string(OS::heap_size()));
+	INFO("Total flash: " + std::to_string(OS::storage_size()));
+
 	INFO("Starting Transport...");
 	Transport::start(*this);
 }
