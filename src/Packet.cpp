@@ -1,5 +1,6 @@
 #include "Packet.h"
 
+#include "Reticulum.h"
 #include "Transport.h"
 #include "Identity.h"
 #include "Log.h"
@@ -17,7 +18,9 @@ ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NO
 {
 }
 
-Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/) : _object(new Object(destination, attached_interface)) {
+Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, context_flag context_flag /*= FLAG_UNSET*/) :
+	_object(new Object(destination, attached_interface))
+{
 
 	if (_object->_destination) {
 		TRACE("Creating packet with destination...");
@@ -31,6 +34,8 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_packet_type = packet_type;
 		_object->_transport_type = transport_type;
 		_object->_context = context;
+        _object->_context_flag = context_flag;
+
 		_object->_transport_id = transport_id;
 		_object->_data = data;
 		if (_object->_data.size() > MDU) {
@@ -38,16 +43,34 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 			_object->_data.resize(MDU);
 		}
 		_object->_flags = get_packed_flags();
+
 		_object->_create_receipt = create_receipt;
 	}
 	else {
 		TRACE("Creating packet without destination...");
+		// CBA NOTE: This variant is for creating a new packet from a received raw buffer
 		_object->_raw = data;
 		_object->_packed = true;
 		_object->_fromPacked = true;
 		_object->_create_receipt = false;
 	}
+
 	MEM("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+}
+
+// CBA LINK
+Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/, context_flag context_flag /*= FLAG_UNSET*/) :
+	//_object(new Object(link))
+	//Packet(link.destination(), data, packet_type, context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, {Bytes::NONE}, true, context_flag)
+	// CBA Must use a destination that targets the Link itself instead of the original destination used to create the link
+	Packet(Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::LINK, link.hash()), data, packet_type, context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, {Bytes::NONE}, true, context_flag)
+{
+	TRACE("Creating packet with link...");
+	_object->_destination_link = link;
+	_object->_MTU = link.mtu();
+	// CBA HACK: Need to re-build packed flags since Link was assigned
+	_object->_flags = get_packed_flags();
+	MEM("Packet link object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
 
@@ -55,12 +78,14 @@ uint8_t Packet::get_packed_flags() {
 	assert(_object);
 	uint8_t packed_flags = 0;
 	if (_object->_context == LRPROOF) {
+TRACE("***** Packing with LINK type");
 		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (Type::Destination::LINK << 2) | _object->_packet_type;
 	}
 	else {
 		if (!_object->_destination) {
 			throw std::logic_error("Packet destination is required");
 		}
+TRACEF("***** Packing with %d type", _object->_destination.type());
 		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (_object->_destination.type() << 2) | _object->_packet_type;
 	}
 	return packed_flags;
@@ -248,58 +273,73 @@ void Packet::pack() {
 	}
 	_object->_destination_hash = _object->_destination.hash();
 
-	_object->_raw.clear();
+	_object->_header.clear();
 	_object->_encrypted = false;
 
-	_object->_raw << _object->_flags;
-	_object->_raw << _object->_hops;
+	_object->_header << _object->_flags;
+	_object->_header << _object->_hops;
 
+	// CBA LINK
 	if (_object->_context == LRPROOF) {
-		TRACE("Packet::pack: destination link id: " + _object->_destination.link_id().toHex() );
-		_object->_raw << _object->_destination.link_id();
-		_object->_raw << (uint8_t)_object->_context;
-		_object->_raw << _object->_data;
+		if (!_object->_destination_link) throw std::invalid_argument("Packet is not associated with a Link");
+		TRACE("Packet::pack: destination link id: " + _object->_destination_link.link_id().toHex() );
+		_object->_header << _object->_destination_link.link_id();
+		_object->_ciphertext = _object->_data;
 	}
 	else {
 		if (_object->_header_type == HEADER_1) {
 			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
-			_object->_raw << _object->_destination.hash();
-			_object->_raw << (uint8_t)_object->_context;
+			_object->_header << _object->_destination.hash();
 
 			if (_object->_packet_type == ANNOUNCE) {
 				// Announce packets are not encrypted
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			else if (_object->_packet_type == LINKREQUEST) {
 				// Link request packets are not encrypted
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			else if (_object->_packet_type == PROOF && _object->_context == RESOURCE_PRF) {
 				// Resource proofs are not encrypted
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
+			// CBA LINK
+            //p elif self.packet_type == Packet.PROOF and self.destination.type == RNS.Destination.LINK:
 			else if (_object->_packet_type == PROOF && _object->_destination.type() == Type::Destination::LINK) {
 				// Packet proofs over links are not encrypted
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			else if (_object->_context == RESOURCE) {
 				// A resource takes care of encryption
 				// by itself
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			else if (_object->_context == KEEPALIVE) {
 				// Keepalive packets contain no actual
 				// data
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			else if (_object->_context == CACHE_REQUEST) {
 				// Cache-requests are not encrypted
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			else {
 				// In all other cases, we encrypt the packet
 				// with the destination's encryption method
-				_object->_raw << _object->_destination.encrypt(_object->_data);
+				// CBA LINK
+				if (_object->_destination_link) {
+					_object->_ciphertext = _object->_destination_link.encrypt(_object->_data);
+TRACEF("***** Link data: %s", _object->_ciphertext.toHex().c_str());
+				}
+				else {
+					_object->_ciphertext = _object->_destination.encrypt(_object->_data);
+TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
+				}
+				// CBA RATCHET
+				/*p TODO
+				if hasattr(self.destination, "latest_ratchet_id"):
+					self.ratchet_id = self.destination.latest_ratchet_id
+				*/
 				_object->_encrypted = true;
 			}
 		}
@@ -309,13 +349,12 @@ void Packet::pack() {
 			}
 			TRACE("Packet::pack: transport id: " + _object->_transport_id.toHex() );
 			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
-			_object->_raw << _object->_transport_id;
-			_object->_raw << _object->_destination.hash();
-			_object->_raw << (uint8_t)_object->_context;
+			_object->_header << _object->_transport_id;
+			_object->_header << _object->_destination.hash();
 
 			if (_object->_packet_type == ANNOUNCE) {
 				// Announce packets are not encrypted
-				_object->_raw << _object->_data;
+				_object->_ciphertext = _object->_data;
 			}
 			// CBA No default encryption here like with header type HEADER_1 ???
 			// CBA Is there any packet type besides ANNOUNCE with header type HEADER_2 ???
@@ -323,8 +362,11 @@ void Packet::pack() {
 		}
 	}
 
-	if (_object->_raw.size() > _object->_mtu) {
-		throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " exceeds MTU of " + std::to_string(_object->_mtu) +" bytes");
+	_object->_header << (uint8_t)_object->_context;
+	_object->_raw = _object->_header + _object->_ciphertext;
+
+	if (_object->_raw.size() > _object->_MTU) {
+		throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " exceeds MTU of " + std::to_string(_object->_MTU) +" bytes");
 	}
 
 	_object->_packed = true;
@@ -389,25 +431,25 @@ Sends the packet.
 
 :returns: A :ref:`RNS.PacketReceipt<api-packetreceipt>` instance if *create_receipt* was set to *True* when the packet was instantiated, if not returns *None*. If the packet could not be sent *False* is returned.
 */
-bool Packet::send() {
+PacketReceipt Packet::send() {
 	assert(_object);
 	TRACE("Packet::send: sending packet...");
 	if (_object->_sent) {
         throw std::logic_error("Packet was already sent");
 	}
-// TODO
-/*
-	if (_destination->type == RNS::Destination::LINK) {
-		if (_destination->status == Type::Link::CLOSED) {
+	// CBA LINK
+    //p if self.destination.type == RNS.Destination.LINK:
+	if (_object->_destination.type() == Type::Destination::LINK) {
+		if (!_object->_destination_link) throw std::invalid_argument("Packet is not associated with a Link");
+		if (_object->_destination_link.status() == Type::Link::CLOSED) {
             throw std::runtime_error("Attempt to transmit over a closed link");
 		}
 		else {
-			_destination->last_outbound = time();
-			_destination->tx += 1;
-			_destination->txbytes += _data_len;
+			_object->_destination_link.last_outbound(OS::time());
+			_object->_destination_link.increment_tx();
+			_object->_destination_link.increment_txbytes(_object->_data.size());
 		}
 	}
-*/
 
 	if (!_object->_packed) {
 		pack();
@@ -415,15 +457,15 @@ bool Packet::send() {
 
 	if (Transport::outbound(*this)) {
 		TRACE("Packet::send: successfully sent packet!!!");
-		//z return self.receipt
-		// MOCK
-		return true;
+		//p return self.receipt
+		return _object->_receipt;
 	}
 	else {
 		ERROR("No interfaces could process the outbound packet");
 		_object->_sent = false;
-		//z _receipt = None;
-		return false;
+		_object->_receipt = {Type::NONE};
+		//p return False
+		return {Type::NONE};
 	}
 }
 
@@ -459,14 +501,15 @@ bool Packet::resend() {
 void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
 	assert(_object);
 	TRACE("Packet::prove: proving packet...");
-	if (!_object->_destination) {
-		throw std::logic_error("Packet destination is required");
-	}
+	// CBA LINK
+	// CBA TODO: Determine under which circumstances to use _destination and which to use _link since it's unclear from this logic
+    //p if self.fromPacked and hasattr(self, "destination") and self.destination:
 	if (_object->_fromPacked && _object->_destination) {
 		if (_object->_destination.identity() && _object->_destination.identity().prv()) {
 			_object->_destination.identity().prove(*this, destination);
 		}
 	}
+    //p elif self.fromPacked and hasattr(self, "link") and self.link:
 	else if (_object->_fromPacked && _object->_link) {
 		_object->_link.prove_packet(*this);
 	}
@@ -522,11 +565,11 @@ const Bytes Packet::get_hashable_part() const {
 	Bytes hashable_part;
 	hashable_part << (uint8_t)(_object->_raw.data()[0] & 0b00001111);
 	if (_object->_header_type == HEADER_2) {
-		//hashable_part += self.raw[(RNS.Identity.TRUNCATED_HASHLENGTH//8)+2:]
+		//p hashable_part += self.raw[(RNS.Identity.TRUNCATED_HASHLENGTH//8)+2:]
 		hashable_part << _object->_raw.mid((Type::Identity::TRUNCATED_HASHLENGTH/8)+2);
 	}
 	else {
-		//hashable_part += self.raw[2:];
+		//p hashable_part += self.raw[2:];
 		hashable_part << _object->_raw.mid(2);
 	}
 	return hashable_part;
@@ -634,6 +677,7 @@ std::string Packet::dumpString() const {
 		if (_object->_context == RESOURCE_PRF) {
 			encrypted = false;
 		}
+		// CBA LINK
 		if (_object->_destination && _object->_destination.type() == Type::Destination::LINK) {
 			encrypted = false;
 		}
@@ -746,6 +790,7 @@ std::string Packet::dumpString() const {
 }
 #endif
 
+
 PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
 
 	if (!packet.destination()) {
@@ -755,13 +800,17 @@ PacketReceipt::PacketReceipt(const Packet& packet) : _object(new Object()) {
 	_object->_truncated_hash = packet.getTruncatedHash();
 	_object->_destination    = packet.destination();
 
+	// CBA LINK
 	if (packet.destination().type() == Type::Destination::LINK) {
-		// CBA BUG? Destination does not have rtt or traffic_timeout_factor memebers
-		//z _object->_timeout    = packet.destination().rtt() * packet.destination().traffic_timeout_factor();
-		_object->_timeout    = TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
+		if (!packet.destination_link()) throw std::invalid_argument("Packet is not associated with a Link");
+        //p self.timeout    = max(packet.destination.rtt * packet.destination.traffic_timeout_factor, RNS.Link.TRAFFIC_TIMEOUT_MIN_MS/1000)
+		_object->_timeout    = std::max(packet.destination_link().rtt() * packet.destination_link().traffic_timeout_factor(), (double)RNS::Type::Link::TRAFFIC_TIMEOUT_MIN_MS/1000);
 	}
 	else {
-		_object->_timeout    = TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
+		//p self.timeout    = RNS.Reticulum.get_instance().get_first_hop_timeout(self.destination.hash)
+		//p self.timeout   += Packet.TIMEOUT_PER_HOP * RNS.Transport.hops_to(self.destination.hash)
+		_object->_timeout    = RNS::Reticulum::get_instance().get_first_hop_timeout(_object->_destination.hash());
+		_object->_timeout   += TIMEOUT_PER_HOP * Transport::hops_to(_object->_destination.hash());
 	}
 }
 
@@ -846,6 +895,8 @@ bool PacketReceipt::validate_proof(const Bytes& proof) {
 bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packet) {
 	assert(_object);
 	TRACE("PacketReceipt::validate_proof: validating proof...");
+	// CBA LINK
+	// CBA TODO: Determine whether to use destination.identity or link.identity here!!!
 	if (proof.size() == EXPL_LENGTH) {
 		// This is an explicit proof
 		Bytes proof_hash = proof.left(Type::Identity::HASHLENGTH/8);

@@ -31,15 +31,27 @@ namespace RNS {
 
 	public:
 		Bytes() {
-			MEMF("Bytes object created from defaul, this: %lu, data: %lu", this, _data.get());
+			MEMF("Bytes object created from default, this: %lu, data: %lu", this, _data.get());
 		}
 		Bytes(const NoneConstructor none) {
 			MEMF("Bytes object created from NONE, this: %lu, data: %lu", this, _data.get());
 		}
 		Bytes(const Bytes& bytes) {
-			MEM("Bytes is using shared data");
+//MEM("Bytes is using shared data");
 			assign(bytes);
 			MEMF("Bytes object copy created from bytes \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
+		}
+		// Construct from std::vector<uint8_t>
+		Bytes(const Data& data) {
+MEM("Creating from data-copy...");
+			assign(data);
+			MEMF("Bytes object created from data-copy \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
+		}
+		// Construct from rvalue std::vector<uint8_t> (move)
+		Bytes(Data&& rdata) {
+MEM("Creating from data-move...");
+			assign(std::move(rdata));
+			MEMF("Bytes object created from data-move \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
 		}
 		Bytes(const uint8_t* chunk, size_t size) {
 			assign(chunk, size);
@@ -70,6 +82,24 @@ namespace RNS {
 			return *this;
 		}
 
+		// CBA TODO Resolve ambiguity in JsonVariantConst assignments before enabling the following
+/*
+		// Assignment from std::vector<uint8_t>
+		inline const Bytes& operator = (const Data& data) {
+			assign(data);
+			return *this;
+		}
+		// Move assignment from std::vector<uint8_t>
+		inline const Bytes& operator = (Data&& rdata) {
+			assign(std::move(rdata));
+			return *this;
+		}
+*/
+		inline const Bytes& operator += (const Data& data) {
+			append(data);
+			return *this;
+		}
+
 		inline Bytes operator + (const Bytes& bytes) const {
 			Bytes newbytes(*this);
 			newbytes.append(bytes);
@@ -87,13 +117,33 @@ namespace RNS {
 		inline bool operator > (const Bytes& bytes) const {
 			return compare(bytes) > 0;
 		}
+
+		inline uint8_t& operator[](size_t index) {
+			if (!_data || index >= _data->size()) {
+				throw std::out_of_range("Index out of bounds");
+			}
+			return (*_data)[index];
+		}
+
+		inline const uint8_t& operator[](size_t index) const {
+			if (!_data || index >= _data->size()) {
+				throw std::out_of_range("Index out of bounds");
+			}
+			return (*_data)[index];
+		}
+
 		inline operator bool() const {
 			return (_data && !_data->empty());
+		}
+		inline operator const Data() const {
+			if (!_data)
+				return Data();
+			return *_data.get();
 		}
 
 	private:
 		inline SharedData shareData() const {
-			MEM("Bytes is sharing its own data");
+//MEM("Bytes is sharing its own data");
 			_exclusive = false;
 			return _data;
 		}
@@ -118,8 +168,31 @@ namespace RNS {
 				return;
 			}
 			exclusiveData(false, bytes._data->size());
-			_data->insert(_data->begin(), bytes._data->begin(), bytes._data->end());
+			//_data->insert(_data->begin(), bytes._data->begin(), bytes._data->end());
+			//_data->assign(bytes._data->begin(), bytes._data->end());
+			*_data = bytes._data;
 #endif
+		}
+		inline void assign(const Data& data) {
+			// if assignment is empty then clear data and don't bother creating new
+			if (data.size() <= 0) {
+				_data = nullptr;
+				_exclusive = true;
+				return;
+			}
+			exclusiveData(false, data.size());
+			//_data->assign(data.begin(), data.end());
+			*_data = data;
+		}
+		inline void assign(Data&& rdata) {
+			// if assignment is empty then clear data and don't bother creating new
+			if (rdata.size() <= 0) {
+				_data = nullptr;
+				_exclusive = true;
+				return;
+			}
+			exclusiveData(false);
+			*_data = std::move(rdata);
 		}
 		inline void assign(const uint8_t* chunk, size_t chunk_size) {
 			// if assignment is empty then clear data and don't bother creating new
@@ -129,7 +202,8 @@ namespace RNS {
 				return;
 			}
 			exclusiveData(false, chunk_size);
-			_data->insert(_data->begin(), chunk, chunk + chunk_size);
+			//_data->insert(_data->begin(), chunk, chunk + chunk_size);
+			_data->assign(chunk, chunk + chunk_size);
 		}
 		inline void assign(const char* string) {
 			// if assignment is empty then clear data and don't bother creating new
@@ -140,7 +214,8 @@ namespace RNS {
 			}
 			size_t string_size = strlen(string);
 			exclusiveData(false, string_size);
-			_data->insert(_data->begin(), (uint8_t* )string, (uint8_t* )string + string_size);
+			//_data->insert(_data->begin(), (uint8_t* )string, (uint8_t* )string + string_size);
+			_data->assign((uint8_t* )string, (uint8_t* )string + string_size);
 		}
 		//inline void assign(const std::string& string) { assign(string.c_str()); }
 		inline void assign(const std::string& string) { assign((uint8_t*)string.c_str(), string.length()); }
@@ -154,6 +229,14 @@ namespace RNS {
 			}
 			exclusiveData(true, size() + bytes.size());
 			_data->insert(_data->end(), bytes._data->begin(), bytes._data->end());
+		}
+		inline void append(const Data& data) {
+			// if append is empty then do nothing
+			if (data.size() <= 0) {
+				return;
+			}
+			exclusiveData(true, size() + data.size());
+			_data->insert(_data->end(), data.begin(), data.end());
 		}
 		inline void append(const uint8_t* chunk, size_t chunk_size) {
 			// if append is empty then do nothing
@@ -221,6 +304,7 @@ namespace RNS {
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
 		inline void reserve(size_t capacity) const { if (!_data) return; _data->reserve(capacity); }
 		inline const uint8_t* data() const { if (!_data) return nullptr; return _data->data(); }
+		inline const Data collection() const { if (!_data) return Data(); return *_data.get(); }
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = false) const;
@@ -229,7 +313,7 @@ namespace RNS {
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
 		inline Bytes right(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data() + (size() - len), len}; }
 		inline int find(int pos, const char* str) {
-			if (!_data || _data->data() == nullptr || pos >= _data->size()) {
+			if (!_data || _data->data() == nullptr || (size_t)pos >= _data->size()) {
 				return -1;
 			}
 			const char* ptr = strnstr((const char*)(_data->data() + pos), str, (_data->size() - pos));
@@ -268,7 +352,7 @@ namespace RNS {
 
 	};
 
-	// following array function doesn't work without size since it's past as a pointer to the array sizeof() is of the pointer
+	// following array function doesn't work without size since it's passed as a pointer to the array so sizeof() is of the pointer
 	//inline Bytes bytesFromArray(const uint8_t arr[]) { return Bytes(arr, sizeof(arr)); }
 	//inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return Bytes(ptr, len); }
 	inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return {ptr, len}; }
@@ -283,23 +367,23 @@ namespace RNS {
 }
 
 inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const RNS::Bytes& rhbytes) {
-	MEM("Appending right-hand Bytes to left-hand Bytes");
+//MEM("Appending right-hand Bytes to left-hand Bytes");
 	lhbytes.append(rhbytes);
-	MEM("Returning left-hand Bytes");
+//MEM("Returning left-hand Bytes");
 	return lhbytes;
 }
 
 inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, uint8_t rhbyte) {
-	MEM("Appending right-hand byte to left-hand Bytes");
+//MEM("Appending right-hand byte to left-hand Bytes");
 	lhbytes.append(rhbyte);
-	MEM("Returning left-hand Bytes");
+//MEM("Returning left-hand Bytes");
 	return lhbytes;
 }
 
 inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const char* rhstr) {
-	MEM("Appending right-hand str to left-hand Bytes");
+//MEM("Appending right-hand str to left-hand Bytes");
 	lhbytes.append(rhstr);
-	MEM("Returning left-hand Bytes");
+//MEM("Returning left-hand Bytes");
 	return lhbytes;
 }
 

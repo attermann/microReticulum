@@ -283,6 +283,20 @@ namespace RNS {
 			double _expires = 0;
 		};
 
+		class RateEntry {
+		public:
+			RateEntry(double now) :
+				_last(now)
+			{
+				_timestamps.push_back(now);
+			}
+		public:
+			double _last = 0.0;
+			double _rate_violations = 0.0;
+			double _blocked_until = 0.0;
+			std::vector<double> _timestamps;
+		};
+
 	public:
 		static void start(const Reticulum& reticulum_instance);
 		static void loop();
@@ -300,7 +314,7 @@ namespace RNS {
 		static void deregister_interface(const Interface& interface);
 		static void register_destination(Destination& destination);
 		static void deregister_destination(const Destination& destination);
-		static void register_link(const Link& link);
+		static void register_link(Link& link);
 		static void activate_link(Link& link);
 		static void register_announce_handler(HAnnounceHandler handler);
 		static void deregister_announce_handler(HAnnounceHandler handler);
@@ -316,6 +330,12 @@ namespace RNS {
 		static uint8_t hops_to(const Bytes& destination_hash);
 		static Bytes next_hop(const Bytes& destination_hash);
 		static Interface next_hop_interface(const Bytes& destination_hash);
+		static uint32_t next_hop_interface_bitrate(const Bytes& destination_hash);
+		static uint16_t next_hop_interface_hw_mtu(const Bytes& destination_hash);
+		static double next_hop_per_bit_latency(const Bytes& destination_hash);
+		static double next_hop_per_byte_latency(const Bytes& destination_hash);
+		static double first_hop_timeout(const Bytes& destination_hash);
+		static double extra_link_proof_timeout(const Interface& interface);
 		static bool expire_path(const Bytes& destination_hash);
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
@@ -329,7 +349,7 @@ namespace RNS {
 		static void shared_connection_disappeared();
 		static void shared_connection_reappeared();
 		static void drop_announce_queues();
-		static bool announce_emitted(const Packet& packet);
+		static uint64_t announce_emitted(const Packet& packet);
 		static void write_packet_hashlist();
 		static bool read_path_table();
 		static bool write_path_table();
@@ -339,6 +359,12 @@ namespace RNS {
 		static void clean_caches();
 		static void dump_stats();
 		static void exit_handler();
+
+		static uint16_t remove_reverse_entries(const std::vector<Bytes>& hashes);
+		static uint16_t remove_links(const std::vector<Bytes>& hashes);
+		static uint16_t remove_paths(const std::vector<Bytes>& hashes);
+		static uint16_t remove_discovery_path_requests(const std::vector<Bytes>& hashes);
+		static uint16_t remove_tunnels(const std::vector<Bytes>& hashes);
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
 
@@ -358,6 +384,10 @@ namespace RNS {
 		// CBA TEST
 		static inline void identity(Identity& identity) { _identity = identity; }
 
+		inline static const std::map<Bytes, DestinationEntry>& get_destination_table() { return _destination_table; }
+		inline static const std::map<Bytes, RateEntry>& get_announce_rate_table() { return _announce_rate_table; }
+		inline static const std::map<Bytes, LinkEntry>& get_link_table() { return _link_table; }
+
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
 #if defined(INTERFACES_SET)
@@ -376,6 +406,7 @@ namespace RNS {
 #elif defined(DESTINATIONS_MAP)
 		static std::map<Bytes, Destination> _destinations;           // All active destinations
 #endif
+		// CBA TODO: Reconsider using std::set for enforcing uniqueness. Maybe consider std::map keyed on hash instead
 		static std::set<Link> _pending_links;           // Links that are being established
 		static std::set<Link> _active_links;           // Links that are active
 		static std::set<Bytes> _packet_hashlist;           // A list of packet hashes for duplicate detection
@@ -392,7 +423,7 @@ namespace RNS {
 		static std::map<Bytes, AnnounceEntry> _held_announces;           // A table containing temporarily held announce-table entries
 		static std::set<HAnnounceHandler> _announce_handlers;           // A table storing externally registered announce handlers
 		static std::map<Bytes, TunnelEntry> _tunnels;           // A table storing tunnels to other transport instances
-		//z _announce_rate_table  = {}           // A table for keeping track of announce rates
+		static std::map<Bytes, RateEntry> _announce_rate_table;           // A table for keeping track of announce rates
 		static std::map<Bytes, double> _path_requests;           // A table for storing path request timestamps
 
 		static std::map<Bytes, PathRequestEntry> _discovery_path_requests;       // A table for keeping track of path requests on behalf of other nodes

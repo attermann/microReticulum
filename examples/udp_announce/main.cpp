@@ -1,18 +1,18 @@
 //#define NDEBUG
 
-#include "UDPInterface.h"
-#include "FileSystem.h"
+#include <UDPInterface.h>
+#include <UniversalFileSystem.h>
 
-#include "Reticulum.h"
-#include "Identity.h"
-#include "Destination.h"
-#include "Packet.h"
-#include "Transport.h"
-#include "Interface.h"
-#include "Log.h"
-#include "Bytes.h"
-#include "Type.h"
-#include "Utilities/OS.h"
+#include <Reticulum.h>
+#include <Identity.h>
+#include <Destination.h>
+#include <Packet.h>
+#include <Transport.h>
+#include <Interface.h>
+#include <Log.h>
+#include <Bytes.h>
+#include <Type.h>
+#include <Utilities/OS.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -89,12 +89,9 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 
 RNS::Reticulum reticulum({RNS::Type::NONE});
 RNS::Interface udp_interface(RNS::Type::NONE);
-RNS::FileSystem test_filesystem(RNS::Type::NONE);
+RNS::FileSystem universal_filesystem(RNS::Type::NONE);
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
-
-UDPInterface* udp_interface_impl = nullptr;
-FileSystem* test_filesystem_impl = nullptr;
 
 //ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
 //RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
@@ -124,19 +121,16 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
-		test_filesystem_impl = new FileSystem();
-		test_filesystem = test_filesystem_impl;
-		((FileSystem*)test_filesystem.get())->init();
-		RNS::Utilities::OS::register_filesystem(test_filesystem);
+		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
+		universal_filesystem = new UniversalFileSystem();
+		universal_filesystem.init();
+		RNS::Utilities::OS::register_filesystem(universal_filesystem);
 
-		HEAD("Registering Interface instances with Transport...", RNS::LOG_TRACE);
-		udp_interface_impl = new UDPInterface();
-		udp_interface = udp_interface_impl;
+		HEAD("Registering UDPInterface instances with Transport...", RNS::LOG_TRACE);
+		udp_interface = new UDPInterface();
 		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(udp_interface);
-
-		HEAD("Starting UDPInterface...", RNS::LOG_TRACE);
-		udp_interface_impl->start();
+		udp_interface.start();
 
 		HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
 		//RNS::Reticulum reticulum;
@@ -227,7 +221,7 @@ void reticulum_setup() {
 void reticulum_teardown() {
 	INFO("Tearing down Reticulum...");
 
-	//zzzCBA RNS::Transport::save_path_table();
+	RNS::Transport::persist_data();
 
 	try {
 
@@ -273,8 +267,13 @@ void setup() {
 	}
 #endif
 
-	RNS::loglevel(RNS::LOG_TRACE);
-	//RNS::loglevel(RNS::LOG_MEM);
+#if defined(MEM_LOG)
+		RNS::loglevel(RNS::LOG_MEM);
+#else
+		//RNS::loglevel(RNS::LOG_WARNING);
+		//RNS::loglevel(RNS::LOG_DEBUG);
+		RNS::loglevel(RNS::LOG_TRACE);
+#endif
 
 /*
 	{
@@ -293,7 +292,7 @@ void setup() {
 void loop() {
 
 	reticulum.loop();
-	udp_interface_impl->loop();
+	udp_interface.loop();
 
 #ifdef ARDUINO
 /*

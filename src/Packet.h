@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Destination.h"
 #include "Link.h"
 #include "Interface.h"
+#include "Destination.h"
 #include "Bytes.h"
 #include "Log.h"
 #include "Type.h"
@@ -48,9 +48,9 @@ namespace RNS {
 		};
 
 	public:
+		PacketReceipt() : _object(new Object()) {}
 		PacketReceipt(Type::NoneConstructor none) {}
 		PacketReceipt(const PacketReceipt& packet_receipt) : _object(packet_receipt._object) {}
-		PacketReceipt() : _object(new Object()) {}
 		PacketReceipt(const Packet& packet);
 
 		inline PacketReceipt& operator = (const PacketReceipt& packet_receipt) {
@@ -99,9 +99,18 @@ namespace RNS {
 			_object->_callbacks._timeout = callback;
 		}
 
-		// getters/setters
+		// getters
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
 		inline Type::PacketReceipt::Status status() const { assert(_object); return _object->_status; }
+		inline bool proved() const { assert(_object); return _object->_proved; }
+		inline double concluded_at() const { assert(_object); return _object->_concluded_at; }
+		inline const Bytes& truncated_hash() const { assert(_object); return _object->_truncated_hash; }
+		inline const Callbacks& callbacks() const { assert(_object); return _object->_callbacks; }
+
+		// setters
+		inline void status(Type::PacketReceipt::Status status) { assert(_object); _object->_status = status; }
+		inline void proved(bool proved) { assert(_object); _object->_proved = proved; }
+		inline void concluded_at(double concluded_at) { assert(_object); _object->_concluded_at = concluded_at; }
 
 	private:
 		class Object {
@@ -150,7 +159,8 @@ namespace RNS {
 			Type::Transport::types transport_type = Type::Transport::BROADCAST,
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
-			bool create_receipt = true
+			bool create_receipt = true,
+			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
 		);
 		Packet(
 			const Destination& destination,
@@ -160,8 +170,17 @@ namespace RNS {
 			Type::Transport::types transport_type = Type::Transport::BROADCAST,
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
-			bool create_receipt = true
-		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt) {}
+			bool create_receipt = true,
+			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
+		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt, context_flag) {}
+		// CBA LINK
+		Packet(
+			const Link& link,
+			const Bytes& data,
+			Type::Packet::types packet_type = Type::Packet::DATA,
+			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
+			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
+		);
 		virtual ~Packet() {
 			MEM("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}			
@@ -191,7 +210,7 @@ namespace RNS {
 		void unpack_flags(uint8_t flags);
 		void pack();
 		bool unpack();
-		bool send();
+		PacketReceipt send();
 		bool resend();
 		void prove(const Destination& destination = {Type::NONE});
 		ProofDestination generate_proof_destination() const;
@@ -202,39 +221,47 @@ namespace RNS {
 		const Bytes getTruncatedHash() const;
 		const Bytes get_hashable_part() const;
 
-		// getters/setters
+		inline std::string toString() const { if (!_object) return ""; return "{Packet:" + _object->_packet_hash.toHex() + "}"; }
+
+		// getters
 		inline const Destination& destination() const { assert(_object); return _object->_destination; }
-		inline void destination(const Destination& destination) { assert(_object); _object->_destination = destination; }
 		inline const Link& link() const { assert(_object); return _object->_link; }
-		inline void link(const Link& link) { assert(_object); _object->_link = link; }
 		inline const Interface& attached_interface() const { assert(_object); return _object->_attached_interface; }
 		inline const Interface& receiving_interface() const { assert(_object); return _object->_receiving_interface; }
-		inline void receiving_interface(const Interface& receiving_interface) { assert(_object); _object->_receiving_interface = receiving_interface; }
 		inline Type::Packet::header_types header_type() const { assert(_object); return _object->_header_type; }
 		inline Type::Transport::types transport_type() const { assert(_object); return _object->_transport_type; }
 		inline Type::Destination::types destination_type() const { assert(_object); return _object->_destination_type; }
 		inline Type::Packet::types packet_type() const { assert(_object); return _object->_packet_type; }
 		inline Type::Packet::context_types context() const { assert(_object); return _object->_context; }
 		inline bool sent() const { assert(_object); return _object->_sent; }
-		inline void sent(bool sent) { assert(_object); _object->_sent = sent; }
 		inline double sent_at() const { assert(_object); return _object->_sent_at; }
-		inline void sent_at(double sent_at) { assert(_object); _object->_sent_at = sent_at; }
 		inline bool create_receipt() const { assert(_object); return _object->_create_receipt; }
 		inline const PacketReceipt& receipt() const { assert(_object); return _object->_receipt; }
-		inline void receipt(const PacketReceipt& receipt) { assert(_object); _object->_receipt = receipt; }
 		inline uint8_t flags() const { assert(_object); return _object->_flags; }
 		inline uint8_t hops() const { assert(_object); return _object->_hops; }
-		inline void hops(uint8_t hops) { assert(_object); _object->_hops = hops; }
 		inline bool cached() const { assert(_object); return _object->_cached; }
-		inline void cached(bool cached) { assert(_object); _object->_cached = cached; }
 		inline const Bytes& packet_hash() const { assert(_object); return _object->_packet_hash; }
 		inline const Bytes& destination_hash() const { assert(_object); return _object->_destination_hash; }
 		inline const Bytes& transport_id() const { assert(_object); return _object->_transport_id; }
-		inline void transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; }
 		inline const Bytes& raw() const { assert(_object); return _object->_raw; }
 		inline const Bytes& data() const { assert(_object); return _object->_data; }
+		// CBA LINK
+		inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
+		//CBA Following method is only used by Resource to access decrypted resource advertisement form Link. Consider a better way.
+		inline const Bytes& plaintext() { assert(_object); return _object->_plaintext; }
 
-		inline std::string toString() const { if (!_object) return ""; return "{Packet:" + _object->_packet_hash.toHex() + "}"; }
+		// setters
+		inline void destination(const Destination& destination) { assert(_object); _object->_destination = destination; }
+		inline void link(const Link& link) { assert(_object); _object->_link = link; }
+		inline void receiving_interface(const Interface& receiving_interface) { assert(_object); _object->_receiving_interface = receiving_interface; }
+		inline void sent(bool sent) { assert(_object); _object->_sent = sent; }
+		inline void sent_at(double sent_at) { assert(_object); _object->_sent_at = sent_at; }
+		inline void receipt(const PacketReceipt& receipt) { assert(_object); _object->_receipt = receipt; }
+		inline void hops(uint8_t hops) { assert(_object); _object->_hops = hops; }
+		inline void cached(bool cached) { assert(_object); _object->_cached = cached; }
+		inline void transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; }
+		//CBA Following method is only used by Link to provide Resource access to decrypted resource advertisement. Consider a better way.
+		inline void plaintext(const Bytes& plaintext) { assert(_object); _object->_plaintext = plaintext; }
 
 #ifndef NDEBUG
 		std::string debugString() const;
@@ -245,9 +272,17 @@ namespace RNS {
 		class Object {
 		public:
 			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { MEM("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			// CBA LINK
+			//Object(const Destination& destination, const Link& destination_link) : _destination(destination), _destination_link(destination_link) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			//Object(const Link& link) : _destination(link.destination()), _destination_link(link) { MEM("Packet::Data object created, this: " + std::to_string((uintptr_t)this)); }
+			virtual ~Object() { MEM("Packet::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
 		private:
 			Destination _destination = {Type::NONE};
+
+			// CBA LINK
+			// CBA TODO: Determine if _link (assigned late by Transport) and _destination_link (assigned in constructor) can be one and the same !!!
+			Link _destination_link = {Type::NONE};
+
 			Link _link = {Type::NONE};
 
 			Interface _attached_interface = {Type::NONE};
@@ -258,6 +293,7 @@ namespace RNS {
 			Type::Destination::types _destination_type = Type::Destination::SINGLE;
 			Type::Packet::types _packet_type = Type::Packet::DATA;
 			Type::Packet::context_types _context = Type::Packet::CONTEXT_NONE;
+			uint8_t _context_flag = Type::Packet::FLAG_UNSET;
 
 			uint8_t _flags = 0;
 			uint8_t _hops = 0;
@@ -271,18 +307,25 @@ namespace RNS {
 			bool _cached = false;		// whether packet has been cached
 			PacketReceipt _receipt = {Type::NONE};
 
-			uint16_t _mtu = Type::Reticulum::MTU;
+			uint16_t _MTU = Type::Reticulum::MTU;
 			double _sent_at = 0;
 
 			float _rssi = 0.0;
 			float _snr = 0.0;
+			float _q = 0.0;
 
 			Bytes _packet_hash;
+			Bytes _ratchet_id;
 			Bytes _destination_hash;
 			Bytes _transport_id;
 
 			Bytes _raw;		// header + ( plaintext | ciphertext-token )
 			Bytes _data;	// plaintext | ciphertext
+
+			Bytes _plaintext;	// used exclusively to relay decrypted resource advertisement form Link to Resource
+
+			Bytes _header;
+			Bytes _ciphertext;
 
 		friend class Packet;
 		};

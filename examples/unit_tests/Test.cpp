@@ -10,5 +10,6 @@ void test() {
 	testPersistence();
 	testFileSystem();
 	testReticulum();
+	testObjects();
 
 }

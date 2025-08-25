@@ -1,10 +1,14 @@
 //#include <unity.h>
 
-#include "Reticulum.h"
-#include "Transport.h"
-#include "Log.h"
+#include "FileSystem.h"
+
+#include <Reticulum.h>
+#include <Transport.h>
+#include <Log.h>
 
 #include <assert.h>
+
+RNS::FileSystem reticulum_filesystem(RNS::Type::NONE);
 
 class InInterface : public RNS::InterfaceImpl {
 public:
@@ -15,9 +19,16 @@ public:
 	virtual ~InInterface() {
 		_name = "(deleted)";
 	}
-	virtual void handle_incoming(const RNS::Bytes &data) {
+	// Incoming interface only, send_outgoing not currently implemented
+	virtual void send_outgoing(const RNS::Bytes &data) {}
+	// Incoming shoujld be handled automatically by InterfaceImpl::handle_incoming called via Interface::handle_incoming from OutInterface
+/*
+	void on_incoming(const RNS::Bytes &data) {
 		HEAD("InInterface.handle_incoming: data: " + data.toHex(), RNS::LOG_TRACE);
+		// Pass received data on to transport
+		InterfaceImpl::handle_incoming(data);
 	}
+*/
 };
 
 class OutInterface : public RNS::InterfaceImpl {
@@ -31,8 +42,12 @@ public:
 	}
 	virtual void send_outgoing(const RNS::Bytes &data) {
 		HEAD("OutInterface.send_outgoing: data: " + data.toHex(), RNS::LOG_TRACE);
+
+		// Loop data back to InInterface for testing
 		_in_interface.handle_incoming(data);
-		InterfaceImpl::send_outgoing(data);
+
+		// Perform post-send housekeeping
+		InterfaceImpl::handle_outgoing(data);
 	}
 private:
 	RNS::Interface& _in_interface;
@@ -62,6 +77,7 @@ public:
 RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler());
 
 // Test packet receive callback
+//void(*)(const Bytes& data, const Packet& packet)
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	INFO("onPacket: data: " + data.toHex());
@@ -71,6 +87,7 @@ void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 }
 
 // Ping packet receive callback
+//void(*)(const Bytes& data, const Packet& packet)
 void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	INFO("onPingPacket: data: " + data.toHex());
@@ -88,6 +105,11 @@ RNS::Interface out_interface(new OutInterface(in_interface));
 
 void testReticulum() {
 	HEAD("Running testReticulum...", RNS::LOG_TRACE);
+
+	HEAD("Registering Filesystem with OS...", RNS::LOG_TRACE);
+	reticulum_filesystem = new FileSystem();
+	((FileSystem*)reticulum_filesystem.get())->init();
+	RNS::Utilities::OS::register_filesystem(reticulum_filesystem);
 
 	HEAD("Registering Interface instances with Transport...", RNS::LOG_TRACE);
 	RNS::Transport::register_interface(in_interface);

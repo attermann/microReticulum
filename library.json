@@ -19,7 +19,8 @@
 	"license": "Apache-2.0",
 	"homepage": "https://reticulum.network/",
 	"dependencies": {
-		"ArduinoJson": "~6.21.3"
+		"ArduinoJson": "~7.1.0",
+		"MsgPack": "~0.4.2"
 	},
 	"frameworks": "*",
 	"platforms": "*",

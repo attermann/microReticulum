@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Log.h"
-#include "Cryptography/Fernet.h"
 
 #include <stdint.h>
 
@@ -13,12 +12,24 @@ namespace RNS { namespace Type {
 	};
 
 	namespace Persistence {
-
 		//static const uint16_t DOCUMENT_MAXSIZE = 1024;
 		static const uint16_t DOCUMENT_MAXSIZE = 8192;
 		//static const uint16_t DOCUMENT_MAXSIZE = 16384;
 		static const uint16_t BUFFER_MAXSIZE = Persistence::DOCUMENT_MAXSIZE * 1.5;	// Json write buffer of 1.5 times document seems to be sufficient
+	}
 
+	namespace Cryptography {
+		namespace Fernet {
+			static const uint8_t FERNET_OVERHEAD  = 48; // Bytes
+		}
+		namespace Token {
+			static const uint8_t TOKEN_OVERHEAD  = 48; // Bytes
+			enum token_mode {
+				MODE_AES			= 0x01,
+				MODE_AES_128_CBC	= 0x02,
+				MODE_AES_256_CBC	= 0x03,
+			};
+		}
 	}
 
 	namespace Reticulum {
@@ -37,6 +48,16 @@ namespace RNS { namespace Type {
 		networks with segments of different MTUs. Absolute minimum is 219.
 		*/
 		static const uint16_t MTU = 500;
+
+		/*
+		Whether automatic link MTU discovery is enabled by default in this
+		release. Link MTU discovery significantly increases throughput over
+		fast links, but requires all intermediary hops to also support it.
+		Support for this feature was added in RNS version 0.9.0. This option
+		will become enabled by default in the near future. Please update your
+		RNS instances.
+		*/
+		static const bool LINK_MTU_DISCOVERY   = true;
 
 		static const uint16_t MAX_QUEUED_ANNOUNCES = 16384;
 		static const uint32_t QUEUED_ANNOUNCE_LIFE = 60*60*24;
@@ -104,24 +125,38 @@ namespace RNS { namespace Type {
 
 	namespace Identity {
 
+		// The curve used for Elliptic Curve DH key exchanges
 		//static const char CURVE[] = "Curve25519";
 		static constexpr const char* CURVE = "Curve25519";
-		// The curve used for Elliptic Curve DH key exchanges
 
-		static const uint16_t KEYSIZE     = 256*2;
 		// X25519 key size in bits. A complete key is the concatenation of a 256 bit encryption key, and a 256 bit signing key.
+		static const uint16_t KEYSIZE     = 256*2;
+
+		// X.25519 ratchet key size in bits.
+		static const uint16_t RATCHETSIZE = 256;
+
+		/*
+		The expiry time for received ratchets in seconds, defaults to 30 days. Reticulum will always use the most recently
+		announced ratchet, and remember it for up to ``RATCHET_EXPIRY`` since receiving it, after which it will be discarded.
+		If a newer ratchet is announced in the meantime, it will be replace the already known ratchet.
+		*/
+		static const uint32_t RATCHET_EXPIRY = 60*60*24*30;
 
 		// Non-configurable constants
 		static const uint8_t FERNET_OVERHEAD           = Cryptography::Fernet::FERNET_OVERHEAD;
+	    static const uint8_t TOKEN_OVERHEAD            = Cryptography::Token::TOKEN_OVERHEAD;
 		static const uint8_t AES128_BLOCKSIZE           = 16;          // In bytes
 		static const uint16_t HASHLENGTH                = Reticulum::HASHLENGTH;	// In bits
 		static const uint16_t SIGLENGTH                 = KEYSIZE;     // In bits
 
 		static const uint8_t NAME_HASH_LENGTH     = 80;
 		static const uint8_t RANDOM_HASH_LENGTH     = 80;
-		static const uint16_t TRUNCATED_HASHLENGTH = Reticulum::TRUNCATED_HASHLENGTH;	// In bits
 		// Constant specifying the truncated hash length (in bits) used by Reticulum
 		// for addressable hashes and other purposes. Non-configurable.
+		static const uint16_t TRUNCATED_HASHLENGTH = Reticulum::TRUNCATED_HASHLENGTH;	// In bits
+
+		static const uint16_t DERIVED_KEY_LENGTH        = 512/8;
+		static const uint16_t DERIVED_KEY_LENGTH_LEGACY = 256/8;
 
 	}
 
@@ -157,8 +192,8 @@ namespace RNS { namespace Type {
 
 	namespace Link {
 
-		static constexpr const char* CURVE = Identity::CURVE;
 		// The curve used for Elliptic Curve DH key exchanges
+		static constexpr const char* CURVE = Identity::CURVE;
 
 		static const uint16_t ECPUBSIZE         = 32+32;
 		static const uint8_t KEYSIZE           = 32;
@@ -166,17 +201,19 @@ namespace RNS { namespace Type {
 		//static const uint16_t MDU = floor((Reticulum::MTU-Reticulum::IFAC_MIN_SIZE-Reticulum::HEADER_MINSIZE-Identity::FERNET_OVERHEAD)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
 		static const uint16_t MDU = ((Reticulum::MTU-Reticulum::IFAC_MIN_SIZE-Reticulum::HEADER_MINSIZE-Identity::FERNET_OVERHEAD)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
 
-		static const uint8_t ESTABLISHMENT_TIMEOUT_PER_HOP = Reticulum::DEFAULT_PER_HOP_TIMEOUT;
 		// Timeout for link establishment in seconds per hop to destination.
+		static const uint8_t ESTABLISHMENT_TIMEOUT_PER_HOP = Reticulum::DEFAULT_PER_HOP_TIMEOUT;
 
-		static const uint16_t TRAFFIC_TIMEOUT_FACTOR = 6;
-		static const uint16_t KEEPALIVE_TIMEOUT_FACTOR = 4;
+		static const uint8_t LINK_MTU_SIZE            = 3;
+		static const uint8_t TRAFFIC_TIMEOUT_MIN_MS   = 5;
 		// RTT timeout factor used in link timeout calculation.
-		static const uint8_t STALE_GRACE = 2;
+		static const uint8_t TRAFFIC_TIMEOUT_FACTOR = 6;
+		static const float KEEPALIVE_MAX_RTT        = 1.75;
+		static const uint8_t KEEPALIVE_TIMEOUT_FACTOR = 4;
 		// Grace period in seconds used in link timeout calculation.
-		static const uint16_t KEEPALIVE = 360;
+		static const uint8_t STALE_GRACE = 2;
 		// Interval for sending keep-alive packets on established links in seconds.
-		static const uint16_t STALE_TIME = 2*KEEPALIVE;
+		static const uint16_t KEEPALIVE = 360;
 		/*
 		If no traffic or keep-alive packets are received within this period, the
 		link will be marked as stale, and a final keep-alive packet will be sent.
@@ -184,6 +221,13 @@ namespace RNS { namespace Type {
 		``KEEPALIVE_TIMEOUT_FACTOR`` + ``STALE_GRACE``, the link is considered timed out,
 		and will be torn down.
 		*/
+	    static const uint8_t STALE_FACTOR = 2;
+		static const uint16_t STALE_TIME = 2*KEEPALIVE;
+
+		static const uint8_t WATCHDOG_MAX_SLEEP  = 5;
+
+		static const uint64_t MTU_BYTEMASK       = 0x1FFFFF;
+		static const uint8_t MODE_BYTEMASK       = 0xE0;
 
 		enum status {
 			PENDING   = 0x00,
@@ -193,16 +237,51 @@ namespace RNS { namespace Type {
 			CLOSED    = 0x04
 		};
 
-		enum teardown_reasons {
+		enum teardown_reason {
+			TEARDOWN_NONE      = 0x00,
 			TIMEOUT            = 0x01,
 			INITIATOR_CLOSED   = 0x02,
 			DESTINATION_CLOSED = 0x03,
 		};
 
-		enum resource_strategies {
+		enum resource_strategy {
 			ACCEPT_NONE = 0x00,
 			ACCEPT_APP  = 0x01,
 			ACCEPT_ALL  = 0x02,
+		};
+
+		enum link_mode {
+			MODE_AES128_CBC     = 0x00,
+			MODE_AES256_CBC     = 0x01,
+			MODE_AES256_GCM     = 0x02,
+			MODE_OTP_RESERVED   = 0x03,
+			MODE_PQ_RESERVED_1  = 0x04,
+			MODE_PQ_RESERVED_2  = 0x05,
+			MODE_PQ_RESERVED_3  = 0x06,
+			MODE_PQ_RESERVED_4  = 0x07,
+		};
+
+/*
+			MODE_DESCRIPTIONS =	{MODE_AES128_CBC: "AES_128_CBC",
+								MODE_AES256_CBC: "AES_256_CBC",
+								MODE_AES256_GCM: "MODE_AES256_GCM",
+								MODE_OTP_RESERVED: "MODE_OTP_RESERVED",
+								MODE_PQ_RESERVED_1: "MODE_PQ_RESERVED_1",
+								MODE_PQ_RESERVED_2: "MODE_PQ_RESERVED_2",
+								MODE_PQ_RESERVED_3: "MODE_PQ_RESERVED_3",
+								MODE_PQ_RESERVED_4: "MODE_PQ_RESERVED_4"}
+*/
+
+	}
+
+	namespace RequestReceipt {
+
+		enum status {
+			FAILED    = 0x00,
+			SENT      = 0x01,
+			DELIVERED = 0x02,
+			RECEIVING = 0x03,
+			READY     = 0x04,
 		};
 
 	}
@@ -263,6 +342,12 @@ namespace RNS { namespace Type {
 			LRPROOF        = 0xFF,    // Packet is a link request proof
 		};
 
+    	// Context flag values
+		enum context_flag {
+    		FLAG_SET       = 0x01,
+    		FLAG_UNSET     = 0x00,
+		};
+
 		// This is used to calculate allowable
 		// payload sizes
 		static const uint16_t HEADER_MAXSIZE = Reticulum::HEADER_MAXSIZE;
@@ -313,14 +398,20 @@ namespace RNS { namespace Type {
 			REACHABILITY_TRANSPORT   = 0x02,
 		};
 
+		enum state {
+			STATE_UNKNOWN        = 0x00,
+			STATE_UNRESPONSIVE   = 0x01,
+			STATE_RESPONSIVE     = 0x02,
+		};
+
 		static constexpr const char* APP_NAME = "rnstransport";
 
-		static const uint8_t PATHFINDER_M    = 128;       // Max hops
 		// Maximum amount of hops that Reticulum will transport a packet.
+		static const uint8_t PATHFINDER_M    = 128;       // Max hops
 
 		static const uint8_t PATHFINDER_R      = 1;          // Retransmit retries
 		static const uint8_t PATHFINDER_G      = 5;          // Retry grace period
-		static constexpr const float PATHFINDER_RW       = 0.5;        // Random window for announce rebroadcast
+		static constexpr const float PATHFINDER_RW     = 0.5;        // Random window for announce rebroadcast
 
 		// TODO: Calculate an optimal number for this in
 		// various situations
@@ -331,12 +422,14 @@ namespace RNS { namespace Type {
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 5;            // Minimum interval in seconds for automated path requests
 
-		static constexpr const float LINK_TIMEOUT            = Link::STALE_TIME * 1.25;
+		static constexpr const float LINK_TIMEOUT  = Link::STALE_TIME * 1.25;
 		static const uint16_t REVERSE_TIMEOUT      = 30*60;        // Reverse table entries are removed after 30 minutes
 		// CBA MCU
 		//static const uint16_t MAX_RECEIPTS         = 1024;         // Maximum number of receipts to keep track of
 		static const uint16_t MAX_RECEIPTS         = 20;         // Maximum number of receipts to keep track of
 		static const uint8_t MAX_RATE_TIMESTAMPS   = 16;           // Maximum number of announce timestamps to keep per destination
+		static const uint8_t PERSIST_RANDOM_BLOBS  = 32;           // Maximum number of random blobs per destination to persist to disk
+		static const uint8_t MAX_RANDOM_BLOBS      = 64;           // Maximum number of random blobs per destination to keep in memory
 
 		// CBA MCU
 		//static const uint32_t DESTINATION_TIMEOUT = 60*60*24*7;   // Destination table entries are removed if unused for one week
@@ -348,6 +441,107 @@ namespace RNS { namespace Type {
 		static const uint32_t AP_PATH_TIME      = 60*60*6;   // Path expiration of 6 hours for Access Point paths
 		static const uint32_t ROAMING_PATH_TIME = 60*60*1;    // Path expiration of 1 hour for Roaming paths
 
+		static const uint16_t LOCAL_CLIENT_CACHE_MAXSIZE = 512;
+	}
+
+	namespace Resource {
+
+		// The initial window size at beginning of transfer
+		static const uint8_t WINDOW               = 4;
+
+		// Absolute minimum window size during transfer
+		static const uint8_t WINDOW_MIN           = 1;
+
+		// The maximum window size for transfers on slow links
+		static const uint8_t WINDOW_MAX_SLOW      = 10;
+
+		// The maximum window size for transfers on fast links
+		static const uint8_t WINDOW_MAX_FAST      = 75;
+		
+		// For calculating maps and guard segments, this
+		// must be set to the global maximum window.
+		static const uint8_t WINDOW_MAX           = WINDOW_MAX_FAST;
+		
+		// If the fast rate is sustained for this many request
+		// rounds, the fast link window size will be allowed.
+		static const uint8_t FAST_RATE_THRESHOLD  = WINDOW_MAX_SLOW - WINDOW - 2;
+
+		// If the RTT rate is higher than this value,
+		// the max window size for fast links will be used.
+		// The default is 50 Kbps (the value is stored in
+		// bytes per second, hence the "/ 8").
+		static const uint16_t RATE_FAST            = (50*1000) / 8;
+
+		// The minimum allowed flexibility of the window size.
+		// The difference between window_max and window_min
+		// will never be smaller than this value.
+		static const uint8_t WINDOW_FLEXIBILITY   = 4;
+
+		// Number of bytes in a map hash
+		static const uint8_t MAPHASH_LEN          = 4;
+		static const uint16_t SDU                 = Packet::MDU;
+		static const uint8_t RANDOM_HASH_SIZE     = 4;
+
+		// This is an indication of what the
+		// maximum size a resource should be, if
+		// it is to be handled within reasonable
+		// time constraint, even on small systems.
+		#
+		// A small system in this regard is
+		// defined as a Raspberry Pi, which should
+		// be able to compress, encrypt and hash-map
+		// the resource in about 10 seconds.
+		#
+		// This constant will be used when determining
+		// how to sequence the sending of large resources.
+		#
+		// Capped at 16777215 (0xFFFFFF) per segment to
+		// fit in 3 bytes in resource advertisements.
+		static const uint32_t MAX_EFFICIENT_SIZE      = 16 * 1024 * 1024 - 1;
+		static const uint8_t RESPONSE_MAX_GRACE_TIME = 10;
+		
+		// The maximum size to auto-compress with
+		// bz2 before sending.
+		static const uint32_t AUTO_COMPRESS_MAX_SIZE = MAX_EFFICIENT_SIZE;
+
+		static const uint8_t PART_TIMEOUT_FACTOR           = 4;
+		static const uint8_t PART_TIMEOUT_FACTOR_AFTER_RTT = 2;
+		static const uint8_t MAX_RETRIES                   = 8;
+		static const uint8_t MAX_ADV_RETRIES               = 4;
+		static const uint8_t SENDER_GRACE_TIME             = 10;
+		static const float RETRY_GRACE_TIME              = 0.25;
+		static const float PER_RETRY_DELAY               = 0.5;
+
+		static const uint8_t WATCHDOG_MAX_SLEEP            = 1;
+
+		static const uint8_t HASHMAP_IS_NOT_EXHAUSTED = 0x00;
+		static const uint8_t HASHMAP_IS_EXHAUSTED = 0xFF;
+
+		// Status constants
+		enum status {
+			NONE            = 0x00,
+			QUEUED          = 0x01,
+			ADVERTISED      = 0x02,
+			TRANSFERRING    = 0x03,
+			AWAITING_PROOF  = 0x04,
+			ASSEMBLING      = 0x05,
+			COMPLETE        = 0x06,
+			FAILED          = 0x07,
+			CORRUPT         = 0x08
+		};
+
+		namespace ResourceAdvertisement {
+			static const uint8_t OVERHEAD             = 134;
+			static const uint16_t HASHMAP_MAX_LEN      = floor((Link::MDU-OVERHEAD)/Resource::MAPHASH_LEN);
+			//static const uint16_t HASHMAP_MAX_LEN      = ((Link::MDU-OVERHEAD)/Resource::MAPHASH_LEN);
+			static const uint16_t COLLISION_GUARD_SIZE = 2*Resource::WINDOW_MAX+HASHMAP_MAX_LEN;
+
+			//assert HASHMAP_MAX_LEN > 0, "The configured MTU is too small to include any map hashes in resource advertisments"
+		}
+
+	}
+
+	namespace Channel {
 	}
 
 } }

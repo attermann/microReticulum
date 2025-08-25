@@ -8,23 +8,33 @@ using namespace RNS::Type::Interface;
 
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
-/*virtual*/ void InterfaceImpl::send_outgoing(const Bytes& data) {
-	//TRACE("InterfaceImpl.send_outgoing: data: " + data.toHex());
-	TRACE("InterfaceImpl.send_outgoing");
+void InterfaceImpl::handle_outgoing(const Bytes& data) {
+	//TRACE("InterfaceImpl.handle_outgoing: data: " + data.toHex());
+	TRACE("InterfaceImpl.handle_outgoing");
 	_txb += data.size();
 }
 
-/*virtual*/ //void InterfaceImpl::handle_incoming(const Bytes& data) {
+void InterfaceImpl::handle_incoming(const Bytes& data) {
+	//TRACE("InterfaceImpl.handle_incoming: data: " + data.toHex());
+	TRACE("InterfaceImpl.handle_incoming");
+	_rxb += data.size();
+	// Create temporary Interface encapsulating our own shared impl
+	std::shared_ptr<InterfaceImpl> self = shared_from_this();
+	Interface interface(self);
+	// Pass data on to transport for handling
+	Transport::inbound(data, interface);
+}
+
 void Interface::handle_incoming(const Bytes& data) {
 	//TRACE("Interface.handle_incoming: data: " + data.toHex());
 	TRACE("Interface.handle_incoming");
 	assert(_impl);
+/*
 	_impl->_rxb += data.size();
-	// CBA TODO implement concept of owner or a callback mechanism for incoming data
-	//_impl->_owner.inbound(data, *this);
+	// Pass data on to transport for handling
 	Transport::inbound(data, *this);
-	// CBA This is no good because it frees impl when Interface is destroyed at end of inbound()
-	//Transport::inbound(data, Interface(this));
+*/
+	_impl->handle_incoming(data);
 }
 
 void Interface::process_announce_queue() {

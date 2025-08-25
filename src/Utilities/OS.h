@@ -70,7 +70,51 @@ namespace RNS { namespace Utilities {
 		//static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 		static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 
-#if defined(RNS_USE_ALLOCATOR)
+		static inline uint64_t from_bytes_big_endian(const uint8_t* data, size_t len) {
+			uint64_t result = 0;
+			for (size_t i = 0; i < len; ++i) {
+				result = (result << 8) | data[i];
+			}
+			return result;
+		}
+
+		// Detect endianness at runtime
+		static int is_big_endian(void) {
+			uint16_t test = 0x0102;
+			return ((uint8_t*)&test)[0] == 0x01;
+		}
+
+		// Byte swap functions
+		static uint16_t swap16(uint16_t val) {
+			return (val << 8) | (val >> 8);
+		}
+
+		static uint32_t swap32(uint32_t val) {
+			return ((val << 24) & 0xFF000000) |
+				((val << 8)  & 0x00FF0000) |
+				((val >> 8)  & 0x0000FF00) |
+				((val >> 24) & 0x000000FF);
+		}
+
+		// Platform-independent replacements
+
+		static uint16_t portable_htons(uint16_t val) {
+			return is_big_endian() ? val : swap16(val);
+		}
+
+		static uint32_t portable_htonl(uint32_t val) {
+			return is_big_endian() ? val : swap32(val);
+		}
+
+		static uint16_t portable_ntohs(uint16_t val) {
+			return is_big_endian() ? val : swap16(val);
+		}
+
+		static uint32_t portable_ntohl(uint32_t val) {
+			return is_big_endian() ? val : swap32(val);
+		}
+
+		#if defined(RNS_USE_ALLOCATOR)
 		static void dump_allocator_stats();
 #endif
 
@@ -79,10 +123,12 @@ namespace RNS { namespace Utilities {
 			_filesystem = filesystem;
 		}
 
+/*
 		inline static void register_filesystem(FileSystemImpl* filesystemimpl) {
 			TRACE("Registering filesystem...");
 			_filesystem = filesystemimpl;
 		}
+*/
 
 		inline static void deregister_filesystem() {
 			TRACE("Deregistering filesystem...");

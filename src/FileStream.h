@@ -55,47 +55,47 @@ namespace RNS {
 
 	public:
 		FileStream(Type::NoneConstructor none) {
-			MEMF("FileStream object NONE created, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream NONE object created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		FileStream(const FileStream& obj) : _impl(obj._impl), _crc(obj._crc) {
-			MEMF("FileStream object copy created, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		FileStream(FileStreamImpl* impl) : _impl(impl) {
-			MEMF("FileStream object impl created, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object impl created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		virtual ~FileStream() {
-			MEMF("FileStream object destroyed, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object destroyed, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 
 		inline virtual FileStream& operator = (const FileStream& obj) {
 			_impl = obj._impl;
 			_crc = obj._crc;
-			MEMF("FileStream object copy created by assignment, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline FileStream& operator = (FileStreamImpl* impl) {
 			_impl.reset(impl);
-			MEMF("FileStream object copy created by impl assignment, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object copy created by impl assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline operator bool() const {
-			MEMF("FileStream object bool, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object bool, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != nullptr;
 		}
 		inline bool operator < (const FileStream& obj) const {
-			MEMF("FileStream object <, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() < obj._impl.get();
 		}
 		inline bool operator > (const FileStream& obj) const {
-			MEMF("FileStream object <, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() > obj._impl.get();
 		}
 		inline bool operator == (const FileStream& obj) const {
-			MEMF("FileStream object ==, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object ==, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() == obj._impl.get();
 		}
 		inline bool operator != (const FileStream& obj) const {
-			MEMF("FileStream object !=, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileStream object !=, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != obj._impl.get();
 		}
 		inline FileStreamImpl* get() {

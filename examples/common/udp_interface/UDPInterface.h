@@ -40,12 +40,10 @@ public:
 	//virtual inline std::string toString() const { return "UDPInterface[" + name() + "]"; }
 
 protected:
-	virtual void on_incoming(const RNS::Bytes& data);
-	//virtual void on_outgoing(const RNS::Bytes& data);
 	virtual void send_outgoing(const RNS::Bytes& data);
+	void on_incoming(const RNS::Bytes& data);
 
 private:
-	const uint16_t HW_MTU = 1064;
 	//uint8_t buffer[Type::Reticulum::MTU] = {0};
 	RNS::Bytes _buffer;
 

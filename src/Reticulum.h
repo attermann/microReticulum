@@ -1,10 +1,12 @@
 #pragma once
 
+#include "Transport.h"
 #include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
 
 #include <vector>
+#include <map>
 #include <string>
 #include <memory>
 #include <cassert>
@@ -31,19 +33,27 @@ namespace RNS {
 		//static std::string _cachepath;
 		static char _cachepath[Type::Reticulum::FILEPATH_MAXSIZE];
 
+		static const Reticulum& _instance;
+
 		static bool __transport_enabled;
+        static bool __link_mtu_discovery;
+        static bool __remote_management_enabled;
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
 
 	public:
+		// Return the currently running Reticulum instance
+		inline static const Reticulum& get_instance() { return _instance; }
+
+	public:
+		Reticulum();
 		Reticulum(Type::NoneConstructor none) {
-			MEM("Reticulum NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEM("Reticulum empty object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Reticulum(const Reticulum& reticulum) : _object(reticulum._object) {
 			MEM("Reticulum object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
-		Reticulum();
 		virtual ~Reticulum() {
 			MEM("Reticulum object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
@@ -68,6 +78,21 @@ namespace RNS {
 		void persist_data();
 		void clean_caches();
 		void clear_caches();
+		//void __create_default_config();
+		//void rpc_loop();
+		//void get_interface_stats() const;
+		const std::map<Bytes, Transport::DestinationEntry>& get_path_table() const;
+		const std::map<Bytes, Transport::RateEntry>& get_rate_table() const;
+		bool drop_path(const Bytes& destination);
+		uint16_t drop_all_via(const Bytes& transport_hash);
+		void drop_announce_queues();
+		const std::string get_next_hop_if_name(const Bytes& destination) const;
+		double get_first_hop_timeout(const Bytes& destination) const;
+		const Bytes get_next_hop(const Bytes& destination) const;
+		size_t get_link_count() const;
+		//void get_packet_rssi(const Bytes& packet_hash) const;
+		//void get_packet_snr(const Bytes& packet_hash) const;
+		//void get_packet_q(const Bytes& packet_hash) const;
 
 		/*
 		Returns whether proofs sent are explicit or implicit.
@@ -88,6 +113,31 @@ namespace RNS {
 		*/
 		inline static bool transport_enabled() { return __transport_enabled; }
 		inline static void transport_enabled(bool transport_enabled) { __transport_enabled = transport_enabled; }
+
+		/*
+		Returns whether link MTU discovery is enabled for the running
+		instance.
+
+		When link MTU discovery is enabled, Reticulum will
+		automatically upgrade link MTUs to the highest supported
+		value, increasing transfer speed and efficiency.
+
+		:returns: True if link MTU discovery is enabled, False if not.
+		*/
+		inline static bool link_mtu_discovery() { return __link_mtu_discovery; }
+		inline static void link_mtu_discovery(bool link_mtu_discovery) { __link_mtu_discovery = link_mtu_discovery; }
+
+		/*
+		Returns whether remote management is enabled for the
+		running instance.
+
+		When remote management is enabled, authenticated peers
+		can remotely query and manage this instance.
+
+		:returns: True if remote management is enabled, False if not.
+		*/
+		inline static bool remote_management_enabled() { return __remote_management_enabled; }
+		inline static void remote_management_enabled(bool remote_management_enabled) { __remote_management_enabled = remote_management_enabled; }
 
 		inline static bool probe_destination_enabled() { return __allow_probes; }
 		inline static void probe_destination_enabled(bool allow_probes) { __allow_probes = allow_probes; }

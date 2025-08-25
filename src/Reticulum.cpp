@@ -20,7 +20,11 @@ using namespace RNS::Utilities;
 /*static*/ //std::string Reticulum::_cachepath;
 /*static*/ char Reticulum::_cachepath[FILEPATH_MAXSIZE];
 
+/*static*/ const Reticulum& Reticulum::_instance = {Type::NONE};
+
 /*static*/ bool Reticulum::__transport_enabled = false;
+/*static*/ bool Reticulum::__link_mtu_discovery = RNS::Type::Reticulum::LINK_MTU_DISCOVERY;
+/*static*/ bool Reticulum::__remote_management_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
 /*static*/ bool Reticulum::panic_on_interface_error = false;
@@ -37,12 +41,33 @@ pass any traffic before being instantiated.
 
 :param configdir: Full path to a Reticulum configuration directory.
 */
+
+/*p TODO
+@staticmethod
+void Reticulum::exit_handler():
+	# This exit handler is called whenever Reticulum is asked to
+	# shut down, and will in turn call exit handlers in other
+	# classes, saving necessary information to disk and carrying
+	# out cleanup operations.
+
+	Transport::exit_handler()
+	RNS.Identity.exit_handler()
+
+@staticmethod
+void Reticulum::sigint_handler(signal, frame):
+	Transport::detach_interfaces()
+	RNS.exit()
+
+
+@staticmethod
+void Reticulum::sigterm_handler(signal, frame):
+	Transport::detach_interfaces()
+	RNS.exit()
+*/
+
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
-
-	INFO("Total memory: " + std::to_string(OS::heap_size()));
-	INFO("Total flash: " + std::to_string(OS::storage_size()));
 
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
@@ -56,7 +81,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 	//z RNS.vendor.platformutils.platform_checks()
 
-/* TODO
+/*p TODO
 	if configdir != None:
 		Reticulum.configdir = configdir
 	else:
@@ -116,7 +141,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	_object->_last_cache_clean = 0.0;
 	_object->_jobs_last_run = OS::time();
 
-/* TODO
+/*p TODO
 	if not os.path.isdir(Reticulum.storagepath):
 		os.makedirs(Reticulum.storagepath)
 
@@ -151,9 +176,9 @@ Reticulum::Reticulum() : _object(new Object()) {
 	// CBA Moved to start() so Transport is not started  until after interfaces are setup
 	//Transport::start(*this);
 
-/*
+/*p TODO
 	self.rpc_addr = ("127.0.0.1", self.local_control_port)
-	self.rpc_key  = RNS.Identity.full_hash(RNS.Transport.identity.get_private_key())
+	self.rpc_key  = RNS.Identity.full_hash(Transport::identity.get_private_key())
 
 	if self.is_shared_instance:
 		self.rpc_listener = multiprocessing.connection.Listener(self.rpc_addr, authkey=self.rpc_key)
@@ -169,38 +194,11 @@ Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 }
 
-/*p TODO
-    @staticmethod
-    def exit_handler():
-        # This exit handler is called whenever Reticulum is asked to
-        # shut down, and will in turn call exit handlers in other
-        # classes, saving necessary information to disk and carrying
-        # out cleanup operations.
-
-        RNS.Transport.exit_handler()
-        RNS.Identity.exit_handler()
-
-    @staticmethod
-    def sigint_handler(signal, frame):
-        RNS.Transport.detach_interfaces()
-        RNS.exit()
-
-
-    @staticmethod
-    def sigterm_handler(signal, frame):
-        RNS.Transport.detach_interfaces()
-        RNS.exit()
-
-
-    @staticmethod
-    def get_instance():
-        """
-        Return the currently running Reticulum instance
-        """
-        return Reticulum.__instance
-*/
-
 void Reticulum::start() {
+
+	INFO("Total memory: " + std::to_string(OS::heap_size()));
+	INFO("Total flash: " + std::to_string(OS::storage_size()));
+
 	INFO("Starting Transport...");
 	Transport::start(*this);
 }
@@ -250,6 +248,17 @@ void Reticulum::jobs() {
 		persist_data();
 	}
 }
+
+// CBA TODO
+/*
+void Reticulum::start_local_interface() {
+}
+
+void Reticulum::apply_config() {
+}
+
+void Reticulum::_add_interface(self,interface, mode = None, configured_bitrate=None, ifac_size=None, ifac_netname=None, ifac_netkey=None, announce_cap=None, announce_rate_target=None, announce_rate_grace=None, announce_rate_penalty=None):
+*/
 
 void Reticulum::should_persist_data() {
 	if (OS::time() > _object->_last_data_persist + GRACIOUS_PERSIST_INTERVAL) {
@@ -353,3 +362,117 @@ void Reticulum::clear_caches() {
 		ERRORF("Failed to clear cache file(s), the contained exception was: %s", e.what());
 	}
 }
+
+/*p TODO
+
+void Reticulum::__create_default_config() {
+	self.config = ConfigObj(__default_rns_config__)
+	self.config.filename = Reticulum.configpath
+	
+	if not os.path.isdir(Reticulum.configdir):
+		os.makedirs(Reticulum.configdir)
+	self.config.write()
+}
+
+void Reticulum::rpc_loop() {
+}
+
+void Reticulum::get_interface_stats() const {
+}
+*/
+
+const std::map<Bytes, Transport::DestinationEntry>& Reticulum::get_path_table() const {
+/*
+	path_table = []
+	for dst_hash in Transport::destination_table:
+		entry = {
+			"hash": dst_hash,
+			"timestamp": Transport::destination_table[dst_hash][0],
+			"via": Transport::destination_table[dst_hash][1],
+			"hops": Transport::destination_table[dst_hash][2],
+			"expires": Transport::destination_table[dst_hash][3],
+			"interface": str(Transport::destination_table[dst_hash][5]),
+		}
+		path_table.append(entry)
+
+	return path_table
+*/
+	return Transport::get_destination_table();
+}
+
+const std::map<Bytes, Transport::RateEntry>& Reticulum::get_rate_table() const {
+/*
+	rate_table = []
+	for dst_hash in Transport::announce_rate_table:
+		entry = {
+			"hash": dst_hash,
+			"last": Transport::announce_rate_table[dst_hash]["last"],
+			"rate_violations": Transport::announce_rate_table[dst_hash]["rate_violations"],
+			"blocked_until": Transport::announce_rate_table[dst_hash]["blocked_until"],
+			"timestamps": Transport::announce_rate_table[dst_hash]["timestamps"],
+		}
+		rate_table.append(entry)
+
+	return rate_table
+*/
+	return Transport::get_announce_rate_table();
+}
+
+bool Reticulum::drop_path(const Bytes& destination) {
+	return Transport::expire_path(destination);
+}
+
+uint16_t Reticulum::drop_all_via(const Bytes& transport_hash) {
+	uint16_t dropped_count = 0;
+	//for (auto& destination_hash : Transport::get_destination_table()) {
+	for (const auto& [destination_hash, destination_entry] : Transport::get_destination_table()) {
+		if (destination_entry._received_from == transport_hash) {
+			Transport::expire_path(destination_hash);
+			++dropped_count;
+		}
+	}
+	return dropped_count;
+}
+
+void Reticulum::drop_announce_queues() {
+	Transport::drop_announce_queues();
+}
+
+const std::string Reticulum::get_next_hop_if_name(const Bytes& destination) const {
+	return Transport::next_hop_interface(destination).name();
+}
+
+double Reticulum::get_first_hop_timeout(const Bytes& destination) const {
+	return Transport::first_hop_timeout(destination);
+}
+
+const Bytes Reticulum::get_next_hop(const Bytes& destination) const {
+	return Transport::next_hop(destination);
+}
+
+size_t Reticulum::get_link_count() const {
+	return Transport::get_link_table().size();
+}
+
+/*p
+void Reticulum::get_packet_rssi(const Bytes& packet_hash) const {
+	for entry in Transport::local_client_rssi_cache:
+		if entry[0] == packet_hash:
+			return entry[1]
+
+	return None
+
+void Reticulum::get_packet_snr(const Bytes& packet_hash) const {
+	for entry in Transport::local_client_snr_cache:
+		if entry[0] == packet_hash:
+			return entry[1]
+
+	return None
+
+void Reticulum::get_packet_q(const Bytes& packet_hash) const {
+	for entry in Transport::local_client_q_cache:
+		if entry[0] == packet_hash:
+			return entry[1]
+
+	return None
+*/

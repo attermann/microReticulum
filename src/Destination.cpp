@@ -382,10 +382,11 @@ void Destination::receive(const Packet& packet) {
 void Destination::incoming_link_request(const Bytes& data, const Packet& packet) {
 	assert(_object);
 	if (_object->_accept_link_requests) {
-		//z link = Link::validate_request(data, packet);
-		//z if (link) {
-		//z	_links.append(link);
-		//z }
+TRACE("***** Accepting link request");
+		RNS::Link link = Link::validate_request(*this, data, packet);
+		if (link) {
+			_object->_links.insert(link);
+		}
 	}
 }
 
@@ -472,4 +473,14 @@ Signs information for ``RNS.Destination.SINGLE`` type destination.
 		return _object->_identity.sign(message);
 	}
 	return {Bytes::NONE};
+}
+
+bool Destination::has_link(const Link& link) {
+	assert(_object);
+	return (_object->_links.count(link) > 0);
+}
+
+void Destination::remove_link(const Link& link) {
+	assert(_object);
+	_object->_links.erase(link);
 }

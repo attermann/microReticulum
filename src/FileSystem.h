@@ -20,6 +20,7 @@ namespace RNS {
 		virtual ~FileSystemImpl() { MEMF("FileSystem::FileSystemImpl object destroyed, this: 0x%X", this); }
 
 	protected:
+		virtual bool init() { return true; }
 		virtual bool file_exists(const char* file_path) = 0;
 		virtual size_t read_file(const char* file_path, Bytes& data) = 0;
 		virtual size_t write_file(const char* file_path, const Bytes& data) = 0;
@@ -40,46 +41,46 @@ namespace RNS {
 
 	public:
 		FileSystem(Type::NoneConstructor none) {
-			MEMF("FileSystem object NONE created, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem NONE object created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		FileSystem(const FileSystem& obj) : _impl(obj._impl) {
-			MEMF("FileSystem object copy created, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		FileSystem(FileSystemImpl* impl) : _impl(impl) {
-			MEMF("FileSystem object impl created, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object impl created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		virtual ~FileSystem() {
-			MEMF("FileSystem object destroyed, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object destroyed, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 
 		inline FileSystem& operator = (const FileSystem& obj) {
 			_impl = obj._impl;
-			MEMF("FileSystem object copy created by assignment, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline FileSystem& operator = (FileSystemImpl* impl) {
 			_impl.reset(impl);
-			MEMF("FileSystem object copy created by impl assignment, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object copy created by impl assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline operator bool() const {
-			MEMF("FileSystem object bool, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object bool, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != nullptr;
 		}
 		inline bool operator < (const FileSystem& obj) const {
-			MEMF("FileSystem object <, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() < obj._impl.get();
 		}
 		inline bool operator > (const FileSystem& obj) const {
-			MEMF("FileSystem object <, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() > obj._impl.get();
 		}
 		inline bool operator == (const FileSystem& obj) const {
-			MEMF("FileSystem object ==, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object ==, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() == obj._impl.get();
 		}
 		inline bool operator != (const FileSystem& obj) const {
-			MEMF("FileSystem object !=, this: 0x%X, data: 0x%X", this, _impl.get());
+			MEMF("FileSystem object !=, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != obj._impl.get();
 		}
 		inline FileSystemImpl* get() {
@@ -90,6 +91,7 @@ namespace RNS {
 		}
 
 	public:
+		inline bool init() { assert(_impl); return _impl->init(); }
 		inline bool file_exists(const char* file_path) { assert(_impl); return _impl->file_exists(file_path); }
 		inline size_t read_file(const char* file_path, Bytes& data) { assert(_impl); return _impl->read_file(file_path, data); }
 		inline size_t write_file(const char* file_path, const Bytes& data) { assert(_impl); return _impl->write_file(file_path, data); }

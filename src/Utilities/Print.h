@@ -26,10 +26,14 @@
 #include <stddef.h>
 #include <string>
 
-#define DEC 10
-#define HEX 16
-#define OCT 8
-#define BIN 2
+//#define DEC 10
+//#define HEX 16
+//#define OCT 8
+//#define BIN 2
+static constexpr uint8_t DEC {10};
+static constexpr uint8_t HEX {16};
+static constexpr uint8_t OCT {8};
+static constexpr uint8_t BIN {2};
 
 class Print
 {

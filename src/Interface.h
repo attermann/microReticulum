@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Identity.h"
 #include "Log.h"
 #include "Bytes.h"
 #include "Type.h"
@@ -29,23 +30,34 @@ namespace RNS {
 		Bytes _destination;
 		double _time = 0;
 		uint8_t _hops = 0;
-		double _emitted = 0;
+		uint64_t _emitted = 0;
 		Bytes _raw;
 	};
 
-	class InterfaceImpl {
+	class InterfaceImpl : public std::enable_shared_from_this<InterfaceImpl> {
 
 	protected:
-		InterfaceImpl() { MEM("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
-		InterfaceImpl(const char* name) : _name(name) { MEM("Interface::Data object created, this: " + std::to_string((uintptr_t)this)); }
+		InterfaceImpl() { MEMF("InterfaceImpl object created, this: 0x%X", this); }
+		InterfaceImpl(const char* name) : _name(name) { MEMF("InterfaceImpl object created, this: 0x%X", this); }
 	public:
-		virtual ~InterfaceImpl() { MEM("Interface::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+		virtual ~InterfaceImpl() { MEMF("InterfaceImpl object destroyed, this: 0x%X", this); }
 
 	protected:
-		// CBA send data out on interface
-		virtual void send_outgoing(const Bytes& data);
-		// CBA handle data coming in on interface
-		//virtual void handle_incoming(const Bytes& data);
+		virtual bool start() { return true; }
+		virtual void stop() {}
+		virtual void loop() {}
+
+		// CBA Virtual override method for custom interface to send outgoing data
+		virtual void send_outgoing(const Bytes& data) = 0;
+		
+		// CBA Internal method to handle housekeeping for data going out on interface
+		void handle_outgoing(const Bytes& data);
+		// CBA Internal method to handle data coming in on interface and pass on to transport
+		void handle_incoming(const Bytes& data);
+
+		virtual const Bytes get_hash() const {
+			return Identity::full_hash({toString()});
+		}
 
 		virtual inline std::string toString() const { return "Interface[" + _name + "]"; }
 
@@ -62,12 +74,15 @@ namespace RNS {
 		Bytes _ifac_identity;
 		Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 		uint32_t _bitrate = 0;
+		uint16_t _HW_MTU = 0;
+		bool _AUTOCONFIGURE_MTU = false;
+		bool _FIXED_MTU = false;
 		double _announce_allowed_at = 0;
 		float _announce_cap = 0.0;
 		std::list<AnnounceEntry> _announce_queue;
 		bool _is_connected_to_shared_instance = false;
 		bool _is_local_shared_instance = false;
-		Bytes _hash;
+		//Bytes _hash;
 		HInterface _parent_interface;
 		//Transport& _owner;
 
@@ -83,46 +98,49 @@ namespace RNS {
 
 	public:
 		Interface(Type::NoneConstructor none) {
-			MEM("Interface object NONE created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface NONE object created, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		Interface(const Interface& obj) : _impl(obj._impl) {
-			MEM("Interface object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object copy created, this: 0x%X, impl: 0x%X", this, _impl.get());
+		}
+		Interface(std::shared_ptr<InterfaceImpl>& impl) : _impl(impl) {
+			MEMF("Interface object created with shared impl, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		Interface(InterfaceImpl* impl) : _impl(impl) {
-			MEM("Interface object impl created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object created with new impl, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 		virtual ~Interface() {
-			MEM("Interface object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object destroyed, this: 0x%X, impl: 0x%X", this, _impl.get());
 		}
 
 		inline Interface& operator = (const Interface& obj) {
 			_impl = obj._impl;
-			MEM("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline Interface& operator = (InterfaceImpl* impl) {
 			_impl.reset(impl);
-			MEM("Interface object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
 		inline operator bool() const {
-			MEM("Interface object bool, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object bool, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != nullptr;
 		}
 		inline bool operator < (const Interface& obj) const {
-			MEM("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() < obj._impl.get();
 		}
 		inline bool operator > (const Interface& obj) const {
-			MEM("Interface object <, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object <, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() > obj._impl.get();
 		}
 		inline bool operator == (const Interface& obj) const {
-			MEM("Interface object ==, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object ==, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() == obj._impl.get();
 		}
 		inline bool operator != (const Interface& obj) const {
-			MEM("Interface object !=, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_impl.get()));
+			MEMF("Interface object !=, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != obj._impl.get();
 		}
 		inline InterfaceImpl* get() {
@@ -133,7 +151,10 @@ namespace RNS {
 		}
 
 	public:
-		inline const Bytes get_hash() const { assert(_impl); return _impl->_hash; }
+		inline bool start() { assert(_impl); return _impl->start(); }
+		inline void stop() { assert(_impl); return _impl->stop(); }
+		inline void loop() { assert(_impl); return _impl->loop(); }
+		inline const Bytes get_hash() const { assert(_impl); return _impl->get_hash(); }
 		void process_announce_queue();
 
 		// CBA ACCUMULATES
@@ -143,11 +164,11 @@ namespace RNS {
 		inline void send_outgoing(const Bytes& data) { assert(_impl); _impl->send_outgoing(data); }
 	public:
 		//inline void handle_incoming(const Bytes& data) { assert(_impl); _impl->handle_incoming(data); }
-		// CBA handle data coming in on interface
+		// Public method to handle data coming in on interface and pass on to impl
 		void handle_incoming(const Bytes& data);
 
-		// getters/setters
 	protected:
+		// setters
 		inline void IN(bool IN) { assert(_impl); _impl->_IN = IN; }
 		inline void OUT(bool OUT) { assert(_impl); _impl->_OUT = OUT; }
 		inline void FWD(bool FWD) { assert(_impl); _impl->_FWD = FWD; }
@@ -157,6 +178,7 @@ namespace RNS {
 		inline void online(bool online) { assert(_impl); _impl->_online = online; }
 		inline void announce_allowed_at(double announce_allowed_at) { assert(_impl); _impl->_announce_allowed_at = announce_allowed_at; }
 	public:
+		// getters
 		inline bool IN() const { assert(_impl); return _impl->_IN; }
 		inline bool OUT() const { assert(_impl); return _impl->_OUT; }
 		inline bool FWD() const { assert(_impl); return _impl->_FWD; }
@@ -167,6 +189,9 @@ namespace RNS {
 		inline Type::Interface::modes mode() const { assert(_impl); return _impl->_mode; }
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }
+		inline uint16_t HW_MTU() const { assert(_impl); return _impl->_HW_MTU; }
+		inline bool AUTOCONFIGURE_MTU() const { assert(_impl); return _impl->_AUTOCONFIGURE_MTU; }
+		inline bool FIXED_MTU() const { assert(_impl); return _impl->_FIXED_MTU; }
 		inline double announce_allowed_at() const { assert(_impl); return _impl->_announce_allowed_at; }
 		inline float announce_cap() const { assert(_impl); return _impl->_announce_cap; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
