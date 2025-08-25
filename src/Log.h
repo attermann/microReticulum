@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #endif
 
+#include <stdarg.h>
+
 #include <string>
 
 #define LOG(msg, level) (RNS::log(msg, level))

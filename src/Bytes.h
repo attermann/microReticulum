@@ -8,9 +8,30 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
+
 #include <vector>
 #include <string>
 #include <memory>
+
+// Finds the start of the first occurrence of the substring needle of length needlelen in the  memory  area  haystack  of length haystacklen.
+inline void* memmem(const void* haystack, size_t haystack_len, const void* needle, size_t needle_len) {
+	const unsigned char* h = (const unsigned char*)haystack;
+	const unsigned char* n = (const unsigned char*)needle;
+
+	if (needle_len == 0)
+		return (void*)h;
+
+	if (haystack_len < needle_len)
+		return nullptr;
+
+	for (size_t i = 0; i <= haystack_len - needle_len; i++) {
+		if (h[i] == n[0] && memcmp(&h[i], n, needle_len) == 0) {
+			return (void*)&h[i];
+		}
+	}
+
+	return nullptr;
+}
 
 namespace RNS {
 
@@ -316,7 +337,8 @@ MEM("Creating from data-move...");
 			if (!_data || _data->data() == nullptr || (size_t)pos >= _data->size()) {
 				return -1;
 			}
-			const char* ptr = strnstr((const char*)(_data->data() + pos), str, (_data->size() - pos));
+			//const char* ptr = strnstr((const char*)(_data->data() + pos), str, (_data->size() - pos));
+			void* ptr = memmem((const void*)(_data->data() + pos), (_data->size() - pos), (const void*)str, strlen(str));
 			if (ptr == nullptr) {
 				return -1;
 			}

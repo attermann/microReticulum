@@ -569,7 +569,7 @@ void testIndex() {
 	assert(bytes[1] == 'e');
 	assert(bytes[2] == 'l');
 	assert(bytes[3] == 'l');
-	assert(bytes[4] == '0');
+	assert(bytes[4] == 'o');
 }
 
 void testBytes() {
