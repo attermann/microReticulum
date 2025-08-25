@@ -3,6 +3,8 @@
 #include "Log.h"
 
 #include <stdint.h>
+#include <math.h>
+
 
 namespace RNS { namespace Type {
 

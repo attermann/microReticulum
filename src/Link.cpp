@@ -16,6 +16,8 @@
 #define MSGPACK_DEBUGLOG_ENABLE 0
 #include <MsgPack.h>
 
+#include <math.h>
+
 #include <algorithm>
 
 using namespace RNS;
@@ -475,7 +477,7 @@ void Link::update_mdu() {
 	assert(_object);
 	_object->_mdu = _object->_mtu - RNS::Type::Reticulum::HEADER_MAXSIZE - RNS::Type::Reticulum::IFAC_MIN_SIZE;
     //p self.mdu = math.floor((self.mtu-RNS.Reticulum.IFAC_MIN_SIZE-RNS.Reticulum.HEADER_MINSIZE-RNS.Identity.TOKEN_OVERHEAD)/RNS.Identity.AES128_BLOCKSIZE)*RNS.Identity.AES128_BLOCKSIZE - 1
-	_object->_mdu = std::floor((_object->_mtu-RNS::Type::Reticulum::IFAC_MIN_SIZE-RNS::Type::Reticulum::HEADER_MINSIZE-RNS::Type::Identity::TOKEN_OVERHEAD)/RNS::Type::Identity::AES128_BLOCKSIZE)*RNS::Type::Identity::AES128_BLOCKSIZE - 1;
+	_object->_mdu = floor((_object->_mtu-RNS::Type::Reticulum::IFAC_MIN_SIZE-RNS::Type::Reticulum::HEADER_MINSIZE-RNS::Type::Identity::TOKEN_OVERHEAD)/RNS::Type::Identity::AES128_BLOCKSIZE)*RNS::Type::Identity::AES128_BLOCKSIZE - 1;
 }
 
 void Link::rtt_packet(const Packet& packet) {
