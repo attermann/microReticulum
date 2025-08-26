@@ -43,8 +43,6 @@
 #define APP_NAME "example_utilities"
 
 RNS::Reticulum reticulum;
-RNS::FileSystem universal_filesystem(RNS::Type::NONE);
-RNS::Interface udp_interface(RNS::Type::NONE);
 
 
 /*
@@ -88,9 +86,9 @@ void client_connected(RNS::Link& link) {
 void server_loop(RNS::Destination& destination) {
 	// Let the user know that everything is ready
 	RNS::log(
-		"Link example "+
+		"Link example <"+
 		destination.hash().toHex()+
-		" running, waiting for a connection."
+		"> running, waiting for a connection."
 	);
 
 	RNS::log("Hit enter to manually send an announce (Ctrl-C to quit)");
@@ -101,7 +99,6 @@ void server_loop(RNS::Destination& destination) {
 	// know how to create messages directed towards it.
 	while (true) {
 		reticulum.loop();
-		udp_interface.loop();
 		// Non-blocking input
 		char ch;
 		while (read(STDIN_FILENO, &ch, 1) > 0) {
@@ -194,7 +191,6 @@ void client_loop() {
     RNS::log("Waiting for link to become active...");
     while (!server_link) {
 		reticulum.loop();
-		udp_interface.loop();
 		RNS::Utilities::OS::sleep(0.1);
 	}
 
@@ -204,7 +200,6 @@ void client_loop() {
 	bool should_quit = false;
     while (!should_quit) {
 		reticulum.loop();
-		udp_interface.loop();
 
 		// Non-blocking input
 		char ch;
@@ -274,7 +269,6 @@ void client(const char* destination_hexhash) {
         RNS::Transport::request_path(destination_hash);
         while (!RNS::Transport::has_path(destination_hash)) {
 			reticulum.loop();
-			udp_interface.loop();
 			RNS::Utilities::OS::sleep(0.1);
 		}
 	}
@@ -350,12 +344,12 @@ int main(int argc, char *argv[]) {
 	fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
 	// Initialize and register filesystem
-	universal_filesystem = new UniversalFileSystem();
+	RNS::FileSystem universal_filesystem = new UniversalFileSystem();
 	universal_filesystem.init();
 	RNS::Utilities::OS::register_filesystem(universal_filesystem);
 
 	// Initialize and register interface
-	udp_interface = new UDPInterface();
+	RNS::Interface udp_interface = new UDPInterface();
 	udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 	RNS::Transport::register_interface(udp_interface);
 	udp_interface.start();

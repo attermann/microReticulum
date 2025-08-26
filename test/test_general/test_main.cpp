@@ -15,8 +15,12 @@ void tearDown(void) {
     // clean stuff up here after each test
 }
 
-#ifndef ARDUINO
-unsigned long millis() {
+#ifdef ARDUINO
+unsigned long test_millis() {
+	return millis();
+}
+#else
+unsigned long test_millis() {
 	timeval time;
 	::gettimeofday(&time, NULL);
 	return (uint64_t)(time.tv_sec * 1000) + (uint64_t)(time.tv_usec / 1000);
@@ -35,7 +39,7 @@ uint64_t timeOffset = 0;
 uint64_t ltime() {
 	// handle roll-over of 32-bit millis (approx. 49 days)
 	static uint32_t low32, high32;
-	uint32_t new_low32 = millis();
+	uint32_t new_low32 = test_millis();
 	if (new_low32 < low32) high32++;
 	low32 = new_low32;
 	return ((uint64_t)high32 << 32 | low32) + timeOffset;

@@ -25,7 +25,6 @@ void tearDown(void) {
     // clean stuff up here after each test
 }
 
-/*
 void testHMAC() {
 
 	{
@@ -124,7 +123,6 @@ void testPKCS7() {
 		TEST_ASSERT_EQUAL_INT(0, memcmp(bytes.data(), str, len));
 	}
 }
-*/
 
 void testCrc8() {
 	char data[32];
@@ -148,7 +146,6 @@ void testCrc8() {
 
 }
 
-/*
 void testCrc32() {
 	char data[16];
 	uint32_t crc;
@@ -201,11 +198,15 @@ void testByteCrc32() {
 	}
 	TEST_ASSERT_EQUAL_UINT32(0xEE2F4613, crc);
 }
-*/
 
 int runUnityTests(void) {
     UNITY_BEGIN();
-    RUN_TEST(testCrc8);
+	RUN_TEST(testHMAC);
+	RUN_TEST(testPKCS7);
+	RUN_TEST(testCrc8);
+	RUN_TEST(testCrc32);
+	RUN_TEST(testIncrementalCrc32);
+	RUN_TEST(testByteCrc32);
     return UNITY_END();
 }
 

@@ -135,6 +135,11 @@ namespace RNS { namespace Utilities {
 			_filesystem = {Type::NONE};
 		}
 
+		inline static FileSystem& get_filesystem() {
+			return _filesystem;
+		}
+
+
 		inline static bool file_exists(const char* file_path) {
 			if (!_filesystem) {
 				WARNING("file_exists: filesystem not registered");

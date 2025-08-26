@@ -1,5 +1,9 @@
 #include <unity.h>
+
+#define MSGPACK_DEBUGLOG_ENABLE 0
+#define DEBUGLOG_DEFAULT_LOG_LEVEL_TRACE
 #include <MsgPack.h>
+#include "Bytes.h"
 
 #include <string.h>
 #include <stdint.h>
@@ -168,11 +172,82 @@ void test_msgpack_binary_content(void) {
     TEST_ASSERT_EQUAL_MEMORY(binaryData2, unpacked_buffer2.data(), 3);
 }
 
+void test_pack_bytes_array_python() {
+    static const unsigned char binary[] = {
+        0x93, 0xcb, 0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f,
+        0xbe, 0x77, 0xc4, 0x06, 0x66, 0x69, 0x72, 0x73, 
+        0x74, 0xab, 0xc4, 0x07, 0x73, 0x65, 0x63, 0x6f,
+        0x6e, 0x64, 0xcd,
+    };
+	double time = 123.456;
+    // Test that array containing bytes matches python equivalent
+	const RNS::Bytes one("first\xab");
+	const RNS::Bytes two("second\xcd");
+    MsgPack::Packer packer;
+	packer.to_array(time, one, two);
+	RNS::Bytes data(packer.data(), packer.size());
+    TEST_ASSERT_EQUAL_size_t(27, packer.size());
+    TEST_ASSERT_EQUAL_MEMORY(binary, packer.data(), packer.size());
+}
+
+void test_unpack_bytes_array_python() {
+    static const unsigned char binary[] = {
+        0x93, 0xcb, 0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f,
+        0xbe, 0x77, 0xc4, 0x06, 0x66, 0x69, 0x72, 0x73, 
+        0x74, 0xab, 0xc4, 0x07, 0x73, 0x65, 0x63, 0x6f,
+        0x6e, 0x64, 0xcd,
+    };
+    MsgPack::Unpacker unpacker;
+    unpacker.feed(binary, sizeof(binary));
+    double time;
+    // CBA NOTE: Can't currently deserialize directly into Bytes
+    //RNS::Bytes one;
+    //RNS::Bytes two;
+    //unpacker.from_array(time, one, two);
+    MsgPack::bin_t<uint8_t> bin_one;
+    MsgPack::bin_t<uint8_t> bin_two;
+    unpacker.from_array(time, bin_one, bin_two);
+    RNS::Bytes one(bin_one);
+    RNS::Bytes two(bin_two);
+    TEST_ASSERT_EQUAL_FLOAT(123.456, time);
+    TEST_ASSERT_EQUAL_MEMORY("first\xab", one.data(), one.size());
+    TEST_ASSERT_EQUAL_MEMORY("second\xcd", two.data(), two.size());
+}
+
+void test_pack_float_python() {
+    static const unsigned char binary[] = {
+        0xcb, 0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f, 0xbe,
+        0x77
+    };
+	double time = 123.456;
+    MsgPack::Packer packer;
+	packer.serialize(time);
+	RNS::Bytes data(packer.data(), packer.size());
+    TEST_ASSERT_EQUAL_size_t(9, packer.size());
+    TEST_ASSERT_EQUAL_MEMORY(binary, packer.data(), packer.size());
+}
+
+void test_unpack_float_python() {
+    static const unsigned char binary[] = {
+        0xcb, 0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f, 0xbe,
+        0x77
+    };
+    MsgPack::Unpacker unpacker;
+    unpacker.feed(binary, sizeof(binary));
+    double time;
+    unpacker.deserialize(time);
+    TEST_ASSERT_EQUAL_FLOAT(123.456, time);
+}
+
 int runUnityTests(void) {
     UNITY_BEGIN();
     RUN_TEST(test_msgpack_array_packing);
     RUN_TEST(test_msgpack_empty_buffer);
     RUN_TEST(test_msgpack_binary_content);
+    RUN_TEST(test_pack_bytes_array_python);
+    RUN_TEST(test_unpack_bytes_array_python);
+    RUN_TEST(test_pack_float_python);
+    RUN_TEST(test_unpack_float_python);
     return UNITY_END();
 }
 

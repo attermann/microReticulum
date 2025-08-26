@@ -207,11 +207,25 @@ void Reticulum::loop() {
 	assert(_object);
 	if (!_object->_is_connected_to_shared_instance) {
 
+		// Perform Reticulum housekeeping
 		if (OS::time() > (_object->_jobs_last_run + JOB_INTERVAL)) {
 			jobs();
 			_object->_jobs_last_run = OS::time();
 		}
 
+		// Perform interface processing
+		for (auto& [hash, interface] : Transport::get_interfaces()) {
+			interface.loop();
+		}
+
+		// Perform Filesystem processing
+		FileSystem& filesystem = OS::get_filesystem();
+		if (filesystem) {
+			filesystem.loop();
+		}
+
+
+		// Perform Transport processing
 		RNS::Transport::loop();
 	}
 	// Perform random number gnerator housekeeping
