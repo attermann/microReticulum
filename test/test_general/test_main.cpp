@@ -7,14 +7,6 @@
 #include <sys/time.h>
 #include <stdio.h>
 
-void setUp(void) {
-    // set stuff up here before each test
-}
-
-void tearDown(void) {
-    // clean stuff up here after each test
-}
-
 #ifdef ARDUINO
 unsigned long test_millis() {
 	return millis();
@@ -72,6 +64,15 @@ void testConvert() {
 	//uint64_t newnum = (uint64_t)(*buf);
 	uint64_t newnum = *(uint64_t*)buf;
 	TEST_ASSERT_EQUAL_UINT64(1234567890, newnum);
+}
+
+
+void setUp(void) {
+    // set stuff up here before each test
+}
+
+void tearDown(void) {
+    // clean stuff up here after each test
 }
 
 int runUnityTests(void) {

@@ -17,14 +17,6 @@
 // CBA Doesn't appear to support incremental checksum building
 extern uint8_t crypto_crc8(uint8_t tag, const void *data, unsigned size);
 
-void setUp(void) {
-    // set stuff up here before each test
-}
-
-void tearDown(void) {
-    // clean stuff up here after each test
-}
-
 void testHMAC() {
 
 	{
@@ -197,6 +189,15 @@ void testByteCrc32() {
 		crc = RNS::Utilities::Crc::crc32(crc, data[i]);
 	}
 	TEST_ASSERT_EQUAL_UINT32(0xEE2F4613, crc);
+}
+
+
+void setUp(void) {
+    // set stuff up here before each test
+}
+
+void tearDown(void) {
+    // clean stuff up here after each test
 }
 
 int runUnityTests(void) {

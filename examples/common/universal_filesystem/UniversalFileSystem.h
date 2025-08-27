@@ -158,7 +158,11 @@ protected:
 			}
 			assert(_file);
 			int ch = fgetc(_file);
-			TRACEF("FileStream::read: %c", ch);
+			if (ch == EOF) {
+				return ch;
+			}
+			--_available;
+			//TRACEF("FileStream::read: %c", ch);
 			return ch;
 		}
 		inline virtual int peek() {

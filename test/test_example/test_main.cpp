@@ -1,5 +1,11 @@
 #include <unity.h>
 
+void testExample() {
+	bool success = true;
+    TEST_ASSERT_EQUAL(true, success);
+}
+
+
 void setUp(void) {
     // set stuff up here before each test
 }
@@ -8,15 +14,16 @@ void tearDown(void) {
     // clean stuff up here after each test
 }
 
-void testExample() {
-	bool success = true;
-    TEST_ASSERT_EQUAL(true, success);
-}
-
-
 int runUnityTests(void) {
     UNITY_BEGIN();
+
+    // Suite-level setup
+
+	// Run tests
     RUN_TEST(testExample);
+
+	// Suite-level teardown
+
     return UNITY_END();
 }
 

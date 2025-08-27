@@ -11,14 +11,6 @@
 // Use MsgPack's native binary type
 using BinaryBuffer = MsgPack::bin_t<uint8_t>;
 
-void setUp(void) {
-    // set stuff up here before each test
-}
-
-void tearDown(void) {
-    // clean stuff up here after each test
-}
-
 void test_msgpack_array_packing(void) {
     // Test data setup
     float testFloat = 3.14159f;
@@ -237,6 +229,15 @@ void test_unpack_float_python() {
     double time;
     unpacker.deserialize(time);
     TEST_ASSERT_EQUAL_FLOAT(123.456, time);
+}
+
+
+void setUp(void) {
+    // set stuff up here before each test
+}
+
+void tearDown(void) {
+    // clean stuff up here after each test
 }
 
 int runUnityTests(void) {
