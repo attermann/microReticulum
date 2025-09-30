@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [test]
 
     steps:
       - uses: actions/checkout@v4
@@ -27,3 +30,7 @@ jobs:
       - name: Build PlatformIO Project
         run: pio run
 
+      - name: Build PlatformIO examples
+        run: pio ci
+        env:
+          PLATFORMIO_CI_SRC: ${{ matrix.example }}
