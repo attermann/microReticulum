@@ -53,4 +53,4 @@ jobs:
         run: |
           pio run --environment ttgo-lora32-v21
           pio run --environment ttgo-t-beam
-          # pio run --environment wiscore_rak4631 # Got UnknownBoard: Unknown board ID 'wiscore_rak4631'
+          pio run --environment wiscore_rak4631
