@@ -1,0 +1,56 @@
+name: PlatformIO CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [native, native17, native20]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build Project
+        run: pio run --environment ${{ matrix.env }}
+
+      - name: Run Unit Tests
+        run: pio test --environment ${{ matrix.env }}
+
+  build-embedded:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build Embedded Targets
+        run: |
+          pio run --environment ttgo-lora32-v21
+          pio run --environment ttgo-t-beam
+          # pio run --environment wiscore_rak4631 # Got UnknownBoard: Unknown board ID 'wiscore_rak4631'
