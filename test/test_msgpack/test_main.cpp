@@ -3,6 +3,9 @@
 #define MSGPACK_DEBUGLOG_ENABLE 0
 #define DEBUGLOG_DEFAULT_LOG_LEVEL_TRACE
 #include <MsgPack.h>
+
+#include <ArduinoJson.h>
+
 #include "Bytes.h"
 
 #include <string.h>
@@ -176,6 +179,7 @@ void test_pack_bytes_array_python() {
 	const RNS::Bytes one("first\xab");
 	const RNS::Bytes two("second\xcd");
     MsgPack::Packer packer;
+    // CBA NOTE: MsgPack appears to use Bytes cast operator to std::vector<uint8_t> for serializing Bytes as binary
 	packer.to_array(time, one, two);
 	RNS::Bytes data(packer.data(), packer.size());
     TEST_ASSERT_EQUAL_size_t(27, packer.size());
@@ -232,6 +236,57 @@ void test_unpack_float_python() {
 }
 
 
+void test_json_pack_bytes_array_python() {
+    static const unsigned char binary[] = {
+        0x93, 0xcb, 0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f,
+        0xbe, 0x77, 0xc4, 0x06, 0x66, 0x69, 0x72, 0x73, 
+        0x74, 0xab, 0xc4, 0x07, 0x73, 0x65, 0x63, 0x6f,
+        0x6e, 0x64, 0xcd,
+    };
+	double time = 123.456;
+    // Test that array containing bytes matches python equivalent
+	const RNS::Bytes one("first\xab");
+	const RNS::Bytes two("second\xcd");
+    // CBA NOTE: ArduinJson AJ MsgPack appears to also use Bytes cast operator to std::vector<uint8_t> for serializing Bytes
+    //  but serializes it as an array instead of as binary, so can't currently serialize Bytes directly yet.
+    // CBA NOTE: Actually AJ MsgPack probably uses the same Json (de)serializers defined in Bytes as AJ Json uses, so need a way
+    //  to distinguish MsgPack from JSON in (de)serializers to know whether to store as binary or as string represenation!!!
+    MsgPackBinary bin_one(one.data(), one.size());
+    MsgPackBinary bin_two(two.data(), two.size());
+    JsonDocument doc;
+    doc.add(time);
+    doc.add(bin_one);
+    doc.add(bin_two);
+    RNS::Bytes packed;
+    size_t len = serializeMsgPack(doc, packed.writable(256), 256);
+    packed.resize(len);
+    TEST_ASSERT_EQUAL_size_t(27, packed.size());
+    TEST_ASSERT_EQUAL_MEMORY(binary, packed.data(), packed.size());
+}
+
+void test_json_unpack_bytes_array_python() {
+    static const unsigned char binary[] = {
+        0x93, 0xcb, 0x40, 0x5e, 0xdd, 0x2f, 0x1a, 0x9f,
+        0xbe, 0x77, 0xc4, 0x06, 0x66, 0x69, 0x72, 0x73, 
+        0x74, 0xab, 0xc4, 0x07, 0x73, 0x65, 0x63, 0x6f,
+        0x6e, 0x64, 0xcd,
+    };
+    JsonDocument doc;
+    deserializeMsgPack(doc, binary, sizeof(binary));
+    double time = doc[0];
+    // CBA NOTE: Can't currently deserialize directly into Bytes
+    //RNS::Bytes one;
+    //RNS::Bytes two;
+    MsgPackBinary bin_one = doc[1];
+    MsgPackBinary bin_two = doc[2];
+    RNS::Bytes one(bin_one.data(), bin_one.size());
+    RNS::Bytes two(bin_two.data(), bin_two.size());
+    TEST_ASSERT_EQUAL_FLOAT(123.456, time);
+    TEST_ASSERT_EQUAL_MEMORY("first\xab", one.data(), one.size());
+    TEST_ASSERT_EQUAL_MEMORY("second\xcd", two.data(), two.size());
+}
+
+
 void setUp(void) {
     // set stuff up here before each test
 }
@@ -249,6 +304,8 @@ int runUnityTests(void) {
     RUN_TEST(test_unpack_bytes_array_python);
     RUN_TEST(test_pack_float_python);
     RUN_TEST(test_unpack_float_python);
+    RUN_TEST(test_json_pack_bytes_array_python);
+    RUN_TEST(test_json_unpack_bytes_array_python);
     return UNITY_END();
 }
 

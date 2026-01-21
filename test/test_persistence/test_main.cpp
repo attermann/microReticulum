@@ -1176,8 +1176,9 @@ int runUnityTests(void) {
 	RNS::Utilities::OS::remove_file(test_map_path);
 	RNS::Utilities::OS::remove_file(test_vector_path);
 	RNS::Utilities::OS::remove_file(test_set_path);
-	RNS::Utilities::OS::remove_file(test_array_path);
 	RNS::Utilities::OS::remove_file(test_destination_table_path);
+	RNS::Utilities::OS::remove_file(test_empty_destination_table_path);
+	RNS::Utilities::OS::remove_file(test_array_path);
 	RNS::Utilities::OS::remove_file(test_series_path);
 	RNS::Utilities::OS::deregister_filesystem();
 

@@ -22,7 +22,6 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
-#include <SPIFFS.h>
 #else
 #include <termios.h>
 #include <fcntl.h>

@@ -40,7 +40,8 @@ bool LoRaInterface::start() {
 	INFO("LoRa initializing...");
   
 #ifdef ARDUINO
-	SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+	//SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+	SPI.begin();
 	delay(1500);
 
     LoRa.setPins(RADIO_CS_PIN, RADIO_RST_PIN, RADIO_DIO0_PIN);
@@ -58,7 +59,7 @@ bool LoRaInterface::start() {
 	LoRa.setTxPower(power);
 
 	INFO("LoRa init succeeded.");
-	TRACE("LoRa bandwidth is " + std::to_string(Utilities::OS::round(bitrate()/1000.0, 2)) + " Kbps");
+	TRACE("LoRa bandwidth is " + std::to_string(Utilities::OS::round(_bitrate/1000.0, 2)) + " Kbps");
 #endif
 
 	_online = true;

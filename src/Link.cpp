@@ -1034,7 +1034,7 @@ void Link::receive(const Packet& packet) {
 				{
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
-						if (_object->_initiator && plaintext.size() == Type::Identity::KEYSIZE/8 + Type::Identity::SIGLENGTH/8) {
+						if (!(_object->_initiator) && plaintext.size() == Type::Identity::KEYSIZE/8 + Type::Identity::SIGLENGTH/8) {
 							const Bytes public_key   = plaintext.left(Type::Identity::KEYSIZE/8);
 							const Bytes signed_data  = _object->_link_id + public_key;
 							const Bytes signature    = plaintext.mid(Type::Identity::KEYSIZE/8, Type::Identity::SIGLENGTH/8);

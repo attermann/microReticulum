@@ -78,6 +78,10 @@ MEM("Creating from data-move...");
 			assign(chunk, size);
 			MEMF("Bytes object created from chunk \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
 		}
+		Bytes(const void* chunk, size_t size) {
+			assign(chunk, size);
+			MEMF("Bytes object created from chunk \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
+		}
 		Bytes(const char* string) {
 			assign(string);
 			MEMF("Bytes object created from string \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
@@ -161,6 +165,19 @@ MEM("Creating from data-move...");
 				return Data();
 			return *_data.get();
 		}
+		// CBA NOTE: Following cast operators can cause issues with ambiguity from other libraries
+/*
+		inline operator const uint8_t*() const {
+			if (!_data)
+				return nullptr;
+			return _data->data();
+		}
+		inline operator const void*() const {
+			if (!_data)
+				return nullptr;
+			return _data->data();
+		}
+*/
 
 	private:
 		inline SharedData shareData() const {
@@ -226,6 +243,9 @@ MEM("Creating from data-move...");
 			//_data->insert(_data->begin(), chunk, chunk + chunk_size);
 			_data->assign(chunk, chunk + chunk_size);
 		}
+		inline void assign(const void* chunk, size_t chunk_size) {
+			assign((uint8_t*)chunk, chunk_size);
+		}
 		inline void assign(const char* string) {
 			// if assignment is empty then clear data and don't bother creating new
 			if (string == nullptr || string[0] == 0) {
@@ -266,6 +286,9 @@ MEM("Creating from data-move...");
 			}
 			exclusiveData(true, size() + chunk_size);
 			_data->insert(_data->end(), chunk, chunk + chunk_size);
+		}
+		inline void append(const void* chunk, size_t chunk_size) {
+			append((uint8_t*)chunk, chunk_size);
 		}
 		inline void append(const char* string) {
 			// if append is empty then do nothing
@@ -410,9 +433,11 @@ inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const char* rhstr) {
 }
 
 namespace ArduinoJson {
+	// Serialize
 	inline bool convertToJson(const RNS::Bytes& src, JsonVariant dst) {
 		return dst.set(src.toHex());
 	}
+	// Deserialize
 	inline void convertFromJson(JsonVariantConst src, RNS::Bytes& dst) {
 		dst.assignHex(src.as<const char*>());
 	}

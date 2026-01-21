@@ -6,7 +6,11 @@
 #include <Transport.h>
 #include <Log.h>
 
-RNS::FileSystem reticulum_filesystem(RNS::Type::NONE);
+#ifdef ARDUINO
+const char destination_table_path[] = "/destination_table";
+#else
+const char destination_table_path[] = "destination_table";
+#endif
 
 class InInterface : public RNS::InterfaceImpl {
 public:
@@ -100,7 +104,7 @@ void testReticulum() {
 	HEAD("Running testReticulum...", RNS::LOG_TRACE);
 
 	HEAD("Registering Filesystem with OS...", RNS::LOG_TRACE);
-	reticulum_filesystem = new FileSystem();
+	RNS::FileSystem reticulum_filesystem = new FileSystem();
 	((FileSystem*)reticulum_filesystem.get())->init();
 	RNS::Utilities::OS::register_filesystem(reticulum_filesystem);
 
@@ -168,6 +172,8 @@ void testReticulum() {
 
 	HEAD("Destroying Reticulum instance...", RNS::LOG_TRACE);
 	reticulum = {RNS::Type::NONE};
+
+	RNS::Utilities::OS::remove_file(destination_table_path);
 }
 
 

@@ -16,7 +16,7 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
-#include <SPIFFS.h>
+//#include <SPIFFS.h>
 #else
 #include <termios.h>
 #include <fcntl.h>
@@ -258,6 +258,7 @@ void setup() {
 	pinMode(BUTTON_PIN, INPUT);
 	attachInterrupt(BUTTON_PIN, userKey, FALLING);  
 
+/*
 	// Setup filesystem
 	if (!SPIFFS.begin(true, "")){
 		ERROR("SPIFFS filesystem mount failed");
@@ -265,6 +266,7 @@ void setup() {
 	else {
 		DEBUG("SPIFFS filesystem is ready");
 	}
+*/
 #endif
 
 #if defined(MEM_LOG)
