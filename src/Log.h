@@ -29,7 +29,7 @@
 	#define DEBUGF(msg, ...) (RNS::debugf(msg, __VA_ARGS__))
 	#define TRACE(msg) (RNS::trace(msg))
 	#define TRACEF(msg, ...) (RNS::tracef(msg, __VA_ARGS__))
-	#if defined(MEM_LOG)
+	#if defined(RNS_MEM_LOG)
 		#define MEM(msg) (RNS::mem(msg))
 		#define MEMF(msg, ...) (RNS::memf(msg, __VA_ARGS__))
 	#else

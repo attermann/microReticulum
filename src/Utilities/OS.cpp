@@ -23,7 +23,8 @@ using namespace RNS::Utilities;
 	#define BUFFER_FRACTION 0
 #endif
 
-bool tlsf_init = false;
+bool _tlsf_init = false;
+//char _tlsf_msg[256] = "";
 size_t _buffer_size = BUFFER_SIZE;
 size_t _contiguous_size = 0;
 
@@ -44,29 +45,46 @@ void* operator new(size_t size) {
 //__attribute__((weak)) void* operator new(size_t size) {
 #if defined(RNS_USE_TLSF)
 	//if (OS::_tlsf == nullptr) {
-	if (!tlsf_init) {
-		tlsf_init = true;
+	if (!_tlsf_init) {
+		_tlsf_init = true;
 #if defined(ESP32)
+		// CBA Still unknown why the call to tlsf_create_with_pool() is so flaky on ESP32 with calculated buffer size. Reuires more research and unit tests.
 		_contiguous_size = ESP.getMaxAllocHeap();
+		TRACEF("contiguous_size: %u", _contiguous_size);
+		if (_buffer_size == 0) {
+			// CBA NOTE Using fp mathhere somehow causes tlsf_create_with_pool() to fail.
+			//_buffer_size = (size_t)(_contiguous_size * BUFFER_FRACTION);
+			// Compute 80% exactly using integers
+			_buffer_size = (_contiguous_size * 4) / 5;
+		}
+		// Round DOWN to TLSF alignment
+		size_t align = tlsf_align_size();
+		_buffer_size &= ~(align - 1);
+		void* raw_buffer = (void*)aligned_alloc(align, _buffer_size);
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
 		_contiguous_size = dbgHeapFree();
-#endif
 		TRACEF("contiguous_size: %u", _contiguous_size);
-
 		if (_buffer_size == 0) {
-			_buffer_size = (size_t)((_contiguous_size * BUFFER_FRACTION) / 1024) * 1024;
+			_buffer_size = (size_t)(_contiguous_size * BUFFER_FRACTION);
 		}
+		// For NRF52 round to kB
+		_buffer_size = (size_t)(_buffer_size / 1024) * 1024;
 		TRACEF("buffer_size: %u", _buffer_size);
-
-		//void* raw_buffer = malloc(BUFFER_SIZE);
 		void* raw_buffer = malloc(_buffer_size);
+#endif
 		if (raw_buffer == nullptr) {
 			ERROR("-- allocation for tlsf FAILED");
+			//strcpy(_tlsf_msg, "-- allocation for tlsf FAILED!!!");
 		}
 		else {
 #if 1
-			//OS::_tlsf = tlsf_create_with_pool(raw_buffer, BUFFER_SIZE);
 			OS::_tlsf = tlsf_create_with_pool(raw_buffer, _buffer_size);
+			//if (OS::_tlsf == nullptr) {
+			//	sprintf(_tlsf_msg, "initialization of tlsf with align=%d, contiguous=%d, size=%d FAILED!!!", tlsf_align_size(), _contiguous_size, _buffer_size);
+			//}
+			//else {
+			//	sprintf(_tlsf_msg, "initialization of tlsf with align=%d, contiguous=%d, size=%d SUCCESSFUL!!!", tlsf_align_size(), _contiguous_size, _buffer_size);
+			//}
 #else
 			Serial.print("raw_buffer: ");
 			Serial.println((long)raw_buffer);
@@ -169,6 +187,10 @@ void dump_tlsf_stats() {
 	_tlsf_free_count = 0;
 	_tlsf_free_size = 0;
 	_tlsf_free_max_size = 0;
+	//TRACEF("TLSF Message: %s", _tlsf_msg);
+	if (OS::_tlsf == nullptr) {
+		return;
+	}
 	tlsf_walk_pool(tlsf_get_pool(OS::_tlsf), tlsf_mem_walker, nullptr);
 	HEAD("TLSF Stats", LOG_TRACE);
 	TRACEF("Buffer Size:     %u", _buffer_size);

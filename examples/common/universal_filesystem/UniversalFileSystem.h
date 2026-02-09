@@ -25,7 +25,8 @@ using namespace Adafruit_LittleFS_Namespace;
 class UniversalFileSystem : public RNS::FileSystemImpl {
 
 public:
-	UniversalFileSystem() {}
+	UniversalFileSystem() { TRACE("UniversalFileSystem CREATED"); }
+	virtual ~UniversalFileSystem() { TRACE("UniversalFileSystem DESTROYED"); }
 
 public:
 	static void listDir(const char* dir);
@@ -55,8 +56,8 @@ protected:
 		bool _closed = false;
 
 	public:
-		UniversalFileStream(File* file) : RNS::FileStreamImpl(), _file(file) {}
-		virtual ~UniversalFileStream() { if (!_closed) close(); }
+		UniversalFileStream(File* file) : RNS::FileStreamImpl(), _file(file) { TRACE("UniversalFileStream CREATED"); }
+		virtual ~UniversalFileStream() { if (!_closed) close(); TRACE("UniversalFileStream DESTROYED"); }
 
 	public:
 		inline virtual const char* name() { return _file->name(); }

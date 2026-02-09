@@ -143,6 +143,7 @@ void reticulum_setup() {
 		//RNS::Reticulum reticulum;
 		reticulum = RNS::Reticulum();
 		reticulum.transport_enabled(true);
+		reticulum.probe_destination_enabled(true);
 		reticulum.start();
 		//return;
 		// 21.9% (+0.1%)

@@ -10,6 +10,14 @@ This API is dependent on the following external libraries:
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson)
 - [rweather/Crypto](https://github.com/rweather/arduinolibs)
 
+## Build Options
+
+- `-DRNS_MEM_LOG` Used to enable logging of low-level memory operations for debug purposes
+- `-DRNS_USE_FS` Used to enable use of file system by RNS for persistence
+- `-DRNS_PERSIST_PATHS` Used to enable persistence of RNS paths in file system (also requires `-DRNS_USE_FS`)
+- `-DRNS_USE_TLSF=1` Enables the use of the TLSF (Two-Level Segregate Fit) dynamic memory manager for efficient management of constrained MCU memory with minimal fragmentation. Currently only required on NRF52 boards (ESP32 already uses TLSF internally).
+- `-DRNS_USE_ALLOCATOR=1` Enables the replacement of default new/delete operators with custom implementations that take advantage of optimized memory managers (eg, TLSF). Currently only required on NRF52 boards (ESP32 already uses TLSF internally).
+
 ## Building
 
 Building and uploading to hardware is simple through the VSCode PlatformIO IDE
@@ -20,6 +28,53 @@ Building and uploading to hardware is simple through the VSCode PlatformIO IDE
 - Build, Upload, and Monitor to observe application logging
 
 Instructions for command line builds and building of individual example applications coming soon.
+
+## PlatformIO Command Line
+
+Clean all environments (boards):
+```
+pio run -t clean
+```
+
+Full Clean (including libdeps) all environments (boards):
+```
+pio run -t fullclean
+```
+
+Run unit tests:
+```
+pio test
+pio test -f test_msgpack
+pio test -f test_msgpack -e native
+pio test -f test_msgpack -e native17
+```
+
+Build a single environment (board):
+```
+pio run -e ttgo-t-beam
+pio run -e wiscore_rak4631
+```
+
+Build and upload a single environment (board):
+```
+pio run -e ttgo-t-beam -t upload
+pio run -e wiscore_rak4631 -t upload
+```
+
+Build and package a single environment (board):
+```
+pio run -e ttgo-t-beam -t package
+pio run -e wiscore_rak4631 -t package
+```
+
+Build all environments (boards):
+```
+pio run
+```
+
+## Known Issues
+
+Use of the custom allocator (enabled by `-DRNS_USE_ALLOCATOR=1`) in conjunction with TLSF (enabled by `-DRNS_USE_TLSF=1`) is not currently working in ESP32 due to TLFS initialization failure at the time that allocator initialization takes place. This causes the allocator to fallback to using regular malloc/free instead of using TLFS as intended.
 
 ## Roadmap
 

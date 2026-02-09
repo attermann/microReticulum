@@ -464,7 +464,8 @@ namespace RNS {
 
 namespace RNS { namespace Persistence {
 
-	static DynamicJsonDocument _document(Type::Persistence::DOCUMENT_MAXSIZE);
+	//static DynamicJsonDocument _document(Type::Persistence::DOCUMENT_MAXSIZE);
+	static JsonDocument _document;
 	static Bytes _buffer(Type::Persistence::BUFFER_MAXSIZE);
 
 	template <typename T> size_t crc(const T& obj) {
@@ -636,6 +637,11 @@ namespace RNS { namespace Persistence {
 		TRACEF("Persistence::deserialize: size: %d bytes", stream.size());
 
 		map.clear();
+
+		if (stream.size() == 0) {
+			TRACE("Persistence::deserialize: read stream is empty");
+			return 0;
+		}
 
 		// find opening brace
 		if (stream.find('{')) {

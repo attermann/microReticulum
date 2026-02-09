@@ -312,7 +312,7 @@ public:
 		TRACEF("open_file: successfully opened file %s", file_path);
 		return RNS::FileStream(new FileStreamImpl(file));
 	#else
-		#warning("unsuppoprted");
+		#warning("unsupported");
 		return RNS::FileStream(RNS::Type::NONE);
 	#endif
 	#else	// ARDUINO

@@ -186,7 +186,7 @@ void testSerializeObject() {
 	TestObject test("test", vec);
 	TRACE("testSerializeObject: test: " + test.toString());
 
-	StaticJsonDocument<1024> doc;
+	JsonDocument doc;
 	doc.set(test);
 
 	RNS::Bytes data;
@@ -215,8 +215,7 @@ void testSerializeObject() {
 
 void testDeserializeObject() {
 
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(1024);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
@@ -260,7 +259,7 @@ void testSerializeVector() {
 	vector.push_back({"two", tvec});
 	vector.push_back({"one", tvec});
 
-	StaticJsonDocument<4096> doc;
+	JsonDocument doc;
 	//copyArray(vector, doc.createNestedArray("vector"));
 	//doc["vector"] = vector;
 	//copyArray(vector, doc);
@@ -312,14 +311,7 @@ void testSerializeVector() {
 
 void testDeserializeVector() {
 
-	// Compute the required size
-	const int capacity =
-		JSON_ARRAY_SIZE(2) +
-		2*JSON_OBJECT_SIZE(3) +
-		4*JSON_OBJECT_SIZE(1);
-
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(1024);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_vector_path, data) > 0) {
@@ -368,7 +360,7 @@ void testSerializeSet() {
 	set.insert({"two", tvec});
 	set.insert({"one", tvec});
 
-	StaticJsonDocument<4096> doc;
+	JsonDocument doc;
 	//copyArray(set, doc.createNestedArray("set"));
 	//doc["set"] = set;
 	//copyArray(set, doc);
@@ -408,14 +400,7 @@ void testSerializeSet() {
 
 void testDeserializeSet() {
 
-	// Compute the required size
-	const int capacity =
-		JSON_ARRAY_SIZE(2) +
-		2*JSON_OBJECT_SIZE(3) +
-		4*JSON_OBJECT_SIZE(1);
-
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(1024);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_set_path, data) > 0) {
@@ -465,7 +450,7 @@ void testSerializeMap() {
 	map.insert({"two", {"two", tvec}});
 	map.insert({"one", {"one", tvec}});
 
-	StaticJsonDocument<4096> doc;
+	JsonDocument doc;
 	//copyArray(map, doc.createNestedArray("map"));
 	//doc["map"] = map;
 	//copyArray(map, doc);
@@ -497,14 +482,7 @@ void testSerializeMap() {
 
 void testDeserializeMap() {
 
-	// Compute the required size
-	const int capacity =
-		JSON_ARRAY_SIZE(2) +
-		2*JSON_OBJECT_SIZE(3) +
-		4*JSON_OBJECT_SIZE(1);
-
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(1024);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_map_path, data) > 0) {
@@ -594,36 +572,13 @@ void testSerializeDestinationTable() {
 		TRACE("testSerializeDestinationTable: entry: " + hash.toHex() + " = " + test.debugString());
 	}
 
-	//StaticJsonDocument<1024> doc;
-	//doc.set(map);
-	TRACE("testSerializeDestinationTable: JSON_OBJECT_SIZE " + std::to_string(JSON_OBJECT_SIZE(1)) + " bytes");
-	TRACE("testSerializeDestinationTable: JSON_ARRAY_SIZE " + std::to_string(JSON_ARRAY_SIZE(1)) + " bytes");
-	int calcsize = 0;
-	for (auto& [destination_hash, destination_entry] : map) {
-		// entry
-		calcsize += JSON_ARRAY_SIZE(1);
-		// map key
-		calcsize += JSON_OBJECT_SIZE(1);
-		// entry (+1)
-		calcsize += JSON_OBJECT_SIZE(7+1);
-		// blobs
-		calcsize += JSON_ARRAY_SIZE(destination_entry._random_blobs.size());
-	}
-	TRACE("testSerializeDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
-	const int BUFFER_SIZE = (JSON_OBJECT_SIZE(9) + JSON_ARRAY_SIZE(2)) * map.size() + JSON_ARRAY_SIZE(map.size());
-	TRACE("testSerializeDestinationTable: BUFFER_SIZE " + std::to_string(BUFFER_SIZE) + " bytes");
-	//DynamicJsonDocument doc(32768);
-	//DynamicJsonDocument doc(BUFFER_SIZE);
-	DynamicJsonDocument doc(calcsize);
+	JsonDocument doc;
 	doc.set(map);
 	TRACE("testSerializeDestinationTable: doc size " + std::to_string(doc.size()));
-	TRACE("testSerializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 
 	RNS::Bytes data;
-	//size_t size = 32768;
+	size_t size = 32768;
 	//size_t size = BUFFER_SIZE;
-	size_t size = calcsize;
-	//size_t size = doc.memoryUsage();
 	TRACE("testSerializeDestinationTable: buffer size " + std::to_string(size) + " bytes");
 	size_t length = serializeJson(doc, data.writable(size), size);
 	//size_t length = serializeMsgPack(doc, data.writable(size), size);
@@ -632,7 +587,7 @@ void testSerializeDestinationTable() {
 	}
 	TRACE("testSerializeDestinationTable: serialized " + std::to_string(length) + " bytes");
 	if (length > 0) {
-		TRACE("json: " + data.toString());
+		TRACE("testSerializeDestinationTable: json: " + data.toString());
 		if (RNS::Utilities::OS::write_file(test_destination_table_path, data) == data.size()) {
 			TRACE("testSerializeDestinationTable: wrote: " + std::to_string(data.size()) + " bytes");
 		}
@@ -653,20 +608,16 @@ void testDeserializeDestinationTable() {
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_destination_table_path, data) > 0) {
 		TRACE("testDeserializeDestinationTable: read: " + std::to_string(data.size()) + " bytes");
-		//StaticJsonDocument<8192> doc;
-		//DynamicJsonDocument doc(1024);
-		int calcsize = data.size() * 2.0;
-		TRACE("testDeserializeDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
-		DynamicJsonDocument doc(calcsize);
+		TRACE("testDeserializeDestinationTable: json: " + data.toString());
+		JsonDocument doc;
 
 		//TRACE("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		TRACE("testDeserializeDestinationTable: doc size " + std::to_string(doc.size()));
-		TRACE("testDeserializeDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 		if (!error) {
 			TRACE("testDeserializeDestinationTable: successfully deserialized " + std::to_string(data.size()) + " bytes");
-			TRACE("json: " + data.toString());
+			//TRACE("testDeserializeDestinationTable: json: " + data.toString());
 
 			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
 			TEST_ASSERT_EQUAL_size_t(22, map.size());
@@ -680,7 +631,7 @@ void testDeserializeDestinationTable() {
 			//}
 		}
 		else {
-			TRACE("testDeserializeDestinationTable: failed to deserialize");
+			TRACEF("testDeserializeDestinationTable: failed to deserialize: %s", error.c_str());
 			TEST_FAIL();
 		}
 		//assert(RNS::Utilities::OS::remove_file(test_destination_table_path));
@@ -701,20 +652,15 @@ void testDeserializeEmptyDestinationTable() {
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_empty_destination_table_path, data) > 0) {
 		TRACE("testDeserializeEmptyDestinationTable: read: " + std::to_string(data.size()) + " bytes");
-		//StaticJsonDocument<8192> doc;
-		//DynamicJsonDocument doc(1024);
-		int calcsize = data.size() * 2.0;
-		TRACE("testDeserializeEmptyDestinationTable: calcsize " + std::to_string(calcsize) + " bytes");
-		DynamicJsonDocument doc(calcsize);
+		JsonDocument doc;
 
 		//TRACE("testDeserializeVector: data: " + data.toString());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
 		TRACE("testDeserializeEmptyDestinationTable: doc size " + std::to_string(doc.size()));
-		TRACE("testDeserializeEmptyDestinationTable: doc memory " + std::to_string(doc.memoryUsage()));
 		if (!error) {
 			TRACE("testDeserializeEmptyDestinationTable: successfully deserialized " + std::to_string(data.size()) + " bytes");
-			TRACE("json: " + data.toString());
+			TRACE("testDeserializeEmptyDestinationTable: json: " + data.toString());
 
 			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
 			TEST_ASSERT_EQUAL_size_t(0, map.size());
@@ -771,7 +717,7 @@ void testJsonMsgpackSerializeObject() {
 	TestObject test("test", vec);
 	TRACE("testJsonMsgpackSerializeObject: test: " + test.toString());
 
-	StaticJsonDocument<1024> doc;
+	JsonDocument doc;
 	doc.set(test);
 
 	RNS::Bytes data;
@@ -799,8 +745,7 @@ void testJsonMsgpackSerializeObject() {
 
 void testJsonMsgpackDeserializeObject() {
 
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(1024);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
@@ -843,7 +788,7 @@ void testJsonMsgpackSerializeArray() {
 	//const std::string two("second");
 	//TRACEF("testJsonMsgpackSerializeArray: time=%f one=%s two=%s", time, one.c_str(), two.c_str());
 
-	StaticJsonDocument<1024> doc;
+	JsonDocument doc;
 
 	JsonArray array = doc.to<JsonArray>();
 	array.add(time);
@@ -883,7 +828,7 @@ void testJsonMsgpackSerializeArray() {
 
 void testJsonMsgpackDeserializeArray() {
 
-	StaticJsonDocument<1024> doc;
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_array_path, data) > 0) {
@@ -926,8 +871,7 @@ void testMsgpackSerializeObject() {
 	TestObject test("test", vec);
 	TRACE("testMsgpackSerializeObject: test: " + test.toString());
 
-	StaticJsonDocument<1024> doc;
-	doc.set(test);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	size_t size = 1024;
@@ -954,8 +898,7 @@ void testMsgpackSerializeObject() {
 
 void testMsgpackDeserializeObject() {
 
-	//StaticJsonDocument<8192> doc;
-	DynamicJsonDocument doc(1024);
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
@@ -1027,7 +970,7 @@ void testMsgpackSerializeArray() {
 
 void testMsgpackDeserializeArray() {
 
-	StaticJsonDocument<1024> doc;
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_array_path, data) > 0) {
@@ -1094,7 +1037,7 @@ void testMsgpackSerializeSeries() {
 
 void testMsgpackDeserializeSeries() {
 
-	StaticJsonDocument<1024> doc;
+	JsonDocument doc;
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_series_path, data) > 0) {
@@ -1126,6 +1069,11 @@ void testMsgpackDeserializeSeries() {
 
 void setUp(void) {
 	// set stuff up here before each test
+#ifdef ARDUINO
+	Serial.begin(115200);
+	while (!Serial) { ; }  // important for USB boards
+	delay(1000);
+#endif
 }
 
 void tearDown(void) {

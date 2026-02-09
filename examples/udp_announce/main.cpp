@@ -136,6 +136,7 @@ void reticulum_setup() {
 		//RNS::Reticulum reticulum;
 		reticulum = RNS::Reticulum();
 		reticulum.transport_enabled(true);
+		reticulum.probe_destination_enabled(true);
 		reticulum.start();
 		//return;
 		// 21.9% (+0.1%)
@@ -269,7 +270,7 @@ void setup() {
 */
 #endif
 
-#if defined(MEM_LOG)
+#if defined(RNS_MEM_LOG)
 		RNS::loglevel(RNS::LOG_MEM);
 #else
 		//RNS::loglevel(RNS::LOG_WARNING);

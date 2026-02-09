@@ -114,7 +114,7 @@ namespace RNS { namespace Utilities {
 			return is_big_endian() ? val : swap32(val);
 		}
 
-		#if defined(RNS_USE_ALLOCATOR)
+#if defined(RNS_USE_ALLOCATOR)
 		static void dump_allocator_stats();
 #endif
 
