@@ -318,8 +318,8 @@ using namespace RNS::Utilities;
 					}
 				}
 				// CBA since modifying of collection while iterating is forbidden
-				for (auto& receipt : _receipts) {
-					cull_receipts.remove(receipt);
+				for (auto& receipt : cull_receipts) {
+					_receipts.remove(receipt);
 				}
 
 				_receipts_last_checked = OS::time();
@@ -2274,8 +2274,8 @@ using namespace RNS::Utilities;
 					}
 				}
 				// CBA since modifying of collection while iterating is forbidden
-				for (auto& receipt : _receipts) {
-					cull_receipts.remove(receipt);
+				for (auto& receipt : cull_receipts) {
+					_receipts.remove(receipt);
 				}
 			}
 		}
