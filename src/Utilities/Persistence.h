@@ -469,7 +469,7 @@ namespace RNS { namespace Persistence {
 	static Bytes _buffer(Type::Persistence::BUFFER_MAXSIZE);
 
 	template <typename T> size_t crc(const T& obj) {
-		TRACE("Persistence::crc<T>");
+		//TRACE("Persistence::crc<T>");
 		_document.set(obj);
 		size_t size = _buffer.capacity();
 #ifdef USE_MSGPACK
@@ -485,7 +485,7 @@ namespace RNS { namespace Persistence {
 	}
 
 	template <typename T> size_t serialize(const T& obj, const char* file_path) {
-		TRACE("Persistence::serialize<T>");
+		//TRACE("Persistence::serialize<T>");
 		_document.set(obj);
 		size_t size = _buffer.capacity();
 #ifdef USE_MSGPACK
@@ -516,7 +516,7 @@ namespace RNS { namespace Persistence {
 	}
 
 	template <typename T> size_t deserialize(T& obj, const char* file_path) {
-		TRACE("Persistence::deserialize<T>");
+		//TRACE("Persistence::deserialize<T>");
 		size_t read = RNS::Utilities::OS::read_file(file_path, _buffer);
 		if (read > 0) {
 			TRACEF("Persistence::deserialize: read: %d bytes", _buffer.size());
@@ -547,7 +547,7 @@ namespace RNS { namespace Persistence {
 
 #if 1
 	template <typename T> size_t crc(std::map<Bytes, T>& map) {
-		TRACE("Persistence::crc<map<Bytes, T>>");
+		//TRACE("Persistence::crc<map<Bytes, T>>");
 
 		uint32_t crc = 0;
 		crc = Utilities::Crc::crc32(crc, '{');
@@ -583,7 +583,7 @@ namespace RNS { namespace Persistence {
 	}
 
 	template <typename T> size_t serialize(std::map<Bytes, T>& map, const char* file_path, uint32_t& crc) {
-		TRACE("Persistence::serialize<map<Bytes,T>>");
+		//TRACE("Persistence::serialize<map<Bytes,T>>");
 
 		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
 		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_WRITE);
@@ -626,7 +626,7 @@ namespace RNS { namespace Persistence {
 	}
 
 	template <typename T> size_t deserialize(std::map<Bytes, T>& map, const char* file_path, uint32_t& crc) {
-		TRACE("Persistence::deserialize<map<Bytes,T>>");
+		//TRACE("Persistence::deserialize<map<Bytes,T>>");
 
 		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
 		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_READ);

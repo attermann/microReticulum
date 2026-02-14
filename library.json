@@ -1,8 +1,8 @@
 {
 	"name": "microReticulum",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"description": "Port of Reticulum Network Stack to C++ specifically but not exclusively targeting 32-bit and better MCUs",
-	"keywords": "reticulum, rns, mcu, esp32, nrf52",
+	"keywords": "reticulum, rns, mesh, embedded, mcu, esp32, nrf52, native",
 	"repository":
 	{
 		"type": "git",

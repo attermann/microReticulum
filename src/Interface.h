@@ -53,7 +53,7 @@ namespace RNS {
 		// CBA Internal method to handle housekeeping for data going out on interface
 		void handle_outgoing(const Bytes& data);
 		// CBA Internal method to handle data coming in on interface and pass on to transport
-		void handle_incoming(const Bytes& data);
+		virtual void handle_incoming(const Bytes& data);
 
 		virtual const Bytes get_hash() const {
 			return Identity::full_hash({toString()});

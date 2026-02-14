@@ -345,7 +345,7 @@ namespace RNS { namespace Type {
 		};
 
     	// Context flag values
-		enum context_flag {
+		enum context_flags {
     		FLAG_SET       = 0x01,
     		FLAG_UNSET     = 0x00,
 		};

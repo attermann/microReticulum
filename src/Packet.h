@@ -160,7 +160,7 @@ namespace RNS {
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
 			bool create_receipt = true,
-			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
+			Type::Packet::context_flags context_flag = Type::Packet::FLAG_UNSET
 		);
 		Packet(
 			const Destination& destination,
@@ -171,7 +171,7 @@ namespace RNS {
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
 			bool create_receipt = true,
-			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
+			Type::Packet::context_flags context_flag = Type::Packet::FLAG_UNSET
 		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt, context_flag) {}
 		// CBA LINK
 		Packet(
@@ -179,7 +179,7 @@ namespace RNS {
 			const Bytes& data,
 			Type::Packet::types packet_type = Type::Packet::DATA,
 			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
-			Type::Packet::context_flag context_flag = Type::Packet::FLAG_UNSET
+			Type::Packet::context_flags context_flag = Type::Packet::FLAG_UNSET
 		);
 		virtual ~Packet() {
 			MEM("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
@@ -229,6 +229,7 @@ namespace RNS {
 		inline const Interface& attached_interface() const { assert(_object); return _object->_attached_interface; }
 		inline const Interface& receiving_interface() const { assert(_object); return _object->_receiving_interface; }
 		inline Type::Packet::header_types header_type() const { assert(_object); return _object->_header_type; }
+		inline Type::Packet::context_flags context_flag() const { assert(_object); return _object->_context_flag; }
 		inline Type::Transport::types transport_type() const { assert(_object); return _object->_transport_type; }
 		inline Type::Destination::types destination_type() const { assert(_object); return _object->_destination_type; }
 		inline Type::Packet::types packet_type() const { assert(_object); return _object->_packet_type; }
@@ -293,7 +294,7 @@ namespace RNS {
 			Type::Destination::types _destination_type = Type::Destination::SINGLE;
 			Type::Packet::types _packet_type = Type::Packet::DATA;
 			Type::Packet::context_types _context = Type::Packet::CONTEXT_NONE;
-			uint8_t _context_flag = Type::Packet::FLAG_UNSET;
+			Type::Packet::context_flags _context_flag = Type::Packet::FLAG_UNSET;
 
 			uint8_t _flags = 0;
 			uint8_t _hops = 0;

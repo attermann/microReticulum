@@ -40,9 +40,16 @@ bool LoRaInterface::start() {
 	INFO("LoRa initializing...");
   
 #ifdef ARDUINO
+
+#ifdef BOARD_NRF52
+	SPI.setPins(RADIO_MISO_PIN, RADIO_SCLK_PIN, RADIO_MOSI_PIN);
+	SPI.begin();
+#else
 	//SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
 	SPI.begin();
-	delay(1500);
+#endif
+
+delay(1500);
 
     LoRa.setPins(RADIO_CS_PIN, RADIO_RST_PIN, RADIO_DIO0_PIN);
 

@@ -2,13 +2,16 @@
 
 Port of Reticulum Network Stack to C++ specifically but not exclusively targeting 32-bit and better MCUs.
 
+Note that this is a library implementing the Reticulum Network Stack and not a useful application on its own. For an actual application, see [microReticulum_Firmware](https://github.com/attermann/microReticulum_Firmware) which is a version of RNode firmware that implements a Reticulm Transport Node.
+
 ## Dependencies
 
 Build environment is configured for use in [VSCode](https://code.visualstudio.com/) and [PlatformIO](https://platformio.org/).
 
 This API is dependent on the following external libraries:
-- [ArduinoJson](https://github.com/bblanchon/ArduinoJson)
 - [rweather/Crypto](https://github.com/rweather/arduinolibs)
+- [ArduinoJson](https://github.com/bblanchon/ArduinoJson)
+- [MsgPack](https://github.com/hideakitai/MsgPack)
 
 ## Build Options
 
