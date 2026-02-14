@@ -126,6 +126,13 @@ void Bytes::assignHex(const uint8_t* hex, size_t hex_size) {
 		_exclusive = true;
 		return;
 	}
+	// Truncate to even length (hex bytes come in pairs)
+	hex_size &= ~(size_t)1;
+	if (hex_size == 0) {
+		_data = nullptr;
+		_exclusive = true;
+		return;
+	}
 	exclusiveData(false, hex_size / 2);
 	// need to clear data since we're appending below
 	_data->clear();
@@ -138,6 +145,11 @@ void Bytes::assignHex(const uint8_t* hex, size_t hex_size) {
 void Bytes::appendHex(const uint8_t* hex, size_t hex_size) {
 	// if append is empty then do nothing
 	if (hex == nullptr || hex_size <= 0) {
+		return;
+	}
+	// Truncate to even length (hex bytes come in pairs)
+	hex_size &= ~(size_t)1;
+	if (hex_size == 0) {
 		return;
 	}
 	exclusiveData(true, size() + (hex_size / 2));
@@ -186,10 +198,11 @@ Bytes Bytes::mid(size_t beginpos, size_t len) const {
 	if (!_data || beginpos >= size()) {
 		return NONE;
 	}
-	if ((beginpos + len) >= size()) {
-		len = (size() - beginpos);
-	 }
-	 return {data() + beginpos, len};
+	size_t remaining = size() - beginpos;
+	if (len > remaining) {
+		len = remaining;
+	}
+	return {data() + beginpos, len};
 }
 
 // to end
