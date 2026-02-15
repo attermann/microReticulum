@@ -176,14 +176,34 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 }
 
 /*static*/ Link Link::validate_request( const Destination& owner, const Bytes& data, const Packet& packet) {
-	if (data.size() == ECPUBSIZE) {
+	if (data.size() == ECPUBSIZE || data.size() == ECPUBSIZE + LINK_MTU_SIZE) {
 		try {
 			Link link({Type::NONE}, nullptr, nullptr, owner, data.left(ECPUBSIZE/2), data.mid(ECPUBSIZE/2, ECPUBSIZE/2));
 			link.set_link_id(packet);
+
+			if (data.size() == ECPUBSIZE + LINK_MTU_SIZE) {
+				DEBUG("Link request includes MTU signalling"); // TODO: Remove debug
+				try {
+					uint16_t mtu = mtu_from_lr_packet(packet);
+					link.mtu((mtu != 0) ? mtu : Type::Reticulum::MTU);
+				}
+				catch (std::exception& e) {
+					ERRORF("An error ocurred while validating link request %s", link.link_id().toHex().c_str());
+					link.mtu(Type::Reticulum::MTU);
+				}
+			}
+
+			link.mode(mode_from_lr_packet(packet));
+
+			// TODO: Remove debug
+			DEBUGF("Incoming link request with mode %d", link.get_mode());
+
+			link.update_mdu();
 			link.destination(packet.destination());
 			link.establishment_timeout(ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, packet.hops()) + KEEPALIVE);
 			link.establishment_cost(link.establishment_cost() + packet.raw().size());
 			VERBOSEF("Validating link request %s", link.link_id().toHex().c_str());
+            TRACEF("Link MTU configured to %d", link.mtu());
 			TRACEF("Establishment timeout is %f for incoming link request %s", link.establishment_timeout(), link.link_id().toHex().c_str());
 			link.handshake();
 			link.attached_interface(packet.receiving_interface());
@@ -202,7 +222,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		}
 	}
 	else {
-		DEBUG("Invalid link request payload size, dropping request");
+		DEBUGF("Invalid link request payload size (%zu), dropping request", data.size());
 		return {Type::NONE};
 	}
 }
@@ -1562,6 +1582,16 @@ void Link::increment_txbytes(uint16_t bytes) {
 void Link::status(Type::Link::status status) {
 	assert(_object);
 	_object->_status = status;
+}
+
+void Link::mtu(uint16_t mtu) {
+	assert(_object);
+	_object->_mtu = mtu;
+}
+
+void Link::mode(RNS::Type::Link::link_mode mode) {
+	assert(_object);
+	_object->_mode = mode;
 }
 
 

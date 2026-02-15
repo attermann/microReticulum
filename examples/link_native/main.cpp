@@ -26,6 +26,7 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <signal.h>
 #endif
 
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 #include <vector>
 #include <map>
 #include <functional>
+#include <algorithm>
 
 // Let's define an app name. We'll use this for all
 // destinations we create. Since this echo example
@@ -328,11 +330,27 @@ void cleanup_handler(int signum) {
 // starts up the desired program mode.
 int main(int argc, char *argv[]) {
 
+	bool log_trace = false;
+	for (int i = 1; i < argc; ++i) {
+		if (argv[i] && strcasecmp(argv[i], "--log_trace") == 0) {
+			log_trace = true;
+			for (int j = i; j < argc - 1; ++j) {
+				argv[j] = argv[j + 1];
+			}
+			--argc;
+			--i;
+		}
+	}
+
 #if defined(RNS_MEM_LOG)
 	RNS::loglevel(RNS::LOG_MEM);
 #else
-	RNS::loglevel(RNS::LOG_NOTICE);
-	//RNS::loglevel(RNS::LOG_TRACE);
+	if (log_trace) {
+		RNS::loglevel(RNS::LOG_TRACE);
+	}
+	else {
+		RNS::loglevel(RNS::LOG_NOTICE);
+	}
 #endif
 
 	// Register the signal handler for SIGINT

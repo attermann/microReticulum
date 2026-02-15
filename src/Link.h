@@ -198,7 +198,7 @@ namespace RNS {
 		void teardown_packet(const Packet& packet);
 		void link_closed();
 		void start_watchdog();
-	void __watchdog_job();
+		void __watchdog_job();
 		void send_keepalive();
 		void handle_request(const Bytes& request_id, const ResourceRequest& unpacked_request);
 		void handle_response(const Bytes& request_id, const Bytes& response_data, size_t response_size, size_t response_transfer_size);
@@ -259,6 +259,8 @@ namespace RNS {
 		void increment_tx();
 		void increment_txbytes(uint16_t bytes);
 		void status(Type::Link::status status);
+		void mtu(uint16_t mtu);
+		void mode(RNS::Type::Link::link_mode mode);
 
 	protected:
 		std::shared_ptr<LinkData> _object;

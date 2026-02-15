@@ -334,7 +334,13 @@ using namespace RNS::Utilities;
 				//	auto& announce_entry = pair.second;
 //TRACE("[0] announce entry data size: " + std::to_string(announce_entry._packet.data().size()));
 					//p announce_entry = Transport.announce_table[destination_hash]
-					if (announce_entry._retries > Type::Transport::PATHFINDER_R) {
+					if (announce_entry._retries > 0 && announce_entry._retries >= Type::Transport::LOCAL_REBROADCASTS_MAX) {
+						TRACE("Completed announce processing for " + destination_hash.toHex() + ", local rebroadcast limit reached");
+						// CBA OK to modify collection here since we're immediately exiting iteration
+						_announce_table.erase(destination_hash);
+						break;
+					}
+					else if (announce_entry._retries > Type::Transport::PATHFINDER_R) {
 						TRACE("Completed announce processing for " + destination_hash.toHex() + ", retry limit reached");
 						// CBA OK to modify collection here since we're immediately exiting iteration
 						_announce_table.erase(destination_hash);

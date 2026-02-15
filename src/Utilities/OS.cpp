@@ -71,6 +71,10 @@ void* operator new(size_t size) {
 		_buffer_size = (size_t)(_buffer_size / 1024) * 1024;
 		TRACEF("buffer_size: %u", _buffer_size);
 		void* raw_buffer = malloc(_buffer_size);
+#else
+		_buffer_size = (size_t)BUFFER_SIZE;
+		TRACEF("buffer_size: %u", _buffer_size);
+		void* raw_buffer = malloc(_buffer_size);
 #endif
 		if (raw_buffer == nullptr) {
 			ERROR("-- allocation for tlsf FAILED");
