@@ -697,6 +697,7 @@ void Link::teardown_packet(const Packet& packet) {
 		}
 	}
 	catch (std::exception& e) {
+		ERRORF("Error while decrypting teardown packet from %s. The contained exception was: %s", toString().c_str(), e.what());
 	}
 }
 

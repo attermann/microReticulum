@@ -18,6 +18,18 @@ using namespace RNS;
 using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
 
+#ifndef RNS_PATH_TABLE_MAX
+#define RNS_PATH_TABLE_MAX 100
+#endif
+
+#ifndef RNS_HASHLIST_MAX
+#define RNS_HASHLIST_MAX 100
+#endif
+
+#ifndef RNS_PR_TAGS_MAX
+#define RNS_PR_TAGS_MAX	 32
+#endif
+
 #if defined(INTERFACES_SET)
 ///*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_interfaces;
 /*static*/ std::set<std::reference_wrapper<Interface>, std::less<Interface>> Transport::_interfaces;
@@ -80,19 +92,16 @@ using namespace RNS::Utilities;
 /*static*/ bool Transport::_saving_path_table			= false;
 // CBA ACCUMULATES
 // CBA MCU
-/*static*/ //uint16_t Transport::_hashlist_maxsize		= 1000000;
-/*static*/ //uint16_t Transport::_hashlist_maxsize		= 100;
-/*static*/ uint16_t Transport::_hashlist_maxsize		= 100;
+/*static*/ uint16_t Transport::_hashlist_maxsize		= RNS_HASHLIST_MAX;
 // CBA ACCUMULATES
 // CBA MCU
-/*static*/ //uint16_t Transport::_max_pr_tags			= 32000;
-/*static*/ uint16_t Transport::_max_pr_tags				= 32;
+/*static*/ uint16_t Transport::_max_pr_tags				= RNS_PR_TAGS_MAX;
 
 // CBA
 // CBA ACCUMULATES
-/*static*/ uint16_t Transport::_path_table_maxsize		= 100;
+/*static*/ uint16_t Transport::_path_table_maxsize		= RNS_PATH_TABLE_MAX;
 // CBA ACCUMULATES
-/*static*/ uint16_t Transport::_path_table_maxpersist	= 100;
+/*static*/ uint16_t Transport::_path_table_maxpersist	= RNS_PATH_TABLE_MAX;
 /*static*/ double Transport::_last_saved				= 0.0;
 /*static*/ float Transport::_save_interval				= 3600.0;
 /*static*/ uint32_t Transport::_destination_table_crc	= 0;
@@ -443,153 +452,197 @@ using namespace RNS::Utilities;
 				//cull_path_table();
 
 				// Cull the reverse table according to timeout
-				std::vector<Bytes> stale_reverse_entries;
-				for (const auto& [packet_hash, reverse_entry] : _reverse_table) {
-					if (OS::time() > (reverse_entry._timestamp + REVERSE_TIMEOUT)) {
-						stale_reverse_entries.push_back(packet_hash);
+				try {
+					std::vector<Bytes> stale_reverse_entries;
+					stale_reverse_entries.reserve(_reverse_table.size());
+					for (const auto& [packet_hash, reverse_entry] : _reverse_table) {
+						if (OS::time() > (reverse_entry._timestamp + REVERSE_TIMEOUT)) {
+							stale_reverse_entries.push_back(packet_hash);
+						}
 					}
+					remove_reverse_entries(stale_reverse_entries);
+				}
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: out of memory culling reverse table");
+				}
+				catch (const std::exception& e) {
+					ERROR("jobs: failed to cull reverse table: " + std::string(e.what()));
 				}
 
 				// Cull the link table according to timeout
-				std::vector<Bytes> stale_links;
-				for (const auto& [link_id, link_entry] : _link_table) {
-					if (link_entry._validated) {
-						if (OS::time() > (link_entry._timestamp + LINK_TIMEOUT)) {
-							stale_links.push_back(link_id);
-						}
-					}
-					else {
-						if (OS::time() > link_entry._proof_timeout) {
-							stale_links.push_back(link_id);
-
-							double last_path_request = 0.0;
-							const auto& iter = _path_requests.find(link_entry._destination_hash);
-							if (iter != _path_requests.end()) {
-								last_path_request = (*iter).second;
-							}
-
-							uint8_t lr_taken_hops = link_entry._hops;
-
-							bool path_request_throttle = (OS::time() - last_path_request) < PATH_REQUEST_MI;
-							bool path_request_conditions = false;
-							
-							// If the path has been invalidated between the time of
-							// making the link request and now, try to rediscover it
-							if (!has_path(link_entry._destination_hash)) {
-								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and path is now missing");
-								path_request_conditions = true;
-							}
-
-							// If this link request was originated from a local client
-							// attempt to rediscover a path to the destination, if this
-							// has not already happened recently.
-							else if (!path_request_throttle && lr_taken_hops == 0) {
-								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted local client link was never established");
-								path_request_conditions = true;
-							}
-
-							// If the link destination was previously only 1 hop
-							// away, this likely means that it was local to one
-							// of our interfaces, and that it roamed somewhere else.
-							// In that case, try to discover a new path.
-							else if (!path_request_throttle && hops_to(link_entry._destination_hash) == 1) {
-								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and destination was previously local to an interface on this instance");
-								path_request_conditions = true;
-							}
-
-							// If the link destination was previously only 1 hop
-							// away, this likely means that it was local to one
-							// of our interfaces, and that it roamed somewhere else.
-							// In that case, try to discover a new path.
-							else if ( !path_request_throttle and lr_taken_hops == 1) {
-								DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and link initiator is local to an interface on this instance");
-								path_request_conditions = true;
-							}
-
-							if (path_request_conditions) {
-								if (path_requests.count(link_entry._destination_hash) == 0) {
-									// CBA ACCUMULATES
-									path_requests.insert(link_entry._destination_hash);
-								}
-
-								if (!Reticulum::transport_enabled()) {
-									// Drop current path if we are not a transport instance, to
-									// allow using higher-hop count paths or reused announces
-									// from newly adjacent transport instances.
-									expire_path(link_entry._destination_hash);
-								}
+				try {
+					std::vector<Bytes> stale_links;
+					stale_links.reserve(_link_table.size());
+					for (const auto& [link_id, link_entry] : _link_table) {
+						if (link_entry._validated) {
+							if (OS::time() > (link_entry._timestamp + LINK_TIMEOUT)) {
+								stale_links.push_back(link_id);
 							}
 						}
+						else {
+							if (OS::time() > link_entry._proof_timeout) {
+								stale_links.push_back(link_id);
+
+								double last_path_request = 0.0;
+								const auto& iter = _path_requests.find(link_entry._destination_hash);
+								if (iter != _path_requests.end()) {
+									last_path_request = (*iter).second;
+								}
+
+								uint8_t lr_taken_hops = link_entry._hops;
+
+								bool path_request_throttle = (OS::time() - last_path_request) < PATH_REQUEST_MI;
+								bool path_request_conditions = false;
+								
+								// If the path has been invalidated between the time of
+								// making the link request and now, try to rediscover it
+								if (!has_path(link_entry._destination_hash)) {
+									DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and path is now missing");
+									path_request_conditions = true;
+								}
+
+								// If this link request was originated from a local client
+								// attempt to rediscover a path to the destination, if this
+								// has not already happened recently.
+								else if (!path_request_throttle && lr_taken_hops == 0) {
+									DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted local client link was never established");
+									path_request_conditions = true;
+								}
+
+								// If the link destination was previously only 1 hop
+								// away, this likely means that it was local to one
+								// of our interfaces, and that it roamed somewhere else.
+								// In that case, try to discover a new path.
+								else if (!path_request_throttle && hops_to(link_entry._destination_hash) == 1) {
+									DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and destination was previously local to an interface on this instance");
+									path_request_conditions = true;
+								}
+
+								// If the link destination was previously only 1 hop
+								// away, this likely means that it was local to one
+								// of our interfaces, and that it roamed somewhere else.
+								// In that case, try to discover a new path.
+								else if ( !path_request_throttle and lr_taken_hops == 1) {
+									DEBUG("Trying to rediscover path for " + link_entry._destination_hash.toHex() + " since an attempted link was never established, and link initiator is local to an interface on this instance");
+									path_request_conditions = true;
+								}
+
+								if (path_request_conditions) {
+									if (path_requests.count(link_entry._destination_hash) == 0) {
+										// CBA ACCUMULATES
+										path_requests.insert(link_entry._destination_hash);
+									}
+
+									if (!Reticulum::transport_enabled()) {
+										// Drop current path if we are not a transport instance, to
+										// allow using higher-hop count paths or reused announces
+										// from newly adjacent transport instances.
+										expire_path(link_entry._destination_hash);
+									}
+								}
+							}
+						}
 					}
+					remove_links(stale_links);
+				}
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: out of memory culling link table");
+				}
+				catch (const std::exception& e) {
+					ERROR("jobs: failed to cull link table: " + std::string(e.what()));
 				}
 
 				// Cull the path table
-				std::vector<Bytes> stale_paths;
-				for (const auto& [destination_hash, destination_entry] : _destination_table) {
-					const Interface& attached_interface = destination_entry.receiving_interface();
-					double destination_expiry;
-					if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
-						destination_expiry = destination_entry._timestamp + AP_PATH_TIME;
-					}
-					else if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ROAMING) {
-						destination_expiry = destination_entry._timestamp + ROAMING_PATH_TIME;
-					}
-					else {
-						destination_expiry = destination_entry._timestamp + DESTINATION_TIMEOUT;
-					}
+				try {
+					std::vector<Bytes> stale_paths;
+					stale_paths.reserve(_destination_table.size());
+					for (const auto& [destination_hash, destination_entry] : _destination_table) {
+						const Interface& attached_interface = destination_entry.receiving_interface();
+						double destination_expiry;
+						if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
+							destination_expiry = destination_entry._timestamp + AP_PATH_TIME;
+						}
+						else if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ROAMING) {
+							destination_expiry = destination_entry._timestamp + ROAMING_PATH_TIME;
+						}
+						else {
+							destination_expiry = destination_entry._timestamp + DESTINATION_TIMEOUT;
+						}
 
-					if (OS::time() > destination_expiry) {
-						stale_paths.push_back(destination_hash);
-						DEBUG("Path to " + destination_hash.toHex() + " timed out and was removed");
+						if (OS::time() > destination_expiry) {
+							stale_paths.push_back(destination_hash);
+							DEBUG("Path to " + destination_hash.toHex() + " timed out and was removed");
+						}
+						else if (_interfaces.count(attached_interface.get_hash()) == 0) {
+							stale_paths.push_back(destination_hash);
+							DEBUG("Path to " + destination_hash.toHex() + " was removed since the attached interface no longer exists");
+						}
 					}
-					else if (_interfaces.count(attached_interface.get_hash()) == 0) {
-						stale_paths.push_back(destination_hash);
-						DEBUG("Path to " + destination_hash.toHex() + " was removed since the attached interface no longer exists");
-					}
+					remove_paths(stale_paths);
+				}
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: out of memory culling path table");
+				}
+				catch (const std::exception& e) {
+					ERROR("jobs: failed to cull path table: " + std::string(e.what()));
 				}
 
 				// Cull the pending discovery path requests table
-				std::vector<Bytes> stale_discovery_path_requests;
-				for (const auto& [destination_hash, path_entry] : _discovery_path_requests) {
-					if (OS::time() > path_entry._timeout) {
-						stale_discovery_path_requests.push_back(destination_hash);
-						DEBUG("Waiting path request for " + destination_hash.toString() + " timed out and was removed");
+				try {
+					std::vector<Bytes> stale_discovery_path_requests;
+					stale_discovery_path_requests.reserve(_discovery_path_requests.size());
+					for (const auto& [destination_hash, path_entry] : _discovery_path_requests) {
+						if (OS::time() > path_entry._timeout) {
+							stale_discovery_path_requests.push_back(destination_hash);
+							DEBUG("Waiting path request for " + destination_hash.toString() + " timed out and was removed");
+						}
 					}
+					remove_discovery_path_requests(stale_discovery_path_requests);
+				}
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: out of memory culling discovery path requests");
+				}
+				catch (const std::exception& e) {
+					ERROR("jobs: failed to cull discovery path requests: " + std::string(e.what()));
 				}
 
 				// Cull the tunnel table
-				count = 0;
-				std::vector<Bytes> stale_tunnels;
-				for (const auto& [tunnel_id, tunnel_entry] : _tunnels) {
-					if (OS::time() > tunnel_entry._expires) {
-						stale_tunnels.push_back(tunnel_id);
-						TRACE("Tunnel " + tunnel_id.toHex() + " timed out and was removed");
-					}
-					else {
-						std::vector<Bytes> stale_tunnel_paths;
-						for (const auto& [destination_hash, destination_entry] : tunnel_entry._serialised_paths) {
-							if (OS::time() > (destination_entry._timestamp + DESTINATION_TIMEOUT)) {
-								stale_tunnel_paths.push_back(destination_hash);
-								TRACE("Tunnel path to " + destination_hash.toHex() + " timed out and was removed");
+				try {
+					count = 0;
+					std::vector<Bytes> stale_tunnels;
+					stale_tunnels.reserve(_tunnels.size());
+					for (const auto& [tunnel_id, tunnel_entry] : _tunnels) {
+						if (OS::time() > tunnel_entry._expires) {
+							stale_tunnels.push_back(tunnel_id);
+							TRACE("Tunnel " + tunnel_id.toHex() + " timed out and was removed");
+						}
+						else {
+							std::vector<Bytes> stale_tunnel_paths;
+							for (const auto& [destination_hash, destination_entry] : tunnel_entry._serialised_paths) {
+								if (OS::time() > (destination_entry._timestamp + DESTINATION_TIMEOUT)) {
+									stale_tunnel_paths.push_back(destination_hash);
+									TRACE("Tunnel path to " + destination_hash.toHex() + " timed out and was removed");
+								}
+							}
+
+							//for (const auto& destination_hash : stale_tunnel_paths) {
+							for (const Bytes& destination_hash : stale_tunnel_paths) {
+								const_cast<TunnelEntry&>(tunnel_entry)._serialised_paths.erase(destination_hash);
+								++count;
 							}
 						}
-
-						//for (const auto& destination_hash : stale_tunnel_paths) {
-						for (const Bytes& destination_hash : stale_tunnel_paths) {
-							const_cast<TunnelEntry&>(tunnel_entry)._serialised_paths.erase(destination_hash);
-							++count;
-						}
 					}
+					if (count > 0) {
+						TRACE("Removed " + std::to_string(count) + " tunnel paths");
+					}
+					remove_tunnels(stale_tunnels);
 				}
-				if (count > 0) {
-					TRACE("Removed " + std::to_string(count) + " tunnel paths");
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: out of memory culling tunnel table");
 				}
-				
-				remove_reverse_entries(stale_reverse_entries);
-				remove_links(stale_links);
-				remove_paths(stale_paths);
-				remove_discovery_path_requests(stale_discovery_path_requests);
-				remove_tunnels(stale_tunnels);
+				catch (const std::exception& e) {
+					ERROR("jobs: failed to cull tunnel table: " + std::string(e.what()));
+				}
 
 //#ifndef NDEBUG
 				dump_stats();
@@ -1989,9 +2042,23 @@ using namespace RNS::Utilities;
 							packet.get_hash()
 						);
 						// CBA ACCUMULATES
-						if (_destination_table.insert({packet.destination_hash(), destination_table_entry}).second) {
-							++_destinations_added;
+						// Pre-emptively cull before insert to avoid hitting OOM at max capacity
+						if (_destination_table.size() >= _path_table_maxsize) {
 							cull_path_table();
+						}
+						try {
+							if (_destination_table.insert({packet.destination_hash(), destination_table_entry}).second) {
+								++_destinations_added;
+								if (_destination_table.size() > _path_table_maxsize) {
+									cull_path_table();
+								}
+							}
+						}
+						catch (const std::bad_alloc&) {
+							ERROR("inbound: out of memory storing destination entry");
+						}
+						catch (const std::exception& e) {
+							ERROR(std::string("inbound: exception storing destination entry: ") + e.what());
 						}
 
 						DEBUG("Destination " + packet.destination_hash().toHex() + " is now " + std::to_string(announce_hops) + " hops away via " + received_from.toHex() + " on " + packet.receiving_interface().toString());
@@ -3933,78 +4000,59 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 /*static*/ void Transport::cull_path_table() {
 	TRACE("Transport::cull_path_table()");
 	if (_destination_table.size() > _path_table_maxsize) {
-		// TODO prune by age, or better yet by last use
-/*
-		std::map<Bytes, DestinationEntry>::iterator iter = _destination_table.begin();
-		// naively erase from front of table
-		std::advance(iter, _destination_table.size() - _path_table_maxsize + 1);
-		_destination_table.erase(_destination_table.begin(), iter);
-*/
-/*
-		uint16_t count = 0;
-		std::set<DestinationEntry> sorted_values;
-		MapToValues(_destination_table, sorted_values);
-		for (auto& destination_entry : sorted_values) {
-			Packet announce_packet = destination_entry.announce_packet();
-			TRACE("Transport::cull_path_table: Removing destination " + announce_packet.destination_hash().toHex() + " from path table");
-			// Remove destination from path table
-			if (_destination_table.erase(announce_packet.destination_hash()) < 1) {
-				WARNING("Failed to remove destination " + announce_packet.destination_hash().toHex() + " from path table");
+		try {
+			// Build lightweight (timestamp, key) index to avoid copying full DestinationEntry
+			// objects (which contain nested std::set<Bytes>) — prevents OOM on heap-constrained
+			// devices when the table hits max capacity.
+			std::vector<std::pair<double, Bytes>> sorted_keys;
+			sorted_keys.reserve(_destination_table.size());
+			for (const auto& [key, entry] : _destination_table) {
+				sorted_keys.emplace_back(entry._timestamp, key);
 			}
-			// Remove announce packet from packet table
-			//if (_packet_table.erase(destination_entry._announce_packet) < 1) {
-			//	WARNING("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
-			//}
+			// Sort ascending by timestamp so oldest entries are removed first
+			std::sort(sorted_keys.begin(), sorted_keys.end());
+
+			uint16_t count = 0;
+			for (const auto& [timestamp, destination_hash] : sorted_keys) {
+				TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from path table");
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-			// Remove cached packet file
-			char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
-			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, destination_entry._announce_packet.toHex().c_str());
-			if (OS::file_exists(packet_cache_path)) {
-				OS::remove_file(packet_cache_path);
-			}
+				auto it = _destination_table.find(destination_hash);
+				if (it != _destination_table.end()) {
+					// Remove cached packet file
+					char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
+					snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, it->second._announce_packet.toHex().c_str());
+					if (OS::file_exists(packet_cache_path)) {
+						OS::remove_file(packet_cache_path);
+					}
+				}
 #endif
-			++count;
-			if (_destination_table.size() <= _path_table_maxsize) {
-				break;
+				if (_destination_table.erase(destination_hash) < 1) {
+					WARNING("Failed to remove destination " + destination_hash.toHex() + " from path table");
+				}
+				++count;
+				if (_destination_table.size() <= _path_table_maxsize) {
+					break;
+				}
+			}
+			DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
+		}
+		catch (const std::bad_alloc& e) {
+			ERROR("cull_path_table: out of memory building sort index, falling back to single erase");
+			// Fallback: std::min_element does no heap allocation — erase one oldest entry
+			auto oldest = std::min_element(
+				_destination_table.begin(), _destination_table.end(),
+				[](const std::pair<const Bytes, DestinationEntry>& a,
+			   const std::pair<const Bytes, DestinationEntry>& b) {
+				return a.second._timestamp < b.second._timestamp;
+			}
+			);
+			if (oldest != _destination_table.end()) {
+				_destination_table.erase(oldest);
 			}
 		}
-		DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
-*/
-		uint16_t count = 0;
-		std::vector<std::pair<Bytes,DestinationEntry>> sorted_pairs;
-		// Copy key/value pairs from map into vector
-		std::for_each(_destination_table.begin(), _destination_table.end(), [&](const std::pair<const Bytes, DestinationEntry>& ref) {
-			sorted_pairs.push_back(ref);
-		});
-		// Sort vector using specified comparator
-		std::sort(sorted_pairs.begin(), sorted_pairs.end(), [](const std::pair<Bytes,DestinationEntry> &left, const std::pair<Bytes,DestinationEntry> &right) {
-			return left.second._timestamp < right.second._timestamp;
-		});
-		// Iterate vector of sorted values
-		for (auto& [destination_hash, destination_entry] : sorted_pairs) {
-			TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from path table");
-			// Remove destination from path table
-			if (_destination_table.erase(destination_hash) < 1) {
-				WARNING("Failed to remove destination " + destination_hash.toHex() + " from path table");
-			}
-			// Remove announce packet from packet table
-			//if (_packet_table.erase(destination_entry._announce_packet) < 1) {
-			//	WARNING("Failed to remove packet " + destination_entry._announce_packet.toHex() + " from packet table");
-			//}
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-			// Remove cached packet file
-			char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
-			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, destination_entry._announce_packet.toHex().c_str());
-			if (OS::file_exists(packet_cache_path)) {
-				OS::remove_file(packet_cache_path);
-			}
-#endif
-			++count;
-			if (_destination_table.size() <= _path_table_maxsize) {
-				break;
-			}
+		catch (const std::exception& e) {
+			ERROR(std::string("cull_path_table: exception: ") + e.what());
 		}
-		DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
 	}
 }
 	

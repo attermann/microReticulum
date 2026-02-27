@@ -19,12 +19,15 @@ using namespace RNS::Type::Identity;
 using namespace RNS::Cryptography;
 using namespace RNS::Utilities;
 
+#ifndef RNS_KNOWN_DESTINATIONS_MAX
+#define RNS_KNOWN_DESTINATIONS_MAX 100
+#endif
+
 /*static*/ std::map<Bytes, Identity::IdentityEntry> Identity::_known_destinations;
 /*static*/ bool Identity::_saving_known_destinations = false;
 // CBA
 // CBA ACCUMULATES
-/*static*/ //uint16_t Identity::_known_destinations_maxsize = 100;
-/*static*/ uint16_t Identity::_known_destinations_maxsize = 100;
+/*static*/ uint16_t Identity::_known_destinations_maxsize = RNS_KNOWN_DESTINATIONS_MAX;
 
 Identity::Identity(bool create_keys /*= true*/) : _object(new Object()) {
 	if (create_keys) {
@@ -196,7 +199,15 @@ Can be used to load previously created and saved identities into Reticulum.
 	else {
 		//p _known_destinations[destination_hash] = {OS::time(), packet_hash, public_key, app_data};
 		// CBA ACCUMULATES
-		_known_destinations.insert({destination_hash, {OS::time(), packet_hash, public_key, app_data}});
+		try {
+			_known_destinations.insert({destination_hash, {OS::time(), packet_hash, public_key, app_data}});
+		}
+		catch (const std::bad_alloc&) {
+			ERROR("remember: out of memory, identity not stored for " + destination_hash.toHex());
+		}
+		catch (const std::exception& e) {
+			ERROR(std::string("remember: exception storing identity: ") + e.what());
+		}
 	}
 }
 
@@ -352,32 +363,49 @@ Recall last heard app_data for a destination hash.
 }
 
 /*static*/ void Identity::cull_known_destinations() {
-	TRACE("Transport::cull_path_table()");
+	TRACE("Identity::cull_known_destinations()");
 	if (_known_destinations.size() > _known_destinations_maxsize) {
-		// prune by age
-		uint16_t count = 0;
-		std::vector<std::pair<Bytes, IdentityEntry>> sorted_pairs;
-		// Copy key/value pairs from map into vector
-		std::for_each(_known_destinations.begin(), _known_destinations.end(), [&](const std::pair<const Bytes, IdentityEntry>& ref) {
-			sorted_pairs.push_back(ref);
-		});
-		// Sort vector using specified comparator
-		std::sort(sorted_pairs.begin(), sorted_pairs.end(), [](const std::pair<Bytes, IdentityEntry> &left, const std::pair<Bytes, IdentityEntry> &right) {
-			return left.second._timestamp < right.second._timestamp;
-		});
-		// Iterate vector of sorted values
-		for (auto& [destination_hash, identity_entry] : sorted_pairs) {
-			TRACE("Transport::cull_path_table: Removing destination " + destination_hash.toHex() + " from known destinations");
-			// Remove destination from known destinations
-			if (_known_destinations.erase(destination_hash) < 1) {
-				WARNING("Failed to remove destination " + destination_hash.toHex() + " from known destinations");
+		try {
+			// Build lightweight (timestamp, key) index to avoid copying full IdentityEntry
+			// objects — prevents OOM on heap-constrained devices when the table is full.
+			std::vector<std::pair<double, Bytes>> sorted_keys;
+			sorted_keys.reserve(_known_destinations.size());
+			for (const auto& [key, entry] : _known_destinations) {
+				sorted_keys.emplace_back(entry._timestamp, key);
 			}
-			++count;
-			if (_known_destinations.size() <= _known_destinations_maxsize) {
-				break;
+			// Sort ascending by timestamp (oldest first)
+			std::sort(sorted_keys.begin(), sorted_keys.end());
+
+			uint16_t count = 0;
+			for (const auto& [timestamp, destination_hash] : sorted_keys) {
+				TRACE("Identity::cull_known_destinations: Removing destination " + destination_hash.toHex() + " from known destinations");
+				if (_known_destinations.erase(destination_hash) < 1) {
+					WARNING("Failed to remove destination " + destination_hash.toHex() + " from known destinations");
+				}
+				++count;
+				if (_known_destinations.size() <= _known_destinations_maxsize) {
+					break;
+				}
+			}
+			DEBUG("Removed " + std::to_string(count) + " path(s) from known destinations");
+		}
+		catch (const std::bad_alloc& e) {
+			ERROR("cull_known_destinations: out of memory building sort index, falling back to single erase");
+			// Fallback: std::min_element does no heap allocation — erase one oldest entry
+			auto oldest = std::min_element(
+				_known_destinations.begin(), _known_destinations.end(),
+				[](const std::pair<const Bytes, IdentityEntry>& a,
+			   const std::pair<const Bytes, IdentityEntry>& b) {
+				return a.second._timestamp < b.second._timestamp;
+			}
+			);
+			if (oldest != _known_destinations.end()) {
+				_known_destinations.erase(oldest);
 			}
 		}
-		DEBUG("Removed " + std::to_string(count) + " path(s) from known destinations");
+		catch (const std::exception& e) {
+			ERROR(std::string("cull_known_destinations: exception: ") + e.what());
+		}
 	}
 }
 
