@@ -419,6 +419,10 @@ bool Packet::unpack() {
 		_object->_packed = false;
 		update_hash();
 	}
+	catch (const std::bad_alloc&) {
+		ERROR("Packet::unpack: out of memory unpacking packet");
+		return false;
+	}
 	catch (std::exception& e) {
 		ERROR(std::string("Received malformed packet, dropping it. The contained exception was: ") + e.what());
 		return false;

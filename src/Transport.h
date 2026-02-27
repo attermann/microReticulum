@@ -380,6 +380,10 @@ namespace RNS {
 		static inline const Identity& identity() { return _identity; }
 		inline static uint16_t path_table_maxsize() { return _path_table_maxsize; }
 		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; }
+		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
+		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) { _hashlist_maxsize = hashlist_maxsize; }
+		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
+		inline static void max_pr_tags(uint16_t max_pr_tags) { _max_pr_tags = max_pr_tags; }
 		inline static uint16_t probe_destination_enabled() { return _path_table_maxpersist; }
 		inline static void path_table_maxpersist(uint16_t path_table_maxpersist) { _path_table_maxpersist = path_table_maxpersist; }
 		// CBA TEST

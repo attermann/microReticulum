@@ -5,6 +5,14 @@
 #include <stdint.h>
 #include <math.h>
 
+#ifndef RNS_RECEIPTS_MAX
+#define RNS_RECEIPTS_MAX 20
+#endif
+
+#ifndef RNS_QUEUED_ANNOUNCES_MAX
+#define RNS_QUEUED_ANNOUNCES_MAX 20
+#endif
+
 
 namespace RNS { namespace Type {
 
@@ -61,7 +69,7 @@ namespace RNS { namespace Type {
 		*/
 		static const bool LINK_MTU_DISCOVERY   = true;
 
-		static const uint16_t MAX_QUEUED_ANNOUNCES = 16384;
+		static const uint16_t MAX_QUEUED_ANNOUNCES = RNS_QUEUED_ANNOUNCES_MAX;
 		static const uint32_t QUEUED_ANNOUNCE_LIFE = 60*60*24;
 
 		static const uint8_t ANNOUNCE_CAP = 2;
@@ -427,8 +435,7 @@ namespace RNS { namespace Type {
 		static constexpr const float LINK_TIMEOUT  = Link::STALE_TIME * 1.25;
 		static const uint16_t REVERSE_TIMEOUT      = 30*60;        // Reverse table entries are removed after 30 minutes
 		// CBA MCU
-		//static const uint16_t MAX_RECEIPTS         = 1024;         // Maximum number of receipts to keep track of
-		static const uint16_t MAX_RECEIPTS         = 20;         // Maximum number of receipts to keep track of
+		static const uint16_t MAX_RECEIPTS         = RNS_RECEIPTS_MAX; // Maximum number of receipts to keep track of
 		static const uint8_t MAX_RATE_TIMESTAMPS   = 16;           // Maximum number of announce timestamps to keep per destination
 		static const uint8_t PERSIST_RANDOM_BLOBS  = 32;           // Maximum number of random blobs per destination to persist to disk
 		static const uint8_t MAX_RANDOM_BLOBS      = 64;           // Maximum number of random blobs per destination to keep in memory

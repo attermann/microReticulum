@@ -194,6 +194,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		throw std::invalid_argument("Only IN destination types can be announced");
 	}
 
+	try {
 	double now = OS::time();
     auto it = _object->_path_responses.begin();
     while (it != _object->_path_responses.end()) {
@@ -284,7 +285,15 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		}
 
 		// CBA ACCUMULATES
-		_object->_path_responses.insert({tag, {OS::time(), announce_data}});
+		try {
+			_object->_path_responses.insert({tag, {OS::time(), announce_data}});
+		}
+		catch (const std::bad_alloc&) {
+			ERROR("announce: out of memory, path response not stored for " + _object->_hash.toHex());
+		}
+		catch (const std::exception& e) {
+			ERROR(std::string("announce: exception storing path response: ") + e.what());
+		}
 	}
 	//TRACE("Destination::announce: announce_data:" + announce_data.toHex());
 
@@ -305,6 +314,15 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 	}
 	else {
 		return announce_packet;
+	}
+	}
+	catch (const std::bad_alloc&) {
+		ERROR("announce: out of memory, announce not sent for " + _object->_hash.toHex());
+		return {Type::NONE};
+	}
+	catch (const std::exception& e) {
+		ERROR(std::string("announce: exception during announce: ") + e.what());
+		return {Type::NONE};
 	}
 }
 
@@ -385,7 +403,15 @@ void Destination::incoming_link_request(const Bytes& data, const Packet& packet)
 TRACE("***** Accepting link request");
 		RNS::Link link = Link::validate_request(*this, data, packet);
 		if (link) {
-			_object->_links.insert(link);
+			try {
+				_object->_links.insert(link);
+			}
+			catch (const std::bad_alloc&) {
+				ERROR("incoming_link_request: out of memory, link not tracked");
+			}
+			catch (const std::exception& e) {
+				ERROR(std::string("incoming_link_request: exception tracking link: ") + e.what());
+			}
 		}
 	}
 }

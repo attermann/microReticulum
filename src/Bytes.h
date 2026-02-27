@@ -196,6 +196,7 @@ MEM("Creating from data-move...");
 
 		inline void assign(const Bytes& bytes) {
 #ifdef COW
+			// shared_ptr copy only — O(1), no heap allocation
 			_data = bytes.shareData();
 			_exclusive = false;
 #else
