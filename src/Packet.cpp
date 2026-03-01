@@ -420,7 +420,7 @@ bool Packet::unpack() {
 		update_hash();
 	}
 	catch (const std::bad_alloc&) {
-		ERROR("Packet::unpack: out of memory unpacking packet");
+		ERROR("Packet::unpack: bad_alloc - out of memory unpacking packet");
 		return false;
 	}
 	catch (std::exception& e) {

@@ -98,8 +98,13 @@ void RNS::doLog(LogLevel level, const char* msg) {
 #endif
 }
 
-void HEAD(const char* msg, LogLevel level) {
+void RNS::doHeadLog(LogLevel level, const char* msg) {
 	if (level > _level) {
+		return;
+	}
+	if (_on_log != nullptr) {
+		_on_log("", level);
+		_on_log(msg, level);
 		return;
 	}
 #ifdef ARDUINO

@@ -201,9 +201,11 @@ Can be used to load previously created and saved identities into Reticulum.
 		// CBA ACCUMULATES
 		try {
 			_known_destinations.insert({destination_hash, {OS::time(), packet_hash, public_key, app_data}});
+			// CBA IMMEDIATE CULL
+			cull_known_destinations();
 		}
 		catch (const std::bad_alloc&) {
-			ERROR("remember: out of memory, identity not stored for " + destination_hash.toHex());
+			ERROR("remember: bad_alloc - out of memory, identity not stored for " + destination_hash.toHex());
 		}
 		catch (const std::exception& e) {
 			ERROR(std::string("remember: exception storing identity: ") + e.what());
@@ -306,6 +308,8 @@ Recall last heard app_data for a destination hash.
 				//_known_destinations[destination_hash] = identity_entry;
 				// CBA ACCUMULATES
 				_known_destinations.insert({destination_hash, identity_entry});
+				// CBA IMMEDIATE CULL
+				cull_known_destinations();
 			}
 		}
 
@@ -390,7 +394,7 @@ Recall last heard app_data for a destination hash.
 			DEBUG("Removed " + std::to_string(count) + " path(s) from known destinations");
 		}
 		catch (const std::bad_alloc& e) {
-			ERROR("cull_known_destinations: out of memory building sort index, falling back to single erase");
+			ERROR("cull_known_destinations: bad_alloc - out of memory building sort index, falling back to single erase");
 			// Fallback: std::min_element does no heap allocation — erase one oldest entry
 			auto oldest = std::min_element(
 				_known_destinations.begin(), _known_destinations.end(),

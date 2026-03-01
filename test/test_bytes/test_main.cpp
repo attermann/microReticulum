@@ -569,6 +569,83 @@ void testIndex() {
 	TEST_ASSERT_EQUAL_UINT8('o', bytes[4]);
 }
 
+// ============================================================================
+// Bytes edge case tests
+// ============================================================================
+
+void test_assignHex_even_length() {
+	// Normal case: even-length hex string
+	RNS::Bytes bytes;
+	bytes.assignHex("48656C6C6F");  // "Hello"
+	TEST_ASSERT_EQUAL_size_t(5, bytes.size());
+	TEST_ASSERT_EQUAL_MEMORY("Hello", bytes.data(), 5);
+}
+
+void test_assignHex_odd_length() {
+	// Odd-length hex should be truncated to even (drop trailing nibble)
+	RNS::Bytes bytes;
+	bytes.assignHex("ABC");  // 3 chars - only "AB" should be decoded
+	TEST_ASSERT_EQUAL_size_t(1, bytes.size());
+	TEST_ASSERT_EQUAL_UINT8(0xAB, bytes.data()[0]);
+}
+
+void test_assignHex_single_char() {
+	// Single char hex can't form a complete byte - should produce empty
+	RNS::Bytes bytes;
+	bytes.assignHex("A");
+	TEST_ASSERT_EQUAL_size_t(0, bytes.size());
+}
+
+void test_assignHex_empty() {
+	RNS::Bytes bytes;
+	bytes.assignHex("");
+	TEST_ASSERT_EQUAL_size_t(0, bytes.size());
+}
+
+void test_appendHex_odd_length() {
+	// appendHex with odd length should also truncate to even
+	RNS::Bytes bytes;
+	bytes.assignHex("4142");  // "AB"
+	TEST_ASSERT_EQUAL_size_t(2, bytes.size());
+
+	bytes.appendHex("434");  // 3 chars - only "43" ('C') should be appended
+	TEST_ASSERT_EQUAL_size_t(3, bytes.size());
+	TEST_ASSERT_EQUAL_UINT8(0x43, bytes.data()[2]);
+}
+
+void test_hex_roundtrip_stability() {
+	// toHex always produces even length, so roundtrip should be safe
+	RNS::Bytes original("Hello World");
+	std::string hex = original.toHex();
+	TEST_ASSERT_TRUE(hex.length() % 2 == 0);  // Must be even
+
+	RNS::Bytes restored;
+	restored.assignHex(hex.c_str());
+	TEST_ASSERT_EQUAL_size_t(original.size(), restored.size());
+	TEST_ASSERT_EQUAL_MEMORY(original.data(), restored.data(), original.size());
+}
+
+void test_mid_large_len() {
+	// mid() with len that extends past end should clamp
+	RNS::Bytes bytes("Hello World");
+
+	RNS::Bytes mid = bytes.mid(3, 100);
+	TEST_ASSERT_EQUAL_size_t(8, mid.size());
+	TEST_ASSERT_EQUAL_MEMORY("lo World", mid.data(), 8);
+
+	// SIZE_MAX len should also clamp, not integer-overflow and crash
+	RNS::Bytes mid2 = bytes.mid(3, SIZE_MAX);
+	TEST_ASSERT_EQUAL_size_t(8, mid2.size());
+	TEST_ASSERT_EQUAL_MEMORY("lo World", mid2.data(), 8);
+}
+
+void test_mid_zero_size_bytes() {
+	RNS::Bytes empty;
+	RNS::Bytes mid = empty.mid(0, 5);
+	TEST_ASSERT_FALSE(mid);
+	TEST_ASSERT_EQUAL_size_t(0, mid.size());
+}
+
 
 void setUp(void) {
 	// set stuff up here before each test
@@ -597,6 +674,16 @@ int runUnityTests(void) {
 	RUN_TEST(testCompare);
 	RUN_TEST(testConcat);
 	RUN_TEST(testIndex);
+
+	// Bytes edge cases
+	RUN_TEST(test_assignHex_even_length);
+	RUN_TEST(test_assignHex_odd_length);
+	RUN_TEST(test_assignHex_single_char);
+	RUN_TEST(test_assignHex_empty);
+	RUN_TEST(test_appendHex_odd_length);
+	RUN_TEST(test_hex_roundtrip_stability);
+	RUN_TEST(test_mid_large_len);
+	RUN_TEST(test_mid_zero_size_bytes);
 
 	// Suite-level teardown
 	size_t post_memory = RNS::Utilities::OS::heap_available();

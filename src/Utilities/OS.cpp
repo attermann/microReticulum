@@ -3,6 +3,8 @@
 #include "../Type.h"
 #include "../Log.h"
 
+#include <new>
+
 using namespace RNS;
 using namespace RNS::Utilities;
 
@@ -11,26 +13,46 @@ using namespace RNS::Utilities;
 
 #if defined(RNS_USE_TLSF)
 #if defined(ESP32)
-	//#define BUFFER_SIZE 1024 * 80
-	#define BUFFER_SIZE 0
-	#define BUFFER_FRACTION 0.8
+	#ifndef RNS_TLSF_BUFFER_SIZE
+		//#define RNS_TLSF_BUFFER_SIZE 1024 * 80
+		#define RNS_TLSF_BUFFER_SIZE 0
+	#endif
+	#ifndef BUFFER_FRACTION
+		#define BUFFER_FRACTION 0.8
+	#endif
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-	//#define BUFFER_SIZE 1024 * 80
-	#define BUFFER_SIZE 0
-	#define BUFFER_FRACTION 0.8
+	#ifndef RNS_TLSF_BUFFER_SIZE
+		//#define RNS_TLSF_BUFFER_SIZE 1024 * 80
+		#define RNS_TLSF_BUFFER_SIZE 0
+	#endif
+	#ifndef BUFFER_FRACTION
+		#define BUFFER_FRACTION 0.8
+	#endif
 #else
-	#define BUFFER_SIZE 1024 * 1000
-	#define BUFFER_FRACTION 0
+	#ifndef RNS_TLSF_BUFFER_SIZE
+		#define RNS_TLSF_BUFFER_SIZE 1024 * 1000
+	#endif
+	#ifndef BUFFER_FRACTION
+		#define BUFFER_FRACTION 0
+	#endif
 #endif
 
-bool _tlsf_init = false;
+struct tlsf_stats {
+	uint32_t used_count = 0;
+	uint32_t used_size = 0;
+	uint32_t free_count = 0;
+	uint32_t free_size = 0;
+	uint32_t free_max_size = 0;
+};
+
+bool _pool_init = false;
 //char _tlsf_msg[256] = "";
-size_t _buffer_size = BUFFER_SIZE;
+size_t _buffer_size = RNS_TLSF_BUFFER_SIZE;
 size_t _contiguous_size = 0;
 
 /*static*/ //tlsf_t OS::_tlsf = tlsf_create_with_pool(malloc(1024 * 1024), 1024 * 1024);
 /*static*/ tlsf_t OS::_tlsf = nullptr;
-#endif
+#endif // RNS_USE_TLSF
 
 uint32_t _new_count = 0;
 uint32_t _new_fault = 0;
@@ -40,72 +62,84 @@ uint32_t _delete_fault = 0;
 size_t _min_size = 0;
 size_t _max_size = 0;
 
-// CBA Added attribute weak to avoid collision with new override on nrf52
-void* operator new(size_t size) {
-//__attribute__((weak)) void* operator new(size_t size) {
+void tlsf_mem_walker(void* ptr, size_t size, int used, void* user);
+void dump_tlsf_stats();
+
 #if defined(RNS_USE_TLSF)
-	//if (OS::_tlsf == nullptr) {
-	if (!_tlsf_init) {
-		_tlsf_init = true;
+inline void pool_init() {
+
 #if defined(ESP32)
-		// CBA Still unknown why the call to tlsf_create_with_pool() is so flaky on ESP32 with calculated buffer size. Reuires more research and unit tests.
-		_contiguous_size = ESP.getMaxAllocHeap();
-		TRACEF("contiguous_size: %u", _contiguous_size);
-		if (_buffer_size == 0) {
-			// CBA NOTE Using fp mathhere somehow causes tlsf_create_with_pool() to fail.
-			//_buffer_size = (size_t)(_contiguous_size * BUFFER_FRACTION);
-			// Compute 80% exactly using integers
-			_buffer_size = (_contiguous_size * 4) / 5;
-		}
-		// Round DOWN to TLSF alignment
-		size_t align = tlsf_align_size();
-		_buffer_size &= ~(align - 1);
-		void* raw_buffer = (void*)aligned_alloc(align, _buffer_size);
+	// CBA Still unknown why the call to tlsf_create_with_pool() is so flaky on ESP32 with calculated buffer size. Reuires more research and unit tests.
+	_contiguous_size = ESP.getMaxAllocHeap();
+	TRACEF("TLSF: contiguous_size: %u", _contiguous_size);
+	if (_buffer_size == 0) {
+		// CBA NOTE Using fp mathhere somehow causes tlsf_create_with_pool() to fail.
+		//_buffer_size = (size_t)(_contiguous_size * BUFFER_FRACTION);
+		// Compute 80% exactly using integers
+		_buffer_size = (_contiguous_size * 4) / 5;
+	}
+	// Round DOWN to TLSF alignment
+	size_t align = tlsf_align_size();
+	_buffer_size &= ~(align - 1);
+	void* raw_buffer = (void*)aligned_alloc(align, _buffer_size);
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-		_contiguous_size = dbgHeapFree();
-		TRACEF("contiguous_size: %u", _contiguous_size);
-		if (_buffer_size == 0) {
-			_buffer_size = (size_t)(_contiguous_size * BUFFER_FRACTION);
-		}
-		// For NRF52 round to kB
-		_buffer_size = (size_t)(_buffer_size / 1024) * 1024;
-		TRACEF("buffer_size: %u", _buffer_size);
-		void* raw_buffer = malloc(_buffer_size);
+	_contiguous_size = dbgHeapFree();
+	TRACEF("TLSF: contiguous_size: %u", _contiguous_size);
+	if (_buffer_size == 0) {
+		_buffer_size = (size_t)(_contiguous_size * BUFFER_FRACTION);
+	}
+	// For NRF52 round to kB
+	_buffer_size = (size_t)(_buffer_size / 1024) * 1024;
+	TRACEF("TLSF: buffer_size: %u", _buffer_size);
+	void* raw_buffer = malloc(_buffer_size);
 #else
-		_buffer_size = (size_t)BUFFER_SIZE;
-		TRACEF("buffer_size: %u", _buffer_size);
-		void* raw_buffer = malloc(_buffer_size);
+	_buffer_size = (size_t)RNS_TLSF_BUFFER_SIZE;
+	TRACEF("TLSF: buffer_size: %u", _buffer_size);
+	void* raw_buffer = malloc(_buffer_size);
 #endif
-		if (raw_buffer == nullptr) {
-			ERROR("-- allocation for tlsf FAILED");
-			//strcpy(_tlsf_msg, "-- allocation for tlsf FAILED!!!");
+	if (raw_buffer == nullptr) {
+		ERROR("-- TLSF: buffer allocation FAILED");
+		//strcpy(_tlsf_msg, "-- TLSF: buffer allocation FAILED!!!");
+	}
+	else {
+#if 1
+		OS::_tlsf = tlsf_create_with_pool(raw_buffer, _buffer_size);
+		if (OS::_tlsf == nullptr) {
+			//sprintf(_tlsf_msg, "TLSF: initialization with align=%d, contiguous=%d, size=%d FAILED!!!", tlsf_align_size(), _contiguous_size, _buffer_size);
+			printf("TLSF: initialization with align=%d, contiguous=%d, size=%d FAILED!!!\n", tlsf_align_size(), _contiguous_size, _buffer_size);
 		}
 		else {
-#if 1
-			OS::_tlsf = tlsf_create_with_pool(raw_buffer, _buffer_size);
-			//if (OS::_tlsf == nullptr) {
-			//	sprintf(_tlsf_msg, "initialization of tlsf with align=%d, contiguous=%d, size=%d FAILED!!!", tlsf_align_size(), _contiguous_size, _buffer_size);
-			//}
-			//else {
-			//	sprintf(_tlsf_msg, "initialization of tlsf with align=%d, contiguous=%d, size=%d SUCCESSFUL!!!", tlsf_align_size(), _contiguous_size, _buffer_size);
-			//}
+			//sprintf(_tlsf_msg, "TLSF: initialization with align=%d, contiguous=%d, size=%d SUCCESSFUL!!!", tlsf_align_size(), _contiguous_size, _buffer_size);
+			printf("TLSF: initialization with align=%d, contiguous=%d, size=%d SUCCESSFUL!!!\n", tlsf_align_size(), _contiguous_size, _buffer_size);
+		}
 #else
-			Serial.print("raw_buffer: ");
-			Serial.println((long)raw_buffer);
-			Serial.print("align_size: ");
-			Serial.println((long)tlsf_align_size());
-			void* aligned_buffer = (void*)(((size_t)raw_buffer + (tlsf_align_size() - 1)) & ~(tlsf_align_size() - 1));
-			Serial.print("aligned_buffer: ");
-			Serial.println((long)aligned_buffer);
-			OS::_tlsf = tlsf_create_with_pool(aligned_buffer, BUFFER_SIZE-(size_t)((uint32_t)aligned_buffer - (uint32_t)raw_buffer));
-			//tlfs = tlsf_create_with_pool(aligned_buffer, buffer_size--(size_t)((uint32_t)aligned_buffer - (uint32_t)raw_buffer));
+		Serial.print("TLSF: raw_buffer: ");
+		Serial.println((long)raw_buffer);
+		Serial.print("TLSF: align_size: ");
+		Serial.println((long)tlsf_align_size());
+		void* aligned_buffer = (void*)(((size_t)raw_buffer + (tlsf_align_size() - 1)) & ~(tlsf_align_size() - 1));
+		Serial.print("TLSF: aligned_buffer: ");
+		Serial.println((long)aligned_buffer);
+		OS::_tlsf = tlsf_create_with_pool(aligned_buffer, _buffer_size-(size_t)((uint32_t)aligned_buffer - (uint32_t)raw_buffer));
+		//tlfs = tlsf_create_with_pool(aligned_buffer, buffer_size--(size_t)((uint32_t)aligned_buffer - (uint32_t)raw_buffer));
 #endif
-			if (OS::_tlsf == nullptr) {
-				ERROR("-- initialization of tlsf FAILED");
-			}
+		if (OS::_tlsf == nullptr) {
+			ERROR("-- TLSF: initialization of FAILED");
 		}
 	}
-#endif
+
+}
+#endif // RNS_USE_TLSF
+
+void* pool_malloc(std::size_t size) {
+#if defined(RNS_USE_TLSF)
+	//if (OS::_tlsf == nullptr) {
+	if (!_pool_init) {
+		_pool_init = true;
+		printf("Initializing TLSF pool...\n");
+		pool_init();
+	}
+#endif // RNS_USE_TLSF
 	++_new_count;
 	_new_size += size;
 	if (size < _min_size || _min_size == 0) {
@@ -118,30 +152,37 @@ void* operator new(size_t size) {
 	void* p;
 #if defined(RNS_USE_TLSF)
 	if (OS::_tlsf != nullptr) {
+		//struct tlsf_stats stats;
+		//memset(&stats, 0, sizeof(stats));
+		//tlsf_walk_pool(tlsf_get_pool(OS::_tlsf), tlsf_mem_walker, &stats);
+		//if (tlsf_check(OS::_tlsf) != 0) {
+		//	printf("--- HEAP CORRUPTION DETECTED!!!\n");
+		//}
 		//TRACEF("--- allocating memory from tlsf (%u bytes)", size);
+		//printf("--- allocating memory from tlsf (%u bytes) (%u free)\n", size, stats.free_size);
     	p = tlsf_malloc(OS::_tlsf, size);
-		//TRACEF("--- allocated memory from tlsf (%u bytes) (addr=%lx)", size, p);
+		//TRACEF("--- allocated memory from tlsf (addr=%lx) (%u bytes)", p, size);
+		//printf("--- allocated memory from tlsf (addr=%lx) (%u bytes)\n", p, size);
 	}
 	else {
 		//TRACEF("--- allocating memory (%u bytes)", size);
 		p = malloc(size);
-		//TRACEF("--- allocated memory (%u bytes) (addr=%lx)", size, p);
+		//TRACEF("--- allocated memory (addr=%lx) (%u bytes)", p, size);
 		++_new_fault;
 	}
 #else
 	//TRACEF("--- allocating memory (%u bytes)", size);
 	p = malloc(size);
-	//TRACEF("--- allocated memory (%u bytes) (addr=%lx)", size, p);
-#endif
+	//TRACEF("--- allocated memory (addr=%lx) (%u bytes)", p, size);
+#endif // RNS_USE_TLSF
 	return p;
 }
- 
-// CBA Added attribute weak to avoid collision with new override on nrf52
-void operator delete(void* p) {
-//__attribute__((weak)) void operator delete(void* p) {
+
+void pool_free(void* p) noexcept {
 #if defined(RNS_USE_TLSF)
 	if (OS::_tlsf != nullptr) {
 		//TRACEF("--- freeing memory from tlsf (addr=%lx)", p);
+		//printf("--- freeing memory from tlsf (addr=%lx)\n", p);
 		tlsf_free(OS::_tlsf, p);
 	}
 	else {
@@ -153,7 +194,7 @@ void operator delete(void* p) {
 	//TRACEF("--- freeing memory (addr=%lx)", p);
 	//TRACE("--- freeing memory");
 	free(p);
-#endif
+#endif // RNS_USE_TLSF
 	++_delete_count;
 #if defined(RNS_USE_TLSF)
 	//if (_delete_count == _new_count) {
@@ -165,47 +206,91 @@ void operator delete(void* p) {
 #endif
 }
 
+
+// CBA Added attribute weak to avoid collision with new override on nrf52
+void* operator new(std::size_t size) {
+//__attribute__((weak)) void* operator new(std::size_t size) {
+	//printf("--- new allocating memory from tlsf (%u bytes)\n", size);
+	void* p = pool_malloc(size);
+	if (p == nullptr) {
+		throw std::bad_alloc();
+	}
+	return p;
+}
+ 
+// CBA Added attribute weak to avoid collision with new override on nrf52
+void operator delete(void* p) noexcept {
+//__attribute__((weak)) void operator delete(void* p) noexcept {
+	//printf("--- delete freeing memory from tlsf (addr=%lx)\n", p);
+	pool_free(p);
+}
+
+
+/**/
+void* operator new[](std::size_t size) {
+	//printf("--- new[] allocating memory from tlsf (%u bytes)\n", size);
+	void* p = pool_malloc(size);
+	if (p == nullptr) {
+		throw std::bad_alloc();
+	}
+	return p;
+}
+
+void operator delete[](void* p) noexcept {
+	//printf("--- delete[] freeing memory from tlsf (addr=%lx)\n", p);
+	pool_free(p);
+}
+
+
+void operator delete(void* p, std::size_t size) noexcept {   // sized delete
+	//printf("--- delete(size) freeing memory from tlsf (addr=%lx)\n", p);
+	pool_free(p);
+}
+
+void operator delete[](void* p, std::size_t size) noexcept {
+	//printf("--- delete[](size) freeing memory from tlsf (addr=%lx)\n", p);
+	pool_free(p);
+}
+/**/
+
+
 #if defined(RNS_USE_TLSF)
-uint32_t _tlsf_used_count = 0;
-uint32_t _tlsf_used_size = 0;
-uint32_t _tlsf_free_count = 0;
-uint32_t _tlsf_free_size = 0;
-uint32_t _tlsf_free_max_size = 0;
 void tlsf_mem_walker(void* ptr, size_t size, int used, void* user)
 {
+	if (!user) {
+		return;
+	}
+	struct tlsf_stats* stats = (struct tlsf_stats*)user;
 	if (used) {
-		_tlsf_used_count++;
-		_tlsf_used_size += size;
+		stats->used_count++;
+		stats->used_size += size;
 	}
 	else {
-		_tlsf_free_count++;
-		_tlsf_free_size += size;
-		if (size > _tlsf_free_max_size) {
-			_tlsf_free_max_size = size;
+		stats->free_count++;
+		stats->free_size += size;
+		if (size > stats->free_max_size) {
+			stats->free_max_size = size;
 		}
 	}
 }
 void dump_tlsf_stats() {
-	_tlsf_used_count = 0;
-	_tlsf_used_size = 0;
-	_tlsf_free_count = 0;
-	_tlsf_free_size = 0;
-	_tlsf_free_max_size = 0;
+	struct tlsf_stats stats;
+	memset(&stats, 0, sizeof(stats));
 	//TRACEF("TLSF Message: %s", _tlsf_msg);
 	if (OS::_tlsf == nullptr) {
 		return;
 	}
-	tlsf_walk_pool(tlsf_get_pool(OS::_tlsf), tlsf_mem_walker, nullptr);
+	tlsf_walk_pool(tlsf_get_pool(OS::_tlsf), tlsf_mem_walker, &stats);
 	HEAD("TLSF Stats", LOG_TRACE);
 	TRACEF("Buffer Size:     %u", _buffer_size);
 	TRACEF("Contiguous Size: %u", _contiguous_size);
-	TRACEF("Used Count:      %u", _tlsf_used_count);
-	TRACEF("Used Size:       %u (%u%% used)", _tlsf_used_size, (unsigned)((double)_tlsf_used_size / (double)_buffer_size * 100.0));
-	TRACEF("Free Count:      %u", _tlsf_free_count);
-	TRACEF("Free Size:       %u (%u%% free)", _tlsf_free_size, (unsigned)((double)_tlsf_free_size / (double)_buffer_size * 100.0));
-	TRACEF("Max Free Size:   %u (%u%% fragmented)\n", _tlsf_free_max_size, (unsigned)(100.0 - (double)_tlsf_free_max_size / (double)_tlsf_free_size * 100.0));
+	TRACEF("Used Count:      %u", stats.used_count);
+	TRACEF("Used Size:       %u (%u%% used)", stats.used_size, (unsigned)((double)stats.used_size / (double)_buffer_size * 100.0));
+	TRACEF("Free Count:      %u", stats.free_count);
+	TRACEF("Free Size:       %u (%u%% free)", stats.free_size, (unsigned)((double)stats.free_size / (double)_buffer_size * 100.0));
+	TRACEF("Max Free Size:   %u (%u%% fragmented)\n", stats.free_max_size, (unsigned)(100.0 - (double)stats.free_max_size / (double)stats.free_size * 100.0));
 }
-#endif
+#endif // RNS_USE_TLSF
 
 /*static*/ void OS::dump_allocator_stats() {
 	HEAD("Allocator Stats", LOG_TRACE);
