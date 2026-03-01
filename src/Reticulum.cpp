@@ -67,12 +67,12 @@ void Reticulum::sigterm_handler(signal, frame):
 
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
-	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEMF("Reticulum default object creating..., this: %p, data: %p", (void*)this, (void*)_object.get());
 
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
 	RNG.begin("Reticulum");
-	TRACE("RNG initial random value: " + std::to_string(Cryptography::randomnum()));
+	TRACEF("RNG initial random value: %d", Cryptography::randomnum());
 
 #ifdef ARDUINO
 	// Add a noise source to the list of sources known to RNG.
@@ -125,7 +125,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 			Bytes buf;
 			if (OS::read_file(time_offset_path, buf) == 8) {
 				uint64_t offset = *(uint64_t*)buf.data();
-				DEBUG("Read time offset of " + std::to_string(offset) + " from file");
+				DEBUGF("Read time offset of %llu from file", offset);
 				OS::setTimeOffset(offset);
 			}
 		}
@@ -191,13 +191,13 @@ Reticulum::Reticulum() : _object(new Object()) {
 	signal.signal(signal.SIGTERM, Reticulum.sigterm_handler)
 */
 
-	MEM("Reticulum default object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEMF("Reticulum default object created, this: %p, data: %p", (void*)this, (void*)_object.get());
 }
 
 void Reticulum::start() {
 
-	INFO("Total memory: " + std::to_string(OS::heap_size()));
-	INFO("Total flash: " + std::to_string(OS::storage_size()));
+	INFOF("Total memory: %zu", OS::heap_size());
+	INFOF("Total flash: %zu", OS::storage_size());
 
 	INFO("Starting Transport...");
 	Transport::start(*this);
@@ -241,7 +241,7 @@ void Reticulum::jobs() {
 	if (OS::heap_size() > 0) {
 		uint8_t remaining = (uint8_t)((double)OS::heap_available() / (double)OS::heap_size() * 100.0);
 		if (remaining <= 2) {
-			head("DETECTED LOW-MEMORY CONDITION (" + std::to_string(remaining) + "%), RESETTING!!!", LOG_CRITICAL);
+			HEADF(LOG_CRITICAL, "DETECTED LOW-MEMORY CONDITION (%d%%), RESETTING!!!", remaining);
 			persist_data();
 #if defined(ESP32)
 			ESP.restart();

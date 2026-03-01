@@ -55,13 +55,13 @@ public:
 	virtual ~ExampleAnnounceHandler() {}
 	virtual void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) {
 		INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-		INFO("ExampleAnnounceHandler: destination hash: " + destination_hash.toHex());
+		INFOF("ExampleAnnounceHandler: destination hash: %s", destination_hash.toHex().c_str());
 		if (announced_identity) {
-			INFO("ExampleAnnounceHandler: announced identity hash: " + announced_identity.hash().toHex());
-			INFO("ExampleAnnounceHandler: announced identity app data: " + announced_identity.app_data().toHex());
+			INFOF("ExampleAnnounceHandler: announced identity hash: %s", announced_identity.hash().toHex().c_str());
+			INFOF("ExampleAnnounceHandler: announced identity app data: %s", announced_identity.app_data().toHex().c_str());
 		}
         if (app_data) {
-			INFO("ExampleAnnounceHandler: app data text: \"" + app_data.toString() + "\"");
+			INFOF("ExampleAnnounceHandler: app data text: \"%s\"", app_data.toString().c_str());
 		}
 		INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	}
@@ -70,18 +70,18 @@ public:
 // Test packet receive callback
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	INFO("onPacket: data: " + data.toHex());
-	INFO("onPacket: text: \"" + data.toString() + "\"");
-	//TRACE("onPacket: " + packet.debugString());
+	INFOF("onPacket: data: %s", data.toHex().c_str());
+	INFOF("onPacket: text: \"%s\"", data.toString().c_str());
+	//TRACEF("onPacket: %s", packet.debugString().c_str());
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 // Ping packet receive callback
 void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	INFO("onPingPacket: data: " + data.toHex());
-	INFO("onPingPacket: text: \"" + data.toString() + "\"");
-	//TRACE("onPingPacket: " + packet.debugString());
+	INFOF("onPingPacket: data: %s", data.toHex().c_str());
+	INFOF("onPingPacket: text: \"%s\"", data.toString().c_str());
+	//TRACEF("onPingPacket: %s", packet.debugString().c_str());
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
@@ -205,14 +205,14 @@ void reticulum_setup() {
 		HEAD("Sending send packet...", RNS::LOG_TRACE);
 		send_packet.pack();
 #ifndef NDEBUG
-		TRACE("Test send_packet: " + send_packet.debugString());
+		TRACEF("Test send_packet: %s", send_packet.debugString().c_str());
 #endif
 
 		HEAD("Creating recv packet...", RNS::LOG_TRACE);
 		RNS::Packet recv_packet({RNS::Type::NONE}, send_packet.raw());
 		recv_packet.unpack();
 #ifndef NDEBUG
-		TRACE("Test recv_packet: " + recv_packet.debugString());
+		TRACEF("Test recv_packet: %s", recv_packet.debugString().c_str());
 #endif
 
 		HEAD("Spoofing recv packet to destination...", RNS::LOG_TRACE);

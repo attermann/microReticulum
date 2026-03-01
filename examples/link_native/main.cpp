@@ -65,7 +65,7 @@ void server_packet_received(const RNS::Bytes& message, const RNS::Packet& packet
 	// it will all be directed to the last client
 	// that connected.
 	std::string text = message.toString();
-	RNS::log("Received data on the link: "+text);
+	RNS::logf(RNS::LOG_NOTICE, "Received data on the link: %s", text.c_str());
 
 	std::string reply_text = "I received \""+text+"\" over the link";
 	RNS::Bytes reply_data(reply_text);
@@ -86,11 +86,7 @@ void client_connected(RNS::Link& link) {
 
 void server_loop(RNS::Destination& destination) {
 	// Let the user know that everything is ready
-	RNS::log(
-		"Link example <"+
-		destination.hash().toHex()+
-		"> running, waiting for a connection."
-	);
+	RNS::logf(RNS::LOG_NOTICE, "Link example <%s> running, waiting for a connection.", destination.hash().toHex().c_str());
 
 	RNS::log("Hit enter to manually send an announce (Ctrl-C to quit)");
 
@@ -105,7 +101,7 @@ void server_loop(RNS::Destination& destination) {
 		while (read(STDIN_FILENO, &ch, 1) > 0) {
 			if (ch == '\n') {
 				destination.announce();
-				RNS::log("Sent announce from "+destination.hash().toHex());
+				RNS::logf(RNS::LOG_NOTICE, "Sent announce from %s", destination.hash().toHex().c_str());
 			}
 		}
 	}
@@ -182,7 +178,7 @@ void link_closed(RNS::Link& link) {
 // simply print out the data.
 void client_packet_received(const RNS::Bytes& message, const RNS::Packet& packet) {
 	std::string text = message.toString();
-    RNS::log("Received data on the link: "+text);
+    RNS::logf(RNS::LOG_NOTICE, "Received data on the link: %s", text.c_str());
     printf("> ");
 	fflush(stdout);
 }
@@ -223,12 +219,7 @@ printf("(sending data: %s)\n", text.c_str());
 						RNS::Packet(server_link, data).send();
 					}
 					else {
-						RNS::log(
-							"Cannot send this packet, the data size of "+
-							std::to_string(data.size())+" bytes exceeds the link packet MDU of "+
-							std::to_string(RNS::Type::Link::MDU)+" bytes",
-							RNS::LOG_ERROR
-						);
+						RNS::logf(RNS::LOG_ERROR, "Cannot send this packet, the data size of %zu bytes exceeds the link packet MDU of %zu bytes", data.size(), (size_t)RNS::Type::Link::MDU);
 					}
 				}
 

@@ -148,14 +148,14 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			//TRACE("<<< Serializing interface hash " + src.get_hash().toHex());
+			//TRACEF("<<< Serializing interface hash %s", src.get_hash().toHex().c_str());
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Interface fromJson(JsonVariantConst src) {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				//TRACE(">>> Deserialized interface hash " + hash.toHex());
+				//TRACEF(">>> Deserialized interface hash %s", hash.toHex().c_str());
 				//TRACE(">>> Querying transport for interface");
 				// Query transport for matching interface
 				return RNS::Transport::find_interface_from_hash(hash);
@@ -178,7 +178,7 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			//TRACE("<<< Serializing packet hash " + src.get_hash().toHex());
+			//TRACEF("<<< Serializing packet hash %s", src.get_hash().toHex().c_str());
 			// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
 			RNS::Transport::cache_packet(src, true);
 			return dst.set(src.get_hash().toHex());
@@ -187,7 +187,7 @@ namespace ArduinoJson {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				//TRACE(">>> Deserialized packet hash " + hash.toHex());
+				//TRACEF(">>> Deserialized packet hash %s", hash.toHex().c_str());
 				//TRACE(">>> Querying transport for cached packet");
 				// Query transport for matching packet
 				return RNS::Transport::get_cached_packet(hash);
@@ -300,7 +300,7 @@ namespace ArduinoJson {
 					}
 				}
 				else {
-					TRACE("Destination announce packet " + src._announce_packet.get_hash().toHex() + " is already cached");
+					TRACEF("Destination announce packet %s is already cached", src._announce_packet.get_hash().toHex().c_str());
 				}
 			}
 			else {
@@ -397,7 +397,7 @@ namespace RNS {
 				}
 			}
 			else {
-				TRACE("Destination announce packet " + src._announce_packet.get_hash().toHex() + " is already cached");
+				TRACEF("Destination announce packet %s is already cached", src._announce_packet.get_hash().toHex().c_str());
 			}
 		}
 		else {
@@ -520,7 +520,7 @@ namespace RNS { namespace Persistence {
 		size_t read = RNS::Utilities::OS::read_file(file_path, _buffer);
 		if (read > 0) {
 			TRACEF("Persistence::deserialize: read: %d bytes", _buffer.size());
-			//TRACE("testDeserializeVector: data: " + _buffer.toString());
+			//TRACEF("testDeserializeVector: data: %s", _buffer.toString().c_str());
 #ifdef USE_MSGPACK
 			DeserializationError error = deserializeMsgPack(_document, _buffer.data());
 #else

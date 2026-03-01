@@ -64,14 +64,14 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	}
 	_local_port = port;
 	_remote_port = port;
-	TRACE("UDPInterface: local host: " + _local_host);
-	TRACE("UDPInterface: local port: " + std::to_string(_local_port));
-	TRACE("UDPInterface: remote host: " + _remote_host);
-	TRACE("UDPInterface: remote port: " + std::to_string(_remote_port));
+	TRACEF("UDPInterface: local host: %s", _local_host.c_str());
+	TRACEF("UDPInterface: local port: %d", _local_port);
+	TRACEF("UDPInterface: remote host: %s", _remote_host.c_str());
+	TRACEF("UDPInterface: remote port: %d", _remote_port);
  
 #ifdef ARDUINO
-	TRACE("UDPInterface: wifi ssid: " + _wifi_ssid);
-	TRACE("UDPInterface: wifi password: " + _wifi_password);
+	TRACEF("UDPInterface: wifi ssid: %s", _wifi_ssid.c_str());
+	TRACEF("UDPInterface: wifi password: %s", _wifi_password.c_str());
 
 	// Connect to the WiFi network
 	WiFi.begin(_wifi_ssid.c_str(), _wifi_password.c_str());
@@ -133,7 +133,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	if (inet_aton(_local_host.c_str(), &local_addr) == 0) {
 		struct hostent* host_ent = gethostbyname(_local_host.c_str());
 		if (host_ent == nullptr || host_ent->h_addr_list[0] == nullptr) {
-			ERROR("Unable to resolve local host " + std::string(_local_host));
+			ERRORF("Unable to resolve local host %s", _local_host.c_str());
 			return false;
 		}
 		_local_address = *((in_addr_t*)(host_ent->h_addr_list[0]));
@@ -147,7 +147,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	if (inet_aton(_remote_host.c_str(), &remote_addr) == 0) {
 		struct hostent* host_ent = gethostbyname(_remote_host.c_str());
 		if (host_ent == nullptr || host_ent->h_addr_list[0] == nullptr) {
-			ERROR("Unable to resolve remote host " + std::string(_remote_host));
+			ERRORF("Unable to resolve remote host %s", _remote_host.c_str());
 			return false;
 		}
 		_remote_address = *((in_addr_t*)(host_ent->h_addr_list[0]));
@@ -160,7 +160,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	TRACE("Opening UDP socket");
 	_socket = socket( PF_INET, SOCK_DGRAM, 0 );
 	if (_socket < 0) {
-		ERROR("Unable to create socket with error " + std::to_string(errno));
+		ERRORF("Unable to create socket with error %d", errno);
 		return false;
 	}
 
@@ -176,7 +176,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 #endif
 
 	// bind to interface for listening
-	INFO("Binding UDP socket " + std::to_string(_socket) + " to " + std::string(_local_host) + ":" + std::to_string(_local_port));
+	INFOF("Binding UDP socket %d to %s:%d", _socket, _local_host.c_str(), _local_port);
 	sockaddr_in bind_addr;
 	bind_addr.sin_family = AF_INET;
 	bind_addr.sin_addr.s_addr = _local_address;
@@ -184,7 +184,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	if (bind(_socket, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
 		close(_socket);
 		_socket = -1;
-		ERROR("Unable to bind socket with error " + std::to_string(errno));
+		ERRORF("Unable to bind socket with error %d", errno);
 		return false;
 	}
 #endif
@@ -234,7 +234,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 }
 
 /*virtual*/ void UDPInterface::send_outgoing(const Bytes& data) {
-	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
+	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
 	try {
 		if (_online) {
 			// Send packet
@@ -243,13 +243,13 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 			udp.write(data.data(), data.size());
 			udp.endPacket();
 #else
-			TRACE("Sending UDP packet to " + std::string(_remote_host) + ":" + std::to_string(_remote_port));
+			TRACEF("Sending UDP packet to %s:%d", _remote_host.c_str(), _remote_port);
 			sockaddr_in sock_addr;
 			sock_addr.sin_family = AF_INET;
 			sock_addr.sin_addr.s_addr = _remote_address;
 			sock_addr.sin_port = htons(_remote_port);
 			int sent = sendto(_socket, data.data(), data.size(), 0, (struct sockaddr*)&sock_addr, sizeof(sock_addr));
-			TRACE("Sent " + std::to_string(sent) + " bytes to " + std::string(_remote_host) + ":" + std::to_string(_remote_port));
+			TRACEF("Sent %d bytes to %s:%d", sent, _remote_host.c_str(), _remote_port);
 #endif
 		}
 
@@ -257,12 +257,12 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 		InterfaceImpl::handle_outgoing(data);
 	}
 	catch (std::exception& e) {
-		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
+		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
 	}
 }
 
 void UDPInterface::on_incoming(const Bytes& data) {
-	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
+	DEBUGF("%s.on_incoming: data: %s", toString().c_str(), data.toHex().c_str());
 	// Pass received data on to transport
 	InterfaceImpl::handle_incoming(data);
 }

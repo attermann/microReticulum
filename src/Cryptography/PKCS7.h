@@ -28,9 +28,9 @@ namespace RNS { namespace Cryptography {
 		// updates passed buffer
 		static inline void inplace_pad(Bytes& data, size_t bs = BLOCKSIZE) {
 			size_t len = data.size();
-			//DEBUG("PKCS7::pad: len: " + std::to_string(len));
+			//DEBUGF("PKCS7::pad: len: %zu", len);
 			size_t padlen = bs - (len % bs);
-			//DEBUG("PKCS7::pad: pad len: " + std::to_string(padlen));
+			//DEBUGF("PKCS7::pad: pad len: %zu", padlen);
 			// create zero-filled byte padding array of size padlen
 			//p v = bytes([padlen])
 			//uint8_t pad[padlen] = {0};
@@ -41,24 +41,24 @@ namespace RNS { namespace Cryptography {
 			// concatenate data with padding
 			//p return data+v*padlen
 			data.append(pad, padlen);
-			//DEBUG("PKCS7::pad: data size: " + std::to_string(data.size()));
+			//DEBUGF("PKCS7::pad: data size: %zu", data.size());
 		}
 
 		// updates passed buffer
 		static inline void inplace_unpad(Bytes& data, size_t bs = BLOCKSIZE) {
 			size_t len = data.size();
-			//DEBUG("PKCS7::unpad: len: " + std::to_string(len));
+			//DEBUGF("PKCS7::unpad: len: %zu", len);
 			// read last byte which is pad length
 			//pad = data[-1]
 			size_t padlen = (size_t)data.data()[data.size()-1];
-			//DEBUG("PKCS7::unpad: pad len: " + std::to_string(padlen));
+			//DEBUGF("PKCS7::unpad: pad len: %zu", padlen);
 			if (padlen > bs) {
 				throw std::runtime_error("Cannot unpad, invalid padding length of " + std::to_string(padlen) + " bytes");
 			}
 			// truncate data to strip padding
 			//return data[:len-padlen]
 			data.resize(len - padlen);
-			//DEBUG("PKCS7::unpad: data size: " + std::to_string(data.size()));
+			//DEBUGF("PKCS7::unpad: data size: %zu", data.size());
 		}
 
 	};

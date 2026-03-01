@@ -46,18 +46,18 @@ namespace RNS {
 	public:
 		Identity(bool create_keys = true);
 		Identity(Type::NoneConstructor none) {
-			MEM("Identity NONE object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEMF("Identity NONE object created, this: %p, data: %p", (void*)this, (void*)_object.get());
 		}
 		Identity(const Identity& identity) : _object(identity._object) {
-			MEM("Identity object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEMF("Identity object copy created, this: %p, data: %p", (void*)this, (void*)_object.get());
 		}
 		virtual ~Identity() {
-			MEM("Identity object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEMF("Identity object destroyed, this: %p, data: %p", (void*)this, (void*)_object.get());
 		}
 
 		inline Identity& operator = (const Identity& identity) {
 			_object = identity._object;
-			MEM("Identity object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			MEMF("Identity object copy created by assignment, this: %p, data: %p", (void*)this, (void*)_object.get());
 			return *this;
 		}
 		inline operator bool() const {
@@ -89,7 +89,7 @@ namespace RNS {
 		inline void update_hashes() {
 			assert(_object);
 			_object->_hash = truncated_hash(get_public_key());
-			TRACE("Identity::update_hashes: hash: " + _object->_hash.toHex());
+			TRACEF("Identity::update_hashes: hash: %s", _object->_hash.toHex().c_str());
 			_object->_hexhash = _object->_hash.toHex();
 		};
 		bool load(const char* path);
@@ -172,8 +172,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object() { MEM("Identity::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { MEM("Identity::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object() { MEMF("Identity::Data object created, this: %p", (void*)this); }
+			virtual ~Object() { MEMF("Identity::Data object destroyed, this: %p", (void*)this); }
 		private:
 
 			Cryptography::X25519PrivateKey::Ptr _prv;

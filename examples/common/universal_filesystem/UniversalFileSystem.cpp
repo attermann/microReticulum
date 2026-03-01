@@ -121,7 +121,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 		return true;
 	}
 	else {
-		ERROR("file_exists: failed to open file " + std::string(file_path));
+		ERRORF("file_exists: failed to open file %s", file_path);
 		return false;
 	}
 }
@@ -155,9 +155,9 @@ void UniversalFileSystem::listDir(const char* dir) {
 		//size_t read = fread(data.writable(size), size, 1, file);
 		read = fread(data.writable(size), 1, size, file);
 #endif
-		TRACE("read_file: read " + std::to_string(read) + " bytes from file " + std::string(file_path));
+		TRACEF("read_file: read %zu bytes from file %s", read, file_path);
 		if (read != size) {
-			ERROR("read_file: failed to read file " + std::string(file_path));
+			ERRORF("read_file: failed to read file %s", file_path);
             data.clear();
 		}
 		//TRACE("read_file: closing input file");
@@ -173,7 +173,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 #endif
 	}
 	else {
-		ERROR("read_file: failed to open input file " + std::string(file_path));
+		ERRORF("read_file: failed to open input file %s", file_path);
 	}
     return read;
 }
@@ -201,9 +201,9 @@ void UniversalFileSystem::listDir(const char* dir) {
         //size_t wrote = fwrite(data.data(), data.size(), 1, file);
         wrote = fwrite(data.data(), 1, data.size(), file);
 #endif
-        TRACE("write_file: wrote " + std::to_string(wrote) + " bytes to file " + std::string(file_path));
+        TRACEF("write_file: wrote %zu bytes to file %s", wrote, file_path);
         if (wrote < data.size()) {
-			WARNING("write_file: not all data was written to file " + std::string(file_path));
+			WARNINGF("write_file: not all data was written to file %s", file_path);
 		}
 		//TRACE("write_file: closing output file");
 #ifdef ARDUINO
@@ -218,7 +218,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 #endif
 	}
 	else {
-		ERROR("write_file: failed to open output file " + std::string(file_path));
+		ERRORF("write_file: failed to open output file %s", file_path);
 	}
     return wrote;
 }
@@ -348,7 +348,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 }
 
 /*virtua*/ bool UniversalFileSystem::directory_exists(const char* directory_path) {
-	TRACE("directory_exists: checking for existence of directory " + std::string(directory_path));
+	TRACEF("directory_exists: checking for existence of directory %s", directory_path);
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	File file = SPIFFS.open(directory_path, FILE_READ);
@@ -382,13 +382,13 @@ void UniversalFileSystem::listDir(const char* dir) {
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	if (!SPIFFS.mkdir(directory_path)) {
-		ERROR("create_directory: failed to create directorty " + std::string(directory_path));
+		ERRORF("create_directory: failed to create directorty %s", directory_path);
 		return false;
 	}
 	return true;
 #elif BOARD_NRF52
 	if (!InternalFS.mkdir(directory_path)) {
-		ERROR("create_directory: failed to create directorty " + std::string(directory_path));
+		ERRORF("create_directory: failed to create directorty %s", directory_path);
 		return false;
 	}
 	return true;
@@ -406,18 +406,18 @@ void UniversalFileSystem::listDir(const char* dir) {
 }
 
 /*virtua*/ bool UniversalFileSystem::remove_directory(const char* directory_path) {
-	TRACE("remove_directory: removing directory " + std::string(directory_path));
+	TRACEF("remove_directory: removing directory %s", directory_path);
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	//if (!LittleFS.rmdir_r(directory_path)) {
 	if (!SPIFFS.rmdir(directory_path)) {
-		ERROR("remove_directory: failed to remove directorty " + std::string(directory_path));
+		ERRORF("remove_directory: failed to remove directorty %s", directory_path);
 		return false;
 	}
 	return true;
 #elif BOARD_NRF52
 	if (!InternalFS.rmdir_r(directory_path)) {
-		ERROR("remove_directory: failed to remove directory " + std::string(directory_path));
+		ERRORF("remove_directory: failed to remove directory %s", directory_path);
 		return false;
 	}
 	return true;
@@ -431,7 +431,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 }
 
 /*virtua*/ std::list<std::string> UniversalFileSystem::list_directory(const char* directory_path) {
-	TRACE("list_directory: listing directory " + std::string(directory_path));
+	TRACEF("list_directory: listing directory %s", directory_path);
 	std::list<std::string> files;
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
@@ -440,7 +440,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 	File root = InternalFS.open(directory_path);
 #endif
 	if (!root) {
-		ERROR("list_directory: failed to open directory " + std::string(directory_path));
+		ERRORF("list_directory: failed to open directory %s", directory_path);
 		return files;
 	}
 	File file = root.openNextFile();
