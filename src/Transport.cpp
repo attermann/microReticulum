@@ -1560,7 +1560,7 @@ using namespace RNS::Utilities;
 								proof_timeout
 							);
 							// CBA ACCUMULATES
-							_link_table.insert({packet.getTruncatedHash(), link_entry});
+							_link_table.insert({Link::link_id_from_lr_packet(packet), link_entry});
 						}
 						else {
 							TRACE("Transport::inbound: Packet is next-hop other type");
