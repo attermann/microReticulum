@@ -276,10 +276,11 @@ void Link::handshake() {
 void Link::prove() {
 	assert(_object);
 	DEBUGF("Link %s requesting proof", link_id().toHex().c_str());
-	Bytes signed_data =_object->_link_id + _object->_pub_bytes + _object->_sig_pub_bytes;
+	Bytes signalling_bytes = Link::signalling_bytes(_object->_mtu, _object->_mode);
+	Bytes signed_data = _object->_link_id + _object->_pub_bytes + _object->_sig_pub_bytes + signalling_bytes;
 	const Bytes signature(_object->_owner.identity().sign(signed_data));
 
-	Bytes proof_data = signature + _object->_pub_bytes;
+	Bytes proof_data = signature + _object->_pub_bytes + signalling_bytes;
 	// CBA LINK
 	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
 	Packet proof(*this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
@@ -337,7 +338,7 @@ void Link::validate_proof(const Packet& packet) {
 				handshake();
 
 				_object->_establishment_cost += packet.raw().size();
-				Bytes signed_data = _object->_link_id + _object->_peer_pub_bytes + _object->_peer_sig_pub_bytes;
+				Bytes signed_data = _object->_link_id + _object->_peer_pub_bytes + _object->_peer_sig_pub_bytes + signalling_bytes;
 				const Bytes signature(packet_data.left(Type::Identity::SIGLENGTH/8));
 				
 				TRACEF("Link %s validating identity", link_id().toHex().c_str());
