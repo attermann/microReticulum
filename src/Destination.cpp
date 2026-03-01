@@ -195,129 +195,129 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 	}
 
 	try {
-	double now = OS::time();
-    auto it = _object->_path_responses.begin();
-    while (it != _object->_path_responses.end()) {
-		// vector
-		//Response& entry = *it;
-		// map
-		PathResponse& entry = (*it).second;
-		if (now > (entry.first + PR_TAG_WINDOW)) {
-			it = _object->_path_responses.erase(it);
+		double now = OS::time();
+		auto it = _object->_path_responses.begin();
+		while (it != _object->_path_responses.end()) {
+			// vector
+			//Response& entry = *it;
+			// map
+			PathResponse& entry = (*it).second;
+			if (now > (entry.first + PR_TAG_WINDOW)) {
+				it = _object->_path_responses.erase(it);
+			}
+			else {
+				++it;
+			}
 		}
-		else {
-			++it;
-		}
-	}
 
-	Bytes announce_data;
+		Bytes announce_data;
 
 /*
-	// CBA TEST
-	TRACE("Destination::announce: performing path test...");
-	TRACE("Destination::announce: inserting path...");
-	_object->_path_responses.insert({Bytes("foo_tag"), {0, Bytes("this is foo tag")}});
-	TRACE("Destination::announce: inserting path...");
-	_object->_path_responses.insert({Bytes("test_tag"), {0, Bytes("this is test tag")}});
-	if (path_response) {
-		TRACE("Destination::announce: path_response is true");
-	}
-	if (!tag.empty()) {
-		TRACE("Destination::announce: tag is specified");
-		std::string tagstr((const char*)tag.data(), tag.size());
-		DEBUG(std::string("Destination::announce: tag: ") + tagstr);
-		DEBUG(std::string("Destination::announce: tag len: ") + std::to_string(tag.size()));
-		TRACE("Destination::announce: searching for tag...");
-		if (_object->_path_responses.find(tag) != _object->_path_responses.end()) {
-			TRACE("Destination::announce: found tag in _path_responses");
-			DEBUG(std::string("Destination::announce: data: ") +_object->_path_responses[tag].second.toString());
+		// CBA TEST
+		TRACE("Destination::announce: performing path test...");
+		TRACE("Destination::announce: inserting path...");
+		_object->_path_responses.insert({Bytes("foo_tag"), {0, Bytes("this is foo tag")}});
+		TRACE("Destination::announce: inserting path...");
+		_object->_path_responses.insert({Bytes("test_tag"), {0, Bytes("this is test tag")}});
+		if (path_response) {
+			TRACE("Destination::announce: path_response is true");
 		}
-		else {
-			TRACE("Destination::announce: tag not found in _path_responses");
+		if (!tag.empty()) {
+			TRACE("Destination::announce: tag is specified");
+			std::string tagstr((const char*)tag.data(), tag.size());
+			DEBUG(std::string("Destination::announce: tag: ") + tagstr);
+			DEBUG(std::string("Destination::announce: tag len: ") + std::to_string(tag.size()));
+			TRACE("Destination::announce: searching for tag...");
+			if (_object->_path_responses.find(tag) != _object->_path_responses.end()) {
+				TRACE("Destination::announce: found tag in _path_responses");
+				DEBUG(std::string("Destination::announce: data: ") +_object->_path_responses[tag].second.toString());
+			}
+			else {
+				TRACE("Destination::announce: tag not found in _path_responses");
+			}
 		}
-	}
-	TRACE("Destination::announce: path test finished");
+		TRACE("Destination::announce: path test finished");
 */
 
-	if (path_response && !tag.empty() && _object->_path_responses.find(tag) != _object->_path_responses.end()) {
-		// This code is currently not used, since Transport will block duplicate
-		// path requests based on tags. When multi-path support is implemented in
-		// Transport, this will allow Transport to detect redundant paths to the
-		// same destination, and select the best one based on chosen criteria,
-		// since it will be able to detect that a single emitted announce was
-		// received via multiple paths. The difference in reception time will
-		// potentially also be useful in determining characteristics of the
-		// multiple available paths, and to choose the best one.
-		//z TRACE("Using cached announce data for answering path request with tag "+RNS.prettyhexrep(tag));
-		announce_data << _object->_path_responses[tag].second;
-	}
-	else {
-		Bytes destination_hash = _object->_hash;
-		//p random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
-		// CBA TODO add in time to random hash
-		Bytes random_hash = Cryptography::random(Type::Identity::RANDOM_HASH_LENGTH/8);
+		if (path_response && !tag.empty() && _object->_path_responses.find(tag) != _object->_path_responses.end()) {
+			// This code is currently not used, since Transport will block duplicate
+			// path requests based on tags. When multi-path support is implemented in
+			// Transport, this will allow Transport to detect redundant paths to the
+			// same destination, and select the best one based on chosen criteria,
+			// since it will be able to detect that a single emitted announce was
+			// received via multiple paths. The difference in reception time will
+			// potentially also be useful in determining characteristics of the
+			// multiple available paths, and to choose the best one.
+			//z TRACE("Using cached announce data for answering path request with tag "+RNS.prettyhexrep(tag));
+			announce_data << _object->_path_responses[tag].second;
+		}
+		else {
+			Bytes destination_hash = _object->_hash;
+			//p random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
+			// CBA TODO add in time to random hash
+			Bytes random_hash = Cryptography::random(Type::Identity::RANDOM_HASH_LENGTH/8);
 
-		Bytes new_app_data(app_data);
-        if (new_app_data.empty() && !_object->_default_app_data.empty()) {
-			new_app_data = _object->_default_app_data;
+			Bytes new_app_data(app_data);
+			if (new_app_data.empty() && !_object->_default_app_data.empty()) {
+				new_app_data = _object->_default_app_data;
+			}
+
+			Bytes signed_data;
+			//TRACE("Destination::announce: hash:         " + _object->_hash.toHex());
+			//TRACE("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
+			//TRACE("Destination::announce: name hash:    " + _object->_name_hash.toHex());
+			//TRACE("Destination::announce: random hash:  " + random_hash.toHex());
+			//TRACE("Destination::announce: app data:     " + new_app_data.toHex());
+			//TRACE("Destination::announce: app data text:" + new_app_data.toString());
+			signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
+			if (new_app_data) {
+				signed_data << new_app_data;
+			}
+			//TRACE("Destination::announce: signed data:  " + signed_data.toHex());
+
+			Bytes signature(_object->_identity.sign(signed_data));
+			//TRACE("Destination::announce: signature:    " + signature.toHex());
+
+			announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
+
+			if (new_app_data) {
+				announce_data << new_app_data;
+			}
+
+			// CBA ACCUMULATES
+			try {
+				_object->_path_responses.insert({tag, {OS::time(), announce_data}});
+			}
+			catch (const std::bad_alloc&) {
+				ERROR("announce: bad_alloc - out of memory, path response not stored for " + _object->_hash.toHex());
+			}
+			catch (const std::exception& e) {
+				ERROR(std::string("announce: exception storing path response: ") + e.what());
+			}
+		}
+		//TRACE("Destination::announce: announce_data:" + announce_data.toHex());
+
+		Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
+		if (path_response) {
+			announce_context = Type::Packet::PATH_RESPONSE;
 		}
 
-		Bytes signed_data;
-		//TRACE("Destination::announce: hash:         " + _object->_hash.toHex());
-		//TRACE("Destination::announce: public key:   " + _object->_identity.get_public_key().toHex());
-		//TRACE("Destination::announce: name hash:    " + _object->_name_hash.toHex());
-		//TRACE("Destination::announce: random hash:  " + random_hash.toHex());
-		//TRACE("Destination::announce: app data:     " + new_app_data.toHex());
-		//TRACE("Destination::announce: app data text:" + new_app_data.toString());
-		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
-		if (new_app_data) {
-			signed_data << new_app_data;
+		//TRACE("Destination::announce: creating announce packet...");
+		//p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
+		//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
+		Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
+
+		if (send) {
+			TRACE("Destination::announce: sending announce packet...");
+			announce_packet.send();
+			return {Type::NONE};
 		}
-		//TRACE("Destination::announce: signed data:  " + signed_data.toHex());
-
-		Bytes signature(_object->_identity.sign(signed_data));
-		//TRACE("Destination::announce: signature:    " + signature.toHex());
-
-		announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
-
-		if (new_app_data) {
-			announce_data << new_app_data;
+		else {
+			return announce_packet;
 		}
-
-		// CBA ACCUMULATES
-		try {
-			_object->_path_responses.insert({tag, {OS::time(), announce_data}});
-		}
-		catch (const std::bad_alloc&) {
-			ERROR("announce: out of memory, path response not stored for " + _object->_hash.toHex());
-		}
-		catch (const std::exception& e) {
-			ERROR(std::string("announce: exception storing path response: ") + e.what());
-		}
-	}
-	//TRACE("Destination::announce: announce_data:" + announce_data.toHex());
-
-	Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
-	if (path_response) {
-		announce_context = Type::Packet::PATH_RESPONSE;
-	}
-
-	//TRACE("Destination::announce: creating announce packet...");
-    //p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
-	//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
-	Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
-
-	if (send) {
-		TRACE("Destination::announce: sending announce packet...");
-		announce_packet.send();
-		return {Type::NONE};
-	}
-	else {
-		return announce_packet;
-	}
 	}
 	catch (const std::bad_alloc&) {
-		ERROR("announce: out of memory, announce not sent for " + _object->_hash.toHex());
+		ERROR("announce: bad_alloc - out of memory, announce not sent for " + _object->_hash.toHex());
 		return {Type::NONE};
 	}
 	catch (const std::exception& e) {
@@ -407,7 +407,7 @@ TRACE("***** Accepting link request");
 				_object->_links.insert(link);
 			}
 			catch (const std::bad_alloc&) {
-				ERROR("incoming_link_request: out of memory, link not tracked");
+				ERROR("incoming_link_request: bad_alloc - out of memory, link not tracked");
 			}
 			catch (const std::exception& e) {
 				ERROR(std::string("incoming_link_request: exception tracking link: ") + e.what());

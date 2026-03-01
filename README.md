@@ -19,6 +19,7 @@ This API is dependent on the following external libraries:
 - `-DRNS_USE_FS` Used to enable use of file system by RNS for persistence
 - `-DRNS_PERSIST_PATHS` Used to enable persistence of RNS paths in file system (also requires `-DRNS_USE_FS`)
 - `-DRNS_USE_TLSF=1` Enables the use of the TLSF (Two-Level Segregate Fit) dynamic memory manager for efficient management of constrained MCU memory with minimal fragmentation. Currently only required on NRF52 boards (ESP32 already uses TLSF internally).
+- `-RNS_TLSF_BUFFER_SIZ=N` Defines the TLSF memory pool buffer size (N bytes, default 0 which means dynamic) 
 - `-DRNS_USE_ALLOCATOR=1` Enables the replacement of default new/delete operators with custom implementations that take advantage of optimized memory managers (eg, TLSF). Currently only required on NRF52 boards (ESP32 already uses TLSF internally).
 
 ## Building

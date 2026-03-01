@@ -468,7 +468,7 @@ namespace RNS { namespace Persistence {
 	static JsonDocument _document;
 	static Bytes _buffer(Type::Persistence::BUFFER_MAXSIZE);
 
-	template <typename T> size_t crc(const T& obj) {
+	template <typename T> uint32_t crc(const T& obj) {
 		//TRACE("Persistence::crc<T>");
 		_document.set(obj);
 		size_t size = _buffer.capacity();
@@ -480,7 +480,7 @@ namespace RNS { namespace Persistence {
 		if (length < size) {
 			_buffer.resize(length);
 		}
-		TRACEF("Persistence::crc: serialized %d bytes", length);
+		//TRACEF("Persistence::crc: serialized %d bytes", length);
 		return Utilities::Crc::crc32(0, _buffer.data(), _buffer.size());
 	}
 
@@ -546,7 +546,7 @@ namespace RNS { namespace Persistence {
 	}
 
 #if 1
-	template <typename T> size_t crc(std::map<Bytes, T>& map) {
+	template <typename T> uint32_t crc(std::map<Bytes, T>& map) {
 		//TRACE("Persistence::crc<map<Bytes, T>>");
 
 		uint32_t crc = 0;
@@ -568,7 +568,7 @@ namespace RNS { namespace Persistence {
 			if (length < size) {
 				_buffer.resize(length);
 			}
-			TRACEF("Persistence::crc: serialized entry %d bytes", length);
+			//TRACEF("Persistence::crc: serialized entry %d bytes", length);
 
 			if (length > 0) {
 				crc = Utilities::Crc::crc32(crc, _buffer.data(), _buffer.size());

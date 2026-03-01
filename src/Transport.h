@@ -371,6 +371,7 @@ namespace RNS {
 
 		// CBA
 		static void cull_path_table();
+		static void cull_announce_table();
 
 		// getters/setters
 		static inline void set_receive_packet_callback(Callbacks::receive_packet callback) { _callbacks._receive_packet = callback; }
@@ -380,6 +381,8 @@ namespace RNS {
 		static inline const Identity& identity() { return _identity; }
 		inline static uint16_t path_table_maxsize() { return _path_table_maxsize; }
 		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; }
+		inline static uint16_t announce_table_maxsize() { return _announce_table_maxsize; }
+		inline static void announce_table_maxsize(uint16_t announce_table_maxsize) { _announce_table_maxsize = announce_table_maxsize; }
 		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
 		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) { _hashlist_maxsize = hashlist_maxsize; }
 		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
@@ -477,6 +480,7 @@ namespace RNS {
 		static double _last_saved;
 		static float _save_interval;
 		static uint32_t _destination_table_crc;
+		static uint16_t _announce_table_maxsize;
 
 		static Reticulum _owner;
 		static Identity _identity;

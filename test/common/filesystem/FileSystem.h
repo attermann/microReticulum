@@ -22,6 +22,7 @@ using namespace Adafruit_LittleFS_Namespace;
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <dirent.h>
 #endif
 
 class FileSystem : public RNS::FileSystemImpl {
@@ -399,7 +400,8 @@ public:
 		}
 	#else
 		// Native
-		return false;
+		struct stat st = {0};
+		return (stat(directory_path, &st) == 0);
 	#endif
 	}
 
@@ -451,7 +453,11 @@ public:
 	#endif
 	#else
 		// Native
-		return false;
+		if (rmdir(directory_path) == 0) {
+			ERROR("remove_directory: failed to remove directory " + std::string(directory_path));
+			return false;
+		}
+		return true;
 	#endif
 	}
 
@@ -483,6 +489,23 @@ public:
 		return files;
 	#else
 		// Native
+		DIR *dir = opendir(directory_path);
+		if (dir == NULL) {
+			ERROR("list_directory: failed to open directory " + std::string(directory_path));
+			return files;
+		}
+		struct dirent *entry;
+		while ((entry = readdir(dir)) != NULL) {
+			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+				continue;
+			}
+			char* name = entry->d_name;
+			files.push_back(name);
+		}
+		if (closedir(dir) == -1) {
+			ERROR("list_directory: failed to close directory " + std::string(directory_path));
+		}
+
 		return files;
 	#endif
 	}

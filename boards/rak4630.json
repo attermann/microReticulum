@@ -46,6 +46,7 @@
 	],
 	"debug": {
 		"jlink_device": "nRF52840_xxAA",
+		"openocd_target": "nrf52840",
 		"svd_path": "nrf52840.svd"
 	},
 	"frameworks": [

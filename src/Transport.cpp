@@ -22,6 +22,10 @@ using namespace RNS::Utilities;
 #define RNS_PATH_TABLE_MAX 100
 #endif
 
+#ifndef RNS_ANNOUNCE_TABLE_MAX
+#define RNS_ANNOUNCE_TABLE_MAX 100
+#endif
+
 #ifndef RNS_HASHLIST_MAX
 #define RNS_HASHLIST_MAX 100
 #endif
@@ -105,6 +109,7 @@ using namespace RNS::Utilities;
 /*static*/ double Transport::_last_saved				= 0.0;
 /*static*/ float Transport::_save_interval				= 3600.0;
 /*static*/ uint32_t Transport::_destination_table_crc	= 0;
+/*static*/ uint16_t Transport::_announce_table_maxsize	= RNS_ANNOUNCE_TABLE_MAX;
 
 /*static*/ Reticulum Transport::_owner({Type::NONE});
 /*static*/ Identity Transport::_identity({Type::NONE});
@@ -423,6 +428,8 @@ using namespace RNS::Utilities;
 								// CBA ACCUMULATES
 								_announce_table.insert({destination_hash, held_entry});
 								DEBUG("Reinserting held announce into table");
+								// CBA IMMEDIATE CULL
+								cull_announce_table();
 							}
 						}
 					}
@@ -463,7 +470,7 @@ using namespace RNS::Utilities;
 					remove_reverse_entries(stale_reverse_entries);
 				}
 				catch (const std::bad_alloc&) {
-					ERROR("jobs: out of memory culling reverse table");
+					ERROR("jobs: bad_alloc - out of memory culling reverse table");
 				}
 				catch (const std::exception& e) {
 					ERROR("jobs: failed to cull reverse table: " + std::string(e.what()));
@@ -546,7 +553,7 @@ using namespace RNS::Utilities;
 					remove_links(stale_links);
 				}
 				catch (const std::bad_alloc&) {
-					ERROR("jobs: out of memory culling link table");
+					ERROR("jobs: bad_alloc - out of memory culling link table");
 				}
 				catch (const std::exception& e) {
 					ERROR("jobs: failed to cull link table: " + std::string(e.what()));
@@ -581,7 +588,7 @@ using namespace RNS::Utilities;
 					remove_paths(stale_paths);
 				}
 				catch (const std::bad_alloc&) {
-					ERROR("jobs: out of memory culling path table");
+					ERROR("jobs: bad_alloc - out of memory culling path table");
 				}
 				catch (const std::exception& e) {
 					ERROR("jobs: failed to cull path table: " + std::string(e.what()));
@@ -600,7 +607,7 @@ using namespace RNS::Utilities;
 					remove_discovery_path_requests(stale_discovery_path_requests);
 				}
 				catch (const std::bad_alloc&) {
-					ERROR("jobs: out of memory culling discovery path requests");
+					ERROR("jobs: bad_alloc - out of memory culling discovery path requests");
 				}
 				catch (const std::exception& e) {
 					ERROR("jobs: failed to cull discovery path requests: " + std::string(e.what()));
@@ -638,7 +645,7 @@ using namespace RNS::Utilities;
 					remove_tunnels(stale_tunnels);
 				}
 				catch (const std::bad_alloc&) {
-					ERROR("jobs: out of memory culling tunnel table");
+					ERROR("jobs: bad_alloc - out of memory culling tunnel table");
 				}
 				catch (const std::exception& e) {
 					ERROR("jobs: failed to cull tunnel table: " + std::string(e.what()));
@@ -1686,21 +1693,25 @@ using namespace RNS::Utilities;
 					if (Reticulum::transport_enabled() && _announce_table.count(packet.destination_hash()) > 0) {
 						//AnnounceEntry& announce_entry = _announce_table[packet.destination_hash()];
 						AnnounceEntry& announce_entry = (*_announce_table.find(packet.destination_hash())).second;
-						
+
+						bool announce_erased = false;
 						if ((packet.hops() - 1) == announce_entry._hops) {
 							DEBUG("Heard a local rebroadcast of announce for " + packet.destination_hash().toHex());
 							announce_entry._local_rebroadcasts += 1;
 							if (announce_entry._local_rebroadcasts >= LOCAL_REBROADCASTS_MAX) {
 								DEBUG("Max local rebroadcasts of announce for " + packet.destination_hash().toHex() + " reached, dropping announce from our table");
 								_announce_table.erase(packet.destination_hash());
+								announce_erased = true;
 							}
 						}
 
-						if ((packet.hops() - 1) == (announce_entry._hops + 1) && announce_entry._retries > 0) {
+						// CBA Checking announce_erased so we don't access announce_entry if it's already been freed!
+						if (!announce_erased && (packet.hops() - 1) == (announce_entry._hops + 1) && announce_entry._retries > 0) {
 							double now = OS::time();
 							if (now < announce_entry._timestamp) {
 								DEBUG("Rebroadcasted announce for " + packet.destination_hash().toHex() + " has been passed on to another node, no further tries needed");
 								_announce_table.erase(packet.destination_hash());
+								announce_erased = true;
 							}
 						}
 					}
@@ -1898,6 +1909,8 @@ using namespace RNS::Utilities;
 								);
 								// CBA ACCUMULATES
 								_announce_table.insert({packet.destination_hash(), announce_entry});
+								// CBA IMMEDIATE CULL
+								cull_announce_table();
 							}
 						}
 						// TODO: Check from_local_client once and store result
@@ -1926,6 +1939,8 @@ using namespace RNS::Utilities;
 								);
 								// CBA ACCUMULATES
 								_announce_table.insert({packet.destination_hash(), announce_entry});
+								// CBA IMMEDIATE CULL
+								cull_announce_table();
 							}
 						}
 
@@ -2042,20 +2057,21 @@ using namespace RNS::Utilities;
 							packet.get_hash()
 						);
 						// CBA ACCUMULATES
-						// Pre-emptively cull before insert to avoid hitting OOM at max capacity
-						if (_destination_table.size() >= _path_table_maxsize) {
-							cull_path_table();
-						}
 						try {
+							// CBA First remove any existing path before inserting new one
+							remove_path(packet.destination_hash());
 							if (_destination_table.insert({packet.destination_hash(), destination_table_entry}).second) {
+								TRACE("Added destination " + packet.destination_hash().toHex() + " to path table!");
 								++_destinations_added;
-								if (_destination_table.size() > _path_table_maxsize) {
-									cull_path_table();
-								}
+								// CBA IMMEDIATE CULL
+								cull_path_table();
+							}
+							else {
+								ERROR("Failed to add destination " + packet.destination_hash().toHex() + " to path table!");
 							}
 						}
 						catch (const std::bad_alloc&) {
-							ERROR("inbound: out of memory storing destination entry");
+							ERROR("inbound: bad_alloc - out of memory storing destination entry");
 						}
 						catch (const std::exception& e) {
 							ERROR(std::string("inbound: exception storing destination entry: ") + e.what());
@@ -2488,29 +2504,29 @@ using namespace RNS::Utilities;
 #if defined(INTERFACES_SET)
 	//for (auto iter = _interfaces.begin(); iter != _interfaces.end(); ++iter) {
 	//	if ((*iter).get() == interface) {
+	//		TRACE("Transport::deregister_interface: Found and removing interface " + (*iter).get().toString());
 	//		_interfaces.erase(iter);
-	//		TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 	//		break;
 	//	}
 	//}
 	//auto iter = _interfaces.find(interface);
 	auto iter = _interfaces.find(const_cast<Interface&>(interface));
 	if (iter != _interfaces.end()) {
+		TRACE("Transport::deregister_interface: Found and removing interface " + (*iter).get().toString());
 		_interfaces.erase(iter);
-		TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 	}
 #elif defined(INTERFACES_LIST)
 	for (auto iter = _interfaces.begin(); iter != _interfaces.end(); ++iter) {
 		if ((*iter).get() == interface) {
+			TRACE("Transport::deregister_interface: Found and removing interface " + (*iter).get().toString());
 			_interfaces.erase(iter);
-			TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).get().toString());
 			break;
 		}
 	}
 #elif defined(INTERFACES_MAP)
 	auto iter = _interfaces.find(interface.get_hash());
 	if (iter != _interfaces.end()) {
-		TRACE("Transport::deregister_interface: Found and removed interface " + (*iter).second.toString());
+		TRACE("Transport::deregister_interface: Found and removing interface " + (*iter).second.toString());
 		_interfaces.erase(iter);
 	}
 #endif
@@ -2569,14 +2585,14 @@ using namespace RNS::Utilities;
 	TRACE("Transport: Deregistering destination " + destination.toString());
 #if defined(DESTINATIONS_SET)
 	if (_destinations.find(destination) != _destinations.end()) {
+		TRACE("Transport::deregister_destination: Found and removing destination " + destination.toString());
 		_destinations.erase(destination);
-		TRACE("Transport::deregister_destination: Found and removed destination " + destination.toString());
 	}
 #elif defined(DESTINATIONS_MAP)
 	auto iter = _destinations.find(destination.hash());
 	if (iter != _destinations.end()) {
+		TRACE("Transport::deregister_destination: Found and removing destination " + (*iter).second.toString());
 		_destinations.erase(iter);
-		TRACE("Transport::deregister_destination: Found and removed destination " + (*iter).second.toString());
 	}
 #endif
 }
@@ -2627,8 +2643,8 @@ Deregisters an announce handler.
 /*static*/ void Transport::deregister_announce_handler(HAnnounceHandler handler) {
 	TRACE("Transport: Deregistering announce handler " + handler->aspect_filter());
 	if (_announce_handlers.find(handler) != _announce_handlers.end()) {
+		TRACE("Transport::deregister_announce_handler: Found and removing handler" + handler->aspect_filter());
 		_announce_handlers.erase(handler);
-		TRACE("Transport::deregister_announce_handler: Found and removed handler" + handler->aspect_filter());
 	}
 }
 
@@ -2636,21 +2652,21 @@ Deregisters an announce handler.
 #if defined(INTERFACES_SET)
 	for (const Interface& interface : _interfaces) {
 		if (interface.get_hash() == interface_hash) {
-			TRACE("Transport::find_interface_from_hash: Found interface " + interface.toString());
+			//TRACE("Transport::find_interface_from_hash: Found interface " + interface.toString());
 			return interface;
 		}
 	}
 #elif defined(INTERFACES_LIST)
 	for (Interface& interface : _interfaces) {
 		if (interface.get_hash() == interface_hash) {
-			TRACE("Transport::find_interface_from_hash: Found interface " + interface.toString());
+			//TRACE("Transport::find_interface_from_hash: Found interface " + interface.toString());
 			return interface;
 		}
 	}
 #elif defined(INTERFACES_MAP)
 	auto iter = _interfaces.find(interface_hash);
 	if (iter != _interfaces.end()) {
-		TRACE("Transport::find_interface_from_hash: Found interface " + (*iter).second.toString());
+		//TRACE("Transport::find_interface_from_hash: Found interface " + (*iter).second.toString());
 		return (*iter).second;
 	}
 #endif
@@ -2792,8 +2808,18 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::remove_path(const Bytes& destination_hash) {
-	if (_destination_table.erase(destination_hash) > 0) {
-		// CBA also remove cached announce packet if exists
+	auto iter = _destination_table.find(destination_hash);
+	if (iter != _destination_table.end()) {
+		// Remove cached packet file associated with this destination
+		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
+		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, iter->second._announce_packet.toHex().c_str());
+		if (OS::file_exists(packet_cache_path)) {
+			OS::remove_file(packet_cache_path);
+		}
+		if (_destination_table.erase(destination_hash) < 1) {
+			WARNING("Failed to remove destination " + destination_hash.toHex() + " from path table");
+		}
+		return true;
 	}
 	return false;
 }
@@ -3237,6 +3263,8 @@ will announce it.
 				);
 				// CBA ACCUMULATES
 				_announce_table.insert({announce_packet.destination_hash(), announce_entry});
+				// CBA IMMEDIATE CULL
+				cull_announce_table();
 			}
 		}
 	}
@@ -4018,7 +4046,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 				auto it = _destination_table.find(destination_hash);
 				if (it != _destination_table.end()) {
-					// Remove cached packet file
+					// Remove cached packet file associated with this destination
 					char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 					snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, it->second._announce_packet.toHex().c_str());
 					if (OS::file_exists(packet_cache_path)) {
@@ -4037,7 +4065,7 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 			DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
 		}
 		catch (const std::bad_alloc& e) {
-			ERROR("cull_path_table: out of memory building sort index, falling back to single erase");
+			ERROR("cull_path_table: bad_alloc - out of memory building sort index, falling back to single erase");
 			// Fallback: std::min_element does no heap allocation — erase one oldest entry
 			auto oldest = std::min_element(
 				_destination_table.begin(), _destination_table.end(),
@@ -4055,7 +4083,55 @@ TRACE("Transport::write_path_table: buffer size " + std::to_string(Persistence::
 		}
 	}
 }
-	
+
+/*static*/ void Transport::cull_announce_table() {
+	TRACE("Transport::cull_announce_table()");
+	if (_announce_table.size() > _announce_table_maxsize) {
+		try {
+			// Build lightweight (timestamp, key) index to avoid copying full AnnounceEntry
+			// objects (which contain nested std::set<Bytes>) — prevents OOM on heap-constrained
+			// devices when the table hits max capacity.
+			std::vector<std::pair<double, Bytes>> sorted_keys;
+			sorted_keys.reserve(_announce_table.size());
+			for (const auto& [key, entry] : _announce_table) {
+				sorted_keys.emplace_back(entry._timestamp, key);
+			}
+			// Sort ascending by timestamp so oldest entries are removed first
+			std::sort(sorted_keys.begin(), sorted_keys.end());
+
+			uint16_t count = 0;
+			for (const auto& [timestamp, destination_hash] : sorted_keys) {
+				TRACE("Transport::cull_announce_table: Removing destination " + destination_hash.toHex() + " from path table");
+				if (_announce_table.erase(destination_hash) < 1) {
+					WARNING("Failed to remove destination " + destination_hash.toHex() + " from path table");
+				}
+				++count;
+				if (_announce_table.size() <= _path_table_maxsize) {
+					break;
+				}
+			}
+			DEBUG("Removed " + std::to_string(count) + " path(s) from path table");
+		}
+		catch (const std::bad_alloc& e) {
+			ERROR("cull_announce_table: bad_alloc - out of memory building sort index, falling back to single erase");
+			// Fallback: std::min_element does no heap allocation — erase one oldest entry
+			auto oldest = std::min_element(
+				_announce_table.begin(), _announce_table.end(),
+				[](const std::pair<const Bytes, AnnounceEntry>& a,
+			   const std::pair<const Bytes, AnnounceEntry>& b) {
+				return a.second._timestamp < b.second._timestamp;
+			}
+			);
+			if (oldest != _announce_table.end()) {
+				_announce_table.erase(oldest);
+			}
+		}
+		catch (const std::exception& e) {
+			ERROR(std::string("cull_announce_table: exception: ") + e.what());
+		}
+	}
+}
+
 /*static*/ uint16_t Transport::remove_reverse_entries(const std::vector<Bytes>& hashes) {
 	uint16_t count = 0;
 	for (const auto& truncated_packet_hash : hashes) {

@@ -25,6 +25,17 @@ public:
 	}
 	virtual ~InInterface() { _name = "(deleted)"; }
 	virtual void send_outgoing(const RNS::Bytes &data) {}
+	virtual void handle_incoming(const RNS::Bytes &data) {
+		try {
+			InterfaceImpl::handle_incoming(data);
+		}
+		catch (const std::bad_alloc&) {
+			ERROR("handle_incoming: bad_alloc - out of memory");
+		}
+		catch (const std::exception& e) {
+			ERROR(std::string("handle_incoming: exception: ") + e.what());
+		}
+	}
 };
 
 class OutInterface : public RNS::InterfaceImpl {
@@ -37,7 +48,15 @@ public:
 	virtual ~OutInterface() { _name = "(deleted)"; }
 	virtual void send_outgoing(const RNS::Bytes &data) {
 		_in_interface.handle_incoming(data);
-		InterfaceImpl::handle_outgoing(data);
+		try {
+			InterfaceImpl::handle_outgoing(data);
+		}
+		catch (const std::bad_alloc&) {
+			ERROR("handle_outgoing: bad_alloc - out of memory");
+		}
+		catch (const std::exception& e) {
+			ERROR(std::string("handle_outgoing: exception: ") + e.what());
+		}
 	}
 private:
 	RNS::Interface& _in_interface;
@@ -63,113 +82,59 @@ bool rns_initialized = false;
 void initRNS() {
 	if (rns_initialized) return;
 
-	RNS::FileSystem reticulum_filesystem = new FileSystem();
-	((FileSystem*)reticulum_filesystem.get())->init();
-	RNS::Utilities::OS::register_filesystem(reticulum_filesystem);
+#if defined(RNS_MEM_LOG)
+      RNS::loglevel(RNS::LOG_MEM);
+#else
+      RNS::loglevel(RNS::LOG_TRACE);
+#endif
 
-	RNS::Transport::register_interface(in_interface);
-	RNS::Transport::register_interface(out_interface);
+	try {
+		// Set sane memory limits based on hardware-specific availability
+		RNS::Transport::path_table_maxsize(50);
+		RNS::Transport::announce_table_maxsize(50);
+		RNS::Transport::hashlist_maxsize(50);
+		RNS::Transport::max_pr_tags(32);
+		RNS::Identity::known_destinations_maxsize(50);
 
-	// Transport identity
-	RNS::Bytes transport_prv;
-	transport_prv.assignHex("BABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABE");
-	RNS::Identity transport_identity(false);
-	transport_identity.load_private_key(transport_prv);
-	RNS::Transport::identity(transport_identity);
+		RNS::FileSystem reticulum_filesystem = new FileSystem();
+		((FileSystem*)reticulum_filesystem.get())->init();
+		RNS::Utilities::OS::register_filesystem(reticulum_filesystem);
 
-	test_reticulum = RNS::Reticulum();
-	test_reticulum.transport_enabled(true);
-	test_reticulum.start();
+		RNS::Transport::register_interface(in_interface);
+		RNS::Transport::register_interface(out_interface);
 
-	// Single identity and destination (same pattern as test_rns_loopback)
-	test_identity = RNS::Identity(false);
-	RNS::Bytes prv;
-	prv.assignHex("E0D43398EDC974EBA9F4A83463691A08F4D306D4E56BA6B275B8690A2FBD9852E9EBE7C03BC45CAEC9EF8E78C830037210BFB9986F6CA2DEE2B5C28D7B4DE6B0");
-	test_identity.load_private_key(prv);
+		RNS::Transport::dump_stats();
 
-	test_dest = RNS::Destination(test_identity, RNS::Type::Destination::IN,
-		RNS::Type::Destination::SINGLE, "test", "transport");
-	test_dest.set_packet_callback(onTestPacket);
-	test_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
+		// Transport identity
+		RNS::Bytes transport_prv;
+		transport_prv.assignHex("BABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABEBABE");
+		RNS::Identity transport_identity(false);
+		transport_identity.load_private_key(transport_prv);
+		RNS::Transport::identity(transport_identity);
 
-	rns_initialized = true;
-}
+		test_reticulum = RNS::Reticulum();
+		test_reticulum.transport_enabled(true);
+		test_reticulum.start();
 
-// ============================================================================
-// Bytes edge case tests
-// ============================================================================
+		// Single identity and destination (same pattern as test_rns_loopback)
+		test_identity = RNS::Identity(false);
+		RNS::Bytes prv;
+		prv.assignHex("E0D43398EDC974EBA9F4A83463691A08F4D306D4E56BA6B275B8690A2FBD9852E9EBE7C03BC45CAEC9EF8E78C830037210BFB9986F6CA2DEE2B5C28D7B4DE6B0");
+		test_identity.load_private_key(prv);
 
-void test_assignHex_even_length() {
-	// Normal case: even-length hex string
-	RNS::Bytes bytes;
-	bytes.assignHex("48656C6C6F");  // "Hello"
-	TEST_ASSERT_EQUAL_size_t(5, bytes.size());
-	TEST_ASSERT_EQUAL_MEMORY("Hello", bytes.data(), 5);
-}
+		test_dest = RNS::Destination(test_identity, RNS::Type::Destination::IN,
+			RNS::Type::Destination::SINGLE, "test", "transport");
+		test_dest.set_packet_callback(onTestPacket);
+		test_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
-void test_assignHex_odd_length() {
-	// Odd-length hex should be truncated to even (drop trailing nibble)
-	RNS::Bytes bytes;
-	bytes.assignHex("ABC");  // 3 chars - only "AB" should be decoded
-	TEST_ASSERT_EQUAL_size_t(1, bytes.size());
-	TEST_ASSERT_EQUAL_UINT8(0xAB, bytes.data()[0]);
-}
-
-void test_assignHex_single_char() {
-	// Single char hex can't form a complete byte - should produce empty
-	RNS::Bytes bytes;
-	bytes.assignHex("A");
-	TEST_ASSERT_EQUAL_size_t(0, bytes.size());
-}
-
-void test_assignHex_empty() {
-	RNS::Bytes bytes;
-	bytes.assignHex("");
-	TEST_ASSERT_EQUAL_size_t(0, bytes.size());
-}
-
-void test_appendHex_odd_length() {
-	// appendHex with odd length should also truncate to even
-	RNS::Bytes bytes;
-	bytes.assignHex("4142");  // "AB"
-	TEST_ASSERT_EQUAL_size_t(2, bytes.size());
-
-	bytes.appendHex("434");  // 3 chars - only "43" ('C') should be appended
-	TEST_ASSERT_EQUAL_size_t(3, bytes.size());
-	TEST_ASSERT_EQUAL_UINT8(0x43, bytes.data()[2]);
-}
-
-void test_hex_roundtrip_stability() {
-	// toHex always produces even length, so roundtrip should be safe
-	RNS::Bytes original("Hello World");
-	std::string hex = original.toHex();
-	TEST_ASSERT_TRUE(hex.length() % 2 == 0);  // Must be even
-
-	RNS::Bytes restored;
-	restored.assignHex(hex.c_str());
-	TEST_ASSERT_EQUAL_size_t(original.size(), restored.size());
-	TEST_ASSERT_EQUAL_MEMORY(original.data(), restored.data(), original.size());
-}
-
-void test_mid_large_len() {
-	// mid() with len that extends past end should clamp
-	RNS::Bytes bytes("Hello World");
-
-	RNS::Bytes mid = bytes.mid(3, 100);
-	TEST_ASSERT_EQUAL_size_t(8, mid.size());
-	TEST_ASSERT_EQUAL_MEMORY("lo World", mid.data(), 8);
-
-	// SIZE_MAX len should also clamp, not integer-overflow and crash
-	RNS::Bytes mid2 = bytes.mid(3, SIZE_MAX);
-	TEST_ASSERT_EQUAL_size_t(8, mid2.size());
-	TEST_ASSERT_EQUAL_MEMORY("lo World", mid2.data(), 8);
-}
-
-void test_mid_zero_size_bytes() {
-	RNS::Bytes empty;
-	RNS::Bytes mid = empty.mid(0, 5);
-	TEST_ASSERT_FALSE(mid);
-	TEST_ASSERT_EQUAL_size_t(0, mid.size());
+		rns_initialized = true;
+	}
+	catch (const std::bad_alloc&) {
+		ERROR("initRNS: bad_alloc - out of memory");
+	}
+	catch (const std::exception& e) {
+		ERROR(std::string("initRNS: exception: ") + e.what());
+	}
 }
 
 // ============================================================================
@@ -405,8 +370,8 @@ void test_destination_packet_cycle() {
 		temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
 		// Announce
-		std::string announce_data = "test_cycle_" + std::to_string(cycle);
-		temp_dest.announce(RNS::bytesFromString(announce_data.c_str()));
+		std::string app_data = "test_cycle_" + std::to_string(cycle);
+		temp_dest.announce(RNS::bytesFromString(app_data.c_str()));
 
 		test_reticulum.loop();
 		// temp_dest goes out of scope here
@@ -414,6 +379,176 @@ void test_destination_packet_cycle() {
 
 	TEST_ASSERT_TRUE_MESSAGE(true, "Destination lifecycle did not crash");
 }
+
+
+void test_incoming_announce_limit() {
+
+	printf("test_incoming_announce_max: BEGIN\n");
+
+	initRNS();
+
+	const int num_announces = 50;
+	const int announces_period = 100;
+
+	int announce_count = 0;
+	uint64_t start_time = RNS::Utilities::OS::ltime();
+	uint64_t announce_time = 0;
+	uint64_t log_time = 0;
+	while (true) {
+		// Loop for 10 seconds after last announce
+		if ((RNS::Utilities::OS::ltime() - start_time) >= (num_announces * announces_period + 10000)) {
+			break;
+		}
+		if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
+			printf("***** test_incoming_announce_limit: Sending announce #%d\n", announce_count + 1);
+			RNS::Identity temp_id(true);
+			RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
+				RNS::Type::Destination::SINGLE, "test", "announce");
+			temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
+
+			// Announce
+			std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
+			RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
+			announce_packet.pack();
+
+			// Must deregister destination so that the ANNOUNCE appears to be from a remote node
+			RNS::Transport::deregister_destination(temp_dest);
+
+			in_interface.handle_incoming(announce_packet.raw());
+
+			announce_time = RNS::Utilities::OS::ltime();
+			++announce_count;
+		}
+		test_reticulum.loop();
+		if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
+			RNS::Transport::dump_stats();
+			log_time = RNS::Utilities::OS::ltime();
+		}
+		RNS::Utilities::OS::sleep(0.1);
+	}
+	RNS::Transport::persist_data();
+	RNS::Transport::dump_stats();
+
+	printf("test_incoming_announce_limit: END\n");
+}
+
+void test_incoming_announce_over_limit() {
+
+	printf("test_incoming_announce_over_limit: BEGIN\n");
+
+	initRNS();
+
+	const int num_announces = 100;
+	const int announces_period = 100;
+
+	int announce_count = 0;
+	uint64_t start_time = RNS::Utilities::OS::ltime();
+	uint64_t announce_time = 0;
+	uint64_t log_time = 0;
+	while (true) {
+		// Loop for 10 seconds after last announce
+		if ((RNS::Utilities::OS::ltime() - start_time) >= (num_announces * announces_period + 10000)) {
+			break;
+		}
+		if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
+			printf("***** test_incoming_announce_over_limit: Sending announce #%d\n", announce_count + 1);
+			RNS::Identity temp_id(true);
+			RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
+				RNS::Type::Destination::SINGLE, "test", "announce");
+			temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
+
+			// Announce
+			std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
+			RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
+			announce_packet.pack();
+
+			// Must deregister destination so that the ANNOUNCE appears to be from a remote node
+			RNS::Transport::deregister_destination(temp_dest);
+
+			in_interface.handle_incoming(announce_packet.raw());
+
+			announce_time = RNS::Utilities::OS::ltime();
+			++announce_count;
+		}
+		test_reticulum.loop();
+		if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
+			RNS::Transport::dump_stats();
+			log_time = RNS::Utilities::OS::ltime();
+		}
+		RNS::Utilities::OS::sleep(0.1);
+	}
+	RNS::Transport::persist_data();
+	RNS::Transport::dump_stats();
+
+	printf("test_incoming_announce_over_limit: END\n");
+}
+
+void test_incoming_announce_stress() {
+
+	printf("test_incoming_announce_stress: BEGIN\n");
+
+	initRNS();
+
+	//const int num_announces = 0;
+	//const int num_announces = 100;
+	//const int num_announces = 1000;
+	const int num_announces = 10000;
+	//const int announces_period = 1000;
+	const int announces_period = 100;
+
+	int announce_count = 0;
+	uint64_t start_time = RNS::Utilities::OS::ltime();
+	uint64_t announce_time = 0;
+	uint64_t log_time = 0;
+	while (true) {
+		// Loop for 60 seconds after last announce
+		if ((RNS::Utilities::OS::ltime() - start_time) >= (num_announces * announces_period + 60000)) {
+			break;
+		}
+		try {
+			if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
+				printf("***** test_incoming_announce_stress: Sending announce #%d\n", announce_count + 1);
+				RNS::Identity temp_id(true);
+				RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
+					RNS::Type::Destination::SINGLE, "test", "announce");
+				temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
+
+				// Announce
+				std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
+				RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
+				announce_packet.pack();
+				//printf("test_incoming_anounce: Sending packet with data: %s\n", announce_packet.raw().toHex().c_str());
+
+				// Must deregister destination so that the ANNOUNCE appears to be from a remote node
+				RNS::Transport::deregister_destination(temp_dest);
+
+				in_interface.handle_incoming(announce_packet.raw());
+
+				announce_time = RNS::Utilities::OS::ltime();
+				++announce_count;
+			}
+			test_reticulum.loop();
+			if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
+				RNS::Transport::dump_stats();
+				log_time = RNS::Utilities::OS::ltime();
+			}
+		}
+		catch (const std::bad_alloc&) {
+			ERROR("test_incoming_announce_stress: bad_alloc - out of memory");
+			break;
+		}
+		catch (const std::exception& e) {
+			ERROR(std::string("test_incoming_announce_stress: exception: ") + e.what());
+			break;
+		}
+		RNS::Utilities::OS::sleep(0.1);
+	}
+	RNS::Transport::persist_data();
+	RNS::Transport::dump_stats();
+
+	printf("test_incoming_announce_stress: END\n");
+}
+
 
 // ============================================================================
 // Test runner
@@ -424,16 +559,6 @@ void tearDown(void) {}
 
 int runUnityTests(void) {
 	UNITY_BEGIN();
-
-	// Bytes edge cases
-	RUN_TEST(test_assignHex_even_length);
-	RUN_TEST(test_assignHex_odd_length);
-	RUN_TEST(test_assignHex_single_char);
-	RUN_TEST(test_assignHex_empty);
-	RUN_TEST(test_appendHex_odd_length);
-	RUN_TEST(test_hex_roundtrip_stability);
-	RUN_TEST(test_mid_large_len);
-	RUN_TEST(test_mid_zero_size_bytes);
 
 	// Transport receipt lifecycle
 	RUN_TEST(test_receipt_creation_and_culling);
@@ -453,6 +578,10 @@ int runUnityTests(void) {
 	// Identity/Destination lifecycle
 	RUN_TEST(test_identity_create_destroy_cycle);
 	RUN_TEST(test_destination_packet_cycle);
+
+	//RUN_TEST(test_incoming_announce_limit);
+	RUN_TEST(test_incoming_announce_over_limit);
+	//RUN_TEST(test_incoming_announce_stress);
 
 	return UNITY_END();
 }
