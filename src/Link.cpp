@@ -356,7 +356,7 @@ void Link::validate_proof(const Packet& packet) {
 					_object->_activated_at = OS::time();
 					_object->_last_proof = _object->_activated_at;
 					Transport::activate_link(*this);
-					VERBOSEF("Link %s established with %s, RTT is %f s", toString().c_str(), _object->_destination.toString().c_str(), OS::round(_object->_rtt, 3));
+					VERBOSEF("Link %s established with %s, RTT is %.3f s", toString().c_str(), _object->_destination.toString().c_str(), OS::round(_object->_rtt, 3));
 					
 					//p if _object->_rtt != None and _object->_establishment_cost != None and _object->_rtt > 0 and _object->_establishment_cost > 0:
 					if (_object->_rtt != 0.0 && _object->_establishment_cost != 0 && _object->_rtt > 0 and _object->_establishment_cost > 0) {

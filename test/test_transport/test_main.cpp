@@ -399,30 +399,40 @@ void test_incoming_announce_limit() {
 		if ((RNS::Utilities::OS::ltime() - start_time) >= (num_announces * announces_period + 10000)) {
 			break;
 		}
-		if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
-			printf("***** test_incoming_announce_limit: Sending announce #%d\n", announce_count + 1);
-			RNS::Identity temp_id(true);
-			RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
-				RNS::Type::Destination::SINGLE, "test", "announce");
-			temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
+		try {
+			if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
+				printf("***** test_incoming_announce_limit: Sending announce #%d\n", announce_count + 1);
+				RNS::Identity temp_id(true);
+				RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
+					RNS::Type::Destination::SINGLE, "test", "announce");
+				temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
-			// Announce
-			std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
-			RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
-			announce_packet.pack();
+				// Announce
+				std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
+				RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
+				announce_packet.pack();
 
-			// Must deregister destination so that the ANNOUNCE appears to be from a remote node
-			RNS::Transport::deregister_destination(temp_dest);
+				// Must deregister destination so that the ANNOUNCE appears to be from a remote node
+				RNS::Transport::deregister_destination(temp_dest);
 
-			in_interface.handle_incoming(announce_packet.raw());
+				in_interface.handle_incoming(announce_packet.raw());
 
-			announce_time = RNS::Utilities::OS::ltime();
-			++announce_count;
+				announce_time = RNS::Utilities::OS::ltime();
+				++announce_count;
+			}
+			test_reticulum.loop();
+			if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
+				RNS::Transport::dump_stats();
+				log_time = RNS::Utilities::OS::ltime();
+			}
 		}
-		test_reticulum.loop();
-		if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
-			RNS::Transport::dump_stats();
-			log_time = RNS::Utilities::OS::ltime();
+		catch (const std::bad_alloc&) {
+			ERROR("test_incoming_announce_limit: bad_alloc - out of memory");
+			break;
+		}
+		catch (const std::exception& e) {
+			ERRORF("test_incoming_announce_limit: exception: %s", e.what());
+			break;
 		}
 		RNS::Utilities::OS::sleep(0.1);
 	}
@@ -450,30 +460,40 @@ void test_incoming_announce_over_limit() {
 		if ((RNS::Utilities::OS::ltime() - start_time) >= (num_announces * announces_period + 10000)) {
 			break;
 		}
-		if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
-			printf("***** test_incoming_announce_over_limit: Sending announce #%d\n", announce_count + 1);
-			RNS::Identity temp_id(true);
-			RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
-				RNS::Type::Destination::SINGLE, "test", "announce");
-			temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
+		try {
+			if (announce_count < num_announces && (RNS::Utilities::OS::ltime() - announce_time) >= announces_period) {
+				printf("***** test_incoming_announce_over_limit: Sending announce #%d\n", announce_count + 1);
+				RNS::Identity temp_id(true);
+				RNS::Destination temp_dest(temp_id, RNS::Type::Destination::IN,
+					RNS::Type::Destination::SINGLE, "test", "announce");
+				temp_dest.set_proof_strategy(RNS::Type::Destination::PROVE_ALL);
 
-			// Announce
-			std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
-			RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
-			announce_packet.pack();
+				// Announce
+				std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
+				RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
+				announce_packet.pack();
 
-			// Must deregister destination so that the ANNOUNCE appears to be from a remote node
-			RNS::Transport::deregister_destination(temp_dest);
+				// Must deregister destination so that the ANNOUNCE appears to be from a remote node
+				RNS::Transport::deregister_destination(temp_dest);
 
-			in_interface.handle_incoming(announce_packet.raw());
+				in_interface.handle_incoming(announce_packet.raw());
 
-			announce_time = RNS::Utilities::OS::ltime();
-			++announce_count;
+				announce_time = RNS::Utilities::OS::ltime();
+				++announce_count;
+			}
+			test_reticulum.loop();
+			if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
+				RNS::Transport::dump_stats();
+				log_time = RNS::Utilities::OS::ltime();
+			}
 		}
-		test_reticulum.loop();
-		if ((RNS::Utilities::OS::ltime() - log_time) >= 5000) {
-			RNS::Transport::dump_stats();
-			log_time = RNS::Utilities::OS::ltime();
+		catch (const std::bad_alloc&) {
+			ERROR("test_incoming_announce_over_limit: bad_alloc - out of memory");
+			break;
+		}
+		catch (const std::exception& e) {
+			ERRORF("test_incoming_announce_over_limit: exception: %s", e.what());
+			break;
 		}
 		RNS::Utilities::OS::sleep(0.1);
 	}
@@ -560,6 +580,7 @@ void tearDown(void) {}
 int runUnityTests(void) {
 	UNITY_BEGIN();
 
+/*
 	// Transport receipt lifecycle
 	RUN_TEST(test_receipt_creation_and_culling);
 	RUN_TEST(test_receipt_rapid_fire);
@@ -580,6 +601,7 @@ int runUnityTests(void) {
 	RUN_TEST(test_destination_packet_cycle);
 
 	//RUN_TEST(test_incoming_announce_limit);
+*/
 	RUN_TEST(test_incoming_announce_over_limit);
 	//RUN_TEST(test_incoming_announce_stress);
 

@@ -92,11 +92,11 @@ namespace RNS {
 #endif
 
 	inline void log(const char* msg, LogLevel level = LOG_NOTICE) { doLog(level, msg); }
-	//inline void log(const std::string& msg, LogLevel level = LOG_NOTICE) { doLog(level, msg.c_str()); }
+	inline void log(const std::string& msg, LogLevel level = LOG_NOTICE) { doLog(level, msg.c_str()); }
 	inline void logf(LogLevel level, const char* msg, ...) { va_list vlist; va_start(vlist, msg); doLog(level, msg, vlist); va_end(vlist); }
 #ifdef ARDUINO
-	//inline void log(const String& msg, LogLevel level = LOG_NOTICE) { doLog(level, msg.c_str()); }
-	//inline void log(const StringSumHelper& msg, LogLevel level = LOG_NOTICE) { doLog(level, msg.c_str()); }
+	inline void log(const String& msg, LogLevel level = LOG_NOTICE) { doLog(level, msg.c_str()); }
+	inline void log(const StringSumHelper& msg, LogLevel level = LOG_NOTICE) { doLog(level, msg.c_str()); }
 	//inline void log(const __FlashStringHelper* msg, LogLevel level = LOG_NOTICE) { doLog(level, msg); }
 	//inline void logf(LogLevel level, const __FlashStringHelper* msg, ...) { va_list vlist; va_start(vlist, msg); doLog(level, msg, vlist); va_end(vlist); }
 #endif

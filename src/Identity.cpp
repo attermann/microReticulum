@@ -607,7 +607,7 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		TRACEF("Identity::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
 		plaintext = token.decrypt(ciphertext);
 		TRACEF("Identity::decrypt: plaintext:  %s", plaintext.toHex().c_str());
-		//TRACEF("Identity::decrypt: Token decrypted data of length %s", std::to_string(plaintext.size()).c_str());
+		//TRACEF("Identity::decrypt: Token decrypted data of length %zu", plaintext.size());
 	}
 	catch (std::exception& e) {
 		DEBUGF("Decryption by %s failed: %s", toString().c_str(), e.what());

@@ -66,7 +66,7 @@ delay(1500);
 	LoRa.setTxPower(power);
 
 	INFO("LoRa init succeeded.");
-	TRACEF("LoRa bandwidth is %s Kbps", std::to_string(Utilities::OS::round(_bitrate/1000.0, 2)).c_str());
+	TRACEF("LoRa bandwidth is %.2f Kbps", Utilities::OS::round(_bitrate/1000.0, 2));
 #endif
 
 	_online = true;
