@@ -1134,6 +1134,7 @@ void Link::receive(const Packet& packet) {
 					if (!_object->_initiator) {
 						rtt_packet(packet);
 					}
+					break;
 				}
 				case Type::Packet::LINKCLOSE:
 				{
