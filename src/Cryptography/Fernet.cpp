@@ -41,44 +41,44 @@ bool Fernet::verify_hmac(const Bytes& token) {
 
 	//received_hmac = token[-32:]
 	Bytes received_hmac = token.right(32);
-	DEBUG("Fernet::verify_hmac: received_hmac: " + received_hmac.toHex());
+	DEBUGF("Fernet::verify_hmac: received_hmac: %s", received_hmac.toHex().c_str());
 	//expected_hmac = HMAC.new(self._signing_key, token[:-32]).digest()
 	Bytes expected_hmac = HMAC::generate(_signing_key, token.left(token.size()-32))->digest();
-	DEBUG("Fernet::verify_hmac: expected_hmac: " + expected_hmac.toHex());
+	DEBUGF("Fernet::verify_hmac: expected_hmac: %s", expected_hmac.toHex().c_str());
 
 	return (received_hmac == expected_hmac);
 }
 
 const Bytes Fernet::encrypt(const Bytes& data) {
 
-	DEBUG("Fernet::encrypt: plaintext length: " + std::to_string(data.size()));
+	DEBUGF("Fernet::encrypt: plaintext length: %zu", data.size());
 	Bytes iv = random(16);
 	//double current_time = OS::time();
-	TRACE("Fernet::encrypt: iv:         " + iv.toHex());
+	TRACEF("Fernet::encrypt: iv:         %s", iv.toHex().c_str());
 
-	TRACE("Fernet::encrypt: plaintext:  " + data.toHex());
+	TRACEF("Fernet::encrypt: plaintext:  %s", data.toHex().c_str());
 	Bytes ciphertext = AES_128_CBC::encrypt(
 		PKCS7::pad(data),
 		_encryption_key,
 		iv
 	);
-	DEBUG("Fernet::encrypt: padded ciphertext length: " + std::to_string(ciphertext.size()));
-	TRACE("Fernet::encrypt: ciphertext: " + ciphertext.toHex());
+	DEBUGF("Fernet::encrypt: padded ciphertext length: %zu", ciphertext.size());
+	TRACEF("Fernet::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	Bytes signed_parts = iv + ciphertext;
 
 	//return signed_parts + HMAC::generate(_signing_key, signed_parts)->digest();
 	Bytes sig(HMAC::generate(_signing_key, signed_parts)->digest());
-	TRACE("Fernet::encrypt: sig:        " + sig.toHex());
+	TRACEF("Fernet::encrypt: sig:        %s", sig.toHex().c_str());
 	Bytes token(signed_parts + sig);
-	DEBUG("Fernet::encrypt: token length: " + std::to_string(token.size()));
+	DEBUGF("Fernet::encrypt: token length: %zu", token.size());
 	return token;
 }
 
 
 const Bytes Fernet::decrypt(const Bytes& token) {
 
-	DEBUG("Fernet::decrypt: token length: " + std::to_string(token.size()));
+	DEBUGF("Fernet::decrypt: token length: %zu", token.size());
 	if (token.size() < 48) {
 		throw std::invalid_argument("Cannot decrypt token of only " + std::to_string(token.size()) + " bytes");
 	}
@@ -89,11 +89,11 @@ const Bytes Fernet::decrypt(const Bytes& token) {
 
 	//iv = token[:16]
 	Bytes iv = token.left(16);
-	TRACE("Fernet::decrypt: iv:         " + iv.toHex());
+	TRACEF("Fernet::decrypt: iv:         %s", iv.toHex().c_str());
 
 	//ciphertext = token[16:-32]
 	Bytes ciphertext = token.mid(16, token.size()-48);
-	TRACE("Fernet::decrypt: ciphertext: " + ciphertext.toHex());
+	TRACEF("Fernet::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	try {
 		Bytes plaintext = PKCS7::unpad(
@@ -103,10 +103,10 @@ const Bytes Fernet::decrypt(const Bytes& token) {
 				iv
 			)
 		);
-		DEBUG("Fernet::encrypt: unpadded plaintext length: " + std::to_string(plaintext.size()));
-		TRACE("Fernet::decrypt: plaintext:  " + plaintext.toHex());
+		DEBUGF("Fernet::encrypt: unpadded plaintext length: %zu", plaintext.size());
+		TRACEF("Fernet::decrypt: plaintext:  %s", plaintext.toHex().c_str());
 
-		DEBUG("Fernet::decrypt: plaintext length: " + std::to_string(plaintext.size()));
+		DEBUGF("Fernet::decrypt: plaintext length: %zu", plaintext.size());
 		return plaintext;
 	}
 	catch (std::exception& e) {

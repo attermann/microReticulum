@@ -56,22 +56,22 @@ bool Token::verify_hmac(const Bytes& token) {
 
 	//received_hmac = token[-32:]
 	Bytes received_hmac = token.right(32);
-	DEBUG("Token::verify_hmac: received_hmac: " + received_hmac.toHex());
+	DEBUGF("Token::verify_hmac: received_hmac: %s", received_hmac.toHex().c_str());
 	//expected_hmac = HMAC.new(self._signing_key, token[:-32]).digest()
 	Bytes expected_hmac = HMAC::generate(_signing_key, token.left(token.size()-32))->digest();
-	DEBUG("Token::verify_hmac: expected_hmac: " + expected_hmac.toHex());
+	DEBUGF("Token::verify_hmac: expected_hmac: %s", expected_hmac.toHex().c_str());
 
 	return (received_hmac == expected_hmac);
 }
 
 const Bytes Token::encrypt(const Bytes& data) {
 
-	DEBUG("Token::encrypt: plaintext length: " + std::to_string(data.size()));
+	DEBUGF("Token::encrypt: plaintext length: %zu", data.size());
 	Bytes iv = random(16);
 	//double current_time = OS::time();
-	TRACE("Token::encrypt: iv:         " + iv.toHex());
+	TRACEF("Token::encrypt: iv:         %s", iv.toHex().c_str());
 
-	TRACE("Token::encrypt: plaintext:  " + data.toHex());
+	TRACEF("Token::encrypt: plaintext:  %s", data.toHex().c_str());
 	Bytes ciphertext;
 	if (_mode == MODE_AES_128_CBC) {
 		ciphertext = AES_128_CBC::encrypt(
@@ -90,23 +90,23 @@ const Bytes Token::encrypt(const Bytes& data) {
 	else {
 		throw new std::invalid_argument("Invalid token mode "+std::to_string(_mode));
 	}
-	DEBUG("Token::encrypt: padded ciphertext length: " + std::to_string(ciphertext.size()));
-	TRACE("Token::encrypt: ciphertext: " + ciphertext.toHex());
+	DEBUGF("Token::encrypt: padded ciphertext length: %zu", ciphertext.size());
+	TRACEF("Token::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	Bytes signed_parts = iv + ciphertext;
 
 	//return signed_parts + HMAC::generate(_signing_key, signed_parts)->digest();
 	Bytes sig(HMAC::generate(_signing_key, signed_parts)->digest());
-	TRACE("Token::encrypt: sig:        " + sig.toHex());
+	TRACEF("Token::encrypt: sig:        %s", sig.toHex().c_str());
 	Bytes token(signed_parts + sig);
-	DEBUG("Token::encrypt: token length: " + std::to_string(token.size()));
+	DEBUGF("Token::encrypt: token length: %zu", token.size());
 	return token;
 }
 
 
 const Bytes Token::decrypt(const Bytes& token) {
 
-	DEBUG("Token::decrypt: token length: " + std::to_string(token.size()));
+	DEBUGF("Token::decrypt: token length: %zu", token.size());
 	if (token.size() < 48) {
 		throw std::invalid_argument("Cannot decrypt token of only " + std::to_string(token.size()) + " bytes");
 	}
@@ -117,11 +117,11 @@ const Bytes Token::decrypt(const Bytes& token) {
 
 	//iv = token[:16]
 	Bytes iv = token.left(16);
-	TRACE("Token::decrypt: iv:         " + iv.toHex());
+	TRACEF("Token::decrypt: iv:         %s", iv.toHex().c_str());
 
 	//ciphertext = token[16:-32]
 	Bytes ciphertext = token.mid(16, token.size()-48);
-	TRACE("Token::decrypt: ciphertext: " + ciphertext.toHex());
+	TRACEF("Token::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	try {
 		Bytes plaintext;
@@ -146,10 +146,10 @@ const Bytes Token::decrypt(const Bytes& token) {
 		else {
 			throw new std::invalid_argument("Invalid token mode "+std::to_string(_mode));
 		}
-		DEBUG("Token::encrypt: unpadded plaintext length: " + std::to_string(plaintext.size()));
-		TRACE("Token::decrypt: plaintext:  " + plaintext.toHex());
+		DEBUGF("Token::encrypt: unpadded plaintext length: %zu", plaintext.size());
+		TRACEF("Token::decrypt: plaintext:  %s", plaintext.toHex().c_str());
 
-		DEBUG("Token::decrypt: plaintext length: " + std::to_string(plaintext.size()));
+		DEBUGF("Token::decrypt: plaintext length: %zu", plaintext.size());
 		return plaintext;
 	}
 	catch (std::exception& e) {

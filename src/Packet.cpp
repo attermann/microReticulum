@@ -55,7 +55,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_create_receipt = false;
 	}
 
-	MEM("Packet object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEMF("Packet object created, this: %p, data: %p", (void*)this, (void*)_object.get());
 }
 
 // CBA LINK
@@ -70,7 +70,7 @@ Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_t
 	_object->_MTU = link.mtu();
 	// CBA HACK: Need to re-build packed flags since Link was assigned
 	_object->_flags = get_packed_flags();
-	MEM("Packet link object created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+	MEMF("Packet link object created, this: %p, data: %p", (void*)this, (void*)_object.get());
 }
 
 
@@ -283,13 +283,13 @@ void Packet::pack() {
 	// CBA LINK
 	if (_object->_context == LRPROOF) {
 		if (!_object->_destination_link) throw std::invalid_argument("Packet is not associated with a Link");
-		TRACE("Packet::pack: destination link id: " + _object->_destination_link.link_id().toHex() );
+		TRACEF("Packet::pack: destination link id: %s", _object->_destination_link.link_id().toHex().c_str());
 		_object->_header << _object->_destination_link.link_id();
 		_object->_ciphertext = _object->_data;
 	}
 	else {
 		if (_object->_header_type == HEADER_1) {
-			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+			TRACEF("Packet::pack: destination hash: %s", _object->_destination.hash().toHex().c_str());
 			_object->_header << _object->_destination.hash();
 
 			if (_object->_packet_type == ANNOUNCE) {
@@ -348,8 +348,8 @@ TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
 			if (!_object->_transport_id) {
                 throw std::invalid_argument("Packet with header type 2 must have a transport ID");
 			}
-			TRACE("Packet::pack: transport id: " + _object->_transport_id.toHex() );
-			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+			TRACEF("Packet::pack: transport id: %s", _object->_transport_id.toHex().c_str());
+			TRACEF("Packet::pack: destination hash: %s", _object->_destination.hash().toHex().c_str());
 			_object->_header << _object->_transport_id;
 			_object->_header << _object->_destination.hash();
 
@@ -424,7 +424,7 @@ bool Packet::unpack() {
 		return false;
 	}
 	catch (std::exception& e) {
-		ERROR(std::string("Received malformed packet, dropping it. The contained exception was: ") + e.what());
+		ERRORF("Received malformed packet, dropping it. The contained exception was: %s", e.what());
 		return false;
 	}
 
@@ -856,8 +856,8 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 						_object->_callbacks._delivery(*this);
 					}
 					catch (std::exception& e) {
-						ERROR("An error occurred while evaluating external delivery callback for " + link.toString());
-						ERROR("The contained exception was: "  + std::string(e.what()));
+						ERRORF("An error occurred while evaluating external delivery callback for %s", link.toString().c_str());
+						ERRORF("The contained exception was: %s", e.what());
 					}
 				}
 				return true;
@@ -918,7 +918,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 						_object->_callbacks._delivery(*this);
 					}
 					catch (std::exception& e) {
-						ERROR("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
+						ERRORF("Error while executing proof validated callback. The contained exception was: %s", e.what());
 					}
 				}
 				return true;
@@ -949,7 +949,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 					_object->_callbacks._delivery(*this);
 				}
 				catch (std::exception& e) {
-					ERROR("Error while executing proof validated callback. The contained exception was: " + std::string(e.what()));
+					ERRORF("Error while executing proof validated callback. The contained exception was: %s", e.what());
 				}
 			}
 			return true;

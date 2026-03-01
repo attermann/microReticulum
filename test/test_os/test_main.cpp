@@ -20,12 +20,12 @@ void testTime()
     double diff_time;
 
     diff_time = (double)(end_ltime - start_ltime) / 1000.0;
-	TRACE(std::string("ltime diff: ") + std::to_string(diff_time));
+	TRACEF("ltime diff: %f", diff_time);
     TEST_ASSERT_TRUE(diff_time > sleep_time * 0.99);
     TEST_ASSERT_TRUE(diff_time < sleep_time * 1.01);
 
     diff_time = end_dtime - start_dtime;
-	TRACE(std::string("dtime diff: ") + std::to_string(diff_time));
+	TRACEF("dtime diff: %f", diff_time);
     TEST_ASSERT_TRUE(diff_time > sleep_time * 0.99);
     TEST_ASSERT_TRUE(diff_time < sleep_time * 1.01);
 

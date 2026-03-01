@@ -165,22 +165,22 @@ void readFileStream(const char* file_path) {
 void testListDirectory() {
 
 	size_t pre_memory = RNS::Utilities::OS::heap_available();
-	INFO("testListDirectory: pre-mem: " + std::to_string(pre_memory));
+	INFOF("testListDirectory: pre-mem: %zu", pre_memory);
 
 	{
 		for (int i = 0; i < 1; i++) {
 			std::list<std::string> files;
 			files = RNS::Utilities::OS::list_directory("/");
 			for (auto& file : files) {
-				INFO("FILE: " + file);
+				INFOF("FILE: %s", file.c_str());
 			}
 		}
 	}
 
 	size_t post_memory = RNS::Utilities::OS::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
-	INFO("testListDirectory: post-mem: " + std::to_string(post_memory));
-	INFO("testListDirectory: diff-mem: " + std::to_string(diff_memory));
+	INFOF("testListDirectory: post-mem: %zu", post_memory);
+	INFOF("testListDirectory: diff-mem: %zu", diff_memory);
 	TEST_ASSERT_EQUAL_size_t(0, diff_memory);
 }
 

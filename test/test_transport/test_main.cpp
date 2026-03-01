@@ -33,7 +33,7 @@ public:
 			ERROR("handle_incoming: bad_alloc - out of memory");
 		}
 		catch (const std::exception& e) {
-			ERROR(std::string("handle_incoming: exception: ") + e.what());
+			ERRORF("handle_incoming: exception: %s", e.what());
 		}
 	}
 };
@@ -55,7 +55,7 @@ public:
 			ERROR("handle_outgoing: bad_alloc - out of memory");
 		}
 		catch (const std::exception& e) {
-			ERROR(std::string("handle_outgoing: exception: ") + e.what());
+			ERRORF("handle_outgoing: exception: %s", e.what());
 		}
 	}
 private:
@@ -133,7 +133,7 @@ void initRNS() {
 		ERROR("initRNS: bad_alloc - out of memory");
 	}
 	catch (const std::exception& e) {
-		ERROR(std::string("initRNS: exception: ") + e.what());
+		ERRORF("initRNS: exception: %s", e.what());
 	}
 }
 
@@ -538,7 +538,7 @@ void test_incoming_announce_stress() {
 			break;
 		}
 		catch (const std::exception& e) {
-			ERROR(std::string("test_incoming_announce_stress: exception: ") + e.what());
+			ERRORF("test_incoming_announce_stress: exception: %s", e.what());
 			break;
 		}
 		RNS::Utilities::OS::sleep(0.1);

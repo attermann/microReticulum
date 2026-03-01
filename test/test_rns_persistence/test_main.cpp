@@ -23,12 +23,12 @@ public:
 
 private:
 	virtual void send_outgoing(const RNS::Bytes& data) {
-		DEBUG("TestInterface.send_outgoing: data: " + data.toHex());
+		DEBUGF("TestInterface.send_outgoing: data: %s", data.toHex().c_str());
 		// Perform post-send housekeeping
 		InterfaceImpl::handle_outgoing(data);
 	}
 	void on_incoming(const RNS::Bytes& data) {
-		DEBUG("TestInterface.on_incoming: data: " + data.toHex());
+		DEBUGF("TestInterface.on_incoming: data: %s", data.toHex().c_str());
 		// Pass received data on to transport
 		InterfaceImpl::handle_incoming(data);
 	}

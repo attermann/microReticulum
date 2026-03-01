@@ -64,9 +64,9 @@ void testBytesMain() {
 	bytes += prebuf + postbuf;
 	TEST_ASSERT_EQUAL_size_t(14, bytes.size());
 	TEST_ASSERT_EQUAL_MEMORY("FooHello World", bytes.data(), bytes.size());
-	TRACE("assign bytes: " + bytes.toString());
-	TRACE("assign prebuf: " + prebuf.toString());
-	TRACE("assign postbuf: " + postbuf.toString());
+	TRACEF("assign bytes: %s", bytes.toString().c_str());
+	TRACEF("assign prebuf: %s", prebuf.toString().c_str());
+	TRACEF("assign postbuf: %s", postbuf.toString().c_str());
 
 	// test string assignment with addition
 	bytes = prebuf + postbuf;
@@ -83,56 +83,56 @@ void testBytesMain() {
 	// test left in range
 	{
 		RNS::Bytes left(bytes.left(5));
-		TRACE("left: " + left.toString());
+		TRACEF("left: %s", left.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(5, left.size());
 		TEST_ASSERT_EQUAL_MEMORY("Hello", left.data(), left.size());
 	}
 	// test left oob
 	{
 		RNS::Bytes left(bytes.left(20));
-		TRACE("oob left: " + left.toString());
+		TRACEF("oob left: %s", left.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(11, left.size());
 		TEST_ASSERT_EQUAL_MEMORY("Hello World", left.data(), left.size());
 	}
 	// test right in range
 	{
 		RNS::Bytes right(bytes.right(5));
-		TRACE("right: " + right.toString());
+		TRACEF("right: %s", right.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(5, right.size());
 		TEST_ASSERT_EQUAL_MEMORY("World", right.data(), right.size());
 	}
 	// test right oob
 	{
 		RNS::Bytes right(bytes.right(20));
-		TRACE("oob right: " + right.toString());
+		TRACEF("oob right: %s", right.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(11, right.size());
 		TEST_ASSERT_EQUAL_MEMORY("Hello World", right.data(), right.size());
 	}
 	// test mid in range
 	{
 		RNS::Bytes mid(bytes.mid(3, 5));
-		TRACE("mid: " + mid.toString());
+		TRACEF("mid: %s", mid.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(5, mid.size());
 		TEST_ASSERT_EQUAL_MEMORY("lo Wo", mid.data(), mid.size());
 	}
 	// test mid oob pos
 	{
 		RNS::Bytes mid(bytes.mid(20, 5));
-		TRACE("oob pos mid: " + mid.toString());
+		TRACEF("oob pos mid: %s", mid.toString().c_str());
 		TEST_ASSERT_FALSE(mid);
 		TEST_ASSERT_EQUAL_size_t(0, mid.size());
 	}
 	// test mid oob pos
 	{
 		RNS::Bytes mid(bytes.mid(3, 20));
-		TRACE("oob len mid: " + mid.toString());
+		TRACEF("oob len mid: %s", mid.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(8, mid.size());
 		TEST_ASSERT_EQUAL_MEMORY("lo World", mid.data(), mid.size());
 	}
 	// test mid to end variant
 	{
 		RNS::Bytes mid(bytes.mid(3));
-		TRACE("end mid: " + mid.toString());
+		TRACEF("end mid: %s", mid.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(8, mid.size());
 		TEST_ASSERT_EQUAL_MEMORY("lo World", mid.data(), mid.size());
 	}
@@ -142,7 +142,7 @@ void testBytesMain() {
 	{
 		RNS::Bytes shrink(bytes);
 		shrink.resize(5);
-		TRACE("shrink: " + shrink.toString());
+		TRACEF("shrink: %s", shrink.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(5, shrink.size());
 		TEST_ASSERT_EQUAL_MEMORY("Hello", shrink.data(), shrink.size());
 	}
@@ -151,11 +151,11 @@ void testBytesMain() {
 	HEAD("TestBytes: trim", RNS::LOG_TRACE);
 	{
 		RNS::Bytes bytes("Hello World");
-		TRACE("orig: " + bytes.toString());
+		TRACEF("orig: %s", bytes.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(11, bytes.size());
 		TEST_ASSERT_EQUAL_MEMORY("Hello World", bytes.data(), bytes.size());
 		bytes = bytes.left(5);
-		TRACE("trim: " + bytes.toString());
+		TRACEF("trim: %s", bytes.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(5, bytes.size());
 		TEST_ASSERT_EQUAL_MEMORY("Hello", bytes.data(), bytes.size());
 	}
@@ -226,9 +226,9 @@ void testCowBytes() {
 	TEST_ASSERT_EQUAL_MEMORY("1", bytes3.data(), bytes3.size());
 	TEST_ASSERT_EQUAL_PTR(bytes2.data(), bytes3.data());
 
-	TRACE("pre bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
-	TRACE("pre bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
-	TRACE("pre bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
+	TRACEF("pre bytes1 ptr: %p data: %s", (void*)bytes1.data(), bytes1.toString().c_str());
+	TRACEF("pre bytes2 ptr: %p data: %s", (void*)bytes2.data(), bytes2.toString().c_str());
+	TRACEF("pre bytes3 ptr: %p data: %s", (void*)bytes3.data(), bytes3.toString().c_str());
 
 	//bytes1.append("mississippi");
 	//assert(bytes1.size() == 12);
@@ -245,9 +245,9 @@ void testCowBytes() {
 	TEST_ASSERT_EQUAL_MEMORY("mississippi", bytes3.data(), bytes3.size());
 	TEST_ASSERT_NOT_EQUAL(bytes2.data(), bytes3.data());
 
-	TRACE("post bytes1 ptr: " + std::to_string((uintptr_t)bytes1.data()) + " data: " + bytes1.toString());
-	TRACE("post bytes2 ptr: " + std::to_string((uintptr_t)bytes2.data()) + " data: " + bytes2.toString());
-	TRACE("post bytes3 ptr: " + std::to_string((uintptr_t)bytes3.data()) + " data: " + bytes3.toString());
+	TRACEF("post bytes1 ptr: %p data: %s", (void*)bytes1.data(), bytes1.toString().c_str());
+	TRACEF("post bytes2 ptr: %p data: %s", (void*)bytes2.data(), bytes2.toString().c_str());
+	TRACEF("post bytes3 ptr: %p data: %s", (void*)bytes3.data(), bytes3.toString().c_str());
 }
 
 void testBytesConversion() {
@@ -255,14 +255,14 @@ void testBytesConversion() {
 	{
 		RNS::Bytes bytes("Hello World");
 		std::string hex = bytes.toHex(true);
-		TRACE("text: \"" + bytes.toString() + "\" upper hex: \"" + hex + "\"");
+		TRACEF("text: \"%s\" upper hex: \"%s\"", bytes.toString().c_str(), hex.c_str());
 		TEST_ASSERT_EQUAL_size_t(22, hex.length());
 		TEST_ASSERT_EQUAL_STRING("48656C6C6F20576F726C64", hex.c_str());
 	}
 	{
 		RNS::Bytes bytes("Hello World");
 		std::string hex = bytes.toHex(false);
-		TRACE("text: \"" + bytes.toString() + "\" lower hex: \"" + hex + "\"");
+		TRACEF("text: \"%s\" lower hex: \"%s\"", bytes.toString().c_str(), hex.c_str());
 		TEST_ASSERT_EQUAL_size_t(22, hex.length());
 		TEST_ASSERT_EQUAL_STRING("48656c6c6f20576f726c64", hex.c_str());
 	}
@@ -271,7 +271,7 @@ void testBytesConversion() {
 		RNS::Bytes bytes;
 		bytes.assignHex(hex.c_str());
 		std::string text = bytes.toString();
-		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACEF("hex: \"%s\" text: \"%s\"", hex.c_str(), text.c_str());
 		TEST_ASSERT_EQUAL_size_t(11, text.length());
 		TEST_ASSERT_EQUAL_STRING("Hello World", text.c_str());
 	}
@@ -280,21 +280,21 @@ void testBytesConversion() {
 		RNS::Bytes bytes;
 		bytes.assignHex(hex.c_str());
 		std::string text = bytes.toString();
-		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACEF("hex: \"%s\" text: \"%s\"", hex.c_str(), text.c_str());
 		TEST_ASSERT_EQUAL_size_t(11, text.length());
 		TEST_ASSERT_EQUAL_STRING("Hello World", text.c_str());
 
 		// overwrite
 		bytes.assignHex(hex.c_str());
 		text = bytes.toString();
-		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACEF("hex: \"%s\" text: \"%s\"", hex.c_str(), text.c_str());
 		TEST_ASSERT_EQUAL_size_t(11, text.length());
 		TEST_ASSERT_EQUAL_STRING("Hello World", text.c_str());
 
 		// apend
 		bytes.appendHex(hex.c_str());
 		text = bytes.toString();
-		TRACE("hex: \"" + hex + "\" text: \"" + text + "\"");
+		TRACEF("hex: \"%s\" text: \"%s\"", hex.c_str(), text.c_str());
 		TEST_ASSERT_EQUAL_size_t(22, text.length());
 		TEST_ASSERT_EQUAL_STRING("Hello WorldHello World", text.c_str());
 	}

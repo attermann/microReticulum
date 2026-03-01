@@ -66,7 +66,7 @@ delay(1500);
 	LoRa.setTxPower(power);
 
 	INFO("LoRa init succeeded.");
-	TRACE("LoRa bandwidth is " + std::to_string(Utilities::OS::round(_bitrate/1000.0, 2)) + " Kbps");
+	TRACEF("LoRa bandwidth is %s Kbps", std::to_string(Utilities::OS::round(_bitrate/1000.0, 2)).c_str());
 #endif
 
 	_online = true;
@@ -111,10 +111,10 @@ void LoRaInterface::loop() {
 }
 
 /*virtual*/ void LoRaInterface::send_outgoing(const Bytes& data) {
-	DEBUG(toString() + ".on_outgoing: data: " + data.toHex());
+	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
 	try {
 		if (_online) {
-			TRACE("LoRaInterface: sending " + std::to_string(data.size()) + " bytes...");
+			TRACEF("LoRaInterface: sending %zu bytes...", data.size());
 			// Send packet
 #ifdef ARDUINO
 
@@ -142,12 +142,12 @@ void LoRaInterface::loop() {
 		InterfaceImpl::handle_outgoing(data);
 	}
 	catch (std::exception& e) {
-		ERROR("Could not transmit on " + toString() + ". The contained exception was: " + e.what());
+		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
 	}
 }
 
 /*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
-	DEBUG(toString() + ".on_incoming: data: " + data.toHex());
+	DEBUGF("%s.on_incoming: data: %s", toString().c_str(), data.toHex().c_str());
 	// Pass received data on to transport
 	InterfaceImpl::handle_incoming(data);
 }

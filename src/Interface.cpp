@@ -9,13 +9,13 @@ using namespace RNS::Type::Interface;
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
 void InterfaceImpl::handle_outgoing(const Bytes& data) {
-	//TRACE("InterfaceImpl.handle_outgoing: data: " + data.toHex());
+	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", data.toHex().c_str());
 	TRACE("InterfaceImpl.handle_outgoing");
 	_txb += data.size();
 }
 
 void InterfaceImpl::handle_incoming(const Bytes& data) {
-	//TRACE("InterfaceImpl.handle_incoming: data: " + data.toHex());
+	//TRACEF("InterfaceImpl.handle_incoming: data: %s", data.toHex().c_str());
 	TRACE("InterfaceImpl.handle_incoming");
 	_rxb += data.size();
 	// Create temporary Interface encapsulating our own shared impl
@@ -26,7 +26,7 @@ void InterfaceImpl::handle_incoming(const Bytes& data) {
 }
 
 void Interface::handle_incoming(const Bytes& data) {
-	//TRACE("Interface.handle_incoming: data: " + data.toHex());
+	//TRACEF("Interface.handle_incoming: data: %s", data.toHex().c_str());
 	TRACE("Interface.handle_incoming");
 	assert(_impl);
 /*
@@ -87,18 +87,18 @@ void Interface::process_announce_queue() {
 /*
 void ArduinoJson::convertFromJson(JsonVariantConst src, RNS::Interface& dst) {
 	TRACE(">>> Deserializing Interface");
-TRACE(">>> Interface pre: " + dst.debugString());
+TRACEF(">>> Interface pre: %s", dst.debugString().c_str());
 	if (!src.isNull()) {
 		RNS::Bytes hash;
 		hash.assignHex(src.as<const char*>());
-		TRACE(">>> Querying Transport for Interface hash " + hash.toHex());
+		TRACEF(">>> Querying Transport for Interface hash %s", hash.toHex().c_str());
 		// Query transport for matching interface
 		dst = Transport::find_interface_from_hash(hash);
-TRACE(">>> Interface post: " + dst.debugString());
+TRACEF(">>> Interface post: %s", dst.debugString().c_str());
 	}
 	else {
 		dst = {RNS::Type::NONE};
-TRACE(">>> Interface post: " + dst.debugString());
+TRACEF(">>> Interface post: %s", dst.debugString().c_str());
 	}
 }
 */

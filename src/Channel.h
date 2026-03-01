@@ -39,8 +39,8 @@ namespace RNS {
 	private:
 		class Object {
 		public:
-			Object() { MEM("Channel::Data object created, this: " + std::to_string((uintptr_t)this)); }
-			virtual ~Object() { MEM("Channel::Data object destroyed, this: " + std::to_string((uintptr_t)this)); }
+			Object() { MEMF("Channel::Data object created, this: %p", (void*)this); }
+			virtual ~Object() { MEMF("Channel::Data object destroyed, this: %p", (void*)this); }
 		private:
 
 		friend class Channel;

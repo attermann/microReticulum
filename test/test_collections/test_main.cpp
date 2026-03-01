@@ -28,14 +28,14 @@ void testBytesMap()
 	TEST_ASSERT_NOT_EQUAL(map.end(), preit);
 	TEST_ASSERT_EQUAL_STRING("hello", (*preit).second.c_str());
 	if (preit != map.end()) {
-		TRACE(std::string("found prebuf: ") + (*preit).second);
+		TRACEF("found prebuf: %s", (*preit).second.c_str());
 	}
 
 	auto postit = map.find(postbuf);
 	TEST_ASSERT_NOT_EQUAL(map.end(), postit);
 	TEST_ASSERT_EQUAL_STRING("world", (*postit).second.c_str());
 	if (postit != map.end()) {
-		TRACE(std::string("found postbuf: ") + (*postit).second);
+		TRACEF("found postbuf: %s", (*postit).second.c_str());
 	}
 
 	const uint8_t newstr[] = "World";
@@ -46,7 +46,7 @@ void testBytesMap()
 	TEST_ASSERT_NOT_EQUAL(map.end(), newit);
 	TEST_ASSERT_EQUAL_STRING("world", (*newit).second.c_str());
 	if (newit != map.end()) {
-		TRACE(std::string("found newbuf: ") + (*newit).second);
+		TRACEF("found newbuf: %s", (*newit).second.c_str());
 	}
 
 	std::string str = map["World"];
@@ -85,7 +85,7 @@ void testOldMap() {
 		}
 	}
 	for (auto& pair : entries) {
-		TRACE("entries: " + pair.second._hash.toString());
+		TRACEF("entries: %s", pair.second._hash.toString().c_str());
 	}
 	TEST_ASSERT_EQUAL_size_t(2, entries.size());
 	TEST_ASSERT_EQUAL_size_t(2, other_entries.size());
@@ -113,7 +113,7 @@ void testNewMap() {
 		}
 	}
 	for (auto& [hash, entry] : entries) {
-		TRACE("entries: " + entry._hash.toString());
+		TRACEF("entries: %s", entry._hash.toString().c_str());
 	}
 	TEST_ASSERT_EQUAL_size_t(2, entries.size());
 	TEST_ASSERT_EQUAL_size_t(2, other_entries.size());
