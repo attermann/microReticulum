@@ -3,6 +3,7 @@
 #include "Reticulum.h"
 #include "Destination.h"
 #include "Identity.h"
+#include "Link.h"
 #include "Packet.h"
 #include "Interface.h"
 #include "Log.h"
@@ -2242,15 +2243,19 @@ using namespace RNS::Utilities;
 				// needs to be transported
 				if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
 					TRACE("Handling link request proof...");
-					LinkEntry link_entry = (*_link_table.find(packet.destination_hash())).second;
+					LinkEntry& link_entry = (*_link_table.find(packet.destination_hash())).second;
 					if (packet.receiving_interface() == link_entry._outbound_interface) {
 						try {
-							if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2)) {
+							if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2) || packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
+								Bytes signalling_bytes;
+								if (packet.data().size() == (Type::Identity::SIGLENGTH/8 + Type::Link::ECPUBSIZE/2 + Type::Link::LINK_MTU_SIZE)) {
+									signalling_bytes = Link::signalling_bytes(Link::mtu_from_lp_packet(packet), Link::mode_from_lp_packet(packet));
+								}
 								Bytes peer_pub_bytes = packet.data().mid(Type::Identity::SIGLENGTH/8, Type::Link::ECPUBSIZE/2);
 								Identity peer_identity = Identity::recall(link_entry._destination_hash);
 								Bytes peer_sig_pub_bytes = peer_identity.get_public_key().mid(Type::Link::ECPUBSIZE/2, Type::Link::ECPUBSIZE/2);
 
-								Bytes signed_data = packet.destination_hash() + peer_pub_bytes + peer_sig_pub_bytes;
+								Bytes signed_data = packet.destination_hash() + peer_pub_bytes + peer_sig_pub_bytes + signalling_bytes;
 								Bytes signature = packet.data().left(Type::Identity::SIGLENGTH/8);
 
 								if (peer_identity.validate(signature, signed_data)) {
