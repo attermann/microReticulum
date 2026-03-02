@@ -262,7 +262,7 @@ MEM("Creating from data-move...");
 		//inline void assign(const std::string& string) { assign(string.c_str()); }
 		inline void assign(const std::string& string) { assign((uint8_t*)string.c_str(), string.length()); }
 		void assignHex(const uint8_t* hex, size_t hex_size);
-		inline void assignHex(const char* hex) { assignHex((uint8_t*)hex, strlen(hex)); }
+		inline void assignHex(const char* hex) { if (!hex) return; assignHex((uint8_t*)hex, strlen(hex)); }
 
 		inline void append(const Bytes& bytes) {
 			// if append is empty then do nothing
@@ -307,7 +307,7 @@ MEM("Creating from data-move...");
 		//inline void append(const std::string& string) { append(string.c_str()); }
 		inline void append(const std::string& string) { append((uint8_t*)string.c_str(), string.length()); }
 		void appendHex(const uint8_t* hex, size_t hex_size);
-		inline void appendHex(const char* hex) { appendHex((uint8_t*)hex, strlen(hex)); }
+		inline void appendHex(const char* hex) { if (!hex) return; appendHex((uint8_t*)hex, strlen(hex)); }
 
 		inline uint8_t* writable(size_t size) {
 			if (size > 0) {
@@ -343,7 +343,7 @@ MEM("Creating from data-move...");
 	public:
 		int compare(const Bytes& bytes) const;
 		int compare(const uint8_t* buf, size_t size) const;
-		inline int compare(const char* str) const { return compare((const uint8_t*)str, strlen(str)); }
+		inline int compare(const char* str) const { if (!str) return empty() ? 0 : 1; return compare((const uint8_t*)str, strlen(str)); }
 		inline size_t size() const { if (!_data) return 0; return _data->size(); }
 		inline bool empty() const { if (!_data) return true; return _data->empty(); }
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
@@ -358,7 +358,7 @@ MEM("Creating from data-move...");
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
 		inline Bytes right(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data() + (size() - len), len}; }
 		inline int find(int pos, const char* str) {
-			if (!_data || _data->data() == nullptr || (size_t)pos >= _data->size()) {
+			if (!str || !_data || _data->data() == nullptr || (size_t)pos >= _data->size()) {
 				return -1;
 			}
 			//const char* ptr = strnstr((const char*)(_data->data() + pos), str, (_data->size() - pos));
@@ -403,7 +403,7 @@ MEM("Creating from data-move...");
 	//inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return Bytes(ptr, len); }
 	inline Bytes bytesFromChunk(const uint8_t* ptr, size_t len) { return {ptr, len}; }
 	//inline Bytes bytesFromString(const char* str) { return Bytes((uint8_t*)str, strlen(str)); }
-	inline Bytes bytesFromString(const char* str) { return {(uint8_t*)str, strlen(str)}; }
+	inline Bytes bytesFromString(const char* str) { if (!str) return {}; return {(uint8_t*)str, strlen(str)}; }
 	//z inline Bytes bytesFromInt(const int) { return {(uint8_t*)str, strlen(str)}; }
 
 	inline std::string stringFromBytes(const Bytes& bytes) { return bytes.toString(); }
@@ -440,7 +440,8 @@ namespace ArduinoJson {
 	}
 	// Deserialize
 	inline void convertFromJson(JsonVariantConst src, RNS::Bytes& dst) {
-		dst.assignHex(src.as<const char*>());
+		const char* hex = src.as<const char*>();
+		if (hex) dst.assignHex(hex);
 	}
 	inline bool canConvertFromJson(JsonVariantConst src, const RNS::Bytes&) {
 		return src.is<const char*>();

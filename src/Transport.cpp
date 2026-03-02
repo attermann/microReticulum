@@ -1547,7 +1547,41 @@ using namespace RNS::Utilities;
 						if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 							TRACE("Transport::inbound: Packet is next-hop LINKREQUEST");
 							double now = OS::time();
-							double proof_timeout = now + Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, remaining_hops);
+							double proof_timeout  = extra_link_proof_timeout(packet.receiving_interface());
+							proof_timeout += now + Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, remaining_hops);
+							uint16_t path_mtu = Link::mtu_from_lr_packet(packet);
+							Type::Link::link_mode mode = Link::mode_from_lr_packet(packet);
+							uint16_t ph_mtu = 0;
+							if (interface) {
+								ph_mtu = interface.HW_MTU();
+							}
+							uint16_t nh_mtu = outbound_interface.HW_MTU();
+							if (path_mtu != 0) {
+								if (outbound_interface.HW_MTU() == 0) {
+									DEBUG("No next-hop HW MTU, disabling link MTU upgrade");
+									path_mtu = 0;
+									new_raw  = new_raw.left(new_raw.size()-Type::Link::LINK_MTU_SIZE);
+								}
+								else if (outbound_interface.AUTOCONFIGURE_MTU() == 0 && outbound_interface.FIXED_MTU() == 0) {
+									DEBUG("Outbound interface doesn't support MTU autoconfiguration, disabling link MTU upgrade");
+									path_mtu = 0;
+									new_raw  = new_raw.left(new_raw.size()-Type::Link::LINK_MTU_SIZE);
+								}
+								else {
+									if (nh_mtu < path_mtu || (ph_mtu != 0 && ph_mtu < path_mtu)) {
+										try {
+											path_mtu = std::min(nh_mtu, ph_mtu);
+											Bytes clamped_mtu = Link::signalling_bytes(path_mtu, mode);
+											DEBUGF("Clamping link MTU to %u", path_mtu);
+											new_raw  = new_raw.left(new_raw.size()-Type::Link::LINK_MTU_SIZE)+clamped_mtu;
+										}
+										catch (const std::exception& e) {
+											WARNINGF("Dropping link request packet. The contained exception was: %s", e.what());
+											return;
+										}
+									}
+								}
+							}
 							LinkEntry link_entry(
 								now,
 								next_hop,
