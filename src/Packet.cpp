@@ -23,7 +23,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 {
 
 	if (_object->_destination) {
-		TRACE("Creating packet with destination...");
+		//TRACE("Creating packet with destination...");
 		// CBA Should never see empty transport_type
 		//if (transport_type == NONE) {
 		//	transport_type = Type::Transport::BROADCAST;
@@ -47,7 +47,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_create_receipt = create_receipt;
 	}
 	else {
-		TRACE("Creating packet without destination...");
+		//TRACE("Creating packet without destination...");
 		// CBA NOTE: This variant is for creating a new packet from a received raw buffer
 		_object->_raw = data;
 		_object->_packed = true;
@@ -78,14 +78,14 @@ uint8_t Packet::get_packed_flags() {
 	assert(_object);
 	uint8_t packed_flags = 0;
 	if (_object->_context == LRPROOF) {
-TRACE("***** Packing with LINK type");
+//TRACE("***** Packing with LINK type");
 		packed_flags = (_object->_header_type << 6) | (_object->_context_flag << 5) | (_object->_transport_type << 4) | (Type::Destination::LINK << 2) | _object->_packet_type;
 	}
 	else {
 		if (!_object->_destination) {
 			throw std::logic_error("Packet destination is required");
 		}
-TRACEF("***** Packing with %d type", _object->_destination.type());
+//TRACEF("***** Packing with %d type", _object->_destination.type());
 		packed_flags = (_object->_header_type << 6) | (_object->_context_flag << 5) | (_object->_transport_type << 4) | (_object->_destination.type() << 2) | _object->_packet_type;
 	}
 	return packed_flags;
@@ -420,7 +420,7 @@ bool Packet::unpack() {
 		update_hash();
 	}
 	catch (const std::bad_alloc&) {
-		ERROR("Packet::unpack: bad_alloc - out of memory unpacking packet");
+		ERROR("Packet::unpack: bad_alloc - OUT OF MEMORY unpacking packet");
 		return false;
 	}
 	catch (std::exception& e) {
@@ -589,14 +589,15 @@ std::string Packet::debugString() const {
 	if (_object->_packed) {
 		//unpack();
 	}
-	std::string str = "ph=" + _object->_packet_hash.toHex();
-	str += " ht=" + std::to_string(_object->_header_type);
+	std::string str;
+	str = "ht=" + std::to_string(_object->_header_type);
 	str += " tt=" + std::to_string(_object->_transport_type);
 	str += " dt=" + std::to_string(_object->_destination_type);
 	str += " pt=" + std::to_string(_object->_packet_type);
 	str += " hp=" + std::to_string(_object->_hops);
 	str += " ti=" + _object->_transport_id.toHex();
 	str += " dh=" + _object->_destination_hash.toHex();
+	str += " ph=" + _object->_packet_hash.toHex();
 	return str;
 }
 std::string Packet::dumpString() const {

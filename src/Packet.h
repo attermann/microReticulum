@@ -250,6 +250,8 @@ namespace RNS {
 		inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
 		//CBA Following method is only used by Resource to access decrypted resource advertisement form Link. Consider a better way.
 		inline const Bytes& plaintext() { assert(_object); return _object->_plaintext; }
+		inline bool packed() const { assert(_object); return _object->_packed; }
+		inline bool from_packed() const { assert(_object); return _object->_fromPacked; }
 
 		// setters
 		inline void destination(const Destination& destination) { assert(_object); _object->_destination = destination; }

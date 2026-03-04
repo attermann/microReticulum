@@ -289,7 +289,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 				_object->_path_responses.insert({tag, {OS::time(), announce_data}});
 			}
 			catch (const std::bad_alloc&) {
-				ERRORF("announce: bad_alloc - out of memory, path response not stored for %s", _object->_hash.toHex().c_str());
+				ERRORF("announce: bad_alloc - OUT OF MEMORY, path response not stored for %s", _object->_hash.toHex().c_str());
 			}
 			catch (const std::exception& e) {
 				ERRORF("announce: exception storing path response: %s", e.what());
@@ -317,7 +317,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		}
 	}
 	catch (const std::bad_alloc&) {
-		ERRORF("announce: bad_alloc - out of memory, announce not sent for %s", _object->_hash.toHex().c_str());
+		ERRORF("announce: bad_alloc - OUT OF MEMORY, announce not sent for %s", _object->_hash.toHex().c_str());
 		return {Type::NONE};
 	}
 	catch (const std::exception& e) {
@@ -407,7 +407,7 @@ TRACE("***** Accepting link request");
 				_object->_links.insert(link);
 			}
 			catch (const std::bad_alloc&) {
-				ERROR("incoming_link_request: bad_alloc - out of memory, link not tracked");
+				ERROR("incoming_link_request: bad_alloc - OUT OF MEMORY, link not tracked");
 			}
 			catch (const std::exception& e) {
 				ERRORF("incoming_link_request: exception tracking link: %s", e.what());

@@ -205,7 +205,7 @@ Can be used to load previously created and saved identities into Reticulum.
 			cull_known_destinations();
 		}
 		catch (const std::bad_alloc&) {
-			ERRORF("remember: bad_alloc - out of memory, identity not stored for %s", destination_hash.toHex().c_str());
+			ERRORF("remember: bad_alloc - OUT OF MEMORY, identity not stored for %s", destination_hash.toHex().c_str());
 		}
 		catch (const std::exception& e) {
 			ERRORF("remember: exception storing identity: %s", e.what());
@@ -319,18 +319,8 @@ Recall last heard app_data for a destination hash.
 		file = open(RNS.Reticulum.storagepath+"/known_destinations","wb")
 		umsgpack.dump(Identity.known_destinations, file)
 		file.close()
+		DEBUGF("Saved known destinations to storage in %.3f seconds", OS::round(OS::time() - save_start, 3));
 */
-
-		std::string time_str;
-		double save_time = OS::time() - save_start;
-		if (save_time < 1) {
-			time_str = std::to_string((int)(save_time*1000)) + " ms";
-		}
-		else {
-			time_str = std::to_string(OS::round(save_time, 1)) + " s";
-		}
-
-		DEBUGF("Saved known destinations to storage in %s", time_str.c_str());
 
 		success = true;
 	}
@@ -394,7 +384,7 @@ Recall last heard app_data for a destination hash.
 			DEBUGF("Removed %d path(s) from known destinations", count);
 		}
 		catch (const std::bad_alloc& e) {
-			ERROR("cull_known_destinations: bad_alloc - out of memory building sort index, falling back to single erase");
+			ERROR("cull_known_destinations: bad_alloc - OUT OF MEMORY building sort index, falling back to single erase");
 			// Fallback: std::min_element does no heap allocation — erase one oldest entry
 			auto oldest = std::min_element(
 				_known_destinations.begin(), _known_destinations.end(),

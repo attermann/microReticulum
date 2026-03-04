@@ -517,11 +517,11 @@ void testDeserializeMap() {
 }
 
 #ifdef ARDUINO
-const char test_destination_table_path[] = "/test_destination_table";
-const char test_empty_destination_table_path[] = "/test_empty_destination_table";
+const char test_path_table_path[] = "/test_path_table";
+const char test_empty_path_table_path[] = "/test_empty_path_table";
 #else
-const char test_destination_table_path[] = "test_destination_table";
-const char test_empty_destination_table_path[] = "test_empty_destination_table";
+const char test_path_table_path[] = "test_path_table";
+const char test_empty_path_table_path[] = "test_empty_path_table";
 #endif
 
 void testSerializeDestinationTable() {
@@ -588,7 +588,7 @@ void testSerializeDestinationTable() {
 	TRACEF("testSerializeDestinationTable: serialized %zu bytes", length);
 	if (length > 0) {
 		TRACEF("testSerializeDestinationTable: json: %s", data.toString().c_str());
-		if (RNS::Utilities::OS::write_file(test_destination_table_path, data) == data.size()) {
+		if (RNS::Utilities::OS::write_file(test_path_table_path, data) == data.size()) {
 			TRACEF("testSerializeDestinationTable: wrote: %zu bytes", data.size());
 		}
 		else {
@@ -606,7 +606,7 @@ void testSerializeDestinationTable() {
 void testDeserializeDestinationTable() {
 
 	RNS::Bytes data;
-	if (RNS::Utilities::OS::read_file(test_destination_table_path, data) > 0) {
+	if (RNS::Utilities::OS::read_file(test_path_table_path, data) > 0) {
 		TRACEF("testDeserializeDestinationTable: read: %zu bytes", data.size());
 		TRACEF("testDeserializeDestinationTable: json: %s", data.toString().c_str());
 		JsonDocument doc;
@@ -634,7 +634,7 @@ void testDeserializeDestinationTable() {
 			TRACEF("testDeserializeDestinationTable: failed to deserialize: %s", error.c_str());
 			TEST_FAIL();
 		}
-		//assert(RNS::Utilities::OS::remove_file(test_destination_table_path));
+		//assert(RNS::Utilities::OS::remove_file(test_path_table_path));
 	}
 	else {
 		TRACE("testDeserializeDestinationTable: read failed");
@@ -647,10 +647,10 @@ void testDeserializeEmptyDestinationTable() {
 
 	// Write empty JSON destination table
 	RNS::Bytes emptyData("{}");
-	TEST_ASSERT_EQUAL_size_t(2, RNS::Utilities::OS::write_file(test_empty_destination_table_path, emptyData));
+	TEST_ASSERT_EQUAL_size_t(2, RNS::Utilities::OS::write_file(test_empty_path_table_path, emptyData));
 
 	RNS::Bytes data;
-	if (RNS::Utilities::OS::read_file(test_empty_destination_table_path, data) > 0) {
+	if (RNS::Utilities::OS::read_file(test_empty_path_table_path, data) > 0) {
 		TRACEF("testDeserializeEmptyDestinationTable: read: %zu bytes", data.size());
 		JsonDocument doc;
 
@@ -677,7 +677,7 @@ void testDeserializeEmptyDestinationTable() {
 			TRACE("testDeserializeEmptyDestinationTable: failed to deserialize");
 			TEST_FAIL();
 		}
-		//assert(RNS::Utilities::OS::remove_file(test_empty_destination_table_path));
+		//assert(RNS::Utilities::OS::remove_file(test_empty_path_table_path));
 	}
 	else {
 		TRACE("testDeserializeEmptyDestinationTable: read failed");
@@ -1124,8 +1124,8 @@ int runUnityTests(void) {
 	RNS::Utilities::OS::remove_file(test_map_path);
 	RNS::Utilities::OS::remove_file(test_vector_path);
 	RNS::Utilities::OS::remove_file(test_set_path);
-	RNS::Utilities::OS::remove_file(test_destination_table_path);
-	RNS::Utilities::OS::remove_file(test_empty_destination_table_path);
+	RNS::Utilities::OS::remove_file(test_path_table_path);
+	RNS::Utilities::OS::remove_file(test_empty_path_table_path);
 	RNS::Utilities::OS::remove_file(test_array_path);
 	RNS::Utilities::OS::remove_file(test_series_path);
 	RNS::Utilities::OS::deregister_filesystem();

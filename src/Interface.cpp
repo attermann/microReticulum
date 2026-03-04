@@ -25,16 +25,41 @@ void InterfaceImpl::handle_incoming(const Bytes& data) {
 	Transport::inbound(data, interface);
 }
 
-void Interface::handle_incoming(const Bytes& data) {
-	//TRACEF("Interface.handle_incoming: data: %s", data.toHex().c_str());
-	TRACE("Interface.handle_incoming");
+void Interface::send_outgoing(const Bytes& data) {
 	assert(_impl);
+	//TRACEF("Interface.send_outgoing: data: %s", data.toHex().c_str());
+	//TRACE("Interface.send_outgoing");
+	// Catch exceptions from calls into Interface implementation
+	try {
+		_impl->send_outgoing(data);
+    }
+    catch (const std::bad_alloc&) {
+		ERROR("Interface::send_outgoing: bad_alloc - OUT OF MEMORY");
+    }
+    catch (std::exception& e) {
+		ERRORF("Interface::send_outgoing: %s", e.what());
+    }
+}
+
+void Interface::handle_incoming(const Bytes& data) {
+	assert(_impl);
+	//TRACEF("Interface.handle_incoming: data: %s", data.toHex().c_str());
+	//TRACE("Interface.handle_incoming");
 /*
 	_impl->_rxb += data.size();
 	// Pass data on to transport for handling
 	Transport::inbound(data, *this);
 */
-	_impl->handle_incoming(data);
+	// Catch exceptions from calls into Interface implementation
+	try {
+		_impl->handle_incoming(data);
+    }
+    catch (const std::bad_alloc&) {
+		ERROR("Interface::handle_incoming: bad_alloc - OUT OF MEMORY");
+    }
+    catch (std::exception& e) {
+		ERRORF("Interface::handle_incoming: %s", e.what());
+    }
 }
 
 void Interface::process_announce_queue() {

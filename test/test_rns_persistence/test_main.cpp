@@ -36,11 +36,11 @@ private:
 };
 
 #ifdef ARDUINO
-const char test_destination_table_path[] = "/test_destination_table";
-const char test_empty_destination_table_path[] = "/test_empty_destination_table";
+const char test_path_table_path[] = "/test_path_table";
+const char test_empty_path_table_path[] = "/test_empty_path_table";
 #else
-const char test_destination_table_path[] = "test_destination_table";
-const char test_empty_destination_table_path[] = "test_empty_destination_table";
+const char test_path_table_path[] = "test_path_table";
+const char test_empty_path_table_path[] = "test_empty_path_table";
 #endif
 
 void testSerializeDestinationTable() {
@@ -95,7 +95,7 @@ void testSerializeDestinationTable() {
 	}
 
 	uint32_t stream_crc;
-	size_t wrote = RNS::Persistence::serialize(map, test_destination_table_path, stream_crc);
+	size_t wrote = RNS::Persistence::serialize(map, test_path_table_path, stream_crc);
 	TRACEF("testSerializeDestinationTable: wrote: %d bytes", wrote);
 	if (wrote == 0) {
 		TRACE("testSerializeDestinationTable: write failed");
@@ -115,7 +115,7 @@ void testDeserializeDestinationTable() {
 
 	std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
 	uint32_t stream_crc;
-	size_t read = RNS::Persistence::deserialize(map, test_destination_table_path, stream_crc);
+	size_t read = RNS::Persistence::deserialize(map, test_path_table_path, stream_crc);
 	TRACEF("testDeserializeDestinationTable: deserialized %d bytes", read);
 	if (read == 0) {
 		TRACE("testDeserializeDestinationTable: failed to deserialize");
@@ -140,10 +140,10 @@ void testDeserializeEmptyDestinationTable() {
 
 	// Write empty JSON destination table
 	RNS::Bytes emptyData("{}");
-	TEST_ASSERT_EQUAL_size_t(2, RNS::Utilities::OS::write_file(test_empty_destination_table_path, emptyData));
+	TEST_ASSERT_EQUAL_size_t(2, RNS::Utilities::OS::write_file(test_empty_path_table_path, emptyData));
 
 	std::map<RNS::Bytes, RNS::Transport::DestinationEntry> destination_table;
-	RNS::Persistence::deserialize(destination_table, test_empty_destination_table_path);
+	RNS::Persistence::deserialize(destination_table, test_empty_path_table_path);
 	TEST_ASSERT_EQUAL_size_t(0, destination_table.size());
 }
 
@@ -170,8 +170,8 @@ int runUnityTests(void) {
 	RUN_TEST(testDeserializeEmptyDestinationTable);
 
 	// Suite-level teardown
-	RNS::Utilities::OS::remove_file(test_destination_table_path);
-	RNS::Utilities::OS::remove_file(test_empty_destination_table_path);
+	RNS::Utilities::OS::remove_file(test_path_table_path);
+	RNS::Utilities::OS::remove_file(test_empty_path_table_path);
 	RNS::Utilities::OS::deregister_filesystem();
 
 	return UNITY_END();

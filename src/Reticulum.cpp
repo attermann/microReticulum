@@ -205,31 +205,40 @@ void Reticulum::start() {
 
 void Reticulum::loop() {
 	assert(_object);
-	if (!_object->_is_connected_to_shared_instance) {
+	// Catch exceptions from loop work
+	try {
+		if (!_object->_is_connected_to_shared_instance) {
 
-		// Perform Reticulum housekeeping
-		if (OS::time() > (_object->_jobs_last_run + JOB_INTERVAL)) {
-			jobs();
-			_object->_jobs_last_run = OS::time();
+			// Perform Reticulum housekeeping
+			if (OS::time() > (_object->_jobs_last_run + JOB_INTERVAL)) {
+				jobs();
+				_object->_jobs_last_run = OS::time();
+			}
+
+			// Perform interface processing
+			for (auto& [hash, interface] : Transport::get_interfaces()) {
+				interface.loop();
+			}
+
+			// Perform Filesystem processing
+			FileSystem& filesystem = OS::get_filesystem();
+			if (filesystem) {
+				filesystem.loop();
+			}
+
+			// Perform Transport processing
+			RNS::Transport::loop();
 		}
 
-		// Perform interface processing
-		for (auto& [hash, interface] : Transport::get_interfaces()) {
-			interface.loop();
-		}
-
-		// Perform Filesystem processing
-		FileSystem& filesystem = OS::get_filesystem();
-		if (filesystem) {
-			filesystem.loop();
-		}
-
-
-		// Perform Transport processing
-		RNS::Transport::loop();
-	}
-	// Perform random number gnerator housekeeping
-	RNG.loop();
+		// Perform random number gnerator housekeeping
+		RNG.loop();
+    }
+    catch (const std::bad_alloc&) {
+		ERROR("Reticulum::loop: bad_alloc - OUT OF MEMORY");
+    }
+    catch (std::exception& e) {
+		ERRORF("Reticulum::loop: %s", e.what());
+    }
 }
 
 void Reticulum::jobs() {
@@ -411,7 +420,7 @@ const std::map<Bytes, Transport::DestinationEntry>& Reticulum::get_path_table() 
 
 	return path_table
 */
-	return Transport::get_destination_table();
+	return Transport::get_path_table();
 }
 
 const std::map<Bytes, Transport::RateEntry>& Reticulum::get_rate_table() const {
@@ -438,8 +447,8 @@ bool Reticulum::drop_path(const Bytes& destination) {
 
 uint16_t Reticulum::drop_all_via(const Bytes& transport_hash) {
 	uint16_t dropped_count = 0;
-	//for (auto& destination_hash : Transport::get_destination_table()) {
-	for (const auto& [destination_hash, destination_entry] : Transport::get_destination_table()) {
+	//for (auto& destination_hash : Transport::get_path_table()) {
+	for (const auto& [destination_hash, destination_entry] : Transport::get_path_table()) {
 		if (destination_entry._received_from == transport_hash) {
 			Transport::expire_path(destination_hash);
 			++dropped_count;

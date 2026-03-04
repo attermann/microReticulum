@@ -105,34 +105,68 @@ namespace RNS {
 		class DestinationEntry {
 		public:
 			DestinationEntry() {}
-			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Bytes& receiving_interface, const Bytes& packet) :
+			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Interface& receiving_interface, const Packet& announce_packet) :
 				_timestamp(timestamp),
 				_received_from(received_from),
 				_hops(announce_hops),
 				_expires(expires),
 				_random_blobs(random_blobs),
 				_receiving_interface(receiving_interface),
-				_announce_packet(packet)
+				_announce_packet(announce_packet)
+			{
+			}
+			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Bytes& receiving_interface_hash, const Bytes& announce_packet_hash) :
+				_timestamp(timestamp),
+				_received_from(received_from),
+				_hops(announce_hops),
+				_expires(expires),
+				_random_blobs(random_blobs),
+				_receiving_interface_hash(receiving_interface_hash),
+				_announce_packet_hash(announce_packet_hash)
 			{
 			}
 		public:
-			inline Interface receiving_interface() const { return find_interface_from_hash(_receiving_interface); }
-			inline Packet announce_packet() const { return get_cached_packet(_announce_packet); }
+			// Lazy load receiving_interface and announce_packet
+			inline Interface& receiving_interface() {
+				if (!_receiving_interface) _receiving_interface = find_interface_from_hash(_receiving_interface_hash);
+				return _receiving_interface;
+			}
+			inline Packet& announce_packet() {
+				if (!_announce_packet) _announce_packet = get_cached_packet(_announce_packet_hash);
+				if (_announce_packet) {
+					// Announce packet is cached in packed state
+					// so we need to unpack it before accessing.
+					_announce_packet.unpack();
+					// We increase the hops, since reading a packet
+					// from cache is equivalent to receiving it again
+					// over an interface. It is cached with it's non-
+					// increased hop-count.
+					_announce_packet.hops(_announce_packet.hops() + 1);
+				}
+				return _announce_packet;
+			}
+			// Getters and setters for receiving_interface_hash and announce_packet_hash
+			inline Bytes receiving_interface_hash() const { if (_receiving_interface) return _receiving_interface.get_hash(); return _receiving_interface_hash; }
+			inline void receiving_interface_hash(const Bytes& hash) { if (hash != receiving_interface_hash()) _receiving_interface_hash = hash; _receiving_interface = {Type::NONE}; }
+			inline Bytes announce_packet_hash() const { if (_announce_packet) return _announce_packet.get_hash(); return _announce_packet_hash; }
+			inline void announce_packet_hash(const Bytes& hash) { if (hash != announce_packet_hash()) _announce_packet_hash = hash; _announce_packet = {Type::NONE}; }
 		public:
 			double _timestamp = 0;
 			Bytes _received_from;
 			uint8_t _hops = 0;
 			double _expires = 0;
 			std::set<Bytes> _random_blobs;
-			//Interface _receiving_interface = {Type::NONE};
-			Bytes _receiving_interface;
-			//const Packet& _announce_packet;
-			//Packet _announce_packet = {Type::NONE};
-			Bytes _announce_packet;
 			inline bool operator < (const DestinationEntry& entry) const {
 				// sort by ascending timestamp (oldest entries at the top)
 				return _timestamp < entry._timestamp;
 			}
+		private:
+			Interface _receiving_interface = {Type::NONE};
+			Bytes _receiving_interface_hash;
+			//const Packet& _announce_packet;
+			Packet _announce_packet = {Type::NONE};
+			Bytes _announce_packet_hash;
+		public:
 #ifndef NDEBUG
 			inline std::string debugString() const {
 				std::string dump;
@@ -141,8 +175,8 @@ namespace RNS {
 					" hops=" + std::to_string(_hops) +
 					" expires=" + std::to_string(_expires) +
 					//" random_blobs=" + _random_blobs +
-					" receiving_interface=" + _receiving_interface.toHex() +
-					" announce_packet=" + _announce_packet.toHex();
+					" receiving_interface=" + receiving_interface_hash().toHex() +
+					" announce_packet=" + announce_packet_hash().toHex();
 				dump += " random_blobs=(";
 				for (auto& blob : _random_blobs) {
 					dump += blob.toHex() + ",";
@@ -312,16 +346,18 @@ namespace RNS {
 		static void handle_tunnel(const Bytes& tunnel_id, const Interface& interface);
 		static void register_interface(Interface& interface);
 		static void deregister_interface(const Interface& interface);
-		inline static const std::map<Bytes, Interface&> get_interfaces() { return _interfaces; }
+		inline static const std::map<Bytes, Interface&>& get_interfaces() { return _interfaces; }
 		static void register_destination(Destination& destination);
 		static void deregister_destination(const Destination& destination);
 		static void register_link(Link& link);
 		static void activate_link(Link& link);
 		static void register_announce_handler(HAnnounceHandler handler);
 		static void deregister_announce_handler(HAnnounceHandler handler);
+		static bool is_interface_from_hash(const Bytes& interface_hash);
 		static Interface find_interface_from_hash(const Bytes& interface_hash);
 		static bool should_cache_packet(const Packet& packet);
 		static bool cache_packet(const Packet& packet, bool force_cache = false);
+		static bool is_cached_packet(const Bytes& packet_hash);
 		static Packet get_cached_packet(const Bytes& packet_hash);
 		static bool clear_cached_packet(const Bytes& packet_hash);
 		static bool cache_request_packet(const Packet& packet);
@@ -392,7 +428,7 @@ namespace RNS {
 		// CBA TEST
 		static inline void identity(Identity& identity) { _identity = identity; }
 
-		inline static const std::map<Bytes, DestinationEntry>& get_destination_table() { return _destination_table; }
+		inline static const std::map<Bytes, DestinationEntry>& get_path_table() { return _path_table; }
 		inline static const std::map<Bytes, RateEntry>& get_announce_rate_table() { return _announce_rate_table; }
 		inline static const std::map<Bytes, LinkEntry>& get_link_table() { return _link_table; }
 
@@ -425,7 +461,7 @@ namespace RNS {
 		// 55.100 path table entries or approximately 22.300 link table entries.
 
 		static std::map<Bytes, AnnounceEntry> _announce_table;           // A table for storing announces currently waiting to be retransmitted
-		static std::map<Bytes, DestinationEntry> _destination_table;           // A lookup table containing the next hop to a given destination
+		static std::map<Bytes, DestinationEntry> _path_table;           // A lookup table containing the next hop to a given destination
 		static std::map<Bytes, ReverseEntry> _reverse_table;           // A lookup table for storing packet hashes used to return proofs and replies
 		static std::map<Bytes, LinkEntry> _link_table;           // A lookup table containing hops for links
 		static std::map<Bytes, AnnounceEntry> _held_announces;           // A table containing temporarily held announce-table entries
@@ -479,7 +515,7 @@ namespace RNS {
 		static uint16_t _path_table_maxpersist;
 		static double _last_saved;
 		static float _save_interval;
-		static uint32_t _destination_table_crc;
+		static uint32_t _path_table_crc;
 		static uint16_t _announce_table_maxsize;
 
 		static Reticulum _owner;

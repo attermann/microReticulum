@@ -209,7 +209,6 @@ namespace ArduinoJson {
 			//dst["hash"] = src.get_hash();
 			dst["raw"] = src.raw();
 			dst["sent_at"] = src.sent_at();
-			dst["destination_hash"] = src.get_hash();
 			//TRACE("<<< Finished serializing Packet");
 			return true;
 		}
@@ -220,8 +219,7 @@ namespace ArduinoJson {
 			RNS::Packet packet(RNS::Destination(RNS::Type::NONE), raw);
 			//packet.set_hash(src["hash"]);
 			packet.sent_at(src["sent_at"]);
-			RNS::Bytes destination_hash = src["destination_hash"];
-			// set cached flag since pcket was read from cache
+			// set cached flag since packet was read from cache
 			packet.cached(true);
 			//TRACE(">>> Finished deserializing Packet");
 			return packet;
@@ -230,8 +228,7 @@ namespace ArduinoJson {
 			return
 				//src["hash"].is<RNS::Bytes>() &&
 				src["raw"].is<RNS::Bytes>() &&
-				src["sent_at"].is<double>() &&
-				src["destination_hash"].is<RNS::Bytes>();
+				src["sent_at"].is<double>();
 		}
 	};
 
@@ -279,18 +276,21 @@ namespace ArduinoJson {
 			dst["announce_hops"] = src._hops;
 			dst["expires"] = src._expires;
 			dst["random_blobs"] = src._random_blobs;
+
 /*
-			//dst["interface_hash"] = src._receiving_interface;
 			if (src._receiving_interface) {
 				dst["interface_hash"] = src._receiving_interface.get_hash();
 			}
 			else {
 				dst["interface_hash"] = nullptr;
 			}
+*/
+			dst["interface_hash"] = src.receiving_interface_hash();
+
 			// CBA TODO Move packet serialization to *after* destination table serialization since packets are useless
-			//  anyway if there's no space to left to write destination table.
+			//  anyway if there's no space left to write destination table.
 			// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
-			//dst["packet"] = src._announce_packet;
+/*
 			if (src._announce_packet) {
 				dst["packet_hash"] = src._announce_packet.get_hash();
 				// Only cache packet if not already cached
@@ -307,8 +307,8 @@ namespace ArduinoJson {
 				dst["packet_hash"] = nullptr;
 			}
 */
-			dst["interface_hash"] = src._receiving_interface;
-			dst["packet_hash"] = src._announce_packet;
+			dst["packet_hash"] = src.announce_packet_hash();
+
 			//TRACE("<<< Finished Serializing Transport::DestinationEntry");
 			return true;
 		}
@@ -320,22 +320,25 @@ namespace ArduinoJson {
 			dst._hops = src["announce_hops"];
 			dst._expires = src["expires"];
 			dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
+
 /*
-			//dst._receiving_interface = src["interface_hash"];
 			RNS::Bytes interface_hash = src["interface_hash"];
 			if (interface_hash) {
 				// Query transport for matching interface
 				dst._receiving_interface = RNS::Transport::find_interface_from_hash(interface_hash);
 			}
-			//dst._announce_packet = src["packet"];
+*/
+			dst.receiving_interface_hash(src["interface_hash"]);
+
+/*
 			RNS::Bytes packet_hash = src["packet_hash"];
 			if (packet_hash) {
-				// Query transport for matching packet
+				// Query transport for matching cached packet
 				dst._announce_packet = RNS::Transport::get_cached_packet(packet_hash);
 			}
 */
-			dst._receiving_interface = src["interface_hash"];
-			dst._announce_packet = src["packet_hash"];
+			dst.announce_packet_hash(src["packet_hash"]);
+
 /*
 			//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
 			RNS::Transport::DestinationEntry dst(
@@ -376,14 +379,18 @@ namespace RNS {
 		dst["announce_hops"] = src._hops;
 		dst["expires"] = src._expires;
 		dst["random_blobs"] = src._random_blobs;
+
 /*
-		//dst["interface_hash"] = src._receiving_interface;
 		if (src._receiving_interface) {
 			dst["interface_hash"] = src._receiving_interface.get_hash();
 		}
 		else {
 			dst["interface_hash"] = nullptr;
 		}
+*/
+		dst["interface_hash"] = src.receiving_interface_hash();
+
+/*
 		// CBA TODO Move packet serialization to *after* destination table serialization since packets are useless
 		//  anyway if there's no space to left to write destination table.
 		// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
@@ -404,8 +411,8 @@ namespace RNS {
 			dst["packet_hash"] = nullptr;
 		}
 */
-		dst["interface_hash"] = src._receiving_interface;
-		dst["packet_hash"] = src._announce_packet;
+		dst["packet_hash"] = src.announce_packet_hash();
+
 		//TRACE("<<< Finished Serializing Transport::DestinationEntry");
 		return true;
 	}
@@ -417,22 +424,25 @@ namespace RNS {
 		dst._hops = src["announce_hops"];
 		dst._expires = src["expires"];
 		dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
+
 /*
-		//dst._receiving_interface = src["interface_hash"];
 		RNS::Bytes interface_hash = src["interface_hash"];
 		if (interface_hash) {
 			// Query transport for matching interface
 			dst._receiving_interface = RNS::Transport::find_interface_from_hash(interface_hash);
 		}
-		//dst._announce_packet = src["packet"];
+*/
+		dst.receiving_interface_hash(src["interface_hash"]);
+
+/*
 		RNS::Bytes packet_hash = src["packet_hash"];
 		if (packet_hash) {
 			// Query transport for matching packet
 			dst._announce_packet = RNS::Transport::get_cached_packet(packet_hash);
 		}
 */
-		dst._receiving_interface = src["interface_hash"];
-		dst._announce_packet = src["packet_hash"];
+		dst.announce_packet_hash(src["packet_hash"]);
+
 /*
 		//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
 		RNS::Transport::DestinationEntry dst(

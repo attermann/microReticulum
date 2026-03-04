@@ -54,7 +54,7 @@ using namespace RNS::Utilities;
 /*static*/ std::list<PacketReceipt> Transport::_receipts;
 
 /*static*/ std::map<Bytes, Transport::AnnounceEntry> Transport::_announce_table;
-/*static*/ std::map<Bytes, Transport::DestinationEntry> Transport::_destination_table;
+/*static*/ std::map<Bytes, Transport::DestinationEntry> Transport::_path_table;
 /*static*/ std::map<Bytes, Transport::ReverseEntry> Transport::_reverse_table;
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
 /*static*/ std::map<Bytes, Transport::AnnounceEntry> Transport::_held_announces;
@@ -109,7 +109,7 @@ using namespace RNS::Utilities;
 /*static*/ uint16_t Transport::_path_table_maxpersist	= RNS_PATH_TABLE_MAX;
 /*static*/ double Transport::_last_saved				= 0.0;
 /*static*/ float Transport::_save_interval				= 3600.0;
-/*static*/ uint32_t Transport::_destination_table_crc	= 0;
+/*static*/ uint32_t Transport::_path_table_crc	= 0;
 /*static*/ uint16_t Transport::_announce_table_maxsize	= RNS_ANNOUNCE_TABLE_MAX;
 
 /*static*/ Reticulum Transport::_owner({Type::NONE});
@@ -138,12 +138,13 @@ using namespace RNS::Utilities;
 	_tables_last_culled = OS::time();
 	_last_saved = OS::time();
 
-	// ensure required directories exist
+	// Ensure required directories exist
 	if (!OS::directory_exists(Reticulum::_cachepath)) {
 		VERBOSE("No cache directory, creating...");
 		OS::create_directory(Reticulum::_cachepath);
 	}
 
+	// Load transport identity
 	if (!_identity) {
 		char transport_identity_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(transport_identity_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/transport_identity", Reticulum::_storagepath);
@@ -169,6 +170,7 @@ using namespace RNS::Utilities;
 
 // TODO
 /*
+	// Load packet hashlist
 	packet_hashlist_path = Reticulum::storagepath + "/packet_hashlist";
 	if (!owner.is_connected_to_shared_instance()) {
 		if (os.path.isfile(packet_hashlist_path)) {
@@ -204,12 +206,13 @@ using namespace RNS::Utilities;
 	_control_hashes.insert(tunnel_synthesize_destination.hash());
 	DEBUGF("Created transport-specific tunnel synthesize destination %s", tunnel_synthesize_destination.hash().toHex().c_str());
 
+	// Start job loops
 	_jobs_running = false;
-
 	// CBA Threading
 	//p thread = threading.Thread(target=Transport.jobloop, daemon=True)
 	//p thread.start()
 
+	// Load transport-related data
 	if (Reticulum::transport_enabled()) {
 		INFO("Transport mode is enabled");
 
@@ -219,6 +222,7 @@ using namespace RNS::Utilities;
 		write_path_table();
 		clean_caches();
 
+		// Read in tunnel table
 		read_tunnel_table();
 
 		// Create transport-specific destination for probe requests
@@ -234,6 +238,10 @@ using namespace RNS::Utilities;
 		VERBOSEF("Transport instance %s started", _identity.toString().c_str());
 		_start_time = OS::time();
 	}
+
+	// CBA TODO
+	// Sort interfaces according to bitrate
+	//p Transport.prioritize_interfaces()
 
 // TODO
 /*p
@@ -563,8 +571,8 @@ using namespace RNS::Utilities;
 				// Cull the path table
 				try {
 					std::vector<Bytes> stale_paths;
-					stale_paths.reserve(_destination_table.size());
-					for (const auto& [destination_hash, destination_entry] : _destination_table) {
+					stale_paths.reserve(_path_table.size());
+					for (auto& [destination_hash, destination_entry] : _path_table) {
 						const Interface& attached_interface = destination_entry.receiving_interface();
 						double destination_expiry;
 						if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
@@ -773,10 +781,10 @@ using namespace RNS::Utilities;
 
 	// Check if we have a known path for the destination in the path table
     //if packet.packet_type != RNS.Packet.ANNOUNCE and packet.destination.type != RNS.Destination.PLAIN and packet.destination.type != RNS.Destination.GROUP and packet.destination_hash in Transport.destination_table:
-	if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.destination().type() != Type::Destination::PLAIN && packet.destination().type() != Type::Destination::GROUP && _destination_table.find(packet.destination_hash()) != _destination_table.end()) {
+	if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.destination().type() != Type::Destination::PLAIN && packet.destination().type() != Type::Destination::GROUP && _path_table.find(packet.destination_hash()) != _path_table.end()) {
 		TRACE("Transport::outbound: Path to destination is known");
         //outbound_interface = Transport.destination_table[packet.destination_hash][5]
-		DestinationEntry destination_entry = (*_destination_table.find(packet.destination_hash())).second;
+		DestinationEntry destination_entry = (*_path_table.find(packet.destination_hash())).second;
 		Interface outbound_interface = destination_entry.receiving_interface();
 
 		// If there's more than one hop to the destination, and we know
@@ -803,7 +811,7 @@ using namespace RNS::Utilities;
 				//new_raw += packet.raw[2:]
 				new_raw << packet.raw().mid(2);
 				transmit(outbound_interface, new_raw);
-				//_destination_table[packet.destination_hash][0] = time.time()
+				//_path_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
 				sent = true;
 			}
@@ -1389,8 +1397,8 @@ using namespace RNS::Utilities;
 		bool for_local_client = false;
 		bool for_local_client_link = false;
 		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
-			auto destination_iter = _destination_table.find(packet.destination_hash());
-			if (destination_iter != _destination_table.end()) {
+			auto destination_iter = _path_table.find(packet.destination_hash());
+			if (destination_iter != _path_table.end()) {
 				DestinationEntry destination_entry = (*destination_iter).second;
 			 	if (destination_entry._hops == 0) {
 					// Destined for a local destination
@@ -1500,8 +1508,8 @@ using namespace RNS::Utilities;
 				TRACE("Transport::inbound: Packet is in transport...");
 				if (packet.transport_id() == _identity.hash()) {
 					TRACE("Transport::inbound: We are designated next-hop");
-					auto destination_iter = _destination_table.find(packet.destination_hash());
-					if (destination_iter != _destination_table.end()) {
+					auto destination_iter = _path_table.find(packet.destination_hash());
+					if (destination_iter != _path_table.end()) {
 						TRACE("Transport::inbound: Found next-hop path to destination");
 						DestinationEntry destination_entry = (*destination_iter).second;
 						Bytes next_hop = destination_entry._received_from;
@@ -1783,8 +1791,8 @@ using namespace RNS::Utilities;
 					//p random_blobs = []
 					std::set<Bytes> empty_random_blobs;
 					std::set<Bytes>& random_blobs = empty_random_blobs;
-					auto iter = _destination_table.find(packet.destination_hash());
-					if (iter != _destination_table.end()) {
+					auto iter = _path_table.find(packet.destination_hash());
+					if (iter != _path_table.end()) {
 						DestinationEntry destination_entry = (*iter).second;
 						//p random_blobs = Transport.destination_table[packet.destination_hash][4]
 						random_blobs = destination_entry._random_blobs;
@@ -2095,7 +2103,7 @@ using namespace RNS::Utilities;
 						try {
 							// CBA First remove any existing path before inserting new one
 							remove_path(packet.destination_hash());
-							if (_destination_table.insert({packet.destination_hash(), destination_table_entry}).second) {
+							if (_path_table.insert({packet.destination_hash(), destination_table_entry}).second) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
 								++_destinations_added;
 								// CBA IMMEDIATE CULL
@@ -2687,6 +2695,29 @@ Deregisters an announce handler.
 	}
 }
 
+/*static*/ bool Transport::is_interface_from_hash(const Bytes& interface_hash) {
+#if defined(INTERFACES_SET)
+	for (const Interface& interface : _interfaces) {
+		if (interface.get_hash() == interface_hash) {
+			return true;
+		}
+	}
+#elif defined(INTERFACES_LIST)
+	for (Interface& interface : _interfaces) {
+		if (interface.get_hash() == interface_hash) {
+			return true;
+		}
+	}
+#elif defined(INTERFACES_MAP)
+	auto iter = _interfaces.find(interface_hash);
+	if (iter != _interfaces.end()) {
+		return true;
+	}
+#endif
+
+	return false;
+}
+
 /*static*/ Interface Transport::find_interface_from_hash(const Bytes& interface_hash) {
 #if defined(INTERFACES_SET)
 	for (const Interface& interface : _interfaces) {
@@ -2746,30 +2777,24 @@ Deregisters an announce handler.
 	return false;
 }
 
+/*static*/ bool Transport::is_cached_packet(const Bytes& packet_hash) {
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+	try {
+		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
+		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
+		return OS::file_exists(packet_cache_path);
+	}
+	catch (std::exception& e) {
+		ERRORF("Exception occurred while getting cached packet: %s", e.what());
+	}
+#endif
+	return false;
+}
+
 /*static*/ Packet Transport::get_cached_packet(const Bytes& packet_hash) {
 	TRACEF("Loading packet %s from cache storage", packet_hash.toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	try {
-/*p
-		packet_hash = RNS.hexrep(packet_hash, delimit=False)
-		path = RNS.Reticulum.cachepath+"/"+packet_hash
-
-		if os.path.isfile(path):
-			file = open(path, "rb")
-			cached_data = umsgpack.unpackb(file.read())
-			file.close()
-
-			packet = RNS.Packet(None, cached_data[0])
-			interface_reference = cached_data[1]
-
-			for interface in Transport.interfaces:
-				if str(interface) == interface_reference:
-					packet.receiving_interface = interface
-
-			return packet
-		else:
-			return None
-*/
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
 		Packet packet({Type::NONE});
@@ -2779,8 +2804,7 @@ Deregisters an announce handler.
 		return packet;
 	}
 	catch (std::exception& e) {
-		ERROR("Exception occurred while getting cached packet.");
-		ERRORF("The contained exception was: %s", e.what());
+		ERRORF("Exception occurred while getting cached packet: %s", e.what());
 	}
 #endif
 	return {Type::NONE};
@@ -2847,15 +2871,15 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::remove_path(const Bytes& destination_hash) {
-	auto iter = _destination_table.find(destination_hash);
-	if (iter != _destination_table.end()) {
+	auto iter = _path_table.find(destination_hash);
+	if (iter != _path_table.end()) {
 		// Remove cached packet file associated with this destination
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
-		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, iter->second._announce_packet.toHex().c_str());
+		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, iter->second.announce_packet_hash().toHex().c_str());
 		if (OS::file_exists(packet_cache_path)) {
 			OS::remove_file(packet_cache_path);
 		}
-		if (_destination_table.erase(destination_hash) < 1) {
+		if (_path_table.erase(destination_hash) < 1) {
 			WARNINGF("Failed to remove destination %s from path table", destination_hash.toHex().c_str());
 		}
 		return true;
@@ -2868,7 +2892,7 @@ Deregisters an announce handler.
 :returns: *True* if a path to the destination is known, otherwise *False*.
 */
 /*static*/ bool Transport::has_path(const Bytes& destination_hash) {
-	if (_destination_table.find(destination_hash) != _destination_table.end()) {
+	if (_path_table.find(destination_hash) != _path_table.end()) {
 		return true;
 	}
 	else {
@@ -2881,8 +2905,8 @@ Deregisters an announce handler.
 :returns: The number of hops to the specified destination, or ``RNS.Transport.PATHFINDER_M`` if the number of hops is unknown.
 */
 /*static*/ uint8_t Transport::hops_to(const Bytes& destination_hash) {
-	auto iter = _destination_table.find(destination_hash);
-	if (iter != _destination_table.end()) {
+	auto iter = _path_table.find(destination_hash);
+	if (iter != _path_table.end()) {
 		DestinationEntry destination_entry = (*iter).second;
 		return destination_entry._hops;
 	}
@@ -2896,8 +2920,8 @@ Deregisters an announce handler.
 :returns: The destination hash as *bytes* for the next hop to the specified destination, or *None* if the next hop is unknown.
 */
 /*static*/ Bytes Transport::next_hop(const Bytes& destination_hash) {
-	auto iter = _destination_table.find(destination_hash);
-	if (iter != _destination_table.end()) {
+	auto iter = _path_table.find(destination_hash);
+	if (iter != _path_table.end()) {
 		DestinationEntry destination_entry = (*iter).second;
 		return destination_entry._received_from;
 	}
@@ -2911,8 +2935,8 @@ Deregisters an announce handler.
 :returns: The interface for the next hop to the specified destination, or *None* if the interface is unknown.
 */
 /*static*/ Interface Transport::next_hop_interface(const Bytes& destination_hash) {
-	auto iter = _destination_table.find(destination_hash);
-	if (iter != _destination_table.end()) {
+	auto iter = _path_table.find(destination_hash);
+	if (iter != _path_table.end()) {
 		DestinationEntry destination_entry = (*iter).second;
 		return destination_entry.receiving_interface();
 	}
@@ -2982,8 +3006,8 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::expire_path(const Bytes& destination_hash) {
-	auto iter = _destination_table.find(destination_hash);
-	if (iter != _destination_table.end()) {
+	auto iter = _path_table.find(destination_hash);
+	if (iter != _path_table.end()) {
 		DestinationEntry destination_entry = (*iter).second;
 		destination_entry._timestamp = 0;
 		_tables_last_culled = 0;
@@ -3183,8 +3207,8 @@ will announce it.
 
 	bool destination_exists_on_local_client = false;
 	if (_local_client_interfaces.size() > 0) {
-		auto iter = _destination_table.find(destination_hash);
-		if (iter != _destination_table.end()) {
+		auto iter = _path_table.find(destination_hash);
+		if (iter != _path_table.end()) {
 			TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
 			DestinationEntry& destination_entry = (*iter).second;
 			if (is_local_client_interface(destination_entry.receiving_interface())) {
@@ -3198,7 +3222,7 @@ will announce it.
 		}
 	}
 
-	auto destination_iter = _destination_table.find(destination_hash);
+	auto destination_iter = _path_table.find(destination_hash);
 	//local_destination = next((d for d in Transport.destinations if d.hash == destination_hash), None)
 #if defined(DESTINATIONS_SET)
 	Destination local_destination({Type::NONE});
@@ -3219,10 +3243,13 @@ will announce it.
 		DEBUGF("Answering path request for destination %s%s, destination is local to this system", destination_hash.toHex().c_str(), interface_str.c_str());
 	}
     //p elif (RNS.Reticulum.transport_enabled() or is_from_local_client) and (destination_hash in Transport.destination_table):
-	else if ((Reticulum::transport_enabled() || is_from_local_client) && destination_iter != _destination_table.end()) {
+	else if ((Reticulum::transport_enabled() || is_from_local_client) && destination_iter != _path_table.end()) {
 		TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
 		DestinationEntry& destination_entry = (*destination_iter).second;
 		const Packet& announce_packet = destination_entry.announce_packet();
+TRACEF("announce_packet destination_hash: %s", announce_packet.destination_hash().toHex().c_str());
+TRACEF("announce_packet hops: %u", announce_packet.hops());
+TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 		const Bytes& next_hop = destination_entry._received_from;
 		const Interface& receiving_interface = destination_entry.receiving_interface();
 
@@ -3522,12 +3549,7 @@ will announce it.
 			file.write(umsgpack.packb(Transport.packet_hashlist))
 			file.close()
 
-			save_time = time.time() - save_start
-			if save_time < 1:
-				time_str = str(round(save_time*1000,2))+"ms"
-			else:
-				time_str = str(round(save_time,2))+"s"
-			RNS.log("Saved packet hashlist in "+time_str, RNS.LOG_DEBUG)
+			DEBUGF("Saved packet hashlist in %.3f seconds", OS::round(time.time() - save_start))
 
 		except Exception as e:
 			RNS.log("Could not save packet hashlist to storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
@@ -3545,51 +3567,15 @@ will announce it.
 	char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
 	snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
 	if (!_owner.is_connected_to_shared_instance() && OS::file_exists(destination_table_path)) {
-/*p
-		serialised_destinations = []
-		try:
-			file = open(destination_table_path, "rb")
-			serialised_destinations = umsgpack.unpackb(file.read())
-			file.close()
-
-			for serialised_entry in serialised_destinations:
-				destination_hash = serialised_entry[0]
-
-				if len(destination_hash) == RNS.Reticulum.TRUNCATED_HASHLENGTH//8:
-					timestamp = serialised_entry[1]
-					received_from = serialised_entry[2]
-					hops = serialised_entry[3]
-					expires = serialised_entry[4]
-					random_blobs = serialised_entry[5]
-					receiving_interface = Transport.find_interface_from_hash(serialised_entry[6])
-					announce_packet = Transport.get_cached_packet(serialised_entry[7])
-
-					if announce_packet != None and receiving_interface != None:
-						announce_packet.unpack()
-						// We increase the hops, since reading a packet
-						// from cache is equivalent to receiving it again
-						// over an interface. It is cached with it's non-
-						// increased hop-count.
-						announce_packet.hops += 1
-						Transport.destination_table[destination_hash] = [timestamp, received_from, hops, expires, random_blobs, receiving_interface, announce_packet]
-						RNS.log("Loaded path table entry for "+RNS.prettyhexrep(destination_hash)+" from storage", RNS.LOG_DEBUG)
-					else:
-						RNS.log("Could not reconstruct path table entry from storage for "+RNS.prettyhexrep(destination_hash), RNS.LOG_DEBUG)
-						if announce_packet == None:
-							RNS.log("The announce packet could not be loaded from cache", RNS.LOG_DEBUG)
-						if receiving_interface == None:
-							RNS.log("The interface is no longer available", RNS.LOG_DEBUG)
-*/
-
 		try {
 #if CUSTOM
-TRACEF("Transport::start: buffer capacity %d bytes", Persistence::_buffer.capacity());
+TRACEF("Transport::read_path_table: buffer capacity %d bytes", Persistence::_buffer.capacity());
 			if (RNS::Utilities::OS::read_file(destination_table_path, Persistence::_buffer) > 0) {
-				TRACEF("Transport::start: read: %d bytes", Persistence::_buffer.size());
+				TRACEF("Transport::read_path_table: read: %d bytes", Persistence::_buffer.size());
 #ifndef NDEBUG
 				// CBA DEBUG Dump path table
-TRACEF("Transport::start: buffer addr: 0x%X", Persistence::_buffer.data());
-TRACEF("Transport::start: buffer size %d bytes", Persistence::_buffer.size());
+TRACEF("Transport::read_path_table: buffer addr: 0x%X", Persistence::_buffer.data());
+TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.size());
 				//TRACE("SERIALIZED: destination_table");
 				//TRACE(Persistence::_buffer.toString().c_str());
 #endif
@@ -3598,53 +3584,57 @@ TRACEF("Transport::start: buffer size %d bytes", Persistence::_buffer.size());
 #else
 				DeserializationError error = deserializeJson(Persistence::_document, Persistence::_buffer.data());
 #endif
-				TRACEF("Transport::start: doc size: %d bytes", Persistence::_buffer.size());
+				TRACEF("Transport::read_path_table: doc size: %d bytes", Persistence::_buffer.size());
 				if (!error) {
 					// Calculate crc for dirty-checking before write
-					_destination_table_crc = Crc::crc32(0, Persistence::_buffer.data(), Persistence::_buffer.size());
-					_destination_table = Persistence::_document.as<std::map<Bytes, DestinationEntry>>();
+					_path_table_crc = Crc::crc32(0, Persistence::_buffer.data(), Persistence::_buffer.size());
+					_path_table = Persistence::_document.as<std::map<Bytes, DestinationEntry>>();
 #else	// CUSTOM
-				// Calculate crc for dirty-checking before write
-				if (Persistence::deserialize(_destination_table, destination_table_path, _destination_table_crc) > 0) {
+				// Calculate crc for dirty-checking before later write
+				if (Persistence::deserialize(_path_table, destination_table_path, _path_table_crc) > 0) {
 #endif	// CUSTOM
 
-					TRACEF("Transport::start: successfully deserialized path table with %d entries", _destination_table.size());
+					TRACEF("Transport::read_path_table: successfully deserialized path table with %d entries", _path_table.size());
 					std::vector<Bytes> invalid_paths;
-					for (auto& [destination_hash, destination_entry] : _destination_table) {
+					for (auto& [destination_hash, destination_entry] : _path_table) {
 #ifndef NDEBUG
-						TRACEF("Transport::start: entry: %s = %s", destination_hash.toHex().c_str(), destination_entry.debugString().c_str());
+						TRACEF("Transport::read_path_table: hash: %s entry: {%s}", destination_hash.toHex().c_str(), destination_entry.debugString().c_str());
 #endif
-						// CBA If announce packet load fails then remove destination entry (it's useless without announce packet)
-						if (!destination_entry.announce_packet()) {
+						// CBA Avoid accessing announce_packet() and receiving_interface() until actually needed in order to
+						// take advantage of lazy loading and avoid incurring memory hit to store if not actually needed.
+
+						// CBA If announce packet is not cached then remove destination entry (it's useless without announce packet)
+						if (!is_cached_packet(destination_entry.announce_packet_hash())) {
 							// remove destination
-							WARNINGF("Transport::start: removing invalid path to %s due to missing announce packet", destination_hash.toHex().c_str());
+							WARNINGF("Transport::read_path_table: removing invalid path to %s due to missing announce packet", destination_hash.toHex().c_str());
 							invalid_paths.push_back(destination_hash);
+							continue;
 						}
-						// CBA If receiving interface is not found then remove destination entry (it's useless without interface)
-						if (!destination_entry.receiving_interface()) {
+						// CBA If receiving interface is not present then remove destination entry (it's useless without receiving interface)
+						if (!is_interface_from_hash(destination_entry.receiving_interface_hash())) {
 							// remove destination
-							WARNINGF("Transport::start: removing invalid path to %s due to missing receiving interface", destination_hash.toHex().c_str());
+							WARNINGF("Transport::read_path_table: removing invalid path to %s due to missing receiving interface", destination_hash.toHex().c_str());
 							invalid_paths.push_back(destination_hash);
+							continue;
 						}
+						DEBUGF("Loaded path table entry for %s from storage", destination_hash.toHex().c_str());
 					}
 					for (const auto& destination_hash : invalid_paths) {
-						_destination_table.erase(destination_hash);
+						_path_table.erase(destination_hash);
 					}
+                    VERBOSEF("Loaded %zu path table entries from storage", _path_table.size());
 					return true;
 				}
 				else {
-					TRACE("Transport::start: failed to deserialize");
+					TRACE("Transport::read_path_table: failed to deserialize");
 				}
 #if CUSTOM
 			}
 			else {
-				TRACE("Transport::start: destination table read failed");
+				TRACE("Transport::read_path_table: destination table read failed");
 			}
 #else	// CUSTOM
 #endif	// CUSTOM
-
-			VERBOSEF("Loaded %d valid path table entries from storage", _destination_table.size());
-
 		}
 		catch (std::exception& e) {
 			ERRORF("Could not load destination table from storage, the contained exception was: %s", e.what());
@@ -3679,7 +3669,6 @@ TRACEF("Transport::start: buffer size %d bytes", Persistence::_buffer.size());
 	try {
 		_saving_path_table = true;
 		double save_start = OS::time();
-		DEBUGF("Saving %d path table entries to storage...", _destination_table.size());
 
 /*p
 		serialised_destinations = []
@@ -3724,7 +3713,7 @@ TRACEF("Transport::start: buffer size %d bytes", Persistence::_buffer.size());
 
 #if CUSTOM
 		{
-			Persistence::_document.set(_destination_table);
+			Persistence::_document.set(_path_table);
 			TRACEF("Transport::write_path_table: doc size %d bytes", Persistence::_document.memoryUsage());
 
 			//size_t size = 8192;
@@ -3743,8 +3732,6 @@ TRACEF("Transport::write_path_table: buffer addr: %ld", (long)buffer);
 			}
 		}
 		if (Persistence::_buffer.size() > 0) {
-			char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
-			snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
 #ifndef NDEBUG
 			// CBA DEBUG Dump path table
 TRACEF("Transport::write_path_table: buffer addr: %ld", (long)Persistence::_buffer.data());
@@ -3754,55 +3741,57 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 #endif
 			// Check crc to see if data has changed before writing
 			uint32_t crc = Crc::crc32(0, Persistence::_buffer.data(), Persistence::_buffer.size());
-			if (_destination_table_crc > 0 && crc == _destination_table_crc) {
+			if (_path_table_crc > 0 && crc == _path_table_crc) {
 				TRACE("Transport::write_path_table: no change detected, skipping write");
 			}
-			else if (RNS::Utilities::OS::write_file(destination_table_path, Persistence::_buffer) == Persistence::_buffer.size()) {
-				TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _destination_table.size(), Persistence::_buffer.size());
-				_destination_table_crc = crc;
-				success = true;
+			else {
+				TRACE("Transport::write_path_table: change detected, writing...");
+				DEBUGF("Saving %d path table entries to storage...", _path_table.size());
+				char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
+				snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
+				if (RNS::Utilities::OS::write_file(destination_table_path, Persistence::_buffer) == Persistence::_buffer.size()) {
+					TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _path_table.size(), Persistence::_buffer.size());
+					_path_table_crc = crc;
+					success = true;
 
 #ifndef NDEBUG
-				// CBA DEBUG Dump path table
-				//TRACE("FILE: destination_table");
-				//if (OS::read_file("/destination_table", Persistence::_buffer) > 0) {
-				//	TRACE(Persistence::_buffer.toString().c_str());
-				//}
+					// CBA DEBUG Dump path table
+					//TRACE("FILE: destination_table");
+					//if (OS::read_file("/destination_table", Persistence::_buffer) > 0) {
+					//	TRACE(Persistence::_buffer.toString().c_str());
+					//}
 #endif
-			}
-			else {
-				TRACE("Transport::write_path_table: write failed");
+				}
+				else {
+					ERROR("Transport::write_path_table: write failed");
+				}
 			}
 		}
 		else {
-			TRACE("Transport::write_path_table: failed to serialize");
+			ERROR("Transport::write_path_table: failed to serialize");
 		}
 #else	// CUSTOM
-		uint32_t crc = Persistence::crc(_destination_table);
-		if (_destination_table_crc > 0 && crc == _destination_table_crc) {
+		uint32_t crc = Persistence::crc(_path_table);
+		if (_path_table_crc > 0 && crc == _path_table_crc) {
 			TRACE("Transport::write_path_table: no change detected, skipping write");
 		}
 		else {
 			TRACE("Transport::write_path_table: change detected, writing...");
+			DEBUGF("Saving %d path table entries to storage...", _path_table.size());
 			char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
 			snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
-			if (Persistence::serialize(_destination_table, destination_table_path, _destination_table_crc) > 0) {
-				TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _destination_table.size(), Persistence::_buffer.size());
+			if (Persistence::serialize(_path_table, destination_table_path, _path_table_crc) > 0) {
+				TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _path_table.size(), Persistence::_buffer.size());
 				success = true;
+			}
+			else {
+				ERROR("Transport::write_path_table: serialize failed");
 			}
 		}
 #endif	// CUSTOM
 
 		if (success) {
-			double save_time = OS::time() - save_start;
-			if (save_time < 1.0) {
-				//DEBUGF("Saved %zu path table entries in %.1f ms", _destination_table.size(), OS::round(save_time * 1000, 1));
-				DEBUGF("Saved %zu path table entries in %.1f ms", _destination_table.size(), OS::round(save_time * 1000, 1));
-			}
-			else {
-				//DEBUGF("Saved %zu path table entries in %.1f s", _destination_table.size(), OS::round(save_time, 1));
-				DEBUGF("Saved %zu path table entries in %.1f s", _destination_table.size(), OS::round(save_time, 1));
-			}
+			DEBUGF("Saved %zu path table entries in %.3f seconds", _path_table.size(), OS::round(OS::time() - save_start, 3));
 		}
 	}
 	catch (std::exception& e) {
@@ -3939,14 +3928,9 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			file.write(umsgpack.packb(serialised_tunnels))
 			file.close()
 
-			save_time = time.time() - save_start
-			if save_time < 1:
-				time_str = str(round(save_time*1000,2))+" ms"
-			else:
-				time_str = str(round(save_time,2))+" s"
-			RNS.log("Saved "+str(len(serialised_tunnels))+" tunnel table entries in "+time_str, RNS.LOG_DEBUG)
+			DEBUGF("Saved %zu tunnel table entries in %.3f seconds", serialised_tunnels.size(), OS::round(OS::time() - save_start))
 		except Exception as e:
-			RNS.log("Could not save tunnel table to storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
+			ERRORF("Could not save tunnel table to storage, the contained exception was: %s", e.what())
 
 		Transport.saving_tunnel_table = False
 */
@@ -3968,8 +3952,8 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
     for (auto& file : files) {
 		TRACEF("Transport::clean_caches: Checking for use of cached packet %s", file.c_str());
 		bool found = false;
-		for (auto& [destination_hash, destination_entry] : _destination_table) {
-			if (file.compare(destination_entry._announce_packet.toHex()) == 0) {
+		for (auto& [destination_hash, destination_entry] : _path_table) {
+			if (file.compare(destination_entry.announce_packet_hash().toHex()) == 0) {
 				found = true;
 				break;
 			}
@@ -4001,11 +3985,11 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// memory
 	// storage
 	// _destinations
-	// _destination_table
+	// _path_table
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	HEADF(LOG_VERBOSE, "mem: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, (int)((double)memory / (double)OS::heap_size() * 100.0), memory - _last_memory, flash, (int)((double)flash / (double)OS::storage_size() * 100.0), flash - _last_flash, _destination_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
+	HEADF(LOG_VERBOSE, "mem: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, (int)((double)memory / (double)OS::heap_size() * 100.0), memory - _last_memory, flash, (int)((double)flash / (double)OS::storage_size() * 100.0), flash - _last_flash, _path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
 
 	// _path_requests
 	// _discovery_path_requests
@@ -4066,14 +4050,14 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 
 /*static*/ void Transport::cull_path_table() {
 	TRACE("Transport::cull_path_table()");
-	if (_destination_table.size() > _path_table_maxsize) {
+	if (_path_table.size() > _path_table_maxsize) {
 		try {
 			// Build lightweight (timestamp, key) index to avoid copying full DestinationEntry
 			// objects (which contain nested std::set<Bytes>) — prevents OOM on heap-constrained
 			// devices when the table hits max capacity.
 			std::vector<std::pair<double, Bytes>> sorted_keys;
-			sorted_keys.reserve(_destination_table.size());
-			for (const auto& [key, entry] : _destination_table) {
+			sorted_keys.reserve(_path_table.size());
+			for (const auto& [key, entry] : _path_table) {
 				sorted_keys.emplace_back(entry._timestamp, key);
 			}
 			// Sort ascending by timestamp so oldest entries are removed first
@@ -4083,21 +4067,21 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			for (const auto& [timestamp, destination_hash] : sorted_keys) {
 				TRACEF("Transport::cull_path_table: Removing destination %s from path table", destination_hash.toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-				auto it = _destination_table.find(destination_hash);
-				if (it != _destination_table.end()) {
+				auto it = _path_table.find(destination_hash);
+				if (it != _path_table.end()) {
 					// Remove cached packet file associated with this destination
 					char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
-					snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, it->second._announce_packet.toHex().c_str());
+					snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, it->second.announce_packet_hash().toHex().c_str());
 					if (OS::file_exists(packet_cache_path)) {
 						OS::remove_file(packet_cache_path);
 					}
 				}
 #endif
-				if (_destination_table.erase(destination_hash) < 1) {
+				if (_path_table.erase(destination_hash) < 1) {
 					WARNINGF("Failed to remove destination %s from path table", destination_hash.toHex().c_str());
 				}
 				++count;
-				if (_destination_table.size() <= _path_table_maxsize) {
+				if (_path_table.size() <= _path_table_maxsize) {
 					break;
 				}
 			}
@@ -4107,14 +4091,14 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			ERROR("cull_path_table: bad_alloc - out of memory building sort index, falling back to single erase");
 			// Fallback: std::min_element does no heap allocation — erase one oldest entry
 			auto oldest = std::min_element(
-				_destination_table.begin(), _destination_table.end(),
+				_path_table.begin(), _path_table.end(),
 				[](const std::pair<const Bytes, DestinationEntry>& a,
 			   const std::pair<const Bytes, DestinationEntry>& b) {
 				return a.second._timestamp < b.second._timestamp;
 			}
 			);
-			if (oldest != _destination_table.end()) {
-				_destination_table.erase(oldest);
+			if (oldest != _path_table.end()) {
+				_path_table.erase(oldest);
 			}
 		}
 		catch (const std::exception& e) {
@@ -4198,7 +4182,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 /*static*/ uint16_t Transport::remove_paths(const std::vector<Bytes>& hashes) {
 	uint16_t count = 0;
 	for (const auto& destination_hash : hashes) {
-		//_destination_table.erase(destination_hash);
+		//_path_table.erase(destination_hash);
 		remove_path(destination_hash);
 		++count;
 	}

@@ -30,7 +30,7 @@ public:
 			InterfaceImpl::handle_incoming(data);
 		}
 		catch (const std::bad_alloc&) {
-			ERROR("handle_incoming: bad_alloc - out of memory");
+			ERROR("handle_incoming: bad_alloc - OUT OF MEMORY");
 		}
 		catch (const std::exception& e) {
 			ERRORF("handle_incoming: exception: %s", e.what());
@@ -52,7 +52,7 @@ public:
 			InterfaceImpl::handle_outgoing(data);
 		}
 		catch (const std::bad_alloc&) {
-			ERROR("handle_outgoing: bad_alloc - out of memory");
+			ERROR("handle_outgoing: bad_alloc - OUT OF MEMORY");
 		}
 		catch (const std::exception& e) {
 			ERRORF("handle_outgoing: exception: %s", e.what());
@@ -130,7 +130,7 @@ void initRNS() {
 		rns_initialized = true;
 	}
 	catch (const std::bad_alloc&) {
-		ERROR("initRNS: bad_alloc - out of memory");
+		ERROR("initRNS: bad_alloc - OUT OF MEMORY");
 	}
 	catch (const std::exception& e) {
 		ERRORF("initRNS: exception: %s", e.what());
@@ -427,7 +427,7 @@ void test_incoming_announce_limit() {
 			}
 		}
 		catch (const std::bad_alloc&) {
-			ERROR("test_incoming_announce_limit: bad_alloc - out of memory");
+			ERROR("test_incoming_announce_limit: bad_alloc - OUT OF MEMORY");
 			break;
 		}
 		catch (const std::exception& e) {
@@ -488,7 +488,7 @@ void test_incoming_announce_over_limit() {
 			}
 		}
 		catch (const std::bad_alloc&) {
-			ERROR("test_incoming_announce_over_limit: bad_alloc - out of memory");
+			ERROR("test_incoming_announce_over_limit: bad_alloc - OUT OF MEMORY");
 			break;
 		}
 		catch (const std::exception& e) {
@@ -554,7 +554,7 @@ void test_incoming_announce_stress() {
 			}
 		}
 		catch (const std::bad_alloc&) {
-			ERROR("test_incoming_announce_stress: bad_alloc - out of memory");
+			ERROR("test_incoming_announce_stress: bad_alloc - OUT OF MEMORY");
 			break;
 		}
 		catch (const std::exception& e) {

@@ -104,7 +104,7 @@ namespace RNS { namespace Type {
 		but it can be configured individually on a per-interface basis.
 		*/
 
-		static const uint16_t MINIMUM_BITRATE = 500;
+		static const uint16_t MINIMUM_BITRATE = 5;
 
 		// TODO: To reach the 300bps level without unreasonably impacting
 		// performance on faster links, we need a mechanism for setting
@@ -130,13 +130,13 @@ namespace RNS { namespace Type {
 		//static const uint16_t JOB_INTERVAL     = 60*5;
 		static const uint16_t JOB_INTERVAL     = 60;
 		// CBA TEST
-		//static const uint16_t CLEAN_INTERVAL   = 60*15;
-		static const uint16_t CLEAN_INTERVAL   = 60;
+		static uint16_t CLEAN_INTERVAL   = 60*15;
+		//static uint16_t CLEAN_INTERVAL   = 60;
 		// CBA MCU
 		//static const uint16_t PERSIST_INTERVAL = 60*60*12;
 		// CBA TEST
-		//static const uint16_t PERSIST_INTERVAL = 60*60;
-		static const uint16_t PERSIST_INTERVAL = 60;
+		static uint16_t PERSIST_INTERVAL = 60*60;
+		//static uint16_t PERSIST_INTERVAL = 60;
 		static const uint16_t GRACIOUS_PERSIST_INTERVAL = 60*5;
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes
@@ -235,7 +235,7 @@ namespace RNS { namespace Type {
 		static const float KEEPALIVE_MAX_RTT        = 1.75;
 		static const uint8_t KEEPALIVE_TIMEOUT_FACTOR = 4;
 		// Grace period in seconds used in link timeout calculation.
-		static const uint8_t STALE_GRACE = 2;
+		static const uint8_t STALE_GRACE = 5;
 		// Interval for sending keep-alive packets on established links in seconds.
 		static const uint16_t KEEPALIVE = 360;
 		/*
@@ -442,12 +442,12 @@ namespace RNS { namespace Type {
 		static const uint8_t LOCAL_REBROADCASTS_MAX = 2;          // How many local rebroadcasts of an announce is allowed
 
 		static const uint8_t PATH_REQUEST_TIMEOUT = 15;           // Default timuout for client path requests in seconds
-		static constexpr const float PATH_REQUEST_GRACE     = 0.35;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
+		static constexpr const float PATH_REQUEST_GRACE     = 0.4;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 5;            // Minimum interval in seconds for automated path requests
 
 		static constexpr const float LINK_TIMEOUT  = Link::STALE_TIME * 1.25;
-		static const uint16_t REVERSE_TIMEOUT      = 30*60;        // Reverse table entries are removed after 30 minutes
+		static const uint16_t REVERSE_TIMEOUT      = 8*60;        // Reverse table entries are removed after 8 minutes
 		// CBA MCU
 		static const uint16_t MAX_RECEIPTS         = RNS_RECEIPTS_MAX; // Maximum number of receipts to keep track of
 		static const uint8_t MAX_RATE_TIMESTAMPS   = RNS_RATE_TIMESTAMPS_MAX; // Maximum number of announce timestamps to keep per destination

@@ -161,9 +161,9 @@ namespace RNS {
 		inline void add_announce(AnnounceEntry& entry) { assert(_impl); _impl->_announce_queue.push_back(entry); }
 
 	protected:
-		inline void send_outgoing(const Bytes& data) { assert(_impl); _impl->send_outgoing(data); }
+		// Internal method to handle data going out on interface and pass on to impl
+		void send_outgoing(const Bytes& data);
 	public:
-		//inline void handle_incoming(const Bytes& data) { assert(_impl); _impl->handle_incoming(data); }
 		// Public method to handle data coming in on interface and pass on to impl
 		void handle_incoming(const Bytes& data);
 
