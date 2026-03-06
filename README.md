@@ -18,9 +18,33 @@ This API is dependent on the following external libraries:
 - `-DRNS_MEM_LOG` Used to enable logging of low-level memory operations for debug purposes
 - `-DRNS_USE_FS` Used to enable use of file system by RNS for persistence
 - `-DRNS_PERSIST_PATHS` Used to enable persistence of RNS paths in file system (also requires `-DRNS_USE_FS`)
-- `-DRNS_USE_TLSF=1` Enables the use of the TLSF (Two-Level Segregate Fit) dynamic memory manager for efficient management of constrained MCU memory with minimal fragmentation. Currently only required on NRF52 boards (ESP32 already uses TLSF internally).
-- `-RNS_TLSF_BUFFER_SIZ=N` Defines the TLSF memory pool buffer size (N bytes, default 0 which means dynamic) 
-- `-DRNS_USE_ALLOCATOR=1` Enables the replacement of default new/delete operators with custom implementations that take advantage of optimized memory managers (eg, TLSF). Currently only required on NRF52 boards (ESP32 already uses TLSF internally).
+
+## Memory Management Build Options
+
+Two classes of memory allocator are defined; the container allocator (`RNS_CONTAINER_ALLOCATOR`) which is used for certain long-lived STL containers (e.g. path table), and the default allocator (`RNS_DEFAULT_ALLOCATOR`) which is used for all other C++ memory allocation (new/delete).
+
+Each class of allocator can be configured to use a separate type of allocator. Available memory allocators are:
+- `RNS_HEAP_ALLOCATOR`: Basic allocator that uses default system HEAP.
+- `RNS_HEAP_POOL_ALLOCATOR`: Optimized TLSF managed HEAP buffer
+- `RNS_PSRAM_ALLOCATOR`: Basic allocator that uses PSRAM memory (if PSRAM is available)
+- `RNS_PSRAM_POOL_ALLOCATOR`: Optimized TLSF managed PSRAM buffer (if PSRAM is available)
+
+Each class of allocator pool can have a separate buffer size:
+- `RNS_HEAP_POOL_BUFFER_SIZE=N` Defines the HEAP TLSF memory pool buffer size (N bytes, default 0 which means dynamic)
+- `RNS_PSRAM_POOL_BUFFER_SIZE=N` Defines the PSRAM TLSF memory pool buffer size (N bytes, default 0 which means dynamic)
+
+"POOL" allocators use TLSF (Two-Level Segregate Fit) for efficient management of constrained MCU memory with minimal fragmentation.
+
+The allocator for each class can be configured using build flags in `platformio.ini, for example:
+
+```
+[env]
+build_flags = 
+  -DRNS_DEFAULT_ALLOCATOR=RNS_HEAP_ALLOCATOR
+  -DRNS_CONTAINER_ALLOCATOR=RNS_PSRAM_POOL_ALLOCATOR
+```
+
+NOTE: Currently `-DRNS_DEFAULT_ALLOCATOR=RNS_HEAP_POOL_ALLOCATOR` is only required on NRF52 boards since ESP32 already uses TLSF internally.
 
 ## Building
 

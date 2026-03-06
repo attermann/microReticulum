@@ -14,6 +14,12 @@ namespace RNS {
 
 	class FileSystemImpl {
 
+	public:
+		struct Callbacks {
+			//using DirectoryListing = void(*)(const char* file_name);
+			using DirectoryListing = std::function<void(const char*)>;
+		};
+
 	protected:
 		FileSystemImpl() { MEMF("FileSystem::FileSystemImpl object created, this: 0x%X", this); }
 	public:
@@ -31,7 +37,7 @@ namespace RNS {
 		virtual bool directory_exists(const char* directory_path) = 0;
 		virtual bool create_directory(const char* directory_path) = 0;
 		virtual bool remove_directory(const char* directory_path) = 0;
-		virtual std::list<std::string> list_directory(const char* directory_path) = 0;
+		virtual std::list<std::string> list_directory(const char* directory_path, Callbacks::DirectoryListing callback = nullptr) = 0;
 		virtual size_t storage_size() = 0;
 		virtual size_t storage_available() = 0;
 
@@ -39,6 +45,9 @@ namespace RNS {
 	};
 
 	class FileSystem {
+
+	public:
+		using Callbacks = FileSystemImpl::Callbacks;
 
 	public:
 		FileSystem(Type::NoneConstructor none) {
@@ -103,7 +112,7 @@ namespace RNS {
 		inline bool directory_exists(const char* directory_path) { assert(_impl); return _impl->directory_exists(directory_path); }
 		inline bool create_directory(const char* directory_path) { assert(_impl); return _impl->create_directory(directory_path); }
 		inline bool remove_directory(const char* directory_path) { assert(_impl); return _impl->remove_directory(directory_path); }
-		inline std::list<std::string> list_directory(const char* directory_path) { assert(_impl); return _impl->list_directory(directory_path); }
+		inline std::list<std::string> list_directory(const char* directory_path, Callbacks::DirectoryListing callback = nullptr) { assert(_impl); return _impl->list_directory(directory_path, callback); }
 		inline size_t storage_size() { assert(_impl); return _impl->storage_size(); }
 		inline size_t storage_available() { assert(_impl); return _impl->storage_available(); }
 

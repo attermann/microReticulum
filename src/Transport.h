@@ -3,6 +3,7 @@
 #include "Packet.h"
 #include "Bytes.h"
 #include "Type.h"
+#include "Utilities/Memory.h"
 
 #include <map>
 #include <vector>
@@ -13,12 +14,9 @@
 #include <functional>
 #include <stdint.h>
 
-//#define INTERFACES_SET
-//#define INTERFACES_LIST
-#define INTERFACES_MAP
-
-//#define DESTINATIONS_SET
-#define DESTINATIONS_MAP
+#ifndef RNS_LEAN_PATH_TABLE
+	#define RNS_LEAN_PATH_TABLE 1
+#endif
 
 namespace RNS {
 
@@ -56,6 +54,10 @@ namespace RNS {
 	class Transport {
 
 	public:
+
+		using InterfaceTable = std::map<Bytes, Interface&>;
+		using DestinationTable = std::map<Bytes, Destination>;
+
 		class Callbacks {
 		public:
 			using receive_packet = void(*)(const Bytes& raw, const Interface& interface);
@@ -67,8 +69,6 @@ namespace RNS {
 			filter_packet _filter_packet = nullptr;
 		friend class Transport;
 		};
-
-	public:
 
 		class PacketEntry {
 		public:
@@ -99,6 +99,7 @@ namespace RNS {
 			}
 #endif
 		};
+		using PacketTable = std::map<Bytes, PacketEntry>;
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
@@ -110,10 +111,14 @@ namespace RNS {
 				_received_from(received_from),
 				_hops(announce_hops),
 				_expires(expires),
-				_random_blobs(random_blobs),
 				_receiving_interface(receiving_interface),
-				_announce_packet(announce_packet)
+#if !RNS_LEAN_PATH_TABLE
+				_announce_packet(announce_packet),
+#endif
+				_random_blobs(random_blobs)
 			{
+				if (receiving_interface) _receiving_interface_hash = receiving_interface.get_hash();
+				if (announce_packet) _announce_packet_hash = announce_packet.get_hash();
 			}
 			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Bytes& receiving_interface_hash, const Bytes& announce_packet_hash) :
 				_timestamp(timestamp),
@@ -125,12 +130,33 @@ namespace RNS {
 				_announce_packet_hash(announce_packet_hash)
 			{
 			}
+			inline operator bool() const {
+				return (_receiving_interface_hash && _announce_packet_hash);
+			}
 		public:
 			// Lazy load receiving_interface and announce_packet
 			inline Interface& receiving_interface() {
 				if (!_receiving_interface) _receiving_interface = find_interface_from_hash(_receiving_interface_hash);
 				return _receiving_interface;
 			}
+#if RNS_LEAN_PATH_TABLE
+			// Lazy load transient announce packet
+			inline Packet announce_packet() {
+				Packet announce_packet = get_cached_packet(_announce_packet_hash);
+				if (announce_packet) {
+					// Announce packet is cached in packed state
+					// so we need to unpack it before accessing.
+					announce_packet.unpack();
+					// We increase the hops, since reading a packet
+					// from cache is equivalent to receiving it again
+					// over an interface. It is cached with it's non-
+					// increased hop-count.
+					announce_packet.hops(announce_packet.hops() + 1);
+				}
+				return announce_packet;
+			}
+#else
+			// Lazy load and cache announce packet
 			inline Packet& announce_packet() {
 				if (!_announce_packet) _announce_packet = get_cached_packet(_announce_packet_hash);
 				if (_announce_packet) {
@@ -145,11 +171,17 @@ namespace RNS {
 				}
 				return _announce_packet;
 			}
+#endif
 			// Getters and setters for receiving_interface_hash and announce_packet_hash
 			inline Bytes receiving_interface_hash() const { if (_receiving_interface) return _receiving_interface.get_hash(); return _receiving_interface_hash; }
-			inline void receiving_interface_hash(const Bytes& hash) { if (hash != receiving_interface_hash()) _receiving_interface_hash = hash; _receiving_interface = {Type::NONE}; }
+			inline void receiving_interface_hash(const Bytes& hash) { if (hash == receiving_interface_hash()) return; _receiving_interface_hash = hash; _receiving_interface = {Type::NONE}; }
+#if RNS_LEAN_PATH_TABLE
+			inline Bytes announce_packet_hash() const { return _announce_packet_hash; }
+			inline void announce_packet_hash(const Bytes& hash) { _announce_packet_hash = hash; }
+#else
 			inline Bytes announce_packet_hash() const { if (_announce_packet) return _announce_packet.get_hash(); return _announce_packet_hash; }
-			inline void announce_packet_hash(const Bytes& hash) { if (hash != announce_packet_hash()) _announce_packet_hash = hash; _announce_packet = {Type::NONE}; }
+			inline void announce_packet_hash(const Bytes& hash) { if (hash == announce_packet_hash()) return; _announce_packet_hash = hash; _announce_packet = {Type::NONE}; }
+#endif
 		public:
 			double _timestamp = 0;
 			Bytes _received_from;
@@ -163,8 +195,10 @@ namespace RNS {
 		private:
 			Interface _receiving_interface = {Type::NONE};
 			Bytes _receiving_interface_hash;
+#if !RNS_LEAN_PATH_TABLE
 			//const Packet& _announce_packet;
 			Packet _announce_packet = {Type::NONE};
+#endif
 			Bytes _announce_packet_hash;
 		public:
 #ifndef NDEBUG
@@ -186,6 +220,8 @@ namespace RNS {
 			}
 #endif
 		};
+		//using PathTable = std::map<Bytes, DestinationEntry>;
+		using PathTable = std::map<Bytes, DestinationEntry, std::less<Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const Bytes, DestinationEntry>>>;
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
@@ -217,6 +253,8 @@ namespace RNS {
 			bool _block_rebroadcasts = false;
 			const Interface _attached_interface = {Type::NONE};
 		};
+		//using AnnounceTable = std::map<Bytes, AnnounceEntry>;
+		using AnnounceTable = std::map<Bytes, AnnounceEntry, std::less<Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const Bytes, AnnounceEntry>>>;
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class LinkEntry {
@@ -244,6 +282,7 @@ namespace RNS {
 			bool _validated = false;
 			double _proof_timeout = 0;
 		};
+		using LinkTable = std::map<Bytes, LinkEntry>;
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class ReverseEntry {
@@ -259,6 +298,7 @@ namespace RNS {
 			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
 		};
+		using ReverseTable = std::map<Bytes, ReverseEntry>;
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class PathRequestEntry {
@@ -274,6 +314,7 @@ namespace RNS {
 			double _timeout = 0;
 			const Interface _requesting_interface = {Type::NONE};
 		};
+		using PathRequestTable = std::map<Bytes, PathRequestEntry>;
 
 /*
 		// CBA TODO Analyze safety of using Inrerface references here
@@ -313,9 +354,10 @@ namespace RNS {
 		public:
 			const Bytes _tunnel_id;
 			const Bytes _interface_hash;
-			std::map<Bytes, DestinationEntry> _serialised_paths;
+			PathTable _serialised_paths;
 			double _expires = 0;
 		};
+		using TunnelTable = std::map<Bytes, TunnelEntry>;
 
 		class RateEntry {
 		public:
@@ -330,6 +372,7 @@ namespace RNS {
 			double _blocked_until = 0.0;
 			std::vector<double> _timestamps;
 		};
+		using RateTable = std::map<Bytes, RateEntry>;
 
 	public:
 		static void start(const Reticulum& reticulum_instance);
@@ -346,7 +389,7 @@ namespace RNS {
 		static void handle_tunnel(const Bytes& tunnel_id, const Interface& interface);
 		static void register_interface(Interface& interface);
 		static void deregister_interface(const Interface& interface);
-		inline static const std::map<Bytes, Interface&>& get_interfaces() { return _interfaces; }
+		inline static const InterfaceTable& get_interfaces() { return _interfaces; }
 		static void register_destination(Destination& destination);
 		static void deregister_destination(const Destination& destination);
 		static void register_link(Link& link);
@@ -362,6 +405,7 @@ namespace RNS {
 		static bool clear_cached_packet(const Bytes& packet_hash);
 		static bool cache_request_packet(const Packet& packet);
 		static void cache_request(const Bytes& packet_hash, const Destination& destination);
+		static DestinationEntry& get_path(const Bytes& destination_hash);
 		static bool remove_path(const Bytes& destination_hash);
 		static bool has_path(const Bytes& destination_hash);
 		static uint8_t hops_to(const Bytes& destination_hash);
@@ -423,55 +467,42 @@ namespace RNS {
 		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) { _hashlist_maxsize = hashlist_maxsize; }
 		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
 		inline static void max_pr_tags(uint16_t max_pr_tags) { _max_pr_tags = max_pr_tags; }
-		inline static uint16_t probe_destination_enabled() { return _path_table_maxpersist; }
+		inline static uint16_t path_table_maxpersist() { return _path_table_maxpersist; }
 		inline static void path_table_maxpersist(uint16_t path_table_maxpersist) { _path_table_maxpersist = path_table_maxpersist; }
 		// CBA TEST
 		static inline void identity(Identity& identity) { _identity = identity; }
 
-		inline static const std::map<Bytes, DestinationEntry>& get_path_table() { return _path_table; }
-		inline static const std::map<Bytes, RateEntry>& get_announce_rate_table() { return _announce_rate_table; }
-		inline static const std::map<Bytes, LinkEntry>& get_link_table() { return _link_table; }
+		inline static const PathTable& get_path_table() { return _path_table; }
+		inline static const RateTable& get_announce_rate_table() { return _announce_rate_table; }
+		inline static const LinkTable& get_link_table() { return _link_table; }
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
-#if defined(INTERFACES_SET)
-		// set sorted, can use find
-		//static std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> _interfaces;           // All active interfaces
-		static std::set<std::reference_wrapper<Interface>, std::less<Interface>> _interfaces;           // All active interfaces
-#elif defined(INTERFACES_LIST)
-		// list is unsorted, can't use find
-		static std::list<std::reference_wrapper<Interface>> _interfaces;           // All active interfaces
-#elif defined(INTERFACES_MAP)
 		// map is sorted, can use find
-		static std::map<Bytes, Interface&> _interfaces;           // All active interfaces
-#endif
-#if defined(DESTINATIONS_SET)
-		static std::set<Destination> _destinations;           // All active destinations
-#elif defined(DESTINATIONS_MAP)
-		static std::map<Bytes, Destination> _destinations;           // All active destinations
-#endif
+		static InterfaceTable _interfaces;			// All active interfaces
+		static DestinationTable _destinations;		// All active destinations
 		// CBA TODO: Reconsider using std::set for enforcing uniqueness. Maybe consider std::map keyed on hash instead
-		static std::set<Link> _pending_links;           // Links that are being established
-		static std::set<Link> _active_links;           // Links that are active
-		static std::set<Bytes> _packet_hashlist;           // A list of packet hashes for duplicate detection
-		static std::list<PacketReceipt> _receipts;           // Receipts of all outgoing packets for proof processing
+		static std::set<Link> _pending_links;		// Links that are being established
+		static std::set<Link> _active_links;		// Links that are active
+		static std::set<Bytes> _packet_hashlist;	// A list of packet hashes for duplicate detection
+		static std::list<PacketReceipt> _receipts;	// Receipts of all outgoing packets for proof processing
 
 		// TODO: "destination_table" should really be renamed to "path_table"
 		// Notes on memory usage: 1 megabyte of memory can store approximately
 		// 55.100 path table entries or approximately 22.300 link table entries.
 
-		static std::map<Bytes, AnnounceEntry> _announce_table;           // A table for storing announces currently waiting to be retransmitted
-		static std::map<Bytes, DestinationEntry> _path_table;           // A lookup table containing the next hop to a given destination
-		static std::map<Bytes, ReverseEntry> _reverse_table;           // A lookup table for storing packet hashes used to return proofs and replies
-		static std::map<Bytes, LinkEntry> _link_table;           // A lookup table containing hops for links
-		static std::map<Bytes, AnnounceEntry> _held_announces;           // A table containing temporarily held announce-table entries
-		static std::set<HAnnounceHandler> _announce_handlers;           // A table storing externally registered announce handlers
-		static std::map<Bytes, TunnelEntry> _tunnels;           // A table storing tunnels to other transport instances
-		static std::map<Bytes, RateEntry> _announce_rate_table;           // A table for keeping track of announce rates
-		static std::map<Bytes, double> _path_requests;           // A table for storing path request timestamps
+		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
+		static PathTable _path_table;			// A lookup table containing the next hop to a given destination
+		static ReverseTable _reverse_table;		// A lookup table for storing packet hashes used to return proofs and replies
+		static LinkTable _link_table;			// A lookup table containing hops for links
+		static AnnounceTable _held_announces;	// A table containing temporarily held announce-table entries
+		static TunnelTable _tunnels;			// A table storing tunnels to other transport instances
+		static RateTable _announce_rate_table;	// A table for keeping track of announce rates
+		static std::set<HAnnounceHandler> _announce_handlers;	// A table storing externally registered announce handlers
+		static std::map<Bytes, double> _path_requests;	// A table for storing path request timestamps
 
-		static std::map<Bytes, PathRequestEntry> _discovery_path_requests;       // A table for keeping track of path requests on behalf of other nodes
-		static std::set<Bytes> _discovery_pr_tags;       // A table for keeping track of tagged path requests
+		static PathRequestTable _discovery_path_requests;	// A table for keeping track of path requests on behalf of other nodes
+		static std::set<Bytes> _discovery_pr_tags;	// A table for keeping track of tagged path requests
 
 		// Transport control destinations are used
 		// for control purposes like path requests
@@ -487,7 +518,7 @@ namespace RNS {
 		static std::map<Bytes, const Interface&> _pending_local_path_requests;
 
 		// CBA
-		static std::map<Bytes, PacketEntry> _packet_table;           // A lookup table containing announce packets for known paths
+		static PacketTable _packet_table;           // A lookup table containing announce packets for known paths
 
 		//z _local_client_rssi_cache    = []
 		//z _local_client_snr_cache     = []
@@ -529,7 +560,11 @@ namespace RNS {
 		static uint32_t _packets_received;
 		static uint32_t _destinations_added;
 		static size_t _last_memory;
+		static size_t _last_psram;
 		static size_t _last_flash;
+
+		// CBA Block re-entrance
+		static bool cleaning_caches;
 	};
 
 	template <typename M, typename S> 

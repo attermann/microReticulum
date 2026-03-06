@@ -35,6 +35,12 @@ void Interface::send_outgoing(const Bytes& data) {
     }
     catch (const std::bad_alloc&) {
 		ERROR("Interface::send_outgoing: bad_alloc - OUT OF MEMORY");
+		// Critical OOM, restarting
+#if defined(ESP32)
+		ESP.restart();
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+		NVIC_SystemReset();
+#endif
     }
     catch (std::exception& e) {
 		ERRORF("Interface::send_outgoing: %s", e.what());
@@ -56,6 +62,12 @@ void Interface::handle_incoming(const Bytes& data) {
     }
     catch (const std::bad_alloc&) {
 		ERROR("Interface::handle_incoming: bad_alloc - OUT OF MEMORY");
+		// Critical OOM, restarting
+#if defined(ESP32)
+		ESP.restart();
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+		NVIC_SystemReset();
+#endif
     }
     catch (std::exception& e) {
 		ERRORF("Interface::handle_incoming: %s", e.what());

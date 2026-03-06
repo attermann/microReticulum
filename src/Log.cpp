@@ -72,7 +72,7 @@ LogLevel RNS::loglevel() {
 	return _level;
 }
 
-void RNS::setLogCallback(log_callback on_log /*= nullptr*/) {
+void RNS::set_log_callback(log_callback on_log /*= nullptr*/) {
 	_on_log = on_log;
 }
 

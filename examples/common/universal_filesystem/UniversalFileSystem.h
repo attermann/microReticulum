@@ -42,7 +42,7 @@ public:
 	virtual bool directory_exists(const char* directory_path);
 	virtual bool create_directory(const char* directory_path);
 	virtual bool remove_directory(const char* directory_path);
-	virtual std::list<std::string> list_directory(const char* directory_path);
+	virtual std::list<std::string> list_directory(const char* directory_path, Callbacks::DirectoryListing callback = nullptr);
 	virtual size_t storage_size();
 	virtual size_t storage_available();
 

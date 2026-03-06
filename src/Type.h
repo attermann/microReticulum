@@ -130,13 +130,11 @@ namespace RNS { namespace Type {
 		//static const uint16_t JOB_INTERVAL     = 60*5;
 		static const uint16_t JOB_INTERVAL     = 60;
 		// CBA TEST
-		static uint16_t CLEAN_INTERVAL   = 60*15;
-		//static uint16_t CLEAN_INTERVAL   = 60;
+		static const uint16_t CLEAN_INTERVAL   = 60*15;
 		// CBA MCU
 		//static const uint16_t PERSIST_INTERVAL = 60*60*12;
 		// CBA TEST
-		static uint16_t PERSIST_INTERVAL = 60*60;
-		//static uint16_t PERSIST_INTERVAL = 60;
+		static const uint16_t PERSIST_INTERVAL = 60*60;
 		static const uint16_t GRACIOUS_PERSIST_INTERVAL = 60*5;
 
 		static const uint8_t DESTINATION_LENGTH = TRUNCATED_HASHLENGTH/8;	// In bytes

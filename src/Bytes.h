@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Log.h"
+#include "Utilities/Memory.h"
 
 #include <ArduinoJson.h>
 
@@ -40,9 +41,9 @@ namespace RNS {
 	class Bytes {
 
 	private:
-		//typedef std::vector<uint8_t> Data;
 		using Data = std::vector<uint8_t>;
-		//typedef std::shared_ptr<Data> SharedData;
+		// CBA Need to fix msgpack serialize/deserialize before enabling ContainerAllocator
+		//using Data = std::vector<uint8_t, Utilities::Memory::ContainerAllocator<uint8_t>>;
 		using SharedData = std::shared_ptr<Data>;
 
 	public:
@@ -433,6 +434,7 @@ inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const char* rhstr) {
 	return lhbytes;
 }
 
+//CBA TODO Standardize where custom object de/serialization lives
 namespace ArduinoJson {
 	// Serialize
 	inline bool convertToJson(const RNS::Bytes& src, JsonVariant dst) {

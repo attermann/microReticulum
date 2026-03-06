@@ -23,7 +23,7 @@ using namespace RNS::Utilities;
 #define RNS_KNOWN_DESTINATIONS_MAX 100
 #endif
 
-/*static*/ std::map<Bytes, Identity::IdentityEntry> Identity::_known_destinations;
+/*static*/ Identity::IdentityTable Identity::_known_destinations;
 /*static*/ bool Identity::_saving_known_destinations = false;
 // CBA
 // CBA ACCUMULATES

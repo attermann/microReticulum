@@ -659,8 +659,8 @@ int runUnityTests(void) {
 	UNITY_BEGIN();
 
 	// Suite-level setup
-	RNS::Utilities::OS::dump_heap_stats();
-	size_t pre_memory = RNS::Utilities::OS::heap_available();
+	RNS::Utilities::Memory::dump_heap_stats();
+	size_t pre_memory = RNS::Utilities::Memory::heap_available();
 	TRACEF("testBytes: pre-mem: %u", pre_memory);
 
 	// Run tests
@@ -686,7 +686,7 @@ int runUnityTests(void) {
 	RUN_TEST(test_mid_zero_size_bytes);
 
 	// Suite-level teardown
-	size_t post_memory = RNS::Utilities::OS::heap_available();
+	size_t post_memory = RNS::Utilities::Memory::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
 	TRACEF("testBytes: post-mem: %u", post_memory);
 	TRACEF("testBytes: diff-mem: %u", diff_memory);

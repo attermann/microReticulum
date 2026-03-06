@@ -247,14 +247,13 @@ void UniversalFileSystem::listDir(const char* dir) {
 	//if (!file) {
 	File* file = new File(SPIFFS.open(file_path, mode));
 	if (file == nullptr || !(*file)) {
+		if (file != nullptr) delete file;
 		ERRORF("open_file: failed to open output file %s", file_path);
 		return {RNS::Type::NONE};
 	}
 	TRACEF("open_file: successfully opened file %s", file_path);
 	return RNS::FileStream(new UniversalFileStream(file));
 #elif BOARD_NRF52
-	//File file = File(InternalFS);
-	File* file = new File(InternalFS);
 	int mode;
 	if (file_mode == RNS::FileStream::MODE_READ) {
 		mode = FILE_O_READ;
@@ -274,7 +273,10 @@ void UniversalFileSystem::listDir(const char* dir) {
 		ERRORF("open_file: unsupported mode %d", file_mode);
 		return {RNS::Type::NONE};
 	}
-	if (!file->open(file_path, mode)) {
+	//File file = File(InternalFS);
+	File* file = new File(InternalFS);
+	if (file == nullptr || !file->open(file_path, mode)) {
+		if (file != nullptr) delete file;
 		ERRORF("open_file: failed to open output file %s", file_path);
 		return {RNS::Type::NONE};
 	}
@@ -430,7 +432,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 #endif
 }
 
-/*virtua*/ std::list<std::string> UniversalFileSystem::list_directory(const char* directory_path) {
+/*virtua*/ std::list<std::string> UniversalFileSystem::list_directory(const char* directory_path, Callbacks::DirectoryListing callback /*= nullptr*/) {
 	TRACEF("list_directory: listing directory %s", directory_path);
 	std::list<std::string> files;
 #ifdef ARDUINO
@@ -447,7 +449,8 @@ void UniversalFileSystem::listDir(const char* dir) {
 	while (file) {
 		if (!file.isDirectory()) {
 			char* name = (char*)file.name();
-			files.push_back(name);
+			if (callback) callback(name);
+			else files.push_back(name);
 		}
 		// CBA Following close required to avoid leaking memory
 		file.close();
