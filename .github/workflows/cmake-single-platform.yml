@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        env: [native, native17, native20]
+        env: [native, native14, native17, native20]
 
     steps:
       - uses: actions/checkout@v4

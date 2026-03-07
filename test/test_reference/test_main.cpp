@@ -3,7 +3,7 @@
 #include "Reticulum.h"
 #include "Bytes.h"
 
-void testReference() {
+void test_reticulum_reference() {
 	HEAD("Running testReference...", RNS::LOG_TRACE);
 
 	RNS::Reticulum reticulum_default;
@@ -115,6 +115,14 @@ void testReference() {
 
 }
 
+void test_destination_entry_reference() {
+	HEAD("Running testReference...", RNS::LOG_TRACE);
+
+	RNS::Transport::DestinationEntry destination_entry;
+	TEST_ASSERT_FALSE(destination_entry);
+
+}
+
 
 void setUp(void) {
 	// set stuff up here before each test
@@ -126,7 +134,8 @@ void tearDown(void) {
 
 int runUnityTests(void) {
 	UNITY_BEGIN();
-	RUN_TEST(testReference);
+	RUN_TEST(test_reticulum_reference);
+	RUN_TEST(test_destination_entry_reference);
 	return UNITY_END();
 }
 

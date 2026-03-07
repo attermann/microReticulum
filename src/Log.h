@@ -75,7 +75,7 @@ namespace RNS {
 	void loglevel(LogLevel level);
 	LogLevel loglevel();
 
-	void setLogCallback(log_callback on_log = nullptr);
+	void set_log_callback(log_callback on_log = nullptr);
 
 	void doLog(LogLevel level, const char* msg);
 	inline void doLog(LogLevel level, const char* msg, va_list vlist) { char buf[RNS_LOG_BUFFER_SIZE]; vsnprintf(buf, sizeof(buf), msg, vlist); doLog(level, buf); }

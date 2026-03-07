@@ -33,8 +33,8 @@ public:
 	bool init() {
 		TRACE("FileSystem initializing...");
 
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		// Setup FileSystem
 		INFO("SPIFFS mounting FileSystem");
 		if (!SPIFFS.begin(true, "")){
@@ -59,22 +59,22 @@ public:
 			remove_file("/test");
 		}
 		DEBUG("SPIFFS FileSystem is ready");
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		// Initialize Internal File System
 		INFO("InternalFS mounting FileSystem");
 		InternalFS.begin();
 		INFO("InternalFS FileSystem is ready");
-	#endif
-	#endif
+#endif
+#endif
 		return true;
 	}
 
 public:
 	static void listDir(const char* dir) {
-	#ifdef ARDUINO
+#ifdef ARDUINO
 		Serial.print("DIR: ");
 		Serial.println(dir);
-	#ifdef BOARD_ESP32
+#ifdef BOARD_ESP32
 		File root = SPIFFS.open(dir);
 		if (!root) {
 			Serial.println("Failed to opend directory");
@@ -93,7 +93,7 @@ public:
 			file = root.openNextFile();
 		}
 		root.close();
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		File root = InternalFS.open(dir);
 		if (!root) {
 			Serial.println("Failed to opend directory");
@@ -112,38 +112,38 @@ public:
 			file = root.openNextFile();
 		}
 		root.close();
-	#endif
-	#endif
+#endif
+#endif
 	}
 
 public:
 	virtual bool file_exists(const char* file_path) {
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		File file = SPIFFS.open(file_path, FILE_READ);
 		if (file) {
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		File file(InternalFS);
 		if (file.open(file_path, FILE_O_READ)) {
-	#else
+#else
 		if (false) {
-	#endif
-	#else
+#endif
+#else
 		// Native
 		FILE* file = fopen(file_path, "r");
 		if (file != nullptr) {
-	#endif
+#endif
 			//TRACE("file_exists: file exists, closing file");
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 			file.close();
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 			file.close();
-	#endif
-	#else
+#endif
+#else
 			// Native
 			fclose(file);
-	#endif
+#endif
 			return true;
 		}
 		else {
@@ -154,24 +154,24 @@ public:
 
 	virtual size_t read_file(const char* file_path, RNS::Bytes& data) {
 		size_t read = 0;
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		File file = SPIFFS.open(file_path, FILE_READ);
 		if (file) {
 			size_t size = file.size();
 			read = file.readBytes((char*)data.writable(size), size);
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		//File file(InternalFS);
 		//if (file.open(file_path, FILE_O_READ)) {
 		File file = InternalFS.open(file_path, FILE_O_READ);
 		if (file) {
 			size_t size = file.size();
 			read = file.readBytes((char*)data.writable(size), size);
-	#else
+#else
 		if (false) {
 			size_t size = 0;
-	#endif
-	#else
+#endif
+#else
 		// Native
 		FILE* file = fopen(file_path, "r");
 		if (file != nullptr) {
@@ -180,23 +180,23 @@ public:
 			rewind(file);
 			//size_t read = fread(data.writable(size), size, 1, file);
 			read = fread(data.writable(size), 1, size, file);
-	#endif
+#endif
 			TRACEF("read_file: read %zu bytes from file %s", read, file_path);
 			if (read != size) {
 				ERRORF("read_file: failed to read file %s", file_path);
 				data.clear();
 			}
 			//TRACE("read_file: closing input file");
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 			file.close();
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 			file.close();
-	#endif
-	#else
+#endif
+#else
 			// Native
 			fclose(file);
-	#endif
+#endif
 		}
 		else {
 			ERRORF("read_file: failed to open input file %s", file_path);
@@ -208,40 +208,40 @@ public:
 		// CBA TODO Replace remove with working truncation
 		remove_file(file_path);
 		size_t wrote = 0;
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		File file = SPIFFS.open(file_path, FILE_WRITE);
 		if (file) {
 			wrote = file.write(data.data(), data.size());
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		File file(InternalFS);
 		if (file.open(file_path, FILE_O_WRITE)) {
 			wrote = file.write(data.data(), data.size());
-	#else
+#else
 		if (false) {
-	#endif
-	#else
+#endif
+#else
 		// Native
 		FILE* file = fopen(file_path, "w");
 		if (file != nullptr) {
 			//size_t wrote = fwrite(data.data(), data.size(), 1, file);
 			wrote = fwrite(data.data(), 1, data.size(), file);
-	#endif
+#endif
 			TRACEF("write_file: wrote %zu bytes to file %s", wrote, file_path);
 			if (wrote < data.size()) {
 				WARNINGF("write_file: not all data was written to file %s", file_path);
 			}
 			//TRACE("write_file: closing output file");
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 			file.close();
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 			file.close();
-	#endif
-	#else
+#endif
+#else
 			// Native
 			fclose(file);
-	#endif
+#endif
 		}
 		else {
 			ERRORF("write_file: failed to open output file %s", file_path);
@@ -251,8 +251,8 @@ public:
 
 	virtual RNS::FileStream open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
 		TRACEF("open_file: opening file %s", file_path);
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		const char* mode;
 		if (file_mode == RNS::FileStream::MODE_READ) {
 			mode = FILE_READ;
@@ -273,14 +273,13 @@ public:
 		//if (!file) {
 		File* file = new File(SPIFFS.open(file_path, mode));
 		if (file == nullptr || !(*file)) {
+			if (file != nullptr) delete file;
 			ERRORF("open_file: failed to open output file %s", file_path);
 			return {RNS::Type::NONE};
 		}
 		TRACEF("open_file: successfully opened file %s", file_path);
 		return RNS::FileStream(new FileStreamImpl(file));
-	#elif BOARD_NRF52
-		//File file = File(InternalFS);
-		File* file = new File(InternalFS);
+#elif BOARD_NRF52
 		int mode;
 		if (file_mode == RNS::FileStream::MODE_READ) {
 			mode = FILE_O_READ;
@@ -300,7 +299,10 @@ public:
 			ERRORF("open_file: unsupported mode %d", file_mode);
 			return {RNS::Type::NONE};
 		}
-		if (!file->open(file_path, mode)) {
+		//File file = File(InternalFS);
+		File* file = new File(InternalFS);
+		if (file == nullptr || !file->open(file_path, mode)) {
+			if (file != nullptr) delete file;
 			ERRORF("open_file: failed to open output file %s", file_path);
 			return {RNS::Type::NONE};
 		}
@@ -312,11 +314,11 @@ public:
 		//}
 		TRACEF("open_file: successfully opened file %s", file_path);
 		return RNS::FileStream(new FileStreamImpl(file));
-	#else
-		#warning("unsupported");
+#else
+	#warning("unsupported");
 		return RNS::FileStream(RNS::Type::NONE);
-	#endif
-	#else	// ARDUINO
+#endif
+#else	// ARDUINO
 		// Native
 		const char* mode;
 		if (file_mode == RNS::FileStream::MODE_READ) {
@@ -340,136 +342,136 @@ public:
 		}
 		TRACEF("open_file: successfully opened file %s", file_path);
 		return RNS::FileStream(new FileStreamImpl(file));
-	#endif
+#endif
 	}
 
 	virtual bool remove_file(const char* file_path) {
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		return SPIFFS.remove(file_path);
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		return InternalFS.remove(file_path);
-	#else
+#else
 		return false;
-	#endif
-	#else
+#endif
+#else
 		// Native
 		return (remove(file_path) == 0);
-	#endif
+#endif
 	}
 
 	virtual bool rename_file(const char* from_file_path, const char* to_file_path) {
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		return SPIFFS.rename(from_file_path, to_file_path);
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		return InternalFS.rename(from_file_path, to_file_path);
-	#else
+#else
 		return false;
-	#endif
-	#else
+#endif
+#else
 		// Native
 		return (rename(from_file_path, to_file_path) == 0);
-	#endif
+#endif
 	}
 
 	/*virtua*/ bool directory_exists(const char* directory_path) {
 		TRACEF("directory_exists: checking for existence of directory %s", directory_path);
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		File file = SPIFFS.open(directory_path, FILE_READ);
 		if (file) {
 			bool is_directory = file.isDirectory();
 			file.close();
 			return is_directory;
 		}
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		File file(InternalFS);
 		if (file.open(directory_path, FILE_O_READ)) {
 			bool is_directory = file.isDirectory();
 			file.close();
 			return is_directory;
 		}
-	#else
+#else
 		if (false) {
 			return false;
 		}
-	#endif
+#endif
 		else {
 			return false;
 		}
-	#else
+#else
 		// Native
 		struct stat st = {0};
 		return (stat(directory_path, &st) == 0);
-	#endif
+#endif
 	}
 
 	virtual bool create_directory(const char* directory_path) {
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		if (!SPIFFS.mkdir(directory_path)) {
 			ERRORF("create_directory: failed to create directorty %s", directory_path);
 			return false;
 		}
 		return true;
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		if (!InternalFS.mkdir(directory_path)) {
 			ERRORF("create_directory: failed to create directorty %s", directory_path);
 			return false;
 		}
 		return true;
-	#else
+#else
 		return false;
-	#endif
-	#else
+#endif
+#else
 		// Native
 		struct stat st = {0};
 		if (stat(directory_path, &st) == 0) {
 			return true;
 		}
 		return (mkdir(directory_path, 0700) == 0);
-	#endif
+#endif
 	}
 
 	/*virtua*/ bool remove_directory(const char* directory_path) {
 		TRACEF("remove_directory: removing directory %s", directory_path);
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		//if (!LittleFS.rmdir_r(directory_path)) {
 		if (!SPIFFS.rmdir(directory_path)) {
 			ERRORF("remove_directory: failed to remove directorty %s", directory_path);
 			return false;
 		}
 		return true;
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		if (!InternalFS.rmdir_r(directory_path)) {
 			ERRORF("remove_directory: failed to remove directory %s", directory_path);
 			return false;
 		}
 		return true;
-	#else
+#else
 		return false;
-	#endif
-	#else
+#endif
+#else
 		// Native
 		if (rmdir(directory_path) == 0) {
 			ERRORF("remove_directory: failed to remove directory %s", directory_path);
 			return false;
 		}
 		return true;
-	#endif
+#endif
 	}
 
-	/*virtua*/ std::list<std::string> list_directory(const char* directory_path) {
+	/*virtua*/ std::list<std::string> list_directory(const char* directory_path, Callbacks::DirectoryListing callback = nullptr) {
 		TRACEF("list_directory: listing directory %s", directory_path);
 		std::list<std::string> files;
-	#ifdef ARDUINO
-	#ifdef BOARD_ESP32
+#ifdef ARDUINO
+#ifdef BOARD_ESP32
 		File root = SPIFFS.open(directory_path);
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 		File root = InternalFS.open(directory_path);
-	#endif
+#endif
 		if (!root) {
 			ERRORF("list_directory: failed to open directory %s", directory_path);
 			return files;
@@ -478,7 +480,8 @@ public:
 		while (file) {
 			if (!file.isDirectory()) {
 				char* name = (char*)file.name();
-				files.push_back(name);
+				if (callback) callback(name);
+				else files.push_back(name);
 			}
 			// CBA Following close required to avoid leaking memory
 			file.close();
@@ -487,7 +490,7 @@ public:
 		TRACE("list_directory: returning directory listing");
 		root.close();
 		return files;
-	#else
+#else
 		// Native
 		DIR *dir = opendir(directory_path);
 		if (dir == NULL) {
@@ -500,20 +503,21 @@ public:
 				continue;
 			}
 			char* name = entry->d_name;
-			files.push_back(name);
+			if (callback) callback(name);
+			else files.push_back(name);
 		}
 		if (closedir(dir) == -1) {
 			ERRORF("list_directory: failed to close directory %s", directory_path);
 		}
 
 		return files;
-	#endif
+#endif
 	}
 
 
-	#ifdef ARDUINO
+#ifdef ARDUINO
 
-	#ifdef BOARD_ESP32
+#ifdef BOARD_ESP32
 
 	virtual size_t storage_size() {
 		return SPIFFS.totalBytes();
@@ -523,7 +527,7 @@ public:
 		return (SPIFFS.totalBytes() - SPIFFS.usedBytes());
 	}
 
-	#elif BOARD_NRF52
+#elif BOARD_NRF52
 
 	static int _countLfsBlock(void *p, lfs_block_t block){
 		lfs_size_t *size = (lfs_size_t*) p;
@@ -558,9 +562,9 @@ public:
 		return (InternalFS.totalBytes() - InternalFS.usedBytes());
 	}
 
-	#endif
+#endif
 
-	#else
+#else
 
 	virtual size_t storage_size() {
 		return 0;
@@ -570,7 +574,7 @@ public:
 		return 0;
 	}
 
-	#endif
+#endif
 
 protected:
 

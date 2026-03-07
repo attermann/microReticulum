@@ -4,9 +4,8 @@
 #include "../FileStream.h"
 #include "../Bytes.h"
 
-#include "tlsf.h"
-
 #include <cmath>
+#include <memory>
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>
@@ -14,6 +13,9 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#if defined(ESP32)
+#include "esp_task_wdt.h"
+#endif
 #endif
 
 #undef round
@@ -22,20 +24,22 @@ namespace RNS { namespace Utilities {
 
 	class OS {
 
+	public:
+		//using LoopCallback = void(*)();
+		using LoopCallback = std::function<void()>;
+
 	private:
 		static FileSystem _filesystem;
 		static uint64_t _time_offset;
+		static LoopCallback _on_loop;
 
 	public:
-		static tlsf_t _tlsf;
-
-	public:
-		static inline uint64_t getTimeOffset() { return _time_offset; }
-		static inline void setTimeOffset(uint64_t offset) { _time_offset = offset; }
+		inline static uint64_t getTimeOffset() { return _time_offset; }
+		inline static void setTimeOffset(uint64_t offset) { _time_offset = offset; }
 
 #ifdef ARDUINO
         // return current time in milliseconds since startup
-		static inline uint64_t ltime() {
+		inline static uint64_t ltime() {
 			// handle roll-over of 32-bit millis (approx. 49 days)
 			static uint32_t low32, high32;
 			uint32_t new_low32 = millis();
@@ -45,32 +49,32 @@ namespace RNS { namespace Utilities {
 		}
 #else
         // return current time in milliseconds since 00:00:00, January 1, 1970 (Unix Epoch)
-		static inline uint64_t ltime() { timeval time; ::gettimeofday(&time, NULL); return (uint64_t)(time.tv_sec * 1000) + (uint64_t)(time.tv_usec / 1000); }
+		inline static uint64_t ltime() { timeval time; ::gettimeofday(&time, NULL); return (uint64_t)(time.tv_sec * 1000) + (uint64_t)(time.tv_usec / 1000); }
 #endif
 
 #ifdef ARDUINO
         // return current time in float seconds since startup
-		static inline double time() { return (double)(ltime() / 1000.0); }
+		inline static double time() { return (double)(ltime() / 1000.0); }
 #else
         // return current time in float seconds since 00:00:00, January 1, 1970 (Unix Epoch)
-		static inline double time() { timeval time; ::gettimeofday(&time, NULL); return (double)time.tv_sec + ((double)time.tv_usec / 1000000); }
+		inline static double time() { timeval time; ::gettimeofday(&time, NULL); return (double)time.tv_sec + ((double)time.tv_usec / 1000000); }
 #endif
 
         // sleep for specified milliseconds
-		//static inline void sleep(float seconds) { ::sleep(seconds); }
+		//inline static void sleep(float seconds) { ::sleep(seconds); }
 #ifdef ARDUINO
-		static inline void sleep(float seconds) { delay((uint32_t)(seconds * 1000)); }
+		inline static void sleep(float seconds) { delay((uint32_t)(seconds * 1000)); }
 #else
-		static inline void sleep(float seconds) { timespec time; time.tv_sec = (time_t)(seconds); time.tv_nsec = (seconds - (float)time.tv_sec) * 1000000000; ::nanosleep(&time, nullptr); }
+		inline static void sleep(float seconds) { timespec time; time.tv_sec = (time_t)(seconds); time.tv_nsec = (seconds - (float)time.tv_sec) * 1000000000; ::nanosleep(&time, nullptr); }
 #endif
-		//static inline void sleep(uint32_t milliseconds) { ::sleep((float)milliseconds / 1000.0); }
+		//inline static void sleep(uint32_t milliseconds) { ::sleep((float)milliseconds / 1000.0); }
 
 		// round decimal number to specified precision
-		//static inline float round(float value, uint8_t precision) { return std::round(value / precision) * precision; }
-		//static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
-		static inline double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
+		//inline static float round(float value, uint8_t precision) { return std::round(value / precision) * precision; }
+		//inline static double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
+		inline static double round(double value, uint8_t precision) { return std::round(value / precision) * precision; }
 
-		static inline uint64_t from_bytes_big_endian(const uint8_t* data, size_t len) {
+		inline static uint64_t from_bytes_big_endian(const uint8_t* data, size_t len) {
 			uint64_t result = 0;
 			for (size_t i = 0; i < len; ++i) {
 				result = (result << 8) | data[i];
@@ -79,17 +83,17 @@ namespace RNS { namespace Utilities {
 		}
 
 		// Detect endianness at runtime
-		static int is_big_endian(void) {
+		inline static int is_big_endian(void) {
 			uint16_t test = 0x0102;
 			return ((uint8_t*)&test)[0] == 0x01;
 		}
 
 		// Byte swap functions
-		static uint16_t swap16(uint16_t val) {
+		inline static uint16_t swap16(uint16_t val) {
 			return (val << 8) | (val >> 8);
 		}
 
-		static uint32_t swap32(uint32_t val) {
+		inline static uint32_t swap32(uint32_t val) {
 			return ((val << 24) & 0xFF000000) |
 				((val << 8)  & 0x00FF0000) |
 				((val >> 8)  & 0x0000FF00) |
@@ -98,25 +102,39 @@ namespace RNS { namespace Utilities {
 
 		// Platform-independent replacements
 
-		static uint16_t portable_htons(uint16_t val) {
+		inline static uint16_t portable_htons(uint16_t val) {
 			return is_big_endian() ? val : swap16(val);
 		}
 
-		static uint32_t portable_htonl(uint32_t val) {
+		inline static uint32_t portable_htonl(uint32_t val) {
 			return is_big_endian() ? val : swap32(val);
 		}
 
-		static uint16_t portable_ntohs(uint16_t val) {
+		inline static uint16_t portable_ntohs(uint16_t val) {
 			return is_big_endian() ? val : swap16(val);
 		}
 
-		static uint32_t portable_ntohl(uint32_t val) {
+		inline static uint32_t portable_ntohl(uint32_t val) {
 			return is_big_endian() ? val : swap32(val);
 		}
 
-#if defined(RNS_USE_ALLOCATOR)
-		static void dump_allocator_stats();
+		inline static void reset_watchdog() {
+#if defined(ESP32)
+			esp_task_wdt_reset();
 #endif
+		}
+
+		inline static void set_loop_callback(LoopCallback on_loop = nullptr) { _on_loop = on_loop; }
+		inline static void run_loop() {
+			if (_on_loop) {
+				try {
+					_on_loop();
+				}
+				catch (const std::exception& e) {
+					ERRORF("run_loop: exception while looping: %s", e.what());
+				}
+			}
+		}
 
 		inline static void register_filesystem(FileSystem& filesystem) {
 			TRACE("Registering filesystem...");
@@ -204,11 +222,11 @@ namespace RNS { namespace Utilities {
 			return _filesystem.remove_directory(directory_path);
 		}
 
-		inline static std::list<std::string> list_directory(const char* directory_path) {
+		inline static std::list<std::string> list_directory(const char* directory_path, FileSystem::Callbacks::DirectoryListing callback = nullptr) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.list_directory(directory_path);
+			return _filesystem.list_directory(directory_path, callback);
 		}
 
 		inline static size_t storage_size() {
@@ -224,10 +242,6 @@ namespace RNS { namespace Utilities {
 			}
 			return _filesystem.storage_available();
 		}
-
-		static size_t heap_size();
-		static size_t heap_available();
-		static void dump_heap_stats();
 	
     };
 

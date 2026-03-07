@@ -7,6 +7,7 @@
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
 #include "Cryptography/Token.h"
+#include "Utilities/Memory.h"
 
 #include <map>
 #include <string>
@@ -36,9 +37,11 @@ namespace RNS {
 			Bytes _public_key;
 			Bytes _app_data;
 		};
+		//using IdentityTable = std::map<Bytes, IdentityEntry>;
+		using IdentityTable = std::map<Bytes, IdentityEntry, std::less<Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const Bytes, IdentityEntry>>>;
 
-	public:
-		static std::map<Bytes, IdentityEntry> _known_destinations;
+	private:
+		static IdentityTable _known_destinations;
 		static bool _saving_known_destinations;
 		// CBA
 		static uint16_t _known_destinations_maxsize;
@@ -197,6 +200,8 @@ namespace RNS {
 		};
 		std::shared_ptr<Object> _object;
 
+	// CBA For access to private static members by Transport class
+	friend class Transport;
 	};
 
 }

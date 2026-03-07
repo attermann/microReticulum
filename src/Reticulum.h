@@ -16,7 +16,7 @@ namespace RNS {
 
 	class Reticulum {
 
-	public:
+	private:
 
 		//z router           = None
 		//z config           = None
@@ -41,6 +41,9 @@ namespace RNS {
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
+
+		static uint16_t _persist_interval;
+		static uint16_t _clean_interval;
 
 	public:
 		// Return the currently running Reticulum instance
@@ -81,7 +84,7 @@ namespace RNS {
 		//void __create_default_config();
 		//void rpc_loop();
 		//void get_interface_stats() const;
-		const std::map<Bytes, Transport::DestinationEntry>& get_path_table() const;
+		const Transport::PathTable& get_path_table() const;
 		const std::map<Bytes, Transport::RateEntry>& get_rate_table() const;
 		bool drop_path(const Bytes& destination);
 		uint16_t drop_all_via(const Bytes& transport_hash);
@@ -144,6 +147,10 @@ namespace RNS {
 
 		// getters/setters
 		inline bool is_connected_to_shared_instance() const { assert(_object); return _object->_is_connected_to_shared_instance; }
+		inline static uint16_t persist_interval() { return _persist_interval; }
+		inline static void persist_interval(uint16_t persist_interval) { _persist_interval = persist_interval; }
+		inline static uint16_t clean_interval() { return _clean_interval; }
+		inline static void clean_interval(uint16_t clean_interval) { _clean_interval = clean_interval; }
 
 	private:
 		class Object {
@@ -177,6 +184,8 @@ namespace RNS {
 		};
 		std::shared_ptr<Object> _object;
 
+	// CBA For access to private static members by Transport class
+	friend class Transport;
 	};
 
 }

@@ -556,7 +556,7 @@ namespace RNS { namespace Persistence {
 	}
 
 #if 1
-	template <typename T> uint32_t crc(std::map<Bytes, T>& map) {
+	template <typename T, typename Compare, typename Allocator> uint32_t crc(std::map<Bytes, T, Compare, Allocator>& map) {
 		//TRACE("Persistence::crc<map<Bytes, T>>");
 
 		uint32_t crc = 0;
@@ -592,7 +592,7 @@ namespace RNS { namespace Persistence {
 		return Utilities::Crc::crc32(crc, '}');
 	}
 
-	template <typename T> size_t serialize(std::map<Bytes, T>& map, const char* file_path, uint32_t& crc) {
+	template <typename T, typename Compare, typename Allocator> size_t serialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path, uint32_t& crc) {
 		//TRACE("Persistence::serialize<map<Bytes,T>>");
 
 		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
@@ -625,17 +625,18 @@ namespace RNS { namespace Persistence {
 			stream.write(',');
 		}
 		stream.write('}');
+		stream.flush();
 		TRACEF("Persistence::serialize: stream size: %d bytes", stream.size());
 		crc = stream.crc();
 		return stream.size();
 	}
 
-	template <typename T> size_t serialize(std::map<Bytes, T>& map, const char* file_path) {
+	template <typename T, typename Compare, typename Allocator> size_t serialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path) {
 		uint32_t crc;
 		return serialize(map, file_path, crc);
 	}
 
-	template <typename T> size_t deserialize(std::map<Bytes, T>& map, const char* file_path, uint32_t& crc) {
+	template <typename T, typename Compare, typename Allocator> size_t deserialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path, uint32_t& crc) {
 		//TRACE("Persistence::deserialize<map<Bytes,T>>");
 
 		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
@@ -700,7 +701,7 @@ namespace RNS { namespace Persistence {
 		return stream.size();
 	}
 
-	template <typename T> size_t deserialize(std::map<Bytes, T>& map, const char* file_path) {
+	template <typename T, typename Compare, typename Allocator> size_t deserialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path) {
 		uint32_t crc;
 		return deserialize(map, file_path, crc);
 	}

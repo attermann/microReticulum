@@ -130,7 +130,7 @@ namespace RNS {
 		friend class Link;
 		};
 
-	public:
+	private:
 		static uint8_t resource_strategies;
 		static std::set<RNS::Type::Link::link_mode> ENABLED_MODES;
 		static RNS::Type::Link::link_mode MODE_DEFAULT;
@@ -265,6 +265,8 @@ namespace RNS {
 	protected:
 		std::shared_ptr<LinkData> _object;
 
+	// CBA For access to private static members by LinkData class
+	friend class LinkData;
 	};
 
 }

@@ -2,6 +2,7 @@
 
 #include "Transport.h"
 #include "Log.h"
+#include "Utilities/Memory.h"
 
 //#include <TransistorNoiseSource.h>
 #include <RNG.h>
@@ -28,6 +29,9 @@ using namespace RNS::Utilities;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
 /*static*/ bool Reticulum::panic_on_interface_error = false;
+
+/*static*/ uint16_t Reticulum::_persist_interval = PERSIST_INTERVAL;
+/*static*/ uint16_t Reticulum::_clean_interval = CLEAN_INTERVAL;
 
 #ifdef ARDUINO
 // Noise source to seed the random number generator.
@@ -115,32 +119,6 @@ Reticulum::Reticulum() : _object(new Object()) {
 	strncpy(_cachepath, "./cache", FILEPATH_MAXSIZE);
 #endif
 
-#ifdef ARDUINO
-#if defined(RNS_USE_FS)
-	// load time offset from file if it exists
-	try {
-		char time_offset_path[FILEPATH_MAXSIZE];
-		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
-		if (OS::file_exists(time_offset_path)) {
-			Bytes buf;
-			if (OS::read_file(time_offset_path, buf) == 8) {
-				uint64_t offset = *(uint64_t*)buf.data();
-				DEBUGF("Read time offset of %llu from file", offset);
-				OS::setTimeOffset(offset);
-			}
-		}
-	}
-	catch (std::exception& e) {
-		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
-	}
-#endif
-#endif
-
-	// Initialize time-based variables *after* time offset update
-	_object->_last_data_persist = OS::time();
-	_object->_last_cache_clean = 0.0;
-	_object->_jobs_last_run = OS::time();
-
 /*p TODO
 	if not os.path.isdir(Reticulum.storagepath):
 		os.makedirs(Reticulum.storagepath)
@@ -196,11 +174,37 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 void Reticulum::start() {
 
-	INFOF("Total memory: %zu", OS::heap_size());
+	INFOF("Total memory: %zu", Memory::heap_size());
 	INFOF("Total flash: %zu", OS::storage_size());
+
+#ifdef ARDUINO
+#if defined(RNS_USE_FS)
+	// load time offset from file if it exists
+	try {
+		char time_offset_path[FILEPATH_MAXSIZE];
+		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+		if (OS::file_exists(time_offset_path)) {
+			Bytes buf;
+			if (OS::read_file(time_offset_path, buf) == 8) {
+				uint64_t offset = *(uint64_t*)buf.data();
+				DEBUGF("Read time offset of %llu from file", offset);
+				OS::setTimeOffset(offset);
+			}
+		}
+	}
+	catch (std::exception& e) {
+		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
+	}
+#endif
+#endif
 
 	INFO("Starting Transport...");
 	Transport::start(*this);
+
+	// Initialize time-based variables *after* time offset update and Transport start
+	_object->_last_data_persist = OS::time();
+	_object->_last_cache_clean = OS::time();
+	_object->_jobs_last_run = OS::time();
 }
 
 void Reticulum::loop() {
@@ -212,7 +216,6 @@ void Reticulum::loop() {
 			// Perform Reticulum housekeeping
 			if (OS::time() > (_object->_jobs_last_run + JOB_INTERVAL)) {
 				jobs();
-				_object->_jobs_last_run = OS::time();
 			}
 
 			// Perform interface processing
@@ -235,6 +238,12 @@ void Reticulum::loop() {
     }
     catch (const std::bad_alloc&) {
 		ERROR("Reticulum::loop: bad_alloc - OUT OF MEMORY");
+		// Critical OOM, restarting
+#if defined(ESP32)
+		ESP.restart();
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+		NVIC_SystemReset();
+#endif
     }
     catch (std::exception& e) {
 		ERRORF("Reticulum::loop: %s", e.what());
@@ -247,8 +256,8 @@ void Reticulum::jobs() {
 
 #if 1
 	// CBA Detect low-memory condition and reset
-	if (OS::heap_size() > 0) {
-		uint8_t remaining = (uint8_t)((double)OS::heap_available() / (double)OS::heap_size() * 100.0);
+	if (Memory::heap_size() > 0) {
+		uint8_t remaining = (uint8_t)((double)Memory::heap_available() / (double)Memory::heap_size() * 100.0);
 		if (remaining <= 2) {
 			HEADF(LOG_CRITICAL, "DETECTED LOW-MEMORY CONDITION (%d%%), RESETTING!!!", remaining);
 			persist_data();
@@ -262,14 +271,15 @@ void Reticulum::jobs() {
 	}
 #endif
 
-	if (now > _object->_last_cache_clean + CLEAN_INTERVAL) {
+	if (now > _object->_last_cache_clean + _clean_interval) {
 		clean_caches();
-		_object->_last_cache_clean = OS::time();
 	}
 
-	if (now > _object->_last_data_persist + PERSIST_INTERVAL) {
+	if (now > _object->_last_data_persist + _persist_interval) {
 		persist_data();
 	}
+
+	_object->_jobs_last_run = OS::time();
 }
 
 // CBA TODO
@@ -363,6 +373,7 @@ void Reticulum::clean_caches() {
 	Identity::cull_known_destinations();
 #endif
 
+	_object->_last_cache_clean = OS::time();
 }
 
 void Reticulum::clear_caches() {
@@ -404,7 +415,7 @@ void Reticulum::get_interface_stats() const {
 }
 */
 
-const std::map<Bytes, Transport::DestinationEntry>& Reticulum::get_path_table() const {
+const Transport::PathTable& Reticulum::get_path_table() const {
 /*
 	path_table = []
 	for dst_hash in Transport::destination_table:
