@@ -1,6 +1,7 @@
 #include "Memory.h"
 
 #include <new>
+#include <cstring>
 
 using namespace RNS;
 using namespace RNS::Utilities;
@@ -23,7 +24,8 @@ using namespace RNS::Utilities;
 #endif
 
 #ifndef RNS_HEAP_POOL_BUFFER_SIZE
-	#define RNS_HEAP_POOL_BUFFER_SIZE 1024 * 1000
+	//#define RNS_HEAP_POOL_BUFFER_SIZE 1024 * 80
+	#define RNS_HEAP_POOL_BUFFER_SIZE 0
 #endif
 #ifndef RNS_PSRAM_POOL_BUFFER_SIZE
 	#define RNS_PSRAM_POOL_BUFFER_SIZE 0
