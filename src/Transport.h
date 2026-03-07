@@ -111,11 +111,13 @@ namespace RNS {
 				_received_from(received_from),
 				_hops(announce_hops),
 				_expires(expires),
+				_random_blobs(random_blobs),
+#if RNS_LEAN_PATH_TABLE
+				_receiving_interface(receiving_interface)
+#else
 				_receiving_interface(receiving_interface),
-#if !RNS_LEAN_PATH_TABLE
-				_announce_packet(announce_packet),
+				_announce_packet(announce_packet)
 #endif
-				_random_blobs(random_blobs)
 			{
 				if (receiving_interface) _receiving_interface_hash = receiving_interface.get_hash();
 				if (announce_packet) _announce_packet_hash = announce_packet.get_hash();

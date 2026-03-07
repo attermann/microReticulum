@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <memory>
+#include <functional>
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>

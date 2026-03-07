@@ -8,6 +8,7 @@
 #include <list>
 #include <memory>
 #include <cassert>
+#include <functional>
 #include <stdint.h>
 
 namespace RNS {
