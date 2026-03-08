@@ -1332,8 +1332,25 @@ Transport::DestinationEntry empty_destination_entry;
 	}
 	if (accept) {
 		TRACE("Transport::inbound: Packet accepted by filter");
-		// CBA ACCUMULATES
-		_packet_hashlist.insert(packet.packet_hash());
+
+		// Defer hashlist insertion for packets belonging to links in
+		// our link table, and for LRPROOF packets. On shared-medium
+		// interfaces (e.g. LoRa), a packet may arrive on the "wrong"
+		// interface first. Premature hash insertion would cause the
+		// correct arrival to be filtered as a duplicate.
+		// Reference: Python Transport.py lines 1362-1373
+		bool remember_packet_hash = true;
+		if (_link_table.find(packet.destination_hash()) != _link_table.end()) {
+			remember_packet_hash = false;
+		}
+		if (packet.packet_type() == Type::Packet::PROOF && packet.context() == Type::Packet::LRPROOF) {
+			remember_packet_hash = false;
+		}
+		if (remember_packet_hash) {
+			// CBA ACCUMULATES
+			_packet_hashlist.insert(packet.packet_hash());
+		}
+
 		cache_packet(packet);
 		
 		// Check special conditions for local clients connected
@@ -1625,6 +1642,8 @@ Transport::DestinationEntry empty_destination_entry;
 						new_raw << packet.raw().mid(2);
 						transmit(outbound_interface, new_raw);
 						link_entry._timestamp = OS::time();
+						// Deferred hashlist insertion for link transport packets
+						_packet_hashlist.insert(packet.packet_hash());
 					}
 					else {
 						//p pass
