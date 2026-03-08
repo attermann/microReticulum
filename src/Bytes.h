@@ -310,6 +310,13 @@ MEM("Creating from data-move...");
 		void appendHex(const uint8_t* hex, size_t hex_size);
 		inline void appendHex(const char* hex) { if (!hex) return; appendHex((uint8_t*)hex, strlen(hex)); }
 
+		void assignBase64(const uint8_t* b64, size_t b64_size);
+		inline void assignBase64(const char* b64) { if (!b64) return; assignBase64((uint8_t*)b64, strlen(b64)); }
+
+		void appendBase64(const uint8_t* b64, size_t b64_size);
+		inline void appendBase64(const char* b64) { if (!b64) return; appendBase64((uint8_t*)b64, strlen(b64)); }
+
+
 		inline uint8_t* writable(size_t size) {
 			if (size > 0) {
 				// create exclusive data with reserved capacity
@@ -354,6 +361,7 @@ MEM("Creating from data-move...");
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = false) const;
+		std::string toBase64() const;
 		Bytes mid(size_t beginpos, size_t len) const;
 		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
@@ -409,6 +417,7 @@ MEM("Creating from data-move...");
 
 	inline std::string stringFromBytes(const Bytes& bytes) { return bytes.toString(); }
 	inline std::string hexFromBytes(const Bytes& bytes) { return bytes.toHex(); }
+	inline std::string base64FromBytes(const Bytes& bytes) { return bytes.toBase64(); }
 	std::string hexFromByte(uint8_t byte, bool upper = true);
 
 }
@@ -438,12 +447,12 @@ inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const char* rhstr) {
 namespace ArduinoJson {
 	// Serialize
 	inline bool convertToJson(const RNS::Bytes& src, JsonVariant dst) {
-		return dst.set(src.toHex());
+		return dst.set(src.toBase64());
 	}
 	// Deserialize
 	inline void convertFromJson(JsonVariantConst src, RNS::Bytes& dst) {
-		const char* hex = src.as<const char*>();
-		if (hex) dst.assignHex(hex);
+		const char* b64 = src.as<const char*>();
+		if (b64) dst.assignBase64(b64);
 	}
 	inline bool canConvertFromJson(JsonVariantConst src, const RNS::Bytes&) {
 		return src.is<const char*>();

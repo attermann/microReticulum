@@ -94,7 +94,7 @@ namespace ArduinoJson {
 			JsonObject obj = dst.to<JsonObject>();
 			for (const auto& item : src) {
 				//obj[item.first] = item.second;
-				obj[item.first.toHex()] = item.second;
+				obj[item.first.toBase64()] = item.second;
 			}
 		}
 		static std::map<RNS::Bytes, T> fromJson(JsonVariantConst src) {
@@ -102,7 +102,7 @@ namespace ArduinoJson {
 			for (JsonPairConst item : src.as<JsonObjectConst>()) {
 				//dst[item.key().c_str()] = item.value().as<T>();
 				RNS::Bytes key;
-				key.assignHex(item.key().c_str());
+				key.assignBase64(item.key().c_str());
 				//dst[key] = item.value().as<T>();
 				dst.insert({key, item.value().as<T>()});
 			}

@@ -3886,11 +3886,12 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			for (const auto& [timestamp, destination_hash] : sorted_keys) {
 				TRACEF("Transport::cull_path_table: Removing destination %s from path table", destination_hash.toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-				auto& destination_entry = get_path(destination_hash);
-				if (destination_entry) {
+				// Not using get_path() here because it performs an unnecessary announce packet load
+				auto iter = _path_table.find(destination_hash);
+				if (iter != _path_table.end()) {
 					// Remove cached packet file associated with this destination
 					char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
-					snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, destination_entry.announce_packet_hash().toHex().c_str());
+					snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, (*iter).second.announce_packet_hash().toHex().c_str());
 					if (OS::file_exists(packet_cache_path)) {
 						OS::remove_file(packet_cache_path);
 					}

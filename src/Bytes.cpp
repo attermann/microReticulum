@@ -162,6 +162,18 @@ void Bytes::appendHex(const uint8_t* hex, size_t hex_size) {
 const char hex_upper_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 const char hex_lower_chars[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 
+static const char base64_chars[65] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static int8_t b64_decode_char(uint8_t c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;  // invalid / padding
+}
+
 std::string RNS::hexFromByte(uint8_t byte, bool upper /*= true*/) {
 	std::string hex;
 	if (upper) {
@@ -191,6 +203,77 @@ std::string Bytes::toHex(bool upper /*= false*/) const {
 		}
 	}
 	return hex;
+}
+
+std::string Bytes::toBase64() const {
+    if (!_data) {
+        return "";
+    }
+    const uint8_t* in = _data->data();
+    size_t in_size = _data->size();
+    std::string out;
+    out.reserve(((in_size + 2) / 3) * 4);
+    for (size_t i = 0; i < in_size; i += 3) {
+        uint8_t b0 = in[i];
+        uint8_t b1 = (i + 1 < in_size) ? in[i + 1] : 0;
+        uint8_t b2 = (i + 2 < in_size) ? in[i + 2] : 0;
+        out += base64_chars[(b0 >> 2) & 0x3F];
+        out += base64_chars[((b0 << 4) | (b1 >> 4)) & 0x3F];
+        out += (i + 1 < in_size) ? base64_chars[((b1 << 2) | (b2 >> 6)) & 0x3F] : '=';
+        out += (i + 2 < in_size) ? base64_chars[b2 & 0x3F] : '=';
+    }
+    return out;
+}
+
+void Bytes::assignBase64(const uint8_t* b64, size_t b64_size) {
+    if (b64 == nullptr || b64_size == 0) {
+        _data = nullptr;
+        _exclusive = true;
+        return;
+    }
+    // strip trailing padding
+    while (b64_size > 0 && b64[b64_size - 1] == '=') {
+        --b64_size;
+    }
+    size_t out_size = (b64_size * 3) / 4;
+    exclusiveData(false, out_size);
+    _data->clear();
+    for (size_t i = 0; i < b64_size; ) {
+        int8_t v0 = (i < b64_size) ? b64_decode_char(b64[i++]) : 0;
+        int8_t v1 = (i < b64_size) ? b64_decode_char(b64[i++]) : 0;
+        int8_t v2 = (i < b64_size) ? b64_decode_char(b64[i++]) : -1;
+        int8_t v3 = (i < b64_size) ? b64_decode_char(b64[i++]) : -1;
+        if (v0 < 0 || v1 < 0) break;
+        _data->push_back((uint8_t)((v0 << 2) | (v1 >> 4)));
+        if (v2 >= 0) _data->push_back((uint8_t)((v1 << 4) | (v2 >> 2)));
+        if (v3 >= 0) _data->push_back((uint8_t)((v2 << 6) | v3));
+    }
+    if (_data->empty()) {
+        _data = nullptr;
+        _exclusive = true;
+    }
+}
+
+void Bytes::appendBase64(const uint8_t* b64, size_t b64_size) {
+    if (b64 == nullptr || b64_size == 0) {
+        return;
+    }
+    // strip trailing padding
+    while (b64_size > 0 && b64[b64_size - 1] == '=') {
+        --b64_size;
+    }
+    size_t out_size = (b64_size * 3) / 4;
+    exclusiveData(true, size() + out_size);
+    for (size_t i = 0; i < b64_size; ) {
+        int8_t v0 = (i < b64_size) ? b64_decode_char(b64[i++]) : 0;
+        int8_t v1 = (i < b64_size) ? b64_decode_char(b64[i++]) : 0;
+        int8_t v2 = (i < b64_size) ? b64_decode_char(b64[i++]) : -1;
+        int8_t v3 = (i < b64_size) ? b64_decode_char(b64[i++]) : -1;
+        if (v0 < 0 || v1 < 0) break;
+        _data->push_back((uint8_t)((v0 << 2) | (v1 >> 4)));
+        if (v2 >= 0) _data->push_back((uint8_t)((v1 << 4) | (v2 >> 2)));
+        if (v3 >= 0) _data->push_back((uint8_t)((v2 << 6) | v3));
+    }
 }
 
 // mid

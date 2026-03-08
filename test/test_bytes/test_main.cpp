@@ -301,6 +301,53 @@ void testBytesConversion() {
 
 }
 
+void testBytesBase64() {
+
+	// encode "Hello World" → known base64 value
+	{
+		RNS::Bytes bytes("Hello World");
+		std::string b64 = bytes.toBase64();
+		TRACEF("text: \"%s\" base64: \"%s\"", bytes.toString().c_str(), b64.c_str());
+		TEST_ASSERT_EQUAL_STRING("SGVsbG8gV29ybGQ=", b64.c_str());
+	}
+
+	// decode known base64 string → "Hello World"
+	{
+		RNS::Bytes bytes;
+		bytes.assignBase64("SGVsbG8gV29ybGQ=");
+		std::string text = bytes.toString();
+		TRACEF("base64: \"SGVsbG8gV29ybGQ=\" text: \"%s\"", text.c_str());
+		TEST_ASSERT_EQUAL_size_t(11, text.length());
+		TEST_ASSERT_EQUAL_STRING("Hello World", text.c_str());
+	}
+
+	// round-trip stability
+	{
+		RNS::Bytes original("Hello World");
+		std::string b64 = original.toBase64();
+		RNS::Bytes restored;
+		restored.assignBase64(b64.c_str());
+		TEST_ASSERT_EQUAL_size_t(original.size(), restored.size());
+		TEST_ASSERT_EQUAL_MEMORY(original.data(), restored.data(), original.size());
+	}
+
+	// empty bytes → toBase64 returns ""
+	{
+		RNS::Bytes empty;
+		TEST_ASSERT_EQUAL_STRING("", empty.toBase64().c_str());
+	}
+
+	// assignBase64 then appendBase64 produces concatenated result
+	{
+		RNS::Bytes bytes;
+		bytes.assignBase64("SGVsbG8=");   // "Hello"
+		bytes.appendBase64("IFdvcmxk");   // " World"
+		TEST_ASSERT_EQUAL_size_t(11, bytes.size());
+		TEST_ASSERT_EQUAL_MEMORY("Hello World", bytes.data(), bytes.size());
+	}
+
+}
+
 void testBytesResize() {
 	TRACE("Testing downsize of Bytes with initial capacity");
 
@@ -667,6 +714,7 @@ int runUnityTests(void) {
 	RUN_TEST(testBytesMain);
 	RUN_TEST(testCowBytes);
 	RUN_TEST(testBytesConversion);
+	RUN_TEST(testBytesBase64);
 	RUN_TEST(testBytesResize);
 	RUN_TEST(testBytesStream);
 	RUN_TEST(testBytesReserve);
