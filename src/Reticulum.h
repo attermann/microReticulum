@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Transport.h"
+#include "Interface.h"
 #include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
@@ -81,6 +82,11 @@ namespace RNS {
 		void persist_data();
 		void clean_caches();
 		void clear_caches();
+		void _add_interface(Interface& interface,
+			Type::Interface::modes mode = Type::Interface::MODE_FULL,
+			uint8_t ifac_size = 16,
+			const std::string& ifac_netname = "",
+			const std::string& ifac_netkey = "");
 		//void __create_default_config();
 		//void rpc_loop();
 		//void get_interface_stats() const;
