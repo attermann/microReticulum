@@ -1,7 +1,9 @@
 #include "Reticulum.h"
 
 #include "Transport.h"
+#include "Identity.h"
 #include "Log.h"
+#include "Cryptography/HKDF.h"
 #include "Utilities/Memory.h"
 
 //#include <TransistorNoiseSource.h>
@@ -289,9 +291,54 @@ void Reticulum::start_local_interface() {
 
 void Reticulum::apply_config() {
 }
-
-void Reticulum::_add_interface(self,interface, mode = None, configured_bitrate=None, ifac_size=None, ifac_netname=None, ifac_netkey=None, announce_cap=None, announce_rate_target=None, announce_rate_grace=None, announce_rate_penalty=None):
 */
+
+void Reticulum::_add_interface(Interface& interface,
+	Type::Interface::modes mode,
+	uint8_t ifac_size,
+	const std::string& ifac_netname,
+	const std::string& ifac_netkey)
+{
+	interface.mode(mode);
+	interface.OUT(true);
+
+	if (ifac_size != 0x00 && ifac_size != 0xFF) {
+		interface.ifac_size(ifac_size);
+	} else {
+		interface.ifac_size(interface.default_ifac_size());
+	}
+
+	interface.ifac_netname(ifac_netname);
+	interface.ifac_netkey(ifac_netkey);
+
+	if (!ifac_netname.empty() || !ifac_netkey.empty()) {
+		Bytes ifac_origin;
+
+		if (!ifac_netname.empty()) {
+			ifac_origin += Identity::full_hash(Bytes((uint8_t*)ifac_netname.c_str(), ifac_netname.size()));
+		}
+
+		if (!ifac_netkey.empty()) {
+			ifac_origin += Identity::full_hash(Bytes((uint8_t*)ifac_netkey.c_str(), ifac_netkey.size()));
+		}
+
+		Bytes ifac_origin_hash = Identity::full_hash(ifac_origin);
+
+		Bytes ifac_salt(Type::Reticulum::IFAC_SALT, sizeof(Type::Reticulum::IFAC_SALT));
+		Bytes ifac_key_bytes = Cryptography::hkdf(64, ifac_origin_hash, ifac_salt);
+
+		Identity ifac_id(false);
+		ifac_id.load_private_key(ifac_key_bytes);
+
+		Bytes ifac_sig = ifac_id.sign(Identity::full_hash(ifac_key_bytes));
+
+		interface._impl->_ifac_key = ifac_key_bytes;
+		interface._impl->_ifac_identity = ifac_id;
+		interface._impl->_ifac_signature = ifac_sig;
+	}
+
+	Transport::register_interface(interface);
+}
 
 void Reticulum::should_persist_data() {
 	if (OS::time() > _object->_last_data_persist + GRACIOUS_PERSIST_INTERVAL) {

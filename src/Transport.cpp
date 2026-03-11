@@ -8,6 +8,7 @@
 #include "Interface.h"
 #include "Log.h"
 #include "Cryptography/Random.h"
+#include "Cryptography/HKDF.h"
 #include "Utilities/OS.h"
 #include "Utilities/Persistence.h"
 
@@ -706,45 +707,34 @@ Transport::DestinationEntry empty_destination_entry;
 		}
 	}
 	try {
-		//if hasattr(interface, "ifac_identity") and interface.ifac_identity != None:
 		if (interface.ifac_identity()) {
-// TODO
-/*p
-			// Calculate packet access code
-			ifac = interface.ifac_identity.sign(raw)[-interface.ifac_size:]
+			Bytes ifac = interface.ifac_identity().sign(raw).right(interface.ifac_size());
 
-			// Generate mask
-			mask = RNS.Cryptography.hkdf(
-				length=len(raw)+interface.ifac_size,
-				derive_from=ifac,
-				salt=interface.ifac_key,
-				context=None,
-			)
+			Bytes mask = Cryptography::hkdf(
+				raw.size() + interface.ifac_size(),
+				ifac,
+				interface.ifac_key()
+			);
 
-			// Set IFAC flag
-			new_header = bytes([raw[0] | 0x80, raw[1]])
+			uint8_t hdr[] = { (uint8_t)(raw[0] | 0x80), raw[1] };
+			Bytes new_header(hdr, 2);
 
-			// Assemble new payload with IFAC
-			new_raw    = new_header+ifac+raw[2:]
-			
+			Bytes new_raw = new_header + ifac + raw.mid(2);
+
 			// Mask payload
-			i = 0; masked_raw = b""
-			for byte in new_raw:
-				if i == 0:
-					// Mask first header byte, but make sure the
-					// IFAC flag is still set
-					masked_raw += bytes([byte ^ mask[i] | 0x80])
-				elif i == 1 or i > interface.ifac_size+1:
-					// Mask second header byte and payload
-					masked_raw += bytes([byte ^ mask[i]])
-				else:
-					// Don't mask the IFAC itself
-					masked_raw += bytes([byte])
-				i += 1
+			Bytes masked_raw;
+			masked_raw.assign(new_raw.data(), new_raw.size());
+			for (size_t i = 0; i < masked_raw.size(); i++) {
+				if (i == 0) {
+					masked_raw[i] = (new_raw[i] ^ mask[i]) | 0x80;
+				}
+				else if (i == 1 || i > (size_t)(interface.ifac_size() + 1)) {
+					masked_raw[i] = new_raw[i] ^ mask[i];
+				}
+				// else: Don't mask the IFAC itself
+			}
 
-			// Send it
-			interface.on_outgoing(masked_raw)
-*/
+			interface.send_outgoing(masked_raw);
 		}
 		else {
 			interface.send_outgoing(raw);
@@ -1190,73 +1180,64 @@ Transport::DestinationEntry empty_destination_entry;
 			DEBUGF("Error while executing receive packet callback. The contained exception was: %s", e.what());
 		}
 	}
-// TODO
-/*p
 	// If interface access codes are enabled,
 	// we must authenticate each packet.
-	//if len(raw) > 2:
-	if (raw.size() > 2) {
-		if interface != None and hasattr(interface, "ifac_identity") and interface.ifac_identity != None:
+	Bytes local_raw(raw);
+	if (local_raw.size() > 2) {
+		if (interface && interface.ifac_identity()) {
 			// Check that IFAC flag is set
-			if raw[0] & 0x80 == 0x80:
-				if len(raw) > 2+interface.ifac_size:
-					// Extract IFAC
-					ifac = raw[2:2+interface.ifac_size]
-
-					// Generate mask
-					mask = RNS.Cryptography.hkdf(
-						length=len(raw),
-						derive_from=ifac,
-						salt=interface.ifac_key,
-						context=None,
-					)
+			if (local_raw[0] & 0x80) {
+				if (local_raw.size() > (size_t)(2 + interface.ifac_size())) {
+					Bytes ifac = local_raw.mid(2, interface.ifac_size());
+					Bytes mask = Cryptography::hkdf(local_raw.size(), ifac, interface.ifac_key());
 
 					// Unmask payload
-					i = 0; unmasked_raw = b""
-					for byte in raw:
-						if i <= 1 or i > interface.ifac_size+1:
-							// Unmask header bytes and payload
-							unmasked_raw += bytes([byte ^ mask[i]])
-						else:
-							// Don't unmask IFAC itself
-							unmasked_raw += bytes([byte])
-						i += 1
-					raw = unmasked_raw
+					Bytes unmasked_raw;
+					unmasked_raw.assign(local_raw.data(), local_raw.size());
+					for (size_t i = 0; i < unmasked_raw.size(); i++) {
+						if (i <= 1 || i > (size_t)(interface.ifac_size() + 1)) {
+							unmasked_raw[i] = local_raw[i] ^ mask[i];
+						}
+						// else: Don't unmask IFAC itself
+					}
+					local_raw = unmasked_raw;
 
-					// Unset IFAC flag
-					new_header = bytes([raw[0] & 0x7f, raw[1]])
+					uint8_t hdr[] = { (uint8_t)(local_raw[0] & 0x7f), local_raw[1] };
+					Bytes new_header(hdr, 2);
 
-					// Re-assemble packet
-					new_raw = new_header+raw[2+interface.ifac_size:]
+					Bytes new_raw = new_header + local_raw.mid(2 + interface.ifac_size());
 
-					// Calculate expected IFAC
-					expected_ifac = interface.ifac_identity.sign(new_raw)[-interface.ifac_size:]
+					Bytes expected_ifac = interface.ifac_identity().sign(new_raw).right(interface.ifac_size());
 
-					// Check it
-					if ifac == expected_ifac:
-						raw = new_raw
-					else:
-						return
-
-				else:
-					return
-
-			else:
+					if (ifac == expected_ifac) {
+						local_raw = new_raw;
+					}
+					else {
+						return;
+					}
+				}
+				else {
+					return;
+				}
+			}
+			else {
 				// If the IFAC flag is not set, but should be,
 				// drop the packet.
-				return
-
-		else:
+				return;
+			}
+		}
+		else {
 			// If the interface does not have IFAC enabled,
 			// check the received packet IFAC flag.
-			if raw[0] & 0x80 == 0x80:
+			if (local_raw[0] & 0x80) {
 				// If the flag is set, drop the packet
-				return
+				return;
+			}
+		}
 	}
 	else {
 		return;
 	}
-*/
 
 	while (_jobs_running) {
 		TRACE("Transport::inbound: sleeping...");
@@ -1270,7 +1251,7 @@ Transport::DestinationEntry empty_destination_entry;
 
 	_jobs_locked = true;
 
-	Packet packet(RNS::Destination(RNS::Type::NONE), raw);
+	Packet packet(RNS::Destination(RNS::Type::NONE), local_raw);
 	if (!packet.unpack()) {
 		WARNING("Transport::inbound: Packet unpack failed!");
 		return;
