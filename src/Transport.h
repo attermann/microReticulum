@@ -55,7 +55,7 @@ namespace RNS {
 
 	public:
 
-		using InterfaceTable = std::map<Bytes, Interface&>;
+		using InterfaceTable = std::map<Bytes, Interface>;
 		using DestinationTable = std::map<Bytes, Destination>;
 
 		class Callbacks {
@@ -391,7 +391,7 @@ namespace RNS {
 		static void handle_tunnel(const Bytes& tunnel_id, const Interface& interface);
 		static void register_interface(Interface& interface);
 		static void deregister_interface(const Interface& interface);
-		inline static const InterfaceTable& get_interfaces() { return _interfaces; }
+		inline static InterfaceTable& get_interfaces() { return _interfaces; }
 		static void register_destination(Destination& destination);
 		static void deregister_destination(const Destination& destination);
 		static void register_link(Link& link);
@@ -517,7 +517,7 @@ namespace RNS {
 		//static std::set<Interface> _local_client_interfaces;
 		static std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> _local_client_interfaces;
 
-		static std::map<Bytes, const Interface&> _pending_local_path_requests;
+		static std::map<Bytes, const Interface> _pending_local_path_requests;
 
 		// CBA
 		static PacketTable _packet_table;           // A lookup table containing announce packets for known paths

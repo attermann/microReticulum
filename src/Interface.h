@@ -152,8 +152,8 @@ namespace RNS {
 
 	public:
 		inline bool start() { assert(_impl); return _impl->start(); }
-		inline void stop() { assert(_impl); return _impl->stop(); }
-		inline void loop() { assert(_impl); return _impl->loop(); }
+		inline void stop() { assert(_impl); _impl->stop(); }
+		inline void loop() { assert(_impl); _impl->loop(); }
 		inline const Bytes get_hash() const { assert(_impl); return _impl->get_hash(); }
 		void process_announce_queue();
 

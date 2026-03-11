@@ -103,7 +103,7 @@ namespace RNS {
 
 	public:
 		inline bool init() { assert(_impl); return _impl->init(); }
-		inline void loop() { assert(_impl); return _impl->loop(); }
+		inline void loop() { assert(_impl); _impl->loop(); }
 		inline bool file_exists(const char* file_path) { assert(_impl); return _impl->file_exists(file_path); }
 		inline size_t read_file(const char* file_path, Bytes& data) { assert(_impl); return _impl->read_file(file_path, data); }
 		inline size_t write_file(const char* file_path, const Bytes& data) { assert(_impl); return _impl->write_file(file_path, data); }

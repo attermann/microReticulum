@@ -35,8 +35,8 @@ using namespace RNS::Utilities;
 #define RNS_PR_TAGS_MAX	 32
 #endif
 
-/*static*/ std::map<Bytes, Interface&> Transport::_interfaces;
-/*static*/ std::map<Bytes, Destination> Transport::_destinations;
+/*static*/ Transport::InterfaceTable Transport::_interfaces;
+/*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
 /*static*/ std::set<Link> Transport::_active_links;
 /*static*/ std::set<Bytes> Transport::_packet_hashlist;
@@ -61,7 +61,7 @@ using namespace RNS::Utilities;
 ///*static*/ std::set<Interface> Transport::_local_client_interfaces;
 /*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_local_client_interfaces;
 
-/*static*/ std::map<Bytes, const Interface&> Transport::_pending_local_path_requests;
+/*static*/ std::map<Bytes, const Interface> Transport::_pending_local_path_requests;
 
 // CBA
 /*static*/ std::map<Bytes, Transport::PacketEntry> Transport::_packet_table;
