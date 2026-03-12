@@ -620,6 +620,22 @@ Transport::DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to cull discovery path requests: %s", e.what());
 				}
 
+				// Cull the path requests table
+				try {
+					std::vector<Bytes> stale_path_requests;
+					for (const auto& [destination_hash, timestamp] : _path_requests) {
+						if (OS::time() > (timestamp + DESTINATION_TIMEOUT)) {
+							stale_path_requests.push_back(destination_hash);
+						}
+					}
+					for (const Bytes& destination_hash : stale_path_requests) {
+						_path_requests.erase(destination_hash);
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to cull path requests: %s", e.what());
+				}
+
 				// Cull the tunnel table
 				try {
 					count = 0;
@@ -1874,6 +1890,7 @@ Transport::DestinationEntry empty_destination_entry;
 							if (iter != _pending_local_path_requests.end()) {
 								//p desiring_interface = Transport.pending_local_path_requests.pop(packet.destination_hash)
 								//const Interface& desiring_interface = (*iter).second;
+								_pending_local_path_requests.erase(iter);
 								retransmit_timeout = now;
 								retries = PATHFINDER_R;
 
