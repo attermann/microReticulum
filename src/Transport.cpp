@@ -1517,7 +1517,7 @@ Transport::DestinationEntry empty_destination_entry;
 								else {
 									if (nh_mtu < path_mtu || (ph_mtu != 0 && ph_mtu < path_mtu)) {
 										try {
-											path_mtu = std::min(nh_mtu, ph_mtu);
+											path_mtu = std::min(nh_mtu, (ph_mtu > 0) ? ph_mtu : nh_mtu);
 											Bytes clamped_mtu = Link::signalling_bytes(path_mtu, mode);
 											DEBUGF("Clamping link MTU to %u", path_mtu);
 											new_raw  = new_raw.left(new_raw.size()-Type::Link::LINK_MTU_SIZE)+clamped_mtu;
