@@ -223,18 +223,18 @@ void UniversalFileSystem::listDir(const char* dir) {
     return wrote;
 }
 
-/*virtual*/ RNS::FileStream UniversalFileSystem::open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+/*virtual*/ RNS::File UniversalFileSystem::open_file(const char* file_path, RNS::File::MODE file_mode) {
 	TRACEF("open_file: opening file %s", file_path);
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 	const char* mode;
-	if (file_mode == RNS::FileStream::MODE_READ) {
+	if (file_mode == RNS::File::MODE_READ) {
 		mode = FILE_READ;
 	}
-	else if (file_mode == RNS::FileStream::MODE_WRITE) {
+	else if (file_mode == RNS::File::MODE_WRITE) {
 		mode = FILE_WRITE;
 	}
-	else if (file_mode == RNS::FileStream::MODE_APPEND) {
+	else if (file_mode == RNS::File::MODE_APPEND) {
 		mode = FILE_APPEND;
 	}
 	else {
@@ -252,20 +252,20 @@ void UniversalFileSystem::listDir(const char* dir) {
 		return {RNS::Type::NONE};
 	}
 	TRACEF("open_file: successfully opened file %s", file_path);
-	return RNS::FileStream(new UniversalFileStream(file));
+	return RNS::File(new UniversalFileStream(file));
 #elif BOARD_NRF52
 	int mode;
-	if (file_mode == RNS::FileStream::MODE_READ) {
+	if (file_mode == RNS::File::MODE_READ) {
 		mode = FILE_O_READ;
 	}
-	else if (file_mode == RNS::FileStream::MODE_WRITE) {
+	else if (file_mode == RNS::File::MODE_WRITE) {
 		mode = FILE_O_WRITE;
 		// CBA TODO Replace remove with working truncation
 		if (InternalFS.exists(file_path)) {
 			InternalFS.remove(file_path);
 		}
 	}
-	else if (file_mode == RNS::FileStream::MODE_APPEND) {
+	else if (file_mode == RNS::File::MODE_APPEND) {
 		// CBA This is the default write mode for nrf52 littlefs
 		mode = FILE_O_WRITE;
 	}
@@ -282,26 +282,26 @@ void UniversalFileSystem::listDir(const char* dir) {
 	}
 
 	// Seek to beginning to overwrite (this is failing on nrf52)
-	//if (file_mode == RNS::FileStream::MODE_WRITE) {
+	//if (file_mode == RNS::File::MODE_WRITE) {
 	//	file->seek(0);
 	//	file->truncate(0);
 	//}
 	TRACEF("open_file: successfully opened file %s", file_path);
-	return RNS::FileStream(new UniversalFileStream(file));
+	return RNS::File(new UniversalFileStream(file));
 #else
 	#warning("unsupported");
-	return RNS::FileStream(RNS::Type::NONE);
+	return RNS::File(RNS::Type::NONE);
 #endif
 #else	// ARDUINO
 	// Native
 	const char* mode;
-	if (file_mode == RNS::FileStream::MODE_READ) {
+	if (file_mode == RNS::File::MODE_READ) {
 		mode = "r";
 	}
-	else if (file_mode == RNS::FileStream::MODE_WRITE) {
+	else if (file_mode == RNS::File::MODE_WRITE) {
 		mode = "w";
 	}
-	else if (file_mode == RNS::FileStream::MODE_APPEND) {
+	else if (file_mode == RNS::File::MODE_APPEND) {
 		mode = "a";
 	}
 	else {
@@ -315,7 +315,7 @@ void UniversalFileSystem::listDir(const char* dir) {
 		return {RNS::Type::NONE};
 	}
 	TRACEF("open_file: successfully opened file %s", file_path);
-	return RNS::FileStream(new UniversalFileStream(file));
+	return RNS::File(new UniversalFileStream(file));
 #endif
 }
 

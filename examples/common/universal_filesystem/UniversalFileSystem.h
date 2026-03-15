@@ -1,7 +1,7 @@
 #pragma once
 
 #include <FileSystem.h>
-#include <FileStream.h>
+#include <File.h>
 #include <Bytes.h>
 
 #ifdef ARDUINO
@@ -36,7 +36,7 @@ public:
 	virtual bool file_exists(const char* file_path);
 	virtual size_t read_file(const char* file_path, RNS::Bytes& data);
 	virtual size_t write_file(const char* file_path, const RNS::Bytes& data);
-	virtual RNS::FileStream open_file(const char* file_path, RNS::FileStream::MODE file_mode);
+	virtual RNS::File open_file(const char* file_path, RNS::File::MODE file_mode);
 	virtual bool remove_file(const char* file_path);
 	virtual bool rename_file(const char* from_file_path, const char* to_file_path);
 	virtual bool directory_exists(const char* directory_path);
@@ -49,19 +49,19 @@ public:
 protected:
 
 #if defined(BOARD_ESP32) || defined(BOARD_NRF52)
-	class UniversalFileStream : public RNS::FileStreamImpl {
+	class UniversalFileStream : public RNS::FileImpl {
 
 	private:
 		std::unique_ptr<File> _file;
 		bool _closed = false;
 
 	public:
-		UniversalFileStream(File* file) : RNS::FileStreamImpl(), _file(file) { TRACE("UniversalFileStream CREATED"); }
+		UniversalFileStream(File* file) : RNS::FileImpl(), _file(file) { TRACE("UniversalFileStream CREATED"); }
 		virtual ~UniversalFileStream() { if (!_closed) close(); TRACE("UniversalFileStream DESTROYED"); }
 
 	public:
-		inline virtual const char* name() { return _file->name(); }
-		inline virtual size_t size() { return _file->size(); }
+		inline virtual const char* name() const { return _file->name(); }
+		inline virtual size_t size() const { return _file->size(); }
 		inline virtual void close() { _closed = true; _file->close(); }
 
 		// Print overrides
@@ -76,7 +76,7 @@ protected:
 
 	};
 #else
-	class UniversalFileStream : public RNS::FileStreamImpl {
+	class UniversalFileStream : public RNS::FileImpl {
 
 	private:
 		FILE* _file = nullptr;
@@ -85,7 +85,7 @@ protected:
 		char _filename[1024];
 
 	public:
-		UniversalFileStream(FILE* file) : RNS::FileStreamImpl(), _file(file) {
+		UniversalFileStream(FILE* file) : RNS::FileImpl(), _file(file) {
 			_available = size();
 		}
 		virtual ~UniversalFileStream() { if (!_closed) close(); }
@@ -147,7 +147,7 @@ protected:
 			assert(_file);
 			int size = 0;
 			ioctl(fileno(_file), FIONREAD, &size);
-			TRACEF("FileStream::available: %d", size);
+			TRACEF("File::available: %d", size);
 			return size;
 #else
 			return _available;
@@ -163,7 +163,7 @@ protected:
 				return ch;
 			}
 			--_available;
-			//TRACEF("FileStream::read: %c", ch);
+			//TRACEF("File::read: %c", ch);
 			return ch;
 		}
 		inline virtual int peek() {
@@ -173,13 +173,13 @@ protected:
 			assert(_file);
 			int ch = fgetc(_file);
 			ungetc(ch, _file);
-			TRACEF("FileStream::peek: %c", ch);
+			TRACEF("File::peek: %c", ch);
 			return ch;
 		}
 		inline virtual void flush() {
 			assert(_file);
 			fflush(_file);
-			TRACE("FileStream::flush");
+			TRACE("File::flush");
 		}
 
 	};

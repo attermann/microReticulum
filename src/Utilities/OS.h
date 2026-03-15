@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../FileSystem.h"
-#include "../FileStream.h"
+#include "../File.h"
 #include "../Bytes.h"
 
 #include <cmath>
@@ -181,7 +181,7 @@ namespace RNS { namespace Utilities {
 			return _filesystem.write_file(file_path, data);
 		}
 
-		inline static FileStream open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+		inline static File open_file(const char* file_path, RNS::File::MODE file_mode) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}

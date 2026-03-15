@@ -1,6 +1,6 @@
 #pragma once
 
-#include "FileStream.h"
+#include "File.h"
 #include "Log.h"
 #include "Bytes.h"
 #include "Type.h"
@@ -32,7 +32,7 @@ namespace RNS {
 		virtual bool file_exists(const char* file_path) = 0;
 		virtual size_t read_file(const char* file_path, Bytes& data) = 0;
 		virtual size_t write_file(const char* file_path, const Bytes& data) = 0;
-		virtual FileStream open_file(const char* file_path, FileStream::MODE file_mode) = 0;
+		virtual File open_file(const char* file_path, File::MODE file_mode) = 0;
 		virtual bool remove_file(const char* file_path) = 0;
 		virtual bool rename_file(const char* from_file_path, const char* to_file_path) = 0;
 		virtual bool directory_exists(const char* directory_path) = 0;
@@ -107,7 +107,7 @@ namespace RNS {
 		inline bool file_exists(const char* file_path) { assert(_impl); return _impl->file_exists(file_path); }
 		inline size_t read_file(const char* file_path, Bytes& data) { assert(_impl); return _impl->read_file(file_path, data); }
 		inline size_t write_file(const char* file_path, const Bytes& data) { assert(_impl); return _impl->write_file(file_path, data); }
-		inline FileStream open_file(const char* file_path, FileStream::MODE file_mode) { return _impl->open_file(file_path, file_mode); }
+		inline File open_file(const char* file_path, File::MODE file_mode) { return _impl->open_file(file_path, file_mode); }
 		inline bool remove_file(const char* file_path) { assert(_impl); return _impl->remove_file(file_path); }
 		inline bool rename_file(const char* from_file_path, const char* to_file_path) { assert(_impl); return _impl->rename_file(from_file_path, to_file_path); }
 		inline bool directory_exists(const char* directory_path) { assert(_impl); return _impl->directory_exists(directory_path); }
@@ -116,6 +116,13 @@ namespace RNS {
 		inline std::list<std::string> list_directory(const char* directory_path, Callbacks::DirectoryListing callback = nullptr) { assert(_impl); return _impl->list_directory(directory_path, callback); }
 		inline size_t storage_size() { assert(_impl); return _impl->storage_size(); }
 		inline size_t storage_available() { assert(_impl); return _impl->storage_available(); }
+
+		//NEW File open(const char *path, const char *mode = FILE_READ, const bool create = false);
+		//NEW bool exists(const char *path);
+		//NEW bool remove(const char *path);
+		//NEW bool rename(const char *pathFrom, const char *pathTo);
+		//NEW bool mkdir(const char *path);
+		//NEW bool rmdir(const char *path);
 
 	private:
 		std::list<std::string> _empty;

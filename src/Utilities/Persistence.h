@@ -596,7 +596,7 @@ namespace RNS { namespace Persistence {
 		//TRACE("Persistence::serialize<map<Bytes,T>>");
 
 		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
-		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_WRITE);
+		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_WRITE);
 		if (!stream) {
 			TRACE("Persistence::serialize: failed to open write stream");
 			return 0;
@@ -640,7 +640,7 @@ namespace RNS { namespace Persistence {
 		//TRACE("Persistence::deserialize<map<Bytes,T>>");
 
 		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
-		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_READ);
+		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_READ);
 		if (!stream) {
 			TRACE("Persistence::deserialize: failed to open read stream");
 			return 0;

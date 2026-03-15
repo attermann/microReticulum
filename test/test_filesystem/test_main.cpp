@@ -107,7 +107,7 @@ void writeFileStream(const char* file_path) {
 
 	{
 		RNS::Bytes data("stream");
-		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_WRITE);
+		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_WRITE);
 		TEST_ASSERT_TRUE(stream);
 		TRACE("testWriteFileStream: writing to file...");
 		size_t wrote = stream.write(data.data(), data.size());
@@ -136,7 +136,7 @@ void readFileStream(const char* file_path) {
 
 	{
 		RNS::Bytes data;
-		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_READ);
+		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_READ);
 		TEST_ASSERT_TRUE(stream);
 		size_t size = stream.size();
 		TRACEF("testReadFileStream: size: %u", size);

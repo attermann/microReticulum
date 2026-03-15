@@ -1,7 +1,7 @@
 #pragma once
 
 #include <FileSystem.h>
-#include <FileStream.h>
+#include <File.h>
 #include <Bytes.h>
 #include <Log.h>
 #include <Utilities/OS.h>
@@ -249,18 +249,18 @@ public:
 		return wrote;
 	}
 
-	virtual RNS::FileStream open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+	virtual RNS::File open_file(const char* file_path, RNS::File::MODE file_mode) {
 		TRACEF("open_file: opening file %s", file_path);
 #ifdef ARDUINO
 #ifdef BOARD_ESP32
 		const char* mode;
-		if (file_mode == RNS::FileStream::MODE_READ) {
+		if (file_mode == RNS::File::MODE_READ) {
 			mode = FILE_READ;
 		}
-		else if (file_mode == RNS::FileStream::MODE_WRITE) {
+		else if (file_mode == RNS::File::MODE_WRITE) {
 			mode = FILE_WRITE;
 		}
-		else if (file_mode == RNS::FileStream::MODE_APPEND) {
+		else if (file_mode == RNS::File::MODE_APPEND) {
 			mode = FILE_APPEND;
 		}
 		else {
@@ -278,20 +278,20 @@ public:
 			return {RNS::Type::NONE};
 		}
 		TRACEF("open_file: successfully opened file %s", file_path);
-		return RNS::FileStream(new FileStreamImpl(file));
+		return RNS::File(new FileImpl(file));
 #elif BOARD_NRF52
 		int mode;
-		if (file_mode == RNS::FileStream::MODE_READ) {
+		if (file_mode == RNS::File::MODE_READ) {
 			mode = FILE_O_READ;
 		}
-		else if (file_mode == RNS::FileStream::MODE_WRITE) {
+		else if (file_mode == RNS::File::MODE_WRITE) {
 			mode = FILE_O_WRITE;
 			// CBA TODO Replace remove with working truncation
 			if (InternalFS.exists(file_path)) {
 				InternalFS.remove(file_path);
 			}
 		}
-		else if (file_mode == RNS::FileStream::MODE_APPEND) {
+		else if (file_mode == RNS::File::MODE_APPEND) {
 			// CBA This is the default write mode for nrf52 littlefs
 			mode = FILE_O_WRITE;
 		}
@@ -308,26 +308,26 @@ public:
 		}
 
 		// Seek to beginning to overwrite (this is failing on nrf52)
-		//if (file_mode == RNS::FileStream::MODE_WRITE) {
+		//if (file_mode == RNS::File::MODE_WRITE) {
 		//	file->seek(0);
 		//	file->truncate(0);
 		//}
 		TRACEF("open_file: successfully opened file %s", file_path);
-		return RNS::FileStream(new FileStreamImpl(file));
+		return RNS::File(new FileImpl(file));
 #else
 	#warning("unsupported");
-		return RNS::FileStream(RNS::Type::NONE);
+		return RNS::File(RNS::Type::NONE);
 #endif
 #else	// ARDUINO
 		// Native
 		const char* mode;
-		if (file_mode == RNS::FileStream::MODE_READ) {
+		if (file_mode == RNS::File::MODE_READ) {
 			mode = "r";
 		}
-		else if (file_mode == RNS::FileStream::MODE_WRITE) {
+		else if (file_mode == RNS::File::MODE_WRITE) {
 			mode = "w";
 		}
-		else if (file_mode == RNS::FileStream::MODE_APPEND) {
+		else if (file_mode == RNS::File::MODE_APPEND) {
 			mode = "a";
 		}
 		else {
@@ -341,7 +341,7 @@ public:
 			return {RNS::Type::NONE};
 		}
 		TRACEF("open_file: successfully opened file %s", file_path);
-		return RNS::FileStream(new FileStreamImpl(file));
+		return RNS::File(new FileImpl(file));
 #endif
 	}
 
@@ -579,19 +579,19 @@ public:
 protected:
 
 #if defined(BOARD_ESP32) || defined(BOARD_NRF52)
-	class FileStreamImpl : public RNS::FileStreamImpl {
+	class FileImpl : public RNS::FileImpl {
 
 	private:
 		std::unique_ptr<File> _file;
 		bool _closed = false;
 
 	public:
-		FileStreamImpl(File* file) : RNS::FileStreamImpl(), _file(file) {}
-		virtual ~FileStreamImpl() { if (!_closed) close(); }
+		FileImpl(File* file) : RNS::FileImpl(), _file(file) {}
+		virtual ~FileImpl() { if (!_closed) close(); }
 
 	public:
-		inline virtual const char* name() { return _file->name(); }
-		inline virtual size_t size() { return _file->size(); }
+		inline virtual const char* name() const { return _file->name(); }
+		inline virtual size_t size() const { return _file->size(); }
 		inline virtual void close() { _closed = true; _file->close(); }
 
 		// Print overrides
@@ -606,7 +606,7 @@ protected:
 
 	};
 #else
-	class FileStreamImpl : public RNS::FileStreamImpl {
+	class FileImpl : public RNS::FileImpl {
 
 	private:
 		FILE* _file = nullptr;
@@ -615,13 +615,13 @@ protected:
 		char _filename[1024];
 
 	public:
-		FileStreamImpl(FILE* file) : RNS::FileStreamImpl(), _file(file) {
+		FileImpl(FILE* file) : RNS::FileImpl(), _file(file) {
 			_available = size();
 		}
-		virtual ~FileStreamImpl() { if (!_closed) close(); }
+		virtual ~FileImpl() { if (!_closed) close(); }
 
 	public:
-		inline virtual const char* name() {
+		inline virtual const char* name() const {
 			assert(_file);
 #if 0
 			char proclnk[1024];
@@ -641,7 +641,7 @@ protected:
 			return nullptr;
 #endif
 		}
-		inline virtual size_t size() {
+		inline virtual size_t size() const {
 			assert(_file);
 			struct stat st;
 			fstat(fileno(_file), &st);
@@ -677,7 +677,7 @@ protected:
 			assert(_file);
 			int size = 0;
 			ioctl(fileno(_file), FIONREAD, &size);
-			TRACEF("FileStream::available: %d", size);
+			TRACEF("File::available: %d", size);
 			return size;
 #else
 			return _available;
@@ -693,7 +693,7 @@ protected:
 				return ch;
 			}
 			--_available;
-			//TRACEF("FileStream::read: %c", ch);
+			//TRACEF("File::read: %c", ch);
 			return ch;
 		}
 		inline virtual int peek() {
@@ -703,13 +703,13 @@ protected:
 			assert(_file);
 			int ch = fgetc(_file);
 			ungetc(ch, _file);
-			TRACEF("FileStream::peek: %c", ch);
+			TRACEF("File::peek: %c", ch);
 			return ch;
 		}
 		inline virtual void flush() {
 			assert(_file);
 			fflush(_file);
-			TRACE("FileStream::flush");
+			TRACE("File::flush");
 		}
 
 	};
