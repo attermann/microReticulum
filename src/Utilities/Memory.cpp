@@ -92,7 +92,11 @@ using namespace RNS::Utilities;
 	void* raw_buffer = malloc(pool_info.buffer_size);
 #else
 	pool_info.buffer_size = (size_t)RNS_HEAP_POOL_BUFFER_SIZE;
+	altheap_pool_info.buffer_size = (size_t)RNS_ALTHEAP_POOL_BUFFER_SIZE;
 	TRACEF("TLSF: buffer_size: %u", pool_info.buffer_size);
+	if (pool_info.buffer_size == 0) {
+		pool_info.buffer_size = (size_t)(1024 * 1024);
+	}
 	void* raw_buffer = malloc(pool_info.buffer_size);
 #endif
 	if (raw_buffer == nullptr) {
