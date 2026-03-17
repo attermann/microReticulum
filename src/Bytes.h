@@ -350,7 +350,7 @@ MEM("Creating from data-move...");
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
 		inline void reserve(size_t capacity) const { if (!_data) return; _data->reserve(capacity); }
 		inline const uint8_t* data() const { if (!_data) return nullptr; return _data->data(); }
-		inline const Data collection() const { if (!_data) return Data(); return *_data.get(); }
+		inline const Data& collection() const { if (!_data) return Data(); return *_data.get(); }
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = false) const;

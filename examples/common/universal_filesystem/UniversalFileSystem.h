@@ -91,7 +91,7 @@ protected:
 		virtual ~UniversalFileStream() { if (!_closed) close(); }
 
 	public:
-		inline virtual const char* name() {
+		inline virtual const char* name() const {
 			assert(_file);
 #if 0
 			char proclnk[1024];
@@ -111,7 +111,7 @@ protected:
 			return nullptr;
 #endif
 		}
-		inline virtual size_t size() {
+		inline virtual size_t size() const {
 			assert(_file);
 			struct stat st;
 			fstat(fileno(_file), &st);

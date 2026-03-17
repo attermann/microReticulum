@@ -4,6 +4,7 @@
 #include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
+#include "Persistence/DestinationEntry.h"
 
 #include <vector>
 #include <map>
@@ -11,6 +12,8 @@
 #include <memory>
 #include <cassert>
 #include <stdint.h>
+
+using namespace RNS::Persistence;
 
 namespace RNS {
 
@@ -84,7 +87,7 @@ namespace RNS {
 		//void __create_default_config();
 		//void rpc_loop();
 		//void get_interface_stats() const;
-		const Transport::PathTable& get_path_table() const;
+		const PathTable& get_path_table() const;
 		const std::map<Bytes, Transport::RateEntry>& get_rate_table() const;
 		bool drop_path(const Bytes& destination);
 		uint16_t drop_all_via(const Bytes& transport_hash);

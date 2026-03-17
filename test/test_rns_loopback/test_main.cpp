@@ -124,7 +124,7 @@ void testReticulum() {
 
 	HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
     reticulum = RNS::Reticulum();
-	reticulum.transport_enabled(true);
+	reticulum.transport_enabled(false);
 	reticulum.probe_destination_enabled(true);
 	reticulum.start();
 

@@ -11,6 +11,9 @@
 #include "Utilities/OS.h"
 #include "Utilities/Persistence.h"
 
+// CBA microStore
+#include <microStore/impl/PosixFileSystemImpl.h>
+
 #include <algorithm>
 #include <unistd.h>
 #include <time.h>
@@ -18,6 +21,7 @@
 using namespace RNS;
 using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
+using namespace RNS::Persistence;
 
 #ifndef RNS_PATH_TABLE_MAX
 #define RNS_PATH_TABLE_MAX 100
@@ -43,7 +47,7 @@ using namespace RNS::Utilities;
 /*static*/ std::list<PacketReceipt> Transport::_receipts;
 
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
-/*static*/ Transport::PathTable Transport::_path_table;
+/*static*/ PathTable Transport::_path_table;
 /*static*/ std::map<Bytes, Transport::ReverseEntry> Transport::_reverse_table;
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
 /*static*/ Transport::AnnounceTable Transport::_held_announces;
@@ -117,7 +121,12 @@ using namespace RNS::Utilities;
 
 /*static*/ bool Transport::cleaning_caches = false;
 
-Transport::DestinationEntry empty_destination_entry;
+// CBA microStore
+/*static*/ microStore::FileSystem Transport::_filesystem(new microStoreImpl::PosixFileSystemImpl());
+/*static*/ NewPathStore Transport::_path_store;
+/*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
+
+DestinationEntry empty_destination_entry;
 
 /*static*/ void Transport::start(const Reticulum& reticulum_instance) {
 	INFO("Transport starting...");
@@ -212,6 +221,8 @@ Transport::DestinationEntry empty_destination_entry;
 
 		// Read in path table
 		read_path_table();
+		// CBA microStore
+	    _path_store.init(_filesystem, "path_store");
 
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
@@ -1094,7 +1105,8 @@ Transport::DestinationEntry empty_destination_entry;
 			// CBA ACCUMULATES
 			_receipts.push_back(receipt);
 		}
-		
+
+		// CBA Currently this packet cache is a noop since it's not forced
 		cache_packet(packet);
 	}
 
@@ -1102,6 +1114,7 @@ Transport::DestinationEntry empty_destination_entry;
 	return sent;
 }
 
+#if 0
 /*static*/ bool Transport::packet_filter(const Packet& packet) {
 	// TODO: Think long and hard about this.
 	// Is it even strictly necessary with the current
@@ -1157,6 +1170,84 @@ Transport::DestinationEntry empty_destination_entry;
 		}
 	}
 
+	if (_packet_hashlist.find(packet.packet_hash()) == _packet_hashlist.end()) {
+		TRACE("Transport::packet_filter: packet not previously seen");
+		return true;
+	}
+	else {
+		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
+			if (packet.destination_type() == Type::Destination::SINGLE) {
+				TRACE("Transport::packet_filter: packet previously seen but is SINGLE ANNOUNCE");
+				return true;
+			}
+			else {
+				DEBUG("Dropped invalid announce packet");
+				return false;
+			}
+		}
+	}
+
+	DEBUGF("Filtered packet with hash %s", packet.packet_hash().toHex().c_str());
+	return false;
+}
+#endif
+
+/*static*/ bool Transport::packet_filter(const Packet& packet) {
+
+	// If connected to a shared instance, it will handle
+	// packet filtering
+	if (_owner && _owner.is_connected_to_shared_instance()) return true;
+
+	// Filter packets intended for other transport instances
+	if (packet.transport_id() && packet.packet_type() != Type::Packet::ANNOUNCE) {
+		if (packet.transport_id() != Transport::identity().hash()) {
+			TRACEF("Ignored packet %s in transport for other transport instance", packet.packet_hash().toHex().c_str());
+			return false;
+		}
+	}
+
+	switch (packet.context()) {
+		case Type::Packet::KEEPALIVE: return true;
+		case Type::Packet::RESOURCE_REQ: return true;
+		case Type::Packet::RESOURCE_PRF: return true;
+		case Type::Packet::RESOURCE: return true;
+		case Type::Packet::CACHE_REQUEST: return true;
+		case Type::Packet::CHANNEL: return true;
+	}
+
+	if (packet.destination_type() == Type::Destination::PLAIN) {
+		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
+			if (packet.hops() > 1) {
+				DEBUGF("Dropped PLAIN packet %s with %u hops", packet.packet_hash().toHex().c_str(), packet.hops());
+				return false;
+			}
+			else {
+				return true;
+			}
+		}
+		else {
+			DEBUG("Dropped invalid PLAIN announce packet");
+			return false;
+		}
+	}
+
+	if (packet.destination_type() == Type::Destination::GROUP) {
+		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
+			if (packet.hops() > 1) {
+				DEBUGF("Dropped GRPUP packet %s with %u hops", packet.packet_hash().toHex().c_str(), packet.hops());
+				return false;
+			}
+			else {
+				return true;
+			}
+		}
+		else {
+			DEBUG("Dropped invalid GROUP announce packet");
+			return false;
+		}
+	}
+
+	//p if not packet.packet_hash in Transport.packet_hashlist and not packet.packet_hash in Transport.packet_hashlist_prev:
 	if (_packet_hashlist.find(packet.packet_hash()) == _packet_hashlist.end()) {
 		TRACE("Transport::packet_filter: packet not previously seen");
 		return true;
@@ -1334,6 +1425,7 @@ Transport::DestinationEntry empty_destination_entry;
 		TRACE("Transport::inbound: Packet accepted by filter");
 		// CBA ACCUMULATES
 		_packet_hashlist.insert(packet.packet_hash());
+		// CBA Currently this packet cache is a noop since it's not forced
 		cache_packet(packet);
 		
 		// Check special conditions for local clients connected
@@ -1985,13 +2077,19 @@ Transport::DestinationEntry empty_destination_entry;
 							new_announce.send();
 						}
 
+// CBA microStore
+/*
+						// CBA ACCUMULATES
 						// CBA Culling before adding to esnure table does not exceed maxsize
 						TRACEF("Caching packet %s", packet.get_hash().toHex().c_str());
+						// CBA Currently this is the ONLY place that packets get cached
 						if (RNS::Transport::cache_packet(packet, true)) {
 							packet.cached(true);
 						}
 						//TRACEF("Adding packet %s to packet table", packet.get_hash().toHex().c_str());
 						//PacketEntry packet_entry(packet);
+*/
+
 						// CBA ACCUMULATES
 						//_packet_table.insert({packet.get_hash(), packet_entry});
 						TRACEF("Adding destination %s to path table", packet.destination_hash().toHex().c_str());
@@ -2002,13 +2100,16 @@ Transport::DestinationEntry empty_destination_entry;
 							expires,
 							random_blobs,
 							//packet.receiving_interface(),
-							//const_cast<Interface&>(packet.receiving_interface()),
-							packet.receiving_interface().get_hash(),
-							//packet
-							packet.get_hash()
+							const_cast<Interface&>(packet.receiving_interface()),
+							//packet.receiving_interface().get_hash(),
+							packet
+							//packet.get_hash()
 						);
 						// CBA ACCUMULATES
 						try {
+
+// CBA microStore
+/*
 							// CBA First remove any existing path before inserting new one
 							remove_path(packet.destination_hash());
 							if (_path_table.insert({packet.destination_hash(), destination_table_entry}).second) {
@@ -2016,6 +2117,15 @@ Transport::DestinationEntry empty_destination_entry;
 								++_destinations_added;
 								// CBA IMMEDIATE CULL
 								cull_path_table();
+							}
+							else {
+								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());
+							}
+*/
+							// CBA microStore
+							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry)) {
+								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
+								++_destinations_added;
 							}
 							else {
 								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());
@@ -2677,7 +2787,9 @@ Deregisters an announce handler.
 	}
 }
 
-/*static*/ Transport::DestinationEntry& Transport::get_path(const Bytes& destination_hash) {
+/*static*/ DestinationEntry& Transport::get_path(const Bytes& destination_hash) {
+// CBA microStore
+/*
 	auto iter = _path_table.find(destination_hash);
 	if (iter == _path_table.end()) return empty_destination_entry;
 	DestinationEntry& destination_entry = (*iter).second;
@@ -2691,10 +2803,18 @@ Deregisters an announce handler.
 		remove_path(destination_hash);
 		return empty_destination_entry;
 	}
+*/
+	// CBA microStore
+	DestinationEntry destination_entry;
+	if (!_new_path_table.get(destination_hash.collection(), destination_entry)) {
+		return empty_destination_entry;
+	}
 	return destination_entry;
 }
 
 /*static*/ bool Transport::remove_path(const Bytes& destination_hash) {
+// CBA microStore
+/*
 	auto iter = _path_table.find(destination_hash);
 	if (iter == _path_table.end()) return false;
 	// Remove cached packet file associated with this destination
@@ -2708,6 +2828,9 @@ Deregisters an announce handler.
 		return false;
 	}
 	return true;
+*/
+	// CBA microStore
+	return _new_path_table.remove(destination_hash.collection());
 }
 
 /*
@@ -2715,7 +2838,12 @@ Deregisters an announce handler.
 :returns: *True* if a path to the destination is known, otherwise *False*.
 */
 /*static*/ bool Transport::has_path(const Bytes& destination_hash) {
+// CBA microStore
+/*
 	return (_path_table.find(destination_hash) != _path_table.end());
+*/
+	// CBA microStore
+	return _new_path_table.exists(destination_hash.collection());
 }
 
 /*
@@ -3816,7 +3944,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	HEADF(LOG_VERBOSE, "mem: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
+	HEADF(LOG_VERBOSE, "mem: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
 
 	// _path_requests
 	// _discovery_path_requests

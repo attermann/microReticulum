@@ -218,7 +218,7 @@ void Reticulum::loop() {
 				jobs();
 			}
 
-			// Perform interface processing
+			// Perform Interface processing
 			for (auto& [hash, interface] : Transport::get_interfaces()) {
 				interface.loop();
 			}
@@ -415,7 +415,7 @@ void Reticulum::get_interface_stats() const {
 }
 */
 
-const Transport::PathTable& Reticulum::get_path_table() const {
+const PathTable& Reticulum::get_path_table() const {
 /*
 	path_table = []
 	for dst_hash in Transport::destination_table:

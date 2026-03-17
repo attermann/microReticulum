@@ -363,6 +363,8 @@ int main(int argc, char *argv[]) {
 	udp_interface.start();
 
 	// Initialize and start Reticulum
+	reticulum.transport_enabled(false);
+	reticulum.probe_destination_enabled(true);
 	reticulum.start();
 
 	if (argc <= 1) {

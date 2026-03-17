@@ -150,6 +150,9 @@ namespace RNS {
 		Packet(const Packet& packet) : _object(packet._object) {
 			MEMF("Packet object copy created, this: %p, data: %p", (void*)this, (void*)_object.get());
 		}
+		Packet(const Bytes& raw) : _object(new Object(raw)) {
+			MEMF("Packet object created from raw, this: %p, data: %p", (void*)this, (void*)_object.get());
+		}
 		Packet(
 			const Destination& destination,
 			const Interface& attached_interface,
@@ -274,6 +277,7 @@ namespace RNS {
 	private:
 		class Object {
 		public:
+			Object(const Bytes& raw) : _raw(raw) { MEMF("Packet::Data object created from raw, this: %p", (void*)this); }
 			Object(const Destination& destination, const Interface& attached_interface) : _destination(destination), _attached_interface(attached_interface) { MEMF("Packet::Data object created, this: %p", (void*)this); }
 			// CBA LINK
 			//Object(const Destination& destination, const Link& destination_link) : _destination(destination), _destination_link(destination_link) { MEMF("Packet::Data object created, this: %p", (void*)this); }
