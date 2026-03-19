@@ -448,7 +448,6 @@ namespace RNS {
 		static bool cleaning_caches;
 
 		// CBA microStore
-		static microStore::FileSystem _filesystem;
 		static NewPathStore _path_store;
 		static NewPathTable _new_path_table;
 	};

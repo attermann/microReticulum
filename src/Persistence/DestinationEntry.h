@@ -79,6 +79,7 @@ struct DestinationEntryCodec
 using PathTable = std::map<RNS::Bytes, DestinationEntry, std::less<RNS::Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const RNS::Bytes, DestinationEntry>>>;
 
 using NewPathStore = microStore::Store;
-using NewPathTable = microStore::Table<std::vector<uint8_t>, DestinationEntry, microStore::Store, microStore::Codec<std::vector<uint8_t>>, DestinationEntryCodec>;
+//using NewPathTable = microStore::Table<std::vector<uint8_t>, DestinationEntry, microStore::Store, microStore::Codec<std::vector<uint8_t>>, DestinationEntryCodec>;
+using NewPathTable = microStore::Table<Bytes, DestinationEntry, microStore::Store, BytesCodec, DestinationEntryCodec>;
 
 } }

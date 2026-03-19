@@ -76,7 +76,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
 	RNG.begin("Reticulum");
-	TRACEF("RNG initial random value: %d", Cryptography::randomnum());
+	TRACEF("RNG initial random value: %u", Cryptography::randomnum());
 
 #ifdef ARDUINO
 	// Add a noise source to the list of sources known to RNG.
@@ -174,8 +174,11 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 void Reticulum::start() {
 
-	INFOF("Total memory: %zu", Memory::heap_size());
-	INFOF("Total flash: %zu", OS::storage_size());
+	INFOF("Total DRAM: %zu bytes", Memory::heap_size());
+#if defined(ESP32)
+	INFOF("Total PSRAM: %u bytes", ESP.getPsramSize());
+#endif
+	INFOF("Total flash: %zu bytes", OS::storage_size());
 
 #ifdef ARDUINO
 #if defined(RNS_USE_FS)
@@ -224,7 +227,7 @@ void Reticulum::loop() {
 			}
 
 			// Perform Filesystem processing
-			FileSystem& filesystem = OS::get_filesystem();
+			microStore::FileSystem& filesystem = OS::get_filesystem();
 			if (filesystem) {
 				filesystem.loop();
 			}

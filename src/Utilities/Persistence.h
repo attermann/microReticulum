@@ -4,8 +4,10 @@
 //  then they MUST be included BEFORE this header is included.
 #include "Transport.h"
 #include "Type.h"
+#include "Utilities/Crc.h"
 #include "Persistence/DestinationEntry.h"
 
+#include <microStore/File.h>
 #include <ArduinoJson.h>
 
 #include <map>
@@ -610,40 +612,40 @@ namespace RNS { namespace Persistence {
 	template <typename T, typename Compare, typename Allocator> size_t serialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path, uint32_t& crc) {
 		//TRACE("Persistence::serialize<map<Bytes,T>>");
 
-		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
-		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_WRITE);
-		if (!stream) {
-			TRACE("Persistence::serialize: failed to open write stream");
+		// CBA TODO: Use file as stream here instead to avoid having to buffer entire structure
+		microStore::File file = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeWrite);
+		if (!file) {
+			TRACE("Persistence::serialize: failed to open write file");
 			return 0;
 		}
 
-		stream.write('{');
+		file.write('{');
 		for (const auto& [key, value] : map) {
-			stream.write('"');
+			file.write('"');
 			std::string hex = key.toHex();
-			stream.write(hex.c_str());
-			stream.write('"');
-			stream.write(':');
+			file.write(hex.c_str());
+			file.write('"');
+			file.write(':');
 
 			_document.set(value);
 #ifdef USE_MSGPACK
-			size_t length = serializeMsgPack(_document, stream);
+			size_t length = serializeMsgPack(_document, file);
 #else
-			size_t length = serializeJson(_document, stream);
+			size_t length = serializeJson(_document, file);
 #endif
 			TRACEF("Persistence::serialize: serialized entry %d bytes", length);
 
 			if (length == 0) {
 				// if failed to serialize entry then write empty entry
-				stream.write("{}");
+				file.write("{}");
 			}
-			stream.write(',');
+			file.write(',');
 		}
-		stream.write('}');
-		stream.flush();
-		TRACEF("Persistence::serialize: stream size: %d bytes", stream.size());
-		crc = stream.crc();
-		return stream.size();
+		file.write('}');
+		file.flush();
+		TRACEF("Persistence::serialize: file size: %d bytes", file.size());
+		crc = file.crc();
+		return file.size();
 	}
 
 	template <typename T, typename Compare, typename Allocator> size_t serialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path) {
@@ -654,39 +656,39 @@ namespace RNS { namespace Persistence {
 	template <typename T, typename Compare, typename Allocator> size_t deserialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path, uint32_t& crc) {
 		//TRACE("Persistence::deserialize<map<Bytes,T>>");
 
-		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
-		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_READ);
-		if (!stream) {
-			TRACE("Persistence::deserialize: failed to open read stream");
+		// CBA TODO: Use file as stream here instead to avoid having to buffer entire structure
+		microStore::File file = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeRead);
+		if (!file) {
+			TRACE("Persistence::deserialize: failed to open read file");
 			return 0;
 		}
-		TRACEF("Persistence::deserialize: size: %d bytes", stream.size());
+		TRACEF("Persistence::deserialize: size: %d bytes", file.size());
 
 		map.clear();
 
-		if (stream.size() == 0) {
-			TRACE("Persistence::deserialize: read stream is empty");
+		if (file.size() == 0) {
+			TRACE("Persistence::deserialize: read file is empty");
 			return 0;
 		}
 
 		// find opening brace
-		if (stream.find('{')) {
+		if (file.find('{')) {
 			char key_str[RNS::Type::Reticulum::DESTINATION_LENGTH*2+1] = "";
 			do {
 				key_str[0] = 0;
 				// find map key opening quote
-				if (stream.find('"')) {
-					if (stream.readBytesUntil('"', key_str, sizeof(key_str)) > 0) {
+				if (file.find('"')) {
+					if (file.readBytesUntil('"', key_str, sizeof(key_str)) > 0) {
 						Bytes key;
 						key.assignHex(key_str);
 						TRACEF("Persistence::deserialize: key: %s", key.toHex().c_str());
-						if (stream.find(':')) {
+						if (file.find(':')) {
 #ifdef USE_MSGPACK
 							//DeserializationError error = deserializeMsgPack(_document, _buffer.data());
-							DeserializationError error = deserializeMsgPack(_document, stream);
+							DeserializationError error = deserializeMsgPack(_document, file);
 #else
 							//DeserializationError error = deserializeJson(_document, _buffer.data());
-							DeserializationError error = deserializeJson(_document, stream);
+							DeserializationError error = deserializeJson(_document, file);
 #endif
 							if (!error) {
 								TRACE("Persistence::deserialize: successfully deserialized entry");
@@ -703,7 +705,7 @@ namespace RNS { namespace Persistence {
 								//break;
 							}
 
-							if (!stream.find(',')) {
+							if (!file.find(',')) {
 								break;
 							}
 
@@ -712,8 +714,8 @@ namespace RNS { namespace Persistence {
 				}
 			} while (key_str[0] != 0);
 		}
-		crc = stream.crc();
-		return stream.size();
+		crc = file.crc();
+		return file.size();
 	}
 
 	template <typename T, typename Compare, typename Allocator> size_t deserialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path) {

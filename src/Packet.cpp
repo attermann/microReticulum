@@ -372,11 +372,12 @@ TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
 
 	_object->_packed = true;
 	update_hash();
+	TRACEF("Packet::pack: packed packet of size %zu bytes", _object->_raw.size());
 }
 
 bool Packet::unpack() {
 	assert(_object);
-	TRACE("Packet::unpack: unpacking packet...");
+	TRACEF("Packet::unpack: unpacking packet of size %zu bytes...", _object->_raw.size());
 	try {
 		if (_object->_raw.size() < Type::Reticulum::HEADER_MINSIZE) {
 			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MINSIZE) +" bytes");

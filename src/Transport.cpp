@@ -11,9 +11,6 @@
 #include "Utilities/OS.h"
 #include "Utilities/Persistence.h"
 
-// CBA microStore
-#include <microStore/impl/PosixFileSystemImpl.h>
-
 #include <algorithm>
 #include <unistd.h>
 #include <time.h>
@@ -122,7 +119,6 @@ using namespace RNS::Persistence;
 /*static*/ bool Transport::cleaning_caches = false;
 
 // CBA microStore
-/*static*/ microStore::FileSystem Transport::_filesystem(new microStoreImpl::PosixFileSystemImpl());
 /*static*/ NewPathStore Transport::_path_store;
 /*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
 
@@ -220,9 +216,9 @@ DestinationEntry empty_destination_entry;
 		INFO("Transport mode is enabled");
 
 		// Read in path table
-		read_path_table();
+		//read_path_table();
 		// CBA microStore
-	    _path_store.init(_filesystem, "path_store");
+	    _path_store.init(Utilities::OS::get_filesystem(), "/path_store");
 
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
@@ -790,7 +786,10 @@ DestinationEntry empty_destination_entry;
 
 	// Check if we have a known path for the destination in the path table
     //if packet.packet_type != RNS.Packet.ANNOUNCE and packet.destination.type != RNS.Destination.PLAIN and packet.destination.type != RNS.Destination.GROUP and packet.destination_hash in Transport.destination_table:
-	auto& destination_entry = get_path(packet.destination_hash());
+	// CBA microStore
+	//auto& destination_entry = get_path(packet.destination_hash());
+	DestinationEntry destination_entry;
+	_new_path_table.get(packet.destination_hash(), destination_entry);
 	if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.destination().type() != Type::Destination::PLAIN && packet.destination().type() != Type::Destination::GROUP && destination_entry) {
 		TRACE("Transport::outbound: Path to destination is known");
         //outbound_interface = Transport.destination_table[packet.destination_hash][5]
@@ -1440,7 +1439,10 @@ DestinationEntry empty_destination_entry;
 		bool for_local_client = false;
 		bool for_local_client_link = false;
 		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
-			auto& destination_entry = get_path(packet.destination_hash());
+			// CBA microStore
+			//auto& destination_entry = get_path(packet.destination_hash());
+			DestinationEntry destination_entry;
+			_new_path_table.get(packet.destination_hash(), destination_entry);
 			if (destination_entry) {
 			 	if (destination_entry._hops == 0) {
 					// Destined for a local destination
@@ -1540,7 +1542,10 @@ DestinationEntry empty_destination_entry;
 				TRACE("Transport::inbound: Packet is in transport...");
 				if (packet.transport_id() == _identity.hash()) {
 					TRACE("Transport::inbound: We are designated next-hop");
-					auto& destination_entry = get_path(packet.destination_hash());
+					// CBA microStore
+					//auto& destination_entry = get_path(packet.destination_hash());
+					DestinationEntry destination_entry;
+					_new_path_table.get(packet.destination_hash(), destination_entry);
 					if (destination_entry) {
 						TRACE("Transport::inbound: Found next-hop path to destination");
 						Bytes next_hop = destination_entry._received_from;
@@ -1792,7 +1797,11 @@ DestinationEntry empty_destination_entry;
 					//p random_blobs = []
 					std::set<Bytes> empty_random_blobs;
 					std::set<Bytes>& random_blobs = empty_random_blobs;
-					auto& destination_entry = get_path(packet.destination_hash());
+					TRACEF("Checking for existing path to %s", packet.destination_hash().toHex().c_str());
+					// CBA microStore
+					//auto& destination_entry = get_path(packet.destination_hash());
+					DestinationEntry destination_entry;
+					_new_path_table.get(packet.destination_hash(), destination_entry);
 					if (destination_entry) {
 						//p random_blobs = Transport.destination_table[packet.destination_hash][4]
 						random_blobs = destination_entry._random_blobs;
@@ -2677,7 +2686,7 @@ Deregisters an announce handler.
 // increased yet! Take note of this when reading from
 // the packet cache.
 /*static*/ bool Transport::cache_packet(const Packet& packet, bool force_cache /*= false*/) {
-	TRACEF("Checking to see if packet %s should be cached", packet.get_hash().toHex().c_str());
+	//TRACEF("Checking to see if packet %s should be cached", packet.get_hash().toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	if (should_cache_packet(packet) || force_cache) {
 		TRACEF("Saving packet %s to storage", packet.get_hash().toHex().c_str());
@@ -2788,8 +2797,6 @@ Deregisters an announce handler.
 }
 
 /*static*/ DestinationEntry& Transport::get_path(const Bytes& destination_hash) {
-// CBA microStore
-/*
 	auto iter = _path_table.find(destination_hash);
 	if (iter == _path_table.end()) return empty_destination_entry;
 	DestinationEntry& destination_entry = (*iter).second;
@@ -2801,12 +2808,6 @@ Deregisters an announce handler.
 	if (!destination_entry.receiving_interface()) {
 		DEBUGF("Entry for destination %s found but is missing receiving interface, discarding", destination_hash.toHex().c_str());
 		remove_path(destination_hash);
-		return empty_destination_entry;
-	}
-*/
-	// CBA microStore
-	DestinationEntry destination_entry;
-	if (!_new_path_table.get(destination_hash.collection(), destination_entry)) {
 		return empty_destination_entry;
 	}
 	return destination_entry;
@@ -2851,7 +2852,10 @@ Deregisters an announce handler.
 :returns: The number of hops to the specified destination, or ``RNS.Transport.PATHFINDER_M`` if the number of hops is unknown.
 */
 /*static*/ uint8_t Transport::hops_to(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		return destination_entry._hops;
 	}
@@ -2865,7 +2869,10 @@ Deregisters an announce handler.
 :returns: The destination hash as *bytes* for the next hop to the specified destination, or *None* if the next hop is unknown.
 */
 /*static*/ Bytes Transport::next_hop(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		return destination_entry._received_from;
 	}
@@ -2879,7 +2886,10 @@ Deregisters an announce handler.
 :returns: The interface for the next hop to the specified destination, or *None* if the interface is unknown.
 */
 /*static*/ Interface Transport::next_hop_interface(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		return destination_entry.receiving_interface();
 	}
@@ -2949,7 +2959,10 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::expire_path(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		destination_entry._timestamp = 0;
 		_tables_last_culled = 0;
@@ -3149,7 +3162,10 @@ will announce it.
 
 	bool destination_exists_on_local_client = false;
 	if (_local_client_interfaces.size() > 0) {
-		auto& destination_entry = get_path(destination_hash);
+		// CBA microStore
+		//auto& destination_entry = get_path(destination_hash);
+		DestinationEntry destination_entry;
+		_new_path_table.get(destination_hash, destination_entry);
 		if (destination_entry) {
 			TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
 			if (is_local_client_interface(destination_entry.receiving_interface())) {
@@ -3163,7 +3179,10 @@ will announce it.
 		}
 	}
 
-	DestinationEntry& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//DestinationEntry& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	//local_destination = next((d for d in Transport.destinations if d.hash == destination_hash), None)
 	auto destinations_iter = _destinations.find(destination_hash);
 	if (destinations_iter != _destinations.end()) {
@@ -3912,7 +3931,8 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	Memory::dump_heap_stats();
 
 	size_t memory = Memory::heap_available();
-	uint8_t memory_pct = (uint8_t)((double)memory / (double)Memory::heap_size() * 100.0);
+	uint8_t memory_pct = 0;
+	if (Memory::heap_size()) memory_pct = (uint8_t)((double)memory / (double)Memory::heap_size() * 100.0);
 	if (_last_memory == 0) {
 		_last_memory = memory;
 	}
@@ -3922,7 +3942,8 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// because it appears to always decrease (even to zero) as if PSRAM is being leaked. Maybe it doesn't
 	// accurately reflect PSRAM freed with calls to free()???
 	size_t psram = ESP.getFreePsram();
-	uint8_t psram_pct = (uint8_t)((double)psram / (double)ESP.getPsramSize() * 100.0);
+	uint8_t psram_pct = 0;
+	if (ESP.getPsramSize() > 0) psram_pct = (uint8_t)((double)psram / (double)ESP.getPsramSize() * 100.0);
 	if (_last_psram == 0) {
 		_last_psram = psram;
 	}
@@ -3935,7 +3956,8 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	if (_last_flash == 0) {
 		_last_flash = flash;
 	}
-	uint8_t flash_pct = (uint8_t)((double)flash / (double)OS::storage_size() * 100.0);
+	uint8_t flash_pct = 0;
+	if (OS::storage_size() > 0) flash_pct = (uint8_t)((double)flash / (double)OS::storage_size() * 100.0);
 
 	// memory
 	// storage
@@ -3944,7 +3966,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	HEADF(LOG_VERBOSE, "mem: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
+	HEADF(LOG_VERBOSE, "dram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
 
 	// _path_requests
 	// _discovery_path_requests
@@ -4014,7 +4036,10 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			for (const auto& [timestamp, destination_hash] : sorted_keys) {
 				TRACEF("Transport::cull_path_table: Removing destination %s from path table", destination_hash.toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-				auto& destination_entry = get_path(destination_hash);
+				// CBA microStore
+				//auto& destination_entry = get_path(destination_hash);
+				DestinationEntry destination_entry;
+				_new_path_table.get(destination_hash, destination_entry);
 				if (destination_entry) {
 					// Remove cached packet file associated with this destination
 					char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];

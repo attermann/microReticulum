@@ -4,6 +4,7 @@
 #include "Utilities/Memory.h"
 
 #include <ArduinoJson.h>
+#include <microStore/Codec.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -449,3 +450,16 @@ namespace ArduinoJson {
 		return src.is<const char*>();
 	}
 }
+
+struct BytesCodec
+{
+	inline static std::vector<uint8_t> encode(const RNS::Bytes& entry) {
+		// CBA Following ok?
+		//return entry.collection();
+		return std::vector<uint8_t>(entry.collection().begin(), entry.collection().end());
+	}
+	inline static bool decode(const std::vector<uint8_t>& data, RNS::Bytes& entry) {
+		entry.assign(data);
+		return true;
+	}
+};

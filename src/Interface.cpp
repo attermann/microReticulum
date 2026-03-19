@@ -10,13 +10,13 @@ using namespace RNS::Type::Interface;
 
 void InterfaceImpl::handle_outgoing(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", data.toHex().c_str());
-	TRACE("InterfaceImpl.handle_outgoing");
+	//TRACE("InterfaceImpl.handle_outgoing");
 	_txb += data.size();
 }
 
 void InterfaceImpl::handle_incoming(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_incoming: data: %s", data.toHex().c_str());
-	TRACE("InterfaceImpl.handle_incoming");
+	//TRACE("InterfaceImpl.handle_incoming");
 	_rxb += data.size();
 	// Create temporary Interface encapsulating our own shared impl
 	std::shared_ptr<InterfaceImpl> self = shared_from_this();
