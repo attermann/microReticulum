@@ -6,7 +6,7 @@
 
 #ifdef ARDUINO
 #include <SPI.h>
-#include <LoRa.h>
+#include <RadioLib.h>
 #endif
 
 #include <stdint.h>
@@ -37,12 +37,16 @@ private:
 	const uint8_t message_count = 0;
 	RNS::Bytes buffer;
 
-	const long frequency = 915E6;
+	// Radio parameters (RadioLib units: MHz, kHz)
+	const float frequency = 915.0;   // MHz
+	const float bandwidth = 125.0;   // kHz
+	const int   spreading = 8;
+	const int   coding    = 5;
+	const int   power     = 17;      // dBm
 
-	// Reticulum default
-	const long bandwidth = 125E3;
-	const int spreading = 8;
-	const int coding = 5;
-	const int power = 17;
+#ifdef ARDUINO
+	Module*       _module = nullptr;
+	PhysicalLayer* _radio = nullptr;
+#endif
 
 };
