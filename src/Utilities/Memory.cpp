@@ -113,7 +113,7 @@ void tlsf_mem_walker(void* ptr, size_t size, int used, void* user)
 	}
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
 	heap_pool_info.contiguous_size = dbgHeapFree();
-	altheap_pool_info.buffer_size = dbgHeapFree();
+	altheap_pool_info.contiguous_size = dbgHeapFree();
 	TRACEF("TLSF: contiguous_size: %u", pool_info.contiguous_size);
 	if (pool_info.buffer_size == 0) {
 		pool_info.buffer_size = (size_t)(pool_info.contiguous_size * BUFFER_FRACTION);

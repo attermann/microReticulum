@@ -19,7 +19,7 @@ namespace RNS { namespace Utilities {
 	private:
 
 		struct pool_info {
-			pool_info(uint8_t t, size_t s) : type(t), buffer_size(s) {}
+			constexpr pool_info(uint8_t t, size_t s) : type(t), buffer_size(s) {}
 			uint8_t type = 0;
 			bool pool_init = false;
 			size_t buffer_size = 0;

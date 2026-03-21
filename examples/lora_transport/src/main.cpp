@@ -121,7 +121,9 @@ void loop() {
 
 #if defined(ARDUINO)
 int _write(int file, char *ptr, int len) {
-    return Serial.write(ptr, len);
+    int wrote = Serial.write(ptr, len);
+	Serial.flush();
+	return wrote;
 }
 #else
 int getch( ) {
