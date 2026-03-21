@@ -1,6 +1,6 @@
 #include <unity.h>
 
-#include "../common/filesystem/FileSystem.h"
+#include <microStore/Adapters/UniversalFileSystem.h>
 
 #include <Reticulum.h>
 #include <Transport.h>
@@ -96,9 +96,9 @@ void initRNS() {
 		RNS::Transport::max_pr_tags(32);
 		RNS::Identity::known_destinations_maxsize(50);
 
-		RNS::FileSystem reticulum_filesystem = new FileSystem();
-		((FileSystem*)reticulum_filesystem.get())->init();
-		RNS::Utilities::OS::register_filesystem(reticulum_filesystem);
+		microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+		filesystem.init();
+		RNS::Utilities::OS::register_filesystem(filesystem);
 
 		RNS::Transport::register_interface(in_interface);
 		RNS::Transport::register_interface(out_interface);

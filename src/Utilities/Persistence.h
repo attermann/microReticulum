@@ -659,7 +659,7 @@ namespace RNS { namespace Persistence {
 		// CBA TODO: Use file as stream here instead to avoid having to buffer entire structure
 		microStore::File file = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeRead);
 		if (!file) {
-			TRACE("Persistence::deserialize: failed to open read file");
+			TRACEF("Persistence::deserialize: failed to open read file: %s", file_path);
 			return 0;
 		}
 		TRACEF("Persistence::deserialize: size: %d bytes", file.size());
@@ -667,7 +667,7 @@ namespace RNS { namespace Persistence {
 		map.clear();
 
 		if (file.size() == 0) {
-			TRACE("Persistence::deserialize: read file is empty");
+			TRACEF("Persistence::deserialize: read file is empty: %s", file_path);
 			return 0;
 		}
 

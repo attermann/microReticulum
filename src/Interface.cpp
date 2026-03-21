@@ -42,7 +42,7 @@ void Interface::send_outgoing(const Bytes& data) {
 		NVIC_SystemReset();
 #endif
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
 		ERRORF("Interface::send_outgoing: %s", e.what());
     }
 }
@@ -69,7 +69,7 @@ void Interface::handle_incoming(const Bytes& data) {
 		NVIC_SystemReset();
 #endif
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
 		ERRORF("Interface::handle_incoming: %s", e.what());
     }
 }

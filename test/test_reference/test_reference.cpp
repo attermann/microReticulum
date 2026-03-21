@@ -118,7 +118,7 @@ void test_reticulum_reference() {
 void test_destination_entry_reference() {
 	HEAD("Running testReference...", RNS::LOG_TRACE);
 
-	RNS::Transport::DestinationEntry destination_entry;
+	RNS::Persistence::DestinationEntry destination_entry;
 	TEST_ASSERT_FALSE(destination_entry);
 
 }

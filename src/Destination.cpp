@@ -226,7 +226,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 			TRACE("Destination::announce: tag is specified");
 			std::string tagstr((const char*)tag.data(), tag.size());
 			DEBUGF("Destination::announce: tag: %s", tagstr.c_str());
-			DEBUGF("Destination::announce: tag len: %zu", tag.size());
+			DEBUGF("Destination::announce: tag len: %lu", tag.size());
 			TRACE("Destination::announce: searching for tag...");
 			if (_object->_path_responses.find(tag) != _object->_path_responses.end()) {
 				TRACE("Destination::announce: found tag in _path_responses");
@@ -388,7 +388,7 @@ void Destination::receive(const Packet& packet) {
 					try {
 						_object->_callbacks._packet(plaintext, packet);
 					}
-					catch (std::exception& e) {
+					catch (const std::exception& e) {
 						DEBUGF("Error while executing receive callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 					}
 				}

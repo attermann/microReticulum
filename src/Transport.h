@@ -448,7 +448,7 @@ namespace RNS {
 		static bool cleaning_caches;
 
 		// CBA microStore
-		static NewPathStore _path_store;
+		static PathStore _path_store;
 		static NewPathTable _new_path_table;
 	};
 

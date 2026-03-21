@@ -1,6 +1,6 @@
 #include <unity.h>
 
-#include "../common/filesystem/FileSystem.h"
+#include <microStore/Adapters/UniversalFileSystem.h>
 
 #include <Utilities/OS.h>
 #include <Utilities/Crc.h>
@@ -107,7 +107,7 @@ void writeFileStream(const char* file_path) {
 
 	{
 		RNS::Bytes data("stream");
-		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_WRITE);
+		microStore::File stream = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeWrite);
 		TEST_ASSERT_TRUE(stream);
 		TRACE("testWriteFileStream: writing to file...");
 		size_t wrote = stream.write(data.data(), data.size());
@@ -136,7 +136,7 @@ void readFileStream(const char* file_path) {
 
 	{
 		RNS::Bytes data;
-		RNS::File stream = RNS::Utilities::OS::open_file(file_path, RNS::File::MODE_READ);
+		microStore::File stream = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeRead);
 		TEST_ASSERT_TRUE(stream);
 		size_t size = stream.size();
 		TRACEF("testReadFileStream: size: %u", size);
@@ -165,7 +165,7 @@ void readFileStream(const char* file_path) {
 void testListDirectory() {
 
 	size_t pre_memory = RNS::Utilities::Memory::heap_available();
-	INFOF("testListDirectory: pre-mem: %zu", pre_memory);
+	INFOF("testListDirectory: pre-mem: %lu", pre_memory);
 
 	{
 		RNS::Utilities::OS::list_directory("/", [](const char* file_path) {
@@ -175,8 +175,8 @@ void testListDirectory() {
 
 	size_t post_memory = RNS::Utilities::Memory::heap_available();
 	size_t diff_memory = (int)pre_memory - (int)post_memory;
-	INFOF("testListDirectory: post-mem: %zu", post_memory);
-	INFOF("testListDirectory: diff-mem: %zu", diff_memory);
+	INFOF("testListDirectory: post-mem: %lu", post_memory);
+	INFOF("testListDirectory: diff-mem: %lu", diff_memory);
 	TEST_ASSERT_EQUAL_size_t(0, diff_memory);
 }
 
@@ -280,11 +280,11 @@ int runUnityTests(void) {
 	UNITY_BEGIN();
 
 	// Suite-level setup
-	RNS::FileSystem test_filesystem = new FileSystem();
-	((FileSystem*)test_filesystem.get())->init();
-	FileSystem::listDir("/");
-	FileSystem::listDir("/cache");
-	RNS::Utilities::OS::register_filesystem(test_filesystem);
+    microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+	filesystem.init();
+	//FileSystem::listDir("/");
+	//FileSystem::listDir("/cache");
+	RNS::Utilities::OS::register_filesystem(filesystem);
 
 	size_t pre_memory = RNS::Utilities::Memory::heap_available();
 	TRACEF("testFileSystem: pre-mem: %u", pre_memory);
@@ -316,8 +316,8 @@ int runUnityTests(void) {
 	// Suite-level teardown
 	removeFile(test_file_path);
 	removeFile(test_stream_path);
-	TRACEF("testFileSystem: size: %u", test_filesystem.storage_size());
-	TRACEF("testFileSystem: available: %u", test_filesystem.storage_available());
+	TRACEF("testFileSystem: size: %u", filesystem.storageSize());
+	TRACEF("testFileSystem: available: %u", filesystem.storageAvailable());
 	RNS::Utilities::OS::deregister_filesystem();
 
 	return UNITY_END();

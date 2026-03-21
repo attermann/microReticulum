@@ -5,8 +5,9 @@
 ##########################################################
 */
 
+#include <microStore/FileSystem.h>
+#include <microStore/Adapters/UniversalFileSystem.h>
 #include <UDPInterface.h>
-#include <UniversalFileSystem.h>
 
 #include <Reticulum.h>
 #include <Interface.h>
@@ -44,6 +45,7 @@
 #define APP_NAME "example_utilities"
 
 RNS::Reticulum reticulum;
+RNS::Interface udp_interface({RNS::Type::NONE});
 
 
 /*
@@ -219,7 +221,7 @@ printf("(sending data: %s)\n", text.c_str());
 						RNS::Packet(server_link, data).send();
 					}
 					else {
-						RNS::logf(RNS::LOG_ERROR, "Cannot send this packet, the data size of %zu bytes exceeds the link packet MDU of %zu bytes", data.size(), (size_t)RNS::Type::Link::MDU);
+						RNS::logf(RNS::LOG_ERROR, "Cannot send this packet, the data size of %lu bytes exceeds the link packet MDU of %lu bytes", data.size(), (size_t)RNS::Type::Link::MDU);
 					}
 				}
 
@@ -250,7 +252,7 @@ void client(const char* destination_hexhash) {
 
 		destination_hash.assignHex(destination_hexhash);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		RNS::log("Invalid destination entered. Check your input!", RNS::LOG_ERROR);
 		return;
 	}
@@ -351,21 +353,27 @@ int main(int argc, char *argv[]) {
 	int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
 	fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
-	// Initialize and register filesystem
-	RNS::FileSystem universal_filesystem = new UniversalFileSystem();
-	universal_filesystem.init();
-	RNS::Utilities::OS::register_filesystem(universal_filesystem);
+	try {
 
-	// Initialize and register interface
-	RNS::Interface udp_interface = new UDPInterface();
-	udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
-	RNS::Transport::register_interface(udp_interface);
-	udp_interface.start();
+		// Initialize and register filesystem
+		microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+		filesystem.init();
+		RNS::Utilities::OS::register_filesystem(filesystem);
 
-	// Initialize and start Reticulum
-	reticulum.transport_enabled(false);
-	reticulum.probe_destination_enabled(true);
-	reticulum.start();
+		// Initialize and register interface
+		udp_interface = new UDPInterface();
+		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
+		RNS::Transport::register_interface(udp_interface);
+		udp_interface.start();
+
+		// Initialize and start Reticulum
+		reticulum.transport_enabled(false);
+		reticulum.probe_destination_enabled(true);
+		reticulum.start();
+	}
+	catch (const std::exception& e) {
+		ERRORF("!!! Exception in Reticulum startup: %s", e.what());
+	}
 
 	if (argc <= 1) {
 		printf("\nMust specify a destination for client mode, or \"-s\" or \"--server\" for server mode.\n\n");

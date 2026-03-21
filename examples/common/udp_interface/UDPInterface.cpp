@@ -256,7 +256,7 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 		// Perform post-send housekeeping
 		InterfaceImpl::handle_outgoing(data);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
 	}
 }

@@ -36,8 +36,8 @@ namespace RNS { namespace Type {
 	};
 
 	namespace Persistence {
-		//static const uint16_t DOCUMENT_MAXSIZE = 1024;
-		static const uint16_t DOCUMENT_MAXSIZE = 8192;
+		static const uint16_t DOCUMENT_MAXSIZE = 1024;
+		//static const uint16_t DOCUMENT_MAXSIZE = 8192;
 		//static const uint16_t DOCUMENT_MAXSIZE = 16384;
 		static const uint16_t BUFFER_MAXSIZE = Persistence::DOCUMENT_MAXSIZE * 1.5;	// Json write buffer of 1.5 times document seems to be sufficient
 	}

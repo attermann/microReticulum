@@ -1,6 +1,6 @@
 #include <unity.h>
 
-#include "../common/filesystem/FileSystem.h"
+#include <microStore/Adapters/UniversalFileSystem.h>
 
 #include <Interface.h>
 #include <Transport.h>
@@ -46,42 +46,39 @@ const char test_empty_path_table_path[] = "test_empty_path_table";
 void testSerializeDestinationTable() {
 	HEAD("testSerializeDestinationTable", RNS::LOG_TRACE);
 
-	//RNS::Bytes empty;
-	//std::set<RNS::Bytes> blobs;
-	//RNS::Interface interface({RNS::Type::NONE});
+	// CBA Must register interface in order for deserializing to find it
 	RNS::Interface test_interface(new TestInterface());
-	//RNS::Packet packet({RNS::Type::NONE});
-	static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
-	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
-	//RNS::Transport::DestinationEntry entry_one(1.0, empty, 1, 0.0, blobs, interface, packet);
+	RNS::Transport::register_interface(test_interface);
+
+	static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map;
 	RNS::Bytes received;
 	received.assignHex("deadbeef");
 	RNS::Bytes blob;
 	blob.assignHex("b10bb10b");
 	std::set<RNS::Bytes> blobs({received, blob});
-	RNS::Transport::DestinationEntry entry_one;
+	RNS::Persistence::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;
-	entry_one.receiving_interface_hash(test_interface.get_hash());
+	entry_one._receiving_interface = test_interface;
 	entry_one._random_blobs = blobs;
 	RNS::Bytes one;
 	one.assignHex("1111111111111111");
 	map.insert({one, entry_one});
-	//RNS::Transport::DestinationEntry entry_two(2.0, empty, 1, 0.0, blobs, interface, packet);
-	RNS::Transport::DestinationEntry entry_two;
+	//RNS::Persistence::DestinationEntry entry_two(2.0, empty, 1, 0.0, blobs, interface, packet);
+	RNS::Persistence::DestinationEntry entry_two;
 	entry_two._timestamp = 2.0;
 	entry_two._received_from = received;
-	entry_two.receiving_interface_hash(test_interface.get_hash());
+	entry_two._receiving_interface = test_interface;
 	entry_two._random_blobs = blobs;
 	RNS::Bytes two;
 	two.assignHex("2222222222222222");
 	map.insert({two, entry_two});
 
 	for (int n = 0; n < 20; n++) {
-		RNS::Transport::DestinationEntry entry;
+		RNS::Persistence::DestinationEntry entry;
 		entry._timestamp = 1.0;
 		entry._received_from = received;
-		entry.receiving_interface_hash(test_interface.get_hash());
+		entry._receiving_interface = test_interface;
 		entry._random_blobs = blobs;
 		RNS::Bytes hash;
 		hash.assign(std::to_string(1000000000000001 + n).c_str());
@@ -113,7 +110,7 @@ void testSerializeDestinationTable() {
 void testDeserializeDestinationTable() {
 	HEAD("testDeserializeDestinationTable", RNS::LOG_TRACE);
 
-	std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
+	std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map;
 	uint32_t stream_crc;
 	size_t read = RNS::Persistence::deserialize(map, test_path_table_path, stream_crc);
 	TRACEF("testDeserializeDestinationTable: deserialized %d bytes", read);
@@ -142,7 +139,7 @@ void testDeserializeEmptyDestinationTable() {
 	RNS::Bytes emptyData("{}");
 	TEST_ASSERT_EQUAL_size_t(2, RNS::Utilities::OS::write_file(test_empty_path_table_path, emptyData));
 
-	std::map<RNS::Bytes, RNS::Transport::DestinationEntry> destination_table;
+	std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> destination_table;
 	RNS::Persistence::deserialize(destination_table, test_empty_path_table_path);
 	TEST_ASSERT_EQUAL_size_t(0, destination_table.size());
 }
@@ -160,9 +157,9 @@ int runUnityTests(void) {
 	UNITY_BEGIN();
 
 	// Suite-level setup
-	RNS::FileSystem persistence_filesystem = new FileSystem();
-	((FileSystem*)persistence_filesystem.get())->init();
-	RNS::Utilities::OS::register_filesystem(persistence_filesystem);
+    microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+	filesystem.init();
+	RNS::Utilities::OS::register_filesystem(filesystem);
 
 	// Run tests
 	RUN_TEST(testSerializeDestinationTable);

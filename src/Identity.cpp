@@ -97,7 +97,7 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 
 		return true;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		//p raise e
 		ERROR("Failed to load identity key");
 		ERRORF("The contained exception was: %s", e.what());
@@ -129,7 +129,7 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 
 		update_hashes();
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while loading public key, the contained exception was: %s", e.what());
 	}
 }
@@ -146,7 +146,7 @@ bool Identity::load(const char* path) {
 			return false;
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while loading identity from %s", path);
 		ERRORF("The contained exception was: %s", e.what());
 	}
@@ -168,7 +168,7 @@ bool Identity::to_file(const char* path) {
 	try {
 		return (OS::write_file(path, get_private_key()) == get_private_key().size());
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while saving identity to %s", path);
 		ERRORF("The contained exception was: %s", e.what());
 	}
@@ -315,7 +315,7 @@ Recall last heard app_data for a destination hash.
 
 // TODO
 /*
-		DEBUGF("Saving %zu known destinations to storage...", _known_destinations.size());
+		DEBUGF("Saving %lu known destinations to storage...", _known_destinations.size());
 		file = open(RNS.Reticulum.storagepath+"/known_destinations","wb")
 		umsgpack.dump(Identity.known_destinations, file)
 		file.close()
@@ -324,7 +324,7 @@ Recall last heard app_data for a destination hash.
 
 		success = true;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while saving known destinations to disk, the contained exception was: %s", e.what());
 	}
 
@@ -495,7 +495,7 @@ Recall last heard app_data for a destination hash.
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error occurred while validating announce. The contained exception was: %s", e.what());
 		return false;
 	}
@@ -543,7 +543,7 @@ const Bytes Identity::encrypt(const Bytes& plaintext) const {
 	TRACEF("Identity::encrypt: derived key:          %s", derived_key.toHex().c_str());
 
 	Cryptography::Token token(derived_key);
-	TRACEF("Identity::encrypt: Token encrypting data of length %zu", plaintext.size());
+	TRACEF("Identity::encrypt: Token encrypting data of length %lu", plaintext.size());
 	TRACEF("Identity::encrypt: plaintext:  %s", plaintext.toHex().c_str());
 	Bytes ciphertext = token.encrypt(plaintext);
 	TRACEF("Identity::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
@@ -566,7 +566,7 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		throw std::runtime_error("Decryption failed because identity does not hold a private key");
 	}
 	if (ciphertext_token.size() <= Type::Identity::KEYSIZE/8/2) {
-		DEBUGF("Decryption failed because the token size %zu was invalid.", ciphertext_token.size());
+		DEBUGF("Decryption failed because the token size %lu was invalid.", ciphertext_token.size());
 		return {Bytes::NONE};
 	}
 	Bytes plaintext;
@@ -593,13 +593,13 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		Cryptography::Token token(derived_key);
 		//ciphertext = ciphertext_token[Identity.KEYSIZE//8//2:]
 		Bytes ciphertext(ciphertext_token.mid(Type::Identity::KEYSIZE/8/2));
-		TRACEF("Identity::decrypt: Token decrypting data of length %zu", ciphertext.size());
+		TRACEF("Identity::decrypt: Token decrypting data of length %lu", ciphertext.size());
 		TRACEF("Identity::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
 		plaintext = token.decrypt(ciphertext);
 		TRACEF("Identity::decrypt: plaintext:  %s", plaintext.toHex().c_str());
-		//TRACEF("Identity::decrypt: Token decrypted data of length %zu", plaintext.size());
+		//TRACEF("Identity::decrypt: Token decrypted data of length %lu", plaintext.size());
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		DEBUGF("Decryption by %s failed: %s", toString().c_str(), e.what());
 	}
 		
@@ -621,7 +621,7 @@ const Bytes Identity::sign(const Bytes& message) const {
 	try {
 		return _object->_sig_prv->sign(message);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("The identity %s could not sign the requested message. The contained exception was: %s", toString().c_str(), e.what());
 		throw e;
 	}
@@ -643,7 +643,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 			_object->_sig_pub->verify(signature, message);
 			return true;
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			return false;
 		}
 	}

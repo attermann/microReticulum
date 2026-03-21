@@ -451,7 +451,9 @@ namespace ArduinoJson {
 	}
 }
 
-struct BytesCodec
+namespace microStore {
+template<>
+struct Codec<RNS::Bytes>
 {
 	inline static std::vector<uint8_t> encode(const RNS::Bytes& entry) {
 		// CBA Following ok?
@@ -463,3 +465,4 @@ struct BytesCodec
 		return true;
 	}
 };
+}

@@ -5,8 +5,8 @@
 #include "Bytes.h"
 
 // CBA microStore
-#include <microStore/Store.h>
-#include <microStore/Table.h>
+#include <microStore/FileStore.h>
+#include <microStore/TypedStore.h>
 #include <microStore/Codec.h>
 
 #include <set>
@@ -68,18 +68,21 @@ public:
 	}
 #endif
 };
-
-struct DestinationEntryCodec
-{
-	static std::vector<uint8_t> encode(const DestinationEntry& entry);
-	static bool decode(const std::vector<uint8_t>& data, DestinationEntry& entry);
-};
-
 //using PathTable = std::map<RNS::Bytes, DestinationEntry>;
 using PathTable = std::map<RNS::Bytes, DestinationEntry, std::less<RNS::Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const RNS::Bytes, DestinationEntry>>>;
 
-using NewPathStore = microStore::Store;
-//using NewPathTable = microStore::Table<std::vector<uint8_t>, DestinationEntry, microStore::Store, microStore::Codec<std::vector<uint8_t>>, DestinationEntryCodec>;
-using NewPathTable = microStore::Table<Bytes, DestinationEntry, microStore::Store, BytesCodec, DestinationEntryCodec>;
+//using PathStore = microStore::FileStore;
+//using NewPathTable = microStore::TypedStore<Bytes, DestinationEntry, PathStore>;
+using PathStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+using NewPathTable = microStore::TypedStore<Bytes, DestinationEntry, PathStore>;
 
 } }
+
+namespace microStore {
+template<>
+struct Codec<RNS::Persistence::DestinationEntry>
+{
+	static std::vector<uint8_t> encode(const RNS::Persistence::DestinationEntry& entry);
+	static bool decode(const std::vector<uint8_t>& data, RNS::Persistence::DestinationEntry& entry);
+};
+}

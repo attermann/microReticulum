@@ -174,11 +174,11 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 void Reticulum::start() {
 
-	INFOF("Total DRAM: %zu bytes", Memory::heap_size());
+	INFOF("Total SRAM: %lu bytes", Memory::heap_size());
 #if defined(ESP32)
 	INFOF("Total PSRAM: %u bytes", ESP.getPsramSize());
 #endif
-	INFOF("Total flash: %zu bytes", OS::storage_size());
+	INFOF("Total flash: %lu bytes", OS::storage_size());
 
 #ifdef ARDUINO
 #if defined(RNS_USE_FS)
@@ -195,7 +195,7 @@ void Reticulum::start() {
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
 	}
 #endif
@@ -248,7 +248,7 @@ void Reticulum::loop() {
 		NVIC_SystemReset();
 #endif
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
 		ERRORF("Reticulum::loop: %s", e.what());
     }
 }
@@ -318,7 +318,7 @@ void Reticulum::persist_data() {
 		Bytes buf((uint8_t*)&offset, sizeof(offset));
 		OS::write_file(time_offset_path, buf);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
 	}
 #endif
@@ -346,7 +346,7 @@ void Reticulum::clean_caches() {
 				//p }
 			}
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERROR("Error while cleaning resources cache, the contained exception was: %s", e.what());
 		}
 	}
@@ -364,7 +364,7 @@ void Reticulum::clean_caches() {
 				//p }
 			}
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERROR("Error while cleaning packet cache, the contained exception was: %s", e.what());
 		}
 	}
@@ -395,7 +395,7 @@ void Reticulum::clear_caches() {
 		OS::remove_file(time_offset_path);
 #endif
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Failed to clear cache file(s), the contained exception was: %s", e.what());
 	}
 }

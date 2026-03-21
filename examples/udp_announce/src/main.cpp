@@ -1,7 +1,8 @@
 //#define NDEBUG
 
-#include <LoRaInterface.h>
-#include <UniversalFileSystem.h>
+#include <microStore/FileSystem.h>
+#include <microStore/Adapters/UniversalFileSystem.h>
+#include <UDPInterface.h>
 
 #include <Reticulum.h>
 #include <Identity.h>
@@ -29,6 +30,7 @@
 #include <vector>
 #include <map>
 #include <functional>
+//#include <sstream>
 
 //#define RETICULUM_PACKET_TEST
 
@@ -87,13 +89,9 @@ void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 
 
 RNS::Reticulum reticulum({RNS::Type::NONE});
-RNS::Interface lora_interface(RNS::Type::NONE);
-RNS::FileSystem universal_filesystem(RNS::Type::NONE);
+RNS::Interface udp_interface({RNS::Type::NONE});
 RNS::Identity identity({RNS::Type::NONE});
 RNS::Destination destination({RNS::Type::NONE});
-
-LoRaInterface* lora_interface_impl = nullptr;
-UniversalFileSystem* universal_filesystem_impl = nullptr;
 
 //ExampleAnnounceHandler announce_handler((const char*)"example_utilities.announcesample.fruits");
 //RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler("example_utilities.announcesample.fruits"));
@@ -123,21 +121,18 @@ void reticulum_setup() {
 
 		// 21.8% baseline here with serial
 
-
+		// Initialize and register filesystem
 		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
-		universal_filesystem_impl = new UniversalFileSystem();
-		universal_filesystem = universal_filesystem_impl;
-		universal_filesystem.init();
-		RNS::Utilities::OS::register_filesystem(universal_filesystem);
+		microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+		filesystem.init();
+		RNS::Utilities::OS::register_filesystem(filesystem);
 
-		HEAD("Registering LoRaInterface instances with Transport...", RNS::LOG_TRACE);
-		lora_interface_impl = new LoRaInterface();
-		lora_interface = lora_interface_impl;
-		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
-		RNS::Transport::register_interface(lora_interface);
-
-		HEAD("Starting LoRaInterface...", RNS::LOG_TRACE);
-		lora_interface_impl->start();
+		// Initialize and register interface
+		HEAD("Registering UDPInterface instances with Transport...", RNS::LOG_TRACE);
+		udp_interface = new UDPInterface();
+		udp_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
+		RNS::Transport::register_interface(udp_interface);
+		udp_interface.start();
 
 		HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
 		//RNS::Reticulum reticulum;
@@ -219,9 +214,9 @@ void reticulum_setup() {
 		destination.receive(recv_packet);
 #endif
 
-		HEAD("Ready!", RNS::LOG_TRACE);
+		HEAD("RNS Ready!", RNS::LOG_TRACE);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("!!! Exception in reticulum_setup: %s", e.what());
 	}
 }
@@ -237,10 +232,10 @@ void reticulum_teardown() {
 		RNS::Transport::deregister_announce_handler(announce_handler);
 
 		HEAD("Deregistering Interface instances with Transport...", RNS::LOG_TRACE);
-		RNS::Transport::deregister_interface(lora_interface);
+		RNS::Transport::deregister_interface(udp_interface);
 
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("!!! Exception in reticulum_teardown: %s", e.what());
 	}
 }
@@ -265,20 +260,15 @@ void setup() {
 	// Setup user button
 	pinMode(BUTTON_PIN, INPUT);
 	attachInterrupt(BUTTON_PIN, userKey, FALLING);  
-
-/*
-	// Setup filesystem
-	if (!SPIFFS.begin(true, "")){
-		ERROR("SPIFFS filesystem mount failed");
-	}
-	else {
-		DEBUG("SPIFFS filesystem is ready");
-	}
-*/
 #endif
 
-	RNS::loglevel(RNS::LOG_TRACE);
-	//RNS::loglevel(RNS::LOG_MEM);
+#if defined(RNS_MEM_LOG)
+		RNS::loglevel(RNS::LOG_MEM);
+#else
+		//RNS::loglevel(RNS::LOG_WARNING);
+		//RNS::loglevel(RNS::LOG_DEBUG);
+		RNS::loglevel(RNS::LOG_TRACE);
+#endif
 
 /*
 	{
@@ -297,7 +287,6 @@ void setup() {
 void loop() {
 
 	reticulum.loop();
-	lora_interface_impl->loop();
 
 #ifdef ARDUINO
 /*

@@ -119,7 +119,7 @@ using namespace RNS::Persistence;
 /*static*/ bool Transport::cleaning_caches = false;
 
 // CBA microStore
-/*static*/ NewPathStore Transport::_path_store;
+/*static*/ PathStore Transport::_path_store;
 /*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
 
 DestinationEntry empty_destination_entry;
@@ -162,7 +162,7 @@ DestinationEntry empty_destination_entry;
 				VERBOSE("Loaded Transport Identity from storage");
 			}
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Failed to check for transport identity, the contained exception was: %s", e.what());
 		}
 	}
@@ -178,7 +178,7 @@ DestinationEntry empty_destination_entry;
 				//p Transport.packet_hashlist = umsgpack.unpackb(file.read())
 				//p file.close()
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
 			}
 		}
@@ -218,7 +218,11 @@ DestinationEntry empty_destination_entry;
 		// Read in path table
 		//read_path_table();
 		// CBA microStore
+#if defined(ARDUINO)
 	    _path_store.init(Utilities::OS::get_filesystem(), "/path_store");
+#else
+	    _path_store.init(Utilities::OS::get_filesystem(), "path_store");
+#endif
 
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
@@ -683,7 +687,7 @@ DestinationEntry empty_destination_entry;
 			//p pass
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERROR("An exception occurred while running Transport jobs.");
 		ERRORF("The contained exception was: %s", e.what());
 	}
@@ -708,7 +712,7 @@ DestinationEntry empty_destination_entry;
 		try {
 			_callbacks._transmit_packet(raw, interface);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			DEBUGF("Error while executing transmit packet callback. The contained exception was: %s", e.what());
 		}
 	}
@@ -757,7 +761,7 @@ DestinationEntry empty_destination_entry;
 			interface.send_outgoing(raw);
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while transmitting on %s. The contained exception was: %s", interface.toString().c_str(), e.what());
 	}
 }
@@ -778,7 +782,6 @@ DestinationEntry empty_destination_entry;
 		TRACE("Transport::outbound: sleeping...");
 		OS::sleep(0.0005);
 	}
-
 	_jobs_locked = true;
 
 	bool sent = false;
@@ -1030,19 +1033,19 @@ DestinationEntry empty_destination_entry;
 												//z timer.start()
 
 												if (wait_time < 1000) {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
 												}
 												else {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
 												}
 											}
 											else {
 												double wait_time = std::max(interface.announce_allowed_at() - OS::time(), (double)0);
 												if (wait_time < 1000) {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
 												}
 												else {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
 												}
 											}
 										}
@@ -1276,7 +1279,7 @@ DestinationEntry empty_destination_entry;
 		try {
 			_callbacks._receive_packet(raw, interface);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			DEBUGF("Error while executing receive packet callback. The contained exception was: %s", e.what());
 		}
 	}
@@ -1413,7 +1416,7 @@ DestinationEntry empty_destination_entry;
 		try {
 			accept = _callbacks._filter_packet(packet);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			DEBUGF("Error while executing filter packet callback. The contained exception was: %s", e.what());
 		}
 	}
@@ -2196,7 +2199,7 @@ DestinationEntry empty_destination_entry;
 										);
 									}
 								}
-								catch (std::exception& e) {
+								catch (const std::exception& e) {
 									ERROR("Error while processing external announce callback.");
 									ERRORF("The contained exception was: %s", e.what());
 								}
@@ -2269,7 +2272,7 @@ DestinationEntry empty_destination_entry;
 										packet.prove();
 									}
 								}
-								catch (std::exception& e) {
+								catch (const std::exception& e) {
 									ERRORF("Error while executing proof request callback. The contained exception was: %s", e.what());
 								}
 							}
@@ -2328,7 +2331,7 @@ DestinationEntry empty_destination_entry;
 								}
 							}
 						}
-						catch (std::exception& e) {
+						catch (const std::exception& e) {
 							ERRORF("Error while transporting link request proof. The contained exception was: %s", e.what());
 						}
 					}
@@ -2695,7 +2698,7 @@ Deregisters an announce handler.
 			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet.get_hash().toHex().c_str());
 			return (Persistence::serialize(packet, packet_cache_path) > 0);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Error writing packet to cache. The contained exception was: %s", e.what());
 		}
 	}
@@ -2710,7 +2713,7 @@ Deregisters an announce handler.
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
 		return OS::file_exists(packet_cache_path);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Exception occurred while getting cached packet: %s", e.what());
 	}
 #endif
@@ -2729,7 +2732,7 @@ Deregisters an announce handler.
 		}
 		return packet;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Exception occurred while getting cached packet: %s", e.what());
 	}
 #endif
@@ -2752,7 +2755,7 @@ Deregisters an announce handler.
 			DEBUGF("Remove cached packet in %f s", diff_time);
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERROR("Exception occurred while clearing cached packet.");
 		ERRORF("The contained exception was: %s", e.what());
 	}
@@ -3139,7 +3142,7 @@ will announce it.
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while handling path request. The contained exception was: %s", e.what());
 	}
 }
@@ -3562,7 +3565,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 					for (const auto& destination_hash : invalid_paths) {
 						_path_table.erase(destination_hash);
 					}
-                    VERBOSEF("Loaded %zu path table entries from storage", _path_table.size());
+                    VERBOSEF("Loaded %lu path table entries from storage", _path_table.size());
 					return true;
 				}
 				else {
@@ -3576,7 +3579,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 #else	// CUSTOM
 #endif	// CUSTOM
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Could not load destination table from storage, the contained exception was: %s", e.what());
 		}
 	}
@@ -3658,7 +3661,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 
 			//size_t size = 8192;
 			size_t size = Persistence::_buffer.capacity();
-TRACEF("Transport::write_path_table: obtaining buffer size %zu bytes", size);
+TRACEF("Transport::write_path_table: obtaining buffer size %lu bytes", size);
 			uint8_t* buffer = Persistence::_buffer.writable(size);
 TRACEF("Transport::write_path_table: buffer addr: %ld", (long)buffer);
 #ifdef USE_MSGPACK
@@ -3675,7 +3678,7 @@ TRACEF("Transport::write_path_table: buffer addr: %ld", (long)buffer);
 #ifndef NDEBUG
 			// CBA DEBUG Dump path table
 TRACEF("Transport::write_path_table: buffer addr: %ld", (long)Persistence::_buffer.data());
-TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffer.size());
+TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffer.size());
 			//TRACE("SERIALIZED: destination_table");
 			//TRACE(Persistence::_buffer.toString().c_str());
 #endif
@@ -3732,10 +3735,10 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 #endif	// CUSTOM
 
 		if (success) {
-			DEBUGF("Saved %zu path table entries in %.3f seconds", _path_table.size(), OS::round(OS::time() - save_start, 3));
+			DEBUGF("Saved %lu path table entries in %.3f seconds", _path_table.size(), OS::round(OS::time() - save_start, 3));
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Could not save path table to storage, the contained exception was: %s", e.what());
 	}
 #endif
@@ -3869,7 +3872,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			file.write(umsgpack.packb(serialised_tunnels))
 			file.close()
 
-			DEBUGF("Saved %zu tunnel table entries in %.3f seconds", serialised_tunnels.size(), OS::round(OS::time() - save_start))
+			DEBUGF("Saved %lu tunnel table entries in %.3f seconds", serialised_tunnels.size(), OS::round(OS::time() - save_start))
 		except Exception as e:
 			ERRORF("Could not save tunnel table to storage, the contained exception was: %s", e.what())
 
@@ -3966,7 +3969,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	HEADF(LOG_VERBOSE, "dram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
+	HEADF(LOG_VERBOSE, "sram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
 
 	// _path_requests
 	// _discovery_path_requests

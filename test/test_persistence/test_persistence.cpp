@@ -1,6 +1,6 @@
 #include <unity.h>
 
-#include "../common/filesystem/FileSystem.h"
+#include <microStore/Adapters/UniversalFileSystem.h>
 
 #include <Interface.h>
 #include <Transport.h>
@@ -82,7 +82,7 @@ const char test_file_data[] = "test data";
 void testWrite() {
 	RNS::Bytes data(test_file_data);
 	if (RNS::Utilities::OS::write_file(test_file_path, data) == data.size()) {
-		TRACEF("wrote: %zu bytes", data.size());
+		TRACEF("wrote: %lu bytes", data.size());
 	}
 	else {
 		TRACE("write failed");
@@ -93,7 +93,7 @@ void testWrite() {
 void testRead() {
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_file_path, data) > 0) {
-		TRACEF("read: %zu bytes", data.size());
+		TRACEF("read: %lu bytes", data.size());
 		TRACEF("data: %s", data.toString().c_str());
 		TEST_ASSERT_EQUAL_size_t(strlen(test_file_data), data.size());
 		TEST_ASSERT_NOT_NULL(data.data());
@@ -132,10 +132,10 @@ void testSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("serialized %zu bytes", length);
+	TRACEF("serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			TRACEF("wrote: %zu bytes", data.size());
+			TRACEF("wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("write failed");
@@ -157,7 +157,7 @@ void testDeserializeObject() {
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
 	if (data) {
-		TRACEF("read: %zu bytes", data.size());
+		TRACEF("read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -196,10 +196,10 @@ void testSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testSerializeObject: serialized %zu bytes", length);
+	TRACEF("testSerializeObject: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			TRACEF("testSerializeObject: wrote: %zu bytes", data.size());
+			TRACEF("testSerializeObject: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testSerializeObject: write failed");
@@ -219,7 +219,7 @@ void testDeserializeObject() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
-		TRACEF("testDeserializeObject: read: %zu bytes", data.size());
+		TRACEF("testDeserializeObject: read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -292,10 +292,10 @@ void testSerializeVector() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testSerializeVector: serialized %zu bytes", length);
+	TRACEF("testSerializeVector: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_vector_path, data) == data.size()) {
-			TRACEF("testSerializeVector: wrote: %zu bytes", data.size());
+			TRACEF("testSerializeVector: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testSerializeVector: write failed");
@@ -315,7 +315,7 @@ void testDeserializeVector() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_vector_path, data) > 0) {
-		TRACEF("testDeserializeVector: read: %zu bytes", data.size());
+		TRACEF("testDeserializeVector: read: %lu bytes", data.size());
 		//TRACEF("testDeserializeVector: data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -381,10 +381,10 @@ void testSerializeSet() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testSerializeSet: serialized %zu bytes", length);
+	TRACEF("testSerializeSet: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_set_path, data) == data.size()) {
-			TRACEF("testSerializeSet: wrote: %zu bytes", data.size());
+			TRACEF("testSerializeSet: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testSerializeSet: write failed");
@@ -404,7 +404,7 @@ void testDeserializeSet() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_set_path, data) > 0) {
-		TRACEF("testDeserializeSet: read: %zu bytes", data.size());
+		TRACEF("testDeserializeSet: read: %lu bytes", data.size());
 		//TRACEF("testDeserializeSet: data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -463,10 +463,10 @@ void testSerializeMap() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testSerializeMap: serialized %zu bytes", length);
+	TRACEF("testSerializeMap: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_map_path, data) == data.size()) {
-			TRACEF("testSerializeMap: wrote: %zu bytes", data.size());
+			TRACEF("testSerializeMap: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testSerializeMap: write failed");
@@ -486,7 +486,7 @@ void testDeserializeMap() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_map_path, data) > 0) {
-		TRACEF("testDeserializeMap: read: %zu bytes", data.size());
+		TRACEF("testDeserializeMap: read: %lu bytes", data.size());
 		//TRACEF("testDeserializeMap: data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
@@ -531,38 +531,38 @@ void testSerializeDestinationTable() {
 	//RNS::Interface interface({RNS::Type::NONE});
 	RNS::Interface test_interface(new TestInterface());
 	//RNS::Packet packet({RNS::Type::NONE});
-	static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map;
+	static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map;
 	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
-	//RNS::Transport::DestinationEntry entry_one(1.0, empty, 1, 0.0, blobs, interface, packet);
+	//RNS::Persistence::DestinationEntry entry_one(1.0, empty, 1, 0.0, blobs, interface, packet);
 	RNS::Bytes received;
 	received.assignHex("deadbeef");
 	RNS::Bytes blob;
 	blob.assignHex("b10bb10b");
 	std::set<RNS::Bytes> blobs({received, blob});
-	RNS::Transport::DestinationEntry entry_one;
+	RNS::Persistence::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;
 	entry_one._random_blobs = blobs;
-	entry_one.receiving_interface_hash(test_interface.get_hash());
+	entry_one._receiving_interface = test_interface;
 	RNS::Bytes one;
 	one.assignHex("1111111111111111");
 	map.insert({one, entry_one});
-	//RNS::Transport::DestinationEntry entry_two(2.0, empty, 1, 0.0, blobs, interface, packet);
-	RNS::Transport::DestinationEntry entry_two;
+	//RNS::Persistence::DestinationEntry entry_two(2.0, empty, 1, 0.0, blobs, interface, packet);
+	RNS::Persistence::DestinationEntry entry_two;
 	entry_two._timestamp = 2.0;
 	entry_two._received_from = received;
 	entry_two._random_blobs = blobs;
-	entry_two.receiving_interface_hash(test_interface.get_hash());
+	entry_two._receiving_interface = test_interface;
 	RNS::Bytes two;
 	two.assignHex("2222222222222222");
 	map.insert({two, entry_two});
 
 	for (int n = 0; n < 20; n++) {
-		RNS::Transport::DestinationEntry entry;
+		RNS::Persistence::DestinationEntry entry;
 		entry._timestamp = 1.0;
 		entry._received_from = received;
 		entry._random_blobs = blobs;
-		entry.receiving_interface_hash(test_interface.get_hash());
+		entry._receiving_interface = test_interface;
 		RNS::Bytes hash;
 		hash.assign(std::to_string(1000000000000001 + n).c_str());
 		map.insert({hash, entry});
@@ -574,22 +574,22 @@ void testSerializeDestinationTable() {
 
 	JsonDocument doc;
 	doc.set(map);
-	TRACEF("testSerializeDestinationTable: doc size %zu", doc.size());
+	TRACEF("testSerializeDestinationTable: doc size %lu", doc.size());
 
 	RNS::Bytes data;
 	size_t size = 32768;
 	//size_t size = BUFFER_SIZE;
-	TRACEF("testSerializeDestinationTable: buffer size %zu bytes", size);
+	TRACEF("testSerializeDestinationTable: buffer size %lu bytes", size);
 	size_t length = serializeJson(doc, data.writable(size), size);
 	//size_t length = serializeMsgPack(doc, data.writable(size), size);
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testSerializeDestinationTable: serialized %zu bytes", length);
+	TRACEF("testSerializeDestinationTable: serialized %lu bytes", length);
 	if (length > 0) {
 		TRACEF("testSerializeDestinationTable: json: %s", data.toString().c_str());
 		if (RNS::Utilities::OS::write_file(test_path_table_path, data) == data.size()) {
-			TRACEF("testSerializeDestinationTable: wrote: %zu bytes", data.size());
+			TRACEF("testSerializeDestinationTable: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testSerializeDestinationTable: write failed");
@@ -607,19 +607,19 @@ void testDeserializeDestinationTable() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_path_table_path, data) > 0) {
-		TRACEF("testDeserializeDestinationTable: read: %zu bytes", data.size());
+		TRACEF("testDeserializeDestinationTable: read: %lu bytes", data.size());
 		TRACEF("testDeserializeDestinationTable: json: %s", data.toString().c_str());
 		JsonDocument doc;
 
 		//TRACEF("testDeserializeVector: data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
-		TRACEF("testDeserializeDestinationTable: doc size %zu", doc.size());
+		TRACEF("testDeserializeDestinationTable: doc size %lu", doc.size());
 		if (!error) {
-			TRACEF("testDeserializeDestinationTable: successfully deserialized %zu bytes", data.size());
+			TRACEF("testDeserializeDestinationTable: successfully deserialized %lu bytes", data.size());
 			//TRACEF("testDeserializeDestinationTable: json: %s", data.toString().c_str());
 
-			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
+			static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Persistence::DestinationEntry>>());
 			TEST_ASSERT_EQUAL_size_t(22, map.size());
 			for (auto& [hash, test] : map) {
 				TRACEF("testDeserializeDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
@@ -651,18 +651,18 @@ void testDeserializeEmptyDestinationTable() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_empty_path_table_path, data) > 0) {
-		TRACEF("testDeserializeEmptyDestinationTable: read: %zu bytes", data.size());
+		TRACEF("testDeserializeEmptyDestinationTable: read: %lu bytes", data.size());
 		JsonDocument doc;
 
 		//TRACEF("testDeserializeVector: data: %s", data.toString().c_str());
 		DeserializationError error = deserializeJson(doc, data.data());
 		//DeserializationError error = deserializeMsgPack(doc, data.data());
-		TRACEF("testDeserializeEmptyDestinationTable: doc size %zu", doc.size());
+		TRACEF("testDeserializeEmptyDestinationTable: doc size %lu", doc.size());
 		if (!error) {
-			TRACEF("testDeserializeEmptyDestinationTable: successfully deserialized %zu bytes", data.size());
+			TRACEF("testDeserializeEmptyDestinationTable: successfully deserialized %lu bytes", data.size());
 			TRACEF("testDeserializeEmptyDestinationTable: json: %s", data.toString().c_str());
 
-			static std::map<RNS::Bytes, RNS::Transport::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Transport::DestinationEntry>>());
+			static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Persistence::DestinationEntry>>());
 			TEST_ASSERT_EQUAL_size_t(0, map.size());
 			for (auto& [hash, test] : map) {
 				TRACEF("testDeserializeEmptyDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
@@ -726,10 +726,10 @@ void testJsonMsgpackSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testJsonMsgpackSerializeObject: serialized %zu bytes", length);
+	TRACEF("testJsonMsgpackSerializeObject: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			TRACEF("testJsonMsgpackSerializeObject: wrote: %zu bytes", data.size());
+			TRACEF("testJsonMsgpackSerializeObject: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testJsonMsgpackSerializeObject: write failed");
@@ -749,7 +749,7 @@ void testJsonMsgpackDeserializeObject() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
-		TRACEF("testJsonMsgpackDeserializeObject: read: %zu bytes", data.size());
+		TRACEF("testJsonMsgpackDeserializeObject: read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
@@ -809,10 +809,10 @@ void testJsonMsgpackSerializeArray() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testJsonMsgpackSerializeArray: serialized %zu bytes", length);
+	TRACEF("testJsonMsgpackSerializeArray: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_array_path, data) == data.size()) {
-			TRACEF("testJsonMsgpackSerializeArray: wrote: %zu bytes", data.size());
+			TRACEF("testJsonMsgpackSerializeArray: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testJsonMsgpackSerializeArray: write failed");
@@ -832,7 +832,7 @@ void testJsonMsgpackDeserializeArray() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_array_path, data) > 0) {
-		TRACEF("testJsonMsgpackDeserializeArray: read: %zu bytes", data.size());
+		TRACEF("testJsonMsgpackDeserializeArray: read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		DeserializationError error = deserializeMsgPack(doc, data.data(), data.size());
 		if (!error) {
@@ -879,10 +879,10 @@ void testMsgpackSerializeObject() {
 	if (length < size) {
 		data.resize(length);
 	}
-	TRACEF("testMsgpackSerializeObject: serialized %zu bytes", length);
+	TRACEF("testMsgpackSerializeObject: serialized %lu bytes", length);
 	if (length > 0) {
 		if (RNS::Utilities::OS::write_file(test_object_path, data) == data.size()) {
-			TRACEF("testMsgpackSerializeObject: wrote: %zu bytes", data.size());
+			TRACEF("testMsgpackSerializeObject: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testMsgpackSerializeObject: write failed");
@@ -902,7 +902,7 @@ void testMsgpackDeserializeObject() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_object_path, data) > 0) {
-		TRACEF("testMsgpackDeserializeObject: read: %zu bytes", data.size());
+		TRACEF("testMsgpackDeserializeObject: read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		DeserializationError error = deserializeMsgPack(doc, data.data());
 		if (!error) {
@@ -951,10 +951,10 @@ void testMsgpackSerializeArray() {
 	//packer.to_array(time, one.collection(), two.collection());
 	RNS::Bytes data(packer.data(), packer.size());
 
-	TRACEF("testMsgpackSerializeArray: serialized %zu bytes", data.size());
+	TRACEF("testMsgpackSerializeArray: serialized %lu bytes", data.size());
 	if (packer.size() > 0) {
 		if (RNS::Utilities::OS::write_file(test_array_path, data) == data.size()) {
-			TRACEF("testMsgpackSerializeArray: wrote: %zu bytes", data.size());
+			TRACEF("testMsgpackSerializeArray: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testMsgpackSerializeArray: write failed");
@@ -974,7 +974,7 @@ void testMsgpackDeserializeArray() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_array_path, data) > 0) {
-		TRACEF("testMsgpackDeserializeArray: read: %zu bytes", data.size());
+		TRACEF("testMsgpackDeserializeArray: read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		MsgPack::Unpacker unpacker;
 		unpacker.feed(data.data(), data.size());
@@ -1018,10 +1018,10 @@ void testMsgpackSerializeSeries() {
 	//packer.serialize(time, one.collection(), two.collection());
 	RNS::Bytes data(packer.data(), packer.size());
 
-	TRACEF("testMsgpackSerializeSeries: serialized %zu bytes", data.size());
+	TRACEF("testMsgpackSerializeSeries: serialized %lu bytes", data.size());
 	if (packer.size() > 0) {
 		if (RNS::Utilities::OS::write_file(test_series_path, data) == data.size()) {
-			TRACEF("testMsgpackSerializeSeries: wrote: %zu bytes", data.size());
+			TRACEF("testMsgpackSerializeSeries: wrote: %lu bytes", data.size());
 		}
 		else {
 			TRACE("testMsgpackSerializeSeries: write failed");
@@ -1041,7 +1041,7 @@ void testMsgpackDeserializeSeries() {
 
 	RNS::Bytes data;
 	if (RNS::Utilities::OS::read_file(test_series_path, data) > 0) {
-		TRACEF("testMsgpackDeserializeSeries: read: %zu bytes", data.size());
+		TRACEF("testMsgpackDeserializeSeries: read: %lu bytes", data.size());
 		//TRACEF("data: %s", data.toString().c_str());
 		MsgPack::Unpacker unpacker;
 		unpacker.feed(data.data(), data.size());
@@ -1084,9 +1084,9 @@ int runUnityTests(void) {
 	UNITY_BEGIN();
 
 	// Suite-level setup
-	RNS::FileSystem persistence_filesystem = new FileSystem();
-	((FileSystem*)persistence_filesystem.get())->init();
-	RNS::Utilities::OS::register_filesystem(persistence_filesystem);
+    microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+	filesystem.init();
+	RNS::Utilities::OS::register_filesystem(filesystem);
 
 	// Run tests
 	RUN_TEST(testWrite);

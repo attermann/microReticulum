@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#define RNS_HEAP_ALLOCATOR 0		// Use HEAP for allocator
-#define RNS_HEAP_POOL_ALLOCATOR 1	// Use HEAP pool for allocator
-#define RNS_PSRAM_ALLOCATOR 2		// Use PSRAM for allocator
-#define RNS_PSRAM_POOL_ALLOCATOR 3	// Use PSRAM pool for allocator
+#define RNS_HEAP_ALLOCATOR 0		 // Use HEAP for allocator
+#define RNS_HEAP_POOL_ALLOCATOR 1	 // Use HEAP pool for allocator
+#define RNS_PSRAM_ALLOCATOR 2		 // Use PSRAM for allocator
+#define RNS_PSRAM_POOL_ALLOCATOR 3	 // Use PSRAM pool for allocator
 #define RNS_ALTHEAP_POOL_ALLOCATOR 4 // Use alternate HEAP pool for allocator
 
 namespace RNS { namespace Utilities {
@@ -134,7 +134,7 @@ namespace RNS { namespace Utilities {
 			void deallocate(T* p, std::size_t n) noexcept {
 				if (p == nullptr) return;
 				size_t size = n * sizeof(value_type);
-				++default_allocator_info.free_count;
+				++container_allocator_info.free_count;
 				container_allocator_info.alloc_size -= size;
 				//TRACEF("--- ContainerAllocator freeing memory (addr=%lx) (%u bytes)", p, size);
 #if RNS_CONTAINER_ALLOCATOR == RNS_HEAP_POOL_ALLOCATOR

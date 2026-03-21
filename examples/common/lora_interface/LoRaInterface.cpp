@@ -5,6 +5,27 @@
 
 #include <memory>
 
+#if defined(BOARD_TBEAM) || defined(BOARD_LOR32_V21)
+// LILYGO T-Beam V1.X
+#define RADIO_SCLK_PIN               5
+#define RADIO_MISO_PIN              19
+#define RADIO_MOSI_PIN              27
+#define RADIO_CS_PIN                18
+#define RADIO_DIO0_PIN              26
+#define RADIO_RST_PIN               23
+#define RADIO_DIO1_PIN              33
+#define RADIO_BUSY_PIN              32
+#elif defined(BOARD_RAK4631)
+#define RADIO_SCLK_PIN              43
+#define RADIO_MISO_PIN              45
+#define RADIO_MOSI_PIN              44
+#define RADIO_CS_PIN                42
+#define RADIO_DIO0_PIN              47
+#define RADIO_RST_PIN               38
+#define RADIO_DIO1_PIN              -1
+#define RADIO_BUSY_PIN              46
+#endif
+
 using namespace RNS;
 
 /*
@@ -41,7 +62,7 @@ bool LoRaInterface::start() {
   
 #ifdef ARDUINO
 
-#ifdef BOARD_NRF52
+#if defined(BOARD_NRF52) || defined(MCU_NRF52)
 	SPI.setPins(RADIO_MISO_PIN, RADIO_SCLK_PIN, RADIO_MOSI_PIN);
 	SPI.begin();
 #else
@@ -114,7 +135,7 @@ void LoRaInterface::loop() {
 	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
 	try {
 		if (_online) {
-			TRACEF("LoRaInterface: sending %zu bytes...", data.size());
+			TRACEF("LoRaInterface: sending %lu bytes...", data.size());
 			// Send packet
 #ifdef ARDUINO
 
@@ -141,7 +162,7 @@ void LoRaInterface::loop() {
 		// Perform post-send housekeeping
 		InterfaceImpl::handle_outgoing(data);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
 	}
 }

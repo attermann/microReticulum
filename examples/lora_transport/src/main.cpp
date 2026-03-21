@@ -1,11 +1,10 @@
 //#define NDEBUG
 
+#include <microStore/FileSystem.h>
+#include <microStore/Adapters/UniversalFileSystem.h>
 #include <LoRaInterface.h>
-#include <UniversalFileSystem.h>
 
 #include <Reticulum.h>
-#include <Identity.h>
-#include <Destination.h>
 #include <Packet.h>
 #include <Transport.h>
 #include <Interface.h>
@@ -16,7 +15,9 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
-//#include <SPIFFS.h>
+#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+#include <Adafruit_TinyUSB.h>
+#endif
 #else
 #include <termios.h>
 #include <fcntl.h>
@@ -32,32 +33,24 @@
 
 RNS::Reticulum reticulum({RNS::Type::NONE});
 RNS::Interface lora_interface(RNS::Type::NONE);
-RNS::FileSystem universal_filesystem(RNS::Type::NONE);
-RNS::Identity identity({RNS::Type::NONE});
-RNS::Destination destination({RNS::Type::NONE});
-
-LoRaInterface* lora_interface_impl = nullptr;
-UniversalFileSystem* universal_filesystem_impl = nullptr;
 
 void reticulum_setup() {
 	INFO("Setting up Reticulum...");
 
 	try {
 
+		// Initialize and register filesystem
 		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
-		universal_filesystem_impl = new UniversalFileSystem();
-		universal_filesystem = universal_filesystem_impl;
-		universal_filesystem.init();
-		RNS::Utilities::OS::register_filesystem(universal_filesystem);
+		microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+		filesystem.init();
+		RNS::Utilities::OS::register_filesystem(filesystem);
 
+		// Initialize and register interface
 		HEAD("Registering LoRaInterface instances with Transport...", RNS::LOG_TRACE);
-		lora_interface_impl = new LoRaInterface();
-		lora_interface = lora_interface_impl;
+		lora_interface = new LoRaInterface();
 		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(lora_interface);
-
-		HEAD("Starting LoRaInterface...", RNS::LOG_TRACE);
-		lora_interface_impl->start();
+		lora_interface.start();
 
 		HEAD("Creating Reticulum instance...", RNS::LOG_TRACE);
 		reticulum = RNS::Reticulum();
@@ -65,22 +58,9 @@ void reticulum_setup() {
 		reticulum.probe_destination_enabled(true);
 		reticulum.start();
 
-		HEAD("Creating Identity instance...", RNS::LOG_TRACE);
-		// new identity
-		//identity = RNS::Identity();
-		// predefined identity
-		identity = RNS::Identity(false);
-		RNS::Bytes prv_bytes;
-#ifdef ARDUINO
-		prv_bytes.assignHex("78E7D93E28D55871608FF13329A226CABC3903A357388A035B360162FF6321570B092E0583772AB80BC425F99791DF5CA2CA0A985FF0415DAB419BBC64DDFAE8");
-#else
-		prv_bytes.assignHex("E0D43398EDC974EBA9F4A83463691A08F4D306D4E56BA6B275B8690A2FBD9852E9EBE7C03BC45CAEC9EF8E78C830037210BFB9986F6CA2DEE2B5C28D7B4DE6B0");
-#endif
-		identity.load_private_key(prv_bytes);
-
 		HEAD("RNS Transport Ready!", RNS::LOG_TRACE);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("!!! Exception in reticulum_setup: %s", e.what());
 	}
 }
@@ -96,37 +76,37 @@ void reticulum_teardown() {
 		RNS::Transport::deregister_interface(lora_interface);
 
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("!!! Exception in reticulum_teardown: %s", e.what());
 	}
 }
 
 void setup() {
 
-#ifdef ARDUINO
+#if defined(ARDUINO)
 	Serial.begin(115200);
-	Serial.print("Hello from Arduino on PlatformIO!\n");
+	while (!Serial) {
+		if (millis() > 5000)
+			break;
+		delay(500);
+	}
+	Serial.println("Serial initialized");
 
-/*
-	// Setup filesystem
-	if (!SPIFFS.begin(true, "")){
-		ERROR("SPIFFS filesystem mount failed");
-	}
-	else {
-		DEBUG("SPIFFS filesystem is ready");
-	}
-*/
+#if defined(ESP32)
+	Serial.print("Total SRAM: ");
+	Serial.println(ESP.getHeapSize());
+	Serial.print("Free SRAM: ");
+	Serial.println(ESP.getFreeHeap());
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+	Serial.print("Total SRAM: ");
+	Serial.println(dbgHeapTotal());
+	Serial.print("Free SRAM: ");
+	Serial.println(dbgHeapFree());
+#endif
 #endif
 
 	RNS::loglevel(RNS::LOG_TRACE);
 	//RNS::loglevel(RNS::LOG_MEM);
-
-/*
-	{
-		//RNS::Reticulum reticulum_test;
-		RNS::Destination destination_test({RNS::Type::NONE}, RNS::Type::Destination::IN, RNS::Type::Destination::SINGLE, "test", "test");
-	}
-*/
 
 	reticulum_setup();
 }
@@ -137,7 +117,11 @@ void loop() {
 
 }
 
-#ifndef ARDUINO
+#if defined(ARDUINO)
+int _write(int file, char *ptr, int len) {
+    return Serial.write(ptr, len);
+}
+#else
 int getch( ) {
 	termios oldt;
 	termios newt;
