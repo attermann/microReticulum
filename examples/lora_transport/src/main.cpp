@@ -40,13 +40,15 @@ void reticulum_setup() {
 	try {
 
 		// Initialize and register filesystem
-		HEAD("Registering FileSystem with OS...", RNS::LOG_TRACE);
+		HEAD("Registering FileSystem...", RNS::LOG_TRACE);
 		microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
 		filesystem.init();
+		HEAD("Formatting FileSystem...", RNS::LOG_TRACE);
+		filesystem.format();
 		RNS::Utilities::OS::register_filesystem(filesystem);
 
 		// Initialize and register interface
-		HEAD("Registering LoRaInterface instances with Transport...", RNS::LOG_TRACE);
+		HEAD("Registering LoRaInterface...", RNS::LOG_TRACE);
 		lora_interface = new LoRaInterface();
 		lora_interface.mode(RNS::Type::Interface::MODE_GATEWAY);
 		RNS::Transport::register_interface(lora_interface);

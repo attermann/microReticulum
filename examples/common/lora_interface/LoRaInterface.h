@@ -45,8 +45,9 @@ private:
 	const int   power     = 17;      // dBm
 
 #ifdef ARDUINO
-	Module*       _module = nullptr;
-	PhysicalLayer* _radio = nullptr;
+	Module*        _module      = nullptr;
+	PhysicalLayer* _radio       = nullptr;
+	int            _pa_mode_pin = -1;    // V4 FEM PA mode pin; -1 = not present
 #endif
 
 };

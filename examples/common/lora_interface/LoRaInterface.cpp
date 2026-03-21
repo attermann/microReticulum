@@ -31,6 +31,33 @@
 #define RADIO_RST_PIN               38
 #define RADIO_BUSY_PIN              46
 
+#elif defined(BOARD_HELTEC_V3)
+// Heltec WiFi LoRa 32 V3 — ESP32-S3 + SX1262
+// RadioLib Module(cs, irq=DIO1, rst, busy)
+// Note: Heltec BSP names this pin "DIO0" but it is physically DIO1 on the SX1262
+#define RADIO_SCLK_PIN               9
+#define RADIO_MISO_PIN              11
+#define RADIO_MOSI_PIN              10
+#define RADIO_CS_PIN                 8
+#define RADIO_DIO1_PIN              14   // IRQ
+#define RADIO_RST_PIN               12
+#define RADIO_BUSY_PIN              13
+
+#elif defined(BOARD_HELTEC_V4)
+// Heltec WiFi LoRa 32 V4 — ESP32-S3R2 + SX1262 + external FEM (GC1109 / KCT8103L)
+// LoRa SPI/control pins are identical to V3; FEM adds 3 extra GPIOs
+#define RADIO_SCLK_PIN               9
+#define RADIO_MISO_PIN              11
+#define RADIO_MOSI_PIN              10
+#define RADIO_CS_PIN                 8
+#define RADIO_DIO1_PIN              14   // IRQ
+#define RADIO_RST_PIN               12
+#define RADIO_BUSY_PIN              13
+// FEM (GC1109) control — required for antenna path; verified against RNode firmware
+#define RADIO_VFEM_EN               7    // LORA_PA_PWR_EN: FEM power rail (active HIGH)
+#define RADIO_FEM_CE                2    // LORA_PA_CSD:    FEM chip enable  (active HIGH)
+#define RADIO_PA_MODE              46    // LORA_PA_CPS:    PA mode HIGH=TX, LOW=RX
+
 #endif
 
 using namespace RNS;
@@ -96,8 +123,36 @@ bool LoRaInterface::start() {
 	int state = chip->begin(frequency, bandwidth, spreading, coding,
 	                        RADIOLIB_SX126X_SYNC_WORD_PRIVATE, power, 20, 1.6, false);
 
+#elif defined(BOARD_HELTEC_V3)
+	// Heltec WiFi LoRa 32 V3 — ESP32-S3 + SX1262, 1.8V TCXO
+	SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+	_module = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN, SPI);
+	SX1262* chip = new SX1262(_module);
+	_radio = chip;
+	chip->setDio2AsRfSwitch(true);
+	int state = chip->begin(frequency, bandwidth, spreading, coding,
+	                        RADIOLIB_SX126X_SYNC_WORD_PRIVATE, power, 20, 1.8, false);
+
+#elif defined(BOARD_HELTEC_V4)
+	// Heltec WiFi LoRa 32 V4 — ESP32-S3R2 + SX1262 + external FEM, 1.8V TCXO
+	SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+	// Power and enable the FEM — required for antenna path to function at all
+	pinMode(RADIO_VFEM_EN, OUTPUT);
+	pinMode(RADIO_FEM_CE, OUTPUT);
+	pinMode(RADIO_PA_MODE, OUTPUT);
+	digitalWrite(RADIO_VFEM_EN, HIGH);
+	digitalWrite(RADIO_FEM_CE, HIGH);
+	digitalWrite(RADIO_PA_MODE, LOW);   // start in RX mode
+	_pa_mode_pin = RADIO_PA_MODE;
+	_module = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN, SPI);
+	SX1262* chip = new SX1262(_module);
+	_radio = chip;
+	chip->setDio2AsRfSwitch(true);
+	int state = chip->begin(frequency, bandwidth, spreading, coding,
+	                        RADIOLIB_SX126X_SYNC_WORD_PRIVATE, power, 20, 1.8, false);
+
 #else
-	#error "Unsupported board: define BOARD_TBEAM, BOARD_LORA32_V21, or BOARD_RAK4631"
+	#error "Unsupported board: define BOARD_TBEAM, BOARD_LORA32_V21, BOARD_RAK4631, BOARD_HELTEC_V3, or BOARD_HELTEC_V4"
 	int state = RADIOLIB_ERR_UNKNOWN;
 #endif
 
@@ -174,12 +229,16 @@ void LoRaInterface::loop() {
 			txBuf[0] = Cryptography::randomnum(256) & 0xF0;
 			memcpy(txBuf + 1, data.data(), data.size());
 
+			// V4: switch FEM to TX mode before transmitting
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+
 			int state = _radio->transmit(txBuf, 1 + data.size());
 			if (state != RADIOLIB_ERR_NONE) {
 				ERRORF("LoRaInterface: transmit failed, code %d", state);
 			}
 
-			// Return to receive mode after blocking transmit
+			// V4: return FEM to RX mode, then re-arm receive
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 			_radio->startReceive();
 #endif
 			TRACE("LoRaInterface: sent bytes");
