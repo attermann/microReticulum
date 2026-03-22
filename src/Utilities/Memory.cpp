@@ -8,20 +8,16 @@ using namespace RNS::Utilities;
 
 #ifndef RNS_DEFAULT_ALLOCATOR
 	#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-		// CBA Disabled default to heap pool allocator for NRF52 until memory sizing issues ca. be resolved
 		// Use TLSF on NRF52 boards by default since they don't embed their own advanced memory manager like ESP32 does
-		//#define RNS_DEFAULT_ALLOCATOR RNS_HEAP_POOL_ALLOCATOR
-		#define RNS_CONTAINER_ALLOCATOR RNS_HEAP_ALLOCATOR
+		#define RNS_DEFAULT_ALLOCATOR RNS_HEAP_POOL_ALLOCATOR
 	#else
 		#define RNS_DEFAULT_ALLOCATOR RNS_HEAP_ALLOCATOR
 	#endif
 #endif
 #ifndef RNS_CONTAINER_ALLOCATOR
 	#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-		// CBA Disabled default to heap pool allocator for NRF52 until memory sizing issues ca. be resolved
 		// Use TLSF on NRF52 boards by default since they don't embed their own advanced memory manager like ESP32 does
-		//#define RNS_CONTAINER_ALLOCATOR RNS_HEAP_POOL_ALLOCATOR
-		#define RNS_CONTAINER_ALLOCATOR RNS_HEAP_ALLOCATOR
+		#define RNS_CONTAINER_ALLOCATOR RNS_HEAP_POOL_ALLOCATOR
 	#else
 		#define RNS_CONTAINER_ALLOCATOR RNS_HEAP_ALLOCATOR
 	#endif

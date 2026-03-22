@@ -24,10 +24,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
-      - name: Build Project
+      - name: Build Targets
         run: pio run --environment ${{ matrix.env }}
 
       - name: Run Unit Tests
@@ -35,6 +36,10 @@ jobs:
 
   build-embedded:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [ttgo-t-beam, lilygo_tbeam_supreme, ttgo-lora32-v21, wiscore_rak4631]
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -46,12 +51,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
       - name: Build Embedded Targets
-        run: |
-          pio run --environment ttgo-t-beam
-          pio run --environment lilygo_tbeam_supreme
-          pio run --environment ttgo-lora32-v21
-          pio run --environment wiscore_rak4631
+        run: pio run --environment ${{ matrix.env }}
