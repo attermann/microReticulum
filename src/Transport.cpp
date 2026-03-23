@@ -231,12 +231,24 @@ DestinationEntry empty_destination_entry;
 
 		// Read in path table
 		//read_path_table();
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 		// CBA microStore
+		if (Utilities::OS::get_filesystem()) {
+			INFOF("FileSystem available: %lu", Utilities::OS::get_filesystem().storageAvailable());
+			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
+			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
 #if defined(ARDUINO)
-	    _path_store.init(Utilities::OS::get_filesystem(), "/path_store");
+			_path_store.init(Utilities::OS::get_filesystem(), "/path_store");
 #else
-	    _path_store.init(Utilities::OS::get_filesystem(), "path_store");
+			_path_store.init(Utilities::OS::get_filesystem(), "path_store");
 #endif
+			// If the filesystem is full then clear the path store since it's of no use full anyway
+			if (Utilities::OS::get_filesystem().storageAvailable() < 1024) {
+				WARNING("FileSystem is full, clearing existing path store");
+				_path_store.clear();
+			}
+		}
+#endif // RNS_USE_FS && RNS_PERSIST_PATHS
 
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
@@ -260,6 +272,9 @@ DestinationEntry empty_destination_entry;
 
 		VERBOSEF("Transport instance %s started", _identity.toString().c_str());
 		_start_time = OS::time();
+	}
+	else {
+		INFO("Transport mode is disabled");
 	}
 
 	// CBA TODO
@@ -591,7 +606,9 @@ DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to cull link table: %s", e.what());
 				}
 
+				// CBA TODO perform path expiry in microStore!!!
 				// Cull the path table
+				DEBUG("Culling path table...");
 				try {
 					std::vector<Bytes> stale_paths;
 					stale_paths.reserve(_path_table.size());
@@ -2149,7 +2166,17 @@ DestinationEntry empty_destination_entry;
 							}
 */
 							// CBA microStore
-							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry)) {
+							uint32_t ttl = 0;
+							if (packet.receiving_interface().mode() == Type::Interface::MODE_ACCESS_POINT) {
+								ttl = AP_PATH_TIME;
+							}
+							else if (packet.receiving_interface().mode() == Type::Interface::MODE_ROAMING) {
+								ttl = ROAMING_PATH_TIME;
+							}
+							else {
+								ttl = DESTINATION_TIMEOUT;
+							}
+							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry, ttl)) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
 								++_destinations_added;
 							}
@@ -3949,7 +3976,8 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 	size_t memory = Memory::heap_available();
 	uint8_t memory_pct = 0;
-	if (Memory::heap_size()) memory_pct = (uint8_t)((double)memory / (double)Memory::heap_size() * 100.0);
+	size_t memory_size = Memory::heap_size();
+	if (memory_size >0 ) memory_pct = (uint8_t)((double)memory / (double)memory_size * 100.0);
 	if (_last_memory == 0) {
 		_last_memory = memory;
 	}
@@ -3960,7 +3988,8 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	// accurately reflect PSRAM freed with calls to free()???
 	size_t psram = ESP.getFreePsram();
 	uint8_t psram_pct = 0;
-	if (ESP.getPsramSize() > 0) psram_pct = (uint8_t)((double)psram / (double)ESP.getPsramSize() * 100.0);
+	size_t psram_size = ESP.getPsramSize();
+	if (psram_size > 0) psram_pct = (uint8_t)((double)psram / (double)psram_size * 100.0);
 	if (_last_psram == 0) {
 		_last_psram = psram;
 	}
@@ -3974,7 +4003,8 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		_last_flash = flash;
 	}
 	uint8_t flash_pct = 0;
-	if (OS::storage_size() > 0) flash_pct = (uint8_t)((double)flash / (double)OS::storage_size() * 100.0);
+	size_t flash_size = OS::storage_size();
+	if (flash_size > 0) flash_pct = (uint8_t)((double)flash / (double)flash_size * 100.0);
 
 	// memory
 	// storage
@@ -4013,6 +4043,13 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	_last_memory = memory;
 	_last_psram = psram;
 	_last_flash = flash;
+
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+	if (_path_store) {
+		HEAD("Path Store Stats", LOG_TRACE);
+		_path_store.dumpInfo();
+	}
+#endif
 
 }
 

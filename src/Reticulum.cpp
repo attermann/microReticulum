@@ -189,10 +189,12 @@ Reticulum::Reticulum() : _object(new Object()) {
 void Reticulum::start() {
 
 	INFOF("Total SRAM: %lu bytes", Memory::heap_size());
+	INFOF("Free SRAM: %lu bytes", Memory::heap_available());
 #if defined(ESP32)
 	INFOF("Total PSRAM: %u bytes", ESP.getPsramSize());
 #endif
 	INFOF("Total flash: %lu bytes", OS::storage_size());
+	INFOF("Free flash: %lu bytes", OS::storage_available());
 
 #ifdef ARDUINO
 #if defined(RNS_USE_FS)
@@ -222,6 +224,7 @@ void Reticulum::start() {
 	_object->_last_data_persist = OS::time();
 	_object->_last_cache_clean = OS::time();
 	_object->_jobs_last_run = OS::time();
+	_object->_last_time_persist = OS::time();
 }
 
 void Reticulum::loop() {
@@ -296,6 +299,26 @@ void Reticulum::jobs() {
 		persist_data();
 	}
 
+#ifdef ARDUINO
+#if defined(RNS_USE_FS)
+	if (now > _object->_last_time_persist + 600) {
+		// write time offset to file
+		try {
+			char time_offset_path[FILEPATH_MAXSIZE];
+			snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+			uint64_t offset = OS::ltime();
+			DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
+			Bytes buf((uint8_t*)&offset, sizeof(offset));
+			OS::write_file(time_offset_path, buf);
+		}
+		catch (const std::exception& e) {
+			ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
+		}
+		_object->_last_time_persist = Utilities::OS::time();
+	}
+#endif
+#endif
+
 	_object->_jobs_last_run = OS::time();
 }
 
@@ -320,23 +343,6 @@ void Reticulum::persist_data() {
 	TRACE("Persisting transport and identity data...");
 	Transport::persist_data();
 	Identity::persist_data();
-
-#ifdef ARDUINO
-#if defined(RNS_USE_FS)
-	// write time offset to file
-	try {
-		char time_offset_path[FILEPATH_MAXSIZE];
-		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
-		uint64_t offset = OS::ltime();
-		DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
-		Bytes buf((uint8_t*)&offset, sizeof(offset));
-		OS::write_file(time_offset_path, buf);
-	}
-	catch (const std::exception& e) {
-		ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
-	}
-#endif
-#endif
 
 	_object->_last_data_persist = OS::time();
 }

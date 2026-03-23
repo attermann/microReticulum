@@ -191,8 +191,9 @@ namespace RNS {
 			bool _is_connected_to_shared_instance = false;
 			bool _is_standalone_instance = false;
 			//p _jobs_thread = None
-			double _last_data_persist = Utilities::OS::time();
+			double _last_data_persist = 0.0;
 			double _last_cache_clean = 0.0;
+			double _last_time_persist = 0.0;
 
 			// CBA
 			double _jobs_last_run = Utilities::OS::time();

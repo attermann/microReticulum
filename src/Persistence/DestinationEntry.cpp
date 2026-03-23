@@ -141,21 +141,24 @@ using namespace RNS::Persistence;
 	Bytes packet_data(packet_size);
 	if(!read((void*)packet_data.writable(packet_size), packet_size)) return false;
 	packet_data.resize(packet_size);
-	entry._announce_packet = Packet(packet_data);
+	if (packet_data.size() > 0) {
+		entry._announce_packet = Packet(packet_data);
+	}
 //TRACEF("Read %lu byte packet", packet_data.size());
 
 	if (entry._announce_packet) {
 		// Announce packet is cached in packed state
 		// so we need to unpack it before accessing.
 //TRACE("Unpacking packet...");
-		entry._announce_packet.unpack();
+		if (entry._announce_packet.unpack()) {
 //TRACEF("Packet: %s", entry._announce_packet.debugString().c_str());
-		// We increase the hops, since reading a packet
-		// from cache is equivalent to receiving it again
-		// over an interface. It is cached with it's non-
-		// increased hop-count.
+			// We increase the hops, since reading a packet
+			// from cache is equivalent to receiving it again
+			// over an interface. It is cached with it's non-
+			// increased hop-count.
 //TRACE("Incrementing packet hop count...");
-		entry._announce_packet.hops(entry._announce_packet.hops() + 1);
+			entry._announce_packet.hops(entry._announce_packet.hops() + 1);
+		}
 	}
 
 	return true;

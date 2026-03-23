@@ -52,7 +52,7 @@ namespace RNS { namespace Utilities {
 		inline static void setTimeOffset(uint64_t offset) { _time_offset = offset; }
 
 #ifdef ARDUINO
-        // return current time in milliseconds since startup
+        // return current time in milliseconds since first boot
 		inline static uint64_t ltime() {
 			// handle roll-over of 32-bit millis (approx. 49 days)
 			static uint32_t low32, high32;
