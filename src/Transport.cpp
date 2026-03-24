@@ -3131,6 +3131,33 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 				_announce_table.insert({announce_packet.destination_hash(), announce_entry});
 				// CBA IMMEDIATE CULL
 				cull_announce_table();
+
+				// Send PATH_RESPONSE immediately for local client requests
+				// rather than waiting for the jobs() loop. On resource-
+				// constrained platforms (e.g. ESP32), continuous TCP backbone
+				// data can starve the cooperative jobs() loop for many
+				// seconds, causing path discovery timeouts for local clients.
+				if (is_from_local_client) {
+					Identity imm_identity(Identity::recall(announce_packet.destination_hash()));
+					if (imm_identity) {
+						Destination imm_destination(imm_identity, Type::Destination::OUT, Type::Destination::SINGLE, announce_packet.destination_hash());
+						Packet imm_packet(
+							imm_destination,
+							attached_interface,
+							announce_packet.data(),
+							Type::Packet::ANNOUNCE,
+							Type::Packet::PATH_RESPONSE,
+							Type::Transport::TRANSPORT,
+							Type::Packet::HEADER_2,
+							_identity.hash(),
+							true,
+							announce_packet.context_flag()
+						);
+						imm_packet.hops(announce_hops);
+						imm_packet.send();
+						_announce_table.erase(announce_packet.destination_hash());
+					}
+				}
 			}
 		}
 	}
