@@ -1139,7 +1139,6 @@ DestinationEntry empty_destination_entry;
 			_receipts.push_back(receipt);
 		}
 
-		// CBA Currently this packet cache is a noop since it's not forced
 		cache_packet(packet);
 	}
 

@@ -1,6 +1,7 @@
 name: PlatformIO CI
 
 on:
+  workflow_dispatch: # This enables the "Run workflow" button in the UI
   push:
     branches: [ "master" ]
   pull_request:
