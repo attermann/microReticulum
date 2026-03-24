@@ -662,6 +662,22 @@ DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to cull discovery path requests: %s", e.what());
 				}
 
+				// Cull the path requests table
+				try {
+					std::vector<Bytes> stale_path_requests;
+					for (const auto& [destination_hash, timestamp] : _path_requests) {
+						if (OS::time() > (timestamp + DESTINATION_TIMEOUT)) {
+							stale_path_requests.push_back(destination_hash);
+						}
+					}
+					for (const Bytes& destination_hash : stale_path_requests) {
+						_path_requests.erase(destination_hash);
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to cull path requests: %s", e.what());
+				}
+
 				// Cull the tunnel table
 				try {
 					count = 0;
@@ -1455,8 +1471,25 @@ DestinationEntry empty_destination_entry;
 	}
 	if (accept) {
 		TRACE("Transport::inbound: Packet accepted by filter");
-		// CBA ACCUMULATES
-		_packet_hashlist.insert(packet.packet_hash());
+
+		// Defer hashlist insertion for packets belonging to links in
+		// our link table, and for LRPROOF packets. On shared-medium
+		// interfaces (e.g. LoRa), a packet may arrive on the "wrong"
+		// interface first. Premature hash insertion would cause the
+		// correct arrival to be filtered as a duplicate.
+		// Reference: Python Transport.py lines 1362-1373
+		bool remember_packet_hash = true;
+		if (_link_table.find(packet.destination_hash()) != _link_table.end()) {
+			remember_packet_hash = false;
+		}
+		if (packet.packet_type() == Type::Packet::PROOF && packet.context() == Type::Packet::LRPROOF) {
+			remember_packet_hash = false;
+		}
+		if (remember_packet_hash) {
+			// CBA ACCUMULATES
+			_packet_hashlist.insert(packet.packet_hash());
+		}
+
 		// CBA Currently this packet cache is a noop since it's not forced
 		cache_packet(packet);
 		
@@ -1647,7 +1680,7 @@ DestinationEntry empty_destination_entry;
 								else {
 									if (nh_mtu < path_mtu || (ph_mtu != 0 && ph_mtu < path_mtu)) {
 										try {
-											path_mtu = std::min(nh_mtu, ph_mtu);
+											path_mtu = std::min(nh_mtu, (ph_mtu > 0) ? ph_mtu : nh_mtu);
 											Bytes clamped_mtu = Link::signalling_bytes(path_mtu, mode);
 											DEBUGF("Clamping link MTU to %u", path_mtu);
 											new_raw  = new_raw.left(new_raw.size()-Type::Link::LINK_MTU_SIZE)+clamped_mtu;
@@ -1709,7 +1742,7 @@ DestinationEntry empty_destination_entry;
 				auto link_iter = _link_table.find(packet.destination_hash());
 				if (link_iter != _link_table.end()) {
 					TRACE("Transport::inbound: Found link entry, handling link transport");
-					LinkEntry link_entry = (*link_iter).second;
+					LinkEntry& link_entry = (*link_iter).second;
 					// If receiving and outbound interface is
 					// the same for this link, direction doesn't
 					// matter, and we simply send the packet on.
@@ -1755,6 +1788,8 @@ DestinationEntry empty_destination_entry;
 						new_raw << packet.raw().mid(2);
 						transmit(outbound_interface, new_raw);
 						link_entry._timestamp = OS::time();
+						// Deferred hashlist insertion for link transport packets
+						_packet_hashlist.insert(packet.packet_hash());
 					}
 					else {
 						//p pass
@@ -2008,6 +2043,7 @@ DestinationEntry empty_destination_entry;
 							if (iter != _pending_local_path_requests.end()) {
 								//p desiring_interface = Transport.pending_local_path_requests.pop(packet.destination_hash)
 								//const Interface& desiring_interface = (*iter).second;
+								_pending_local_path_requests.erase(iter);
 								retransmit_timeout = now;
 								retries = PATHFINDER_R;
 
@@ -3321,6 +3357,33 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 				_announce_table.insert({announce_packet.destination_hash(), announce_entry});
 				// CBA IMMEDIATE CULL
 				cull_announce_table();
+
+				// Send PATH_RESPONSE immediately for local client requests
+				// rather than waiting for the jobs() loop. On resource-
+				// constrained platforms (e.g. ESP32), continuous TCP backbone
+				// data can starve the cooperative jobs() loop for many
+				// seconds, causing path discovery timeouts for local clients.
+				if (is_from_local_client) {
+					Identity imm_identity(Identity::recall(announce_packet.destination_hash()));
+					if (imm_identity) {
+						Destination imm_destination(imm_identity, Type::Destination::OUT, Type::Destination::SINGLE, announce_packet.destination_hash());
+						Packet imm_packet(
+							imm_destination,
+							attached_interface,
+							announce_packet.data(),
+							Type::Packet::ANNOUNCE,
+							Type::Packet::PATH_RESPONSE,
+							Type::Transport::TRANSPORT,
+							Type::Packet::HEADER_2,
+							_identity.hash(),
+							true,
+							announce_packet.context_flag()
+						);
+						imm_packet.hops(announce_hops);
+						imm_packet.send();
+						_announce_table.erase(announce_packet.destination_hash());
+					}
+				}
 			}
 		}
 	}

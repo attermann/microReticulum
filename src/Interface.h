@@ -208,6 +208,8 @@ namespace RNS {
 		inline bool FIXED_MTU() const { assert(_impl); return _impl->_FIXED_MTU; }
 		inline double announce_allowed_at() const { assert(_impl); return _impl->_announce_allowed_at; }
 		inline float announce_cap() const { assert(_impl); return _impl->_announce_cap; }
+		inline size_t rxb() const { assert(_impl); return _impl->_rxb; }
+		inline size_t txb() const { assert(_impl); return _impl->_txb; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
 		inline bool is_connected_to_shared_instance() const { assert(_impl); return _impl->_is_connected_to_shared_instance; }
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }
