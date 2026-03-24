@@ -1579,7 +1579,7 @@ Transport::DestinationEntry empty_destination_entry;
 				auto link_iter = _link_table.find(packet.destination_hash());
 				if (link_iter != _link_table.end()) {
 					TRACE("Transport::inbound: Found link entry, handling link transport");
-					LinkEntry link_entry = (*link_iter).second;
+					LinkEntry& link_entry = (*link_iter).second;
 					// If receiving and outbound interface is
 					// the same for this link, direction doesn't
 					// matter, and we simply send the packet on.
