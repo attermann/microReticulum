@@ -236,8 +236,8 @@ DestinationEntry empty_destination_entry;
 		if (Utilities::OS::get_filesystem()) {
 			INFOF("FileSystem available: %lu", Utilities::OS::get_filesystem().storageAvailable());
 			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
-			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
 #if defined(ARDUINO)
+			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
 			_path_store.init(Utilities::OS::get_filesystem(), "/path_store");
 #else
 			_path_store.init(Utilities::OS::get_filesystem(), "path_store");
