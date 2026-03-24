@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Token.h"
 
 #include "HMAC.h"
@@ -66,7 +80,7 @@ bool Token::verify_hmac(const Bytes& token) {
 
 const Bytes Token::encrypt(const Bytes& data) {
 
-	DEBUGF("Token::encrypt: plaintext length: %zu", data.size());
+	DEBUGF("Token::encrypt: plaintext length: %lu", data.size());
 	Bytes iv = random(16);
 	//double current_time = OS::time();
 	TRACEF("Token::encrypt: iv:         %s", iv.toHex().c_str());
@@ -90,7 +104,7 @@ const Bytes Token::encrypt(const Bytes& data) {
 	else {
 		throw new std::invalid_argument("Invalid token mode "+std::to_string(_mode));
 	}
-	DEBUGF("Token::encrypt: padded ciphertext length: %zu", ciphertext.size());
+	DEBUGF("Token::encrypt: padded ciphertext length: %lu", ciphertext.size());
 	TRACEF("Token::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	Bytes signed_parts = iv + ciphertext;
@@ -99,14 +113,14 @@ const Bytes Token::encrypt(const Bytes& data) {
 	Bytes sig(HMAC::generate(_signing_key, signed_parts)->digest());
 	TRACEF("Token::encrypt: sig:        %s", sig.toHex().c_str());
 	Bytes token(signed_parts + sig);
-	DEBUGF("Token::encrypt: token length: %zu", token.size());
+	DEBUGF("Token::encrypt: token length: %lu", token.size());
 	return token;
 }
 
 
 const Bytes Token::decrypt(const Bytes& token) {
 
-	DEBUGF("Token::decrypt: token length: %zu", token.size());
+	DEBUGF("Token::decrypt: token length: %lu", token.size());
 	if (token.size() < 48) {
 		throw std::invalid_argument("Cannot decrypt token of only " + std::to_string(token.size()) + " bytes");
 	}
@@ -146,13 +160,13 @@ const Bytes Token::decrypt(const Bytes& token) {
 		else {
 			throw new std::invalid_argument("Invalid token mode "+std::to_string(_mode));
 		}
-		DEBUGF("Token::encrypt: unpadded plaintext length: %zu", plaintext.size());
+		DEBUGF("Token::encrypt: unpadded plaintext length: %lu", plaintext.size());
 		TRACEF("Token::decrypt: plaintext:  %s", plaintext.toHex().c_str());
 
-		DEBUGF("Token::decrypt: plaintext length: %zu", plaintext.size());
+		DEBUGF("Token::decrypt: plaintext length: %lu", plaintext.size());
 		return plaintext;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		WARNING("Could not decrypt Token token");
 		throw std::runtime_error("Could not decrypt Token token");
 	}

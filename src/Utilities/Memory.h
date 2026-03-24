@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #pragma once
 
 #include "../Log.h"
@@ -6,10 +20,10 @@
 
 #include <memory>
 
-#define RNS_HEAP_ALLOCATOR 0		// Use HEAP for allocator
-#define RNS_HEAP_POOL_ALLOCATOR 1	// Use HEAP pool for allocator
-#define RNS_PSRAM_ALLOCATOR 2		// Use PSRAM for allocator
-#define RNS_PSRAM_POOL_ALLOCATOR 3	// Use PSRAM pool for allocator
+#define RNS_HEAP_ALLOCATOR 0		 // Use HEAP for allocator
+#define RNS_HEAP_POOL_ALLOCATOR 1	 // Use HEAP pool for allocator
+#define RNS_PSRAM_ALLOCATOR 2		 // Use PSRAM for allocator
+#define RNS_PSRAM_POOL_ALLOCATOR 3	 // Use PSRAM pool for allocator
 #define RNS_ALTHEAP_POOL_ALLOCATOR 4 // Use alternate HEAP pool for allocator
 
 namespace RNS { namespace Utilities {
@@ -19,7 +33,7 @@ namespace RNS { namespace Utilities {
 	private:
 
 		struct pool_info {
-			pool_info(uint8_t t, size_t s) : type(t), buffer_size(s) {}
+			constexpr pool_info(uint8_t t, size_t s) : type(t), buffer_size(s) {}
 			uint8_t type = 0;
 			bool pool_init = false;
 			size_t buffer_size = 0;
@@ -134,7 +148,7 @@ namespace RNS { namespace Utilities {
 			void deallocate(T* p, std::size_t n) noexcept {
 				if (p == nullptr) return;
 				size_t size = n * sizeof(value_type);
-				++default_allocator_info.free_count;
+				++container_allocator_info.free_count;
 				container_allocator_info.alloc_size -= size;
 				//TRACEF("--- ContainerAllocator freeing memory (addr=%lx) (%u bytes)", p, size);
 #if RNS_CONTAINER_ALLOCATOR == RNS_HEAP_POOL_ALLOCATOR

@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Transport.h"
 
 #include "Reticulum.h"
@@ -18,6 +32,7 @@
 using namespace RNS;
 using namespace RNS::Type::Transport;
 using namespace RNS::Utilities;
+using namespace RNS::Persistence;
 
 #ifndef RNS_PATH_TABLE_MAX
 #define RNS_PATH_TABLE_MAX 100
@@ -43,7 +58,7 @@ using namespace RNS::Utilities;
 /*static*/ std::list<PacketReceipt> Transport::_receipts;
 
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
-/*static*/ Transport::PathTable Transport::_path_table;
+/*static*/ PathTable Transport::_path_table;
 /*static*/ std::map<Bytes, Transport::ReverseEntry> Transport::_reverse_table;
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
 /*static*/ Transport::AnnounceTable Transport::_held_announces;
@@ -117,7 +132,11 @@ using namespace RNS::Utilities;
 
 /*static*/ bool Transport::cleaning_caches = false;
 
-Transport::DestinationEntry empty_destination_entry;
+// CBA microStore
+/*static*/ PathStore Transport::_path_store;
+/*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
+
+DestinationEntry empty_destination_entry;
 
 /*static*/ void Transport::start(const Reticulum& reticulum_instance) {
 	INFO("Transport starting...");
@@ -157,7 +176,7 @@ Transport::DestinationEntry empty_destination_entry;
 				VERBOSE("Loaded Transport Identity from storage");
 			}
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Failed to check for transport identity, the contained exception was: %s", e.what());
 		}
 	}
@@ -173,7 +192,7 @@ Transport::DestinationEntry empty_destination_entry;
 				//p Transport.packet_hashlist = umsgpack.unpackb(file.read())
 				//p file.close()
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
 			}
 		}
@@ -211,7 +230,25 @@ Transport::DestinationEntry empty_destination_entry;
 		INFO("Transport mode is enabled");
 
 		// Read in path table
-		read_path_table();
+		//read_path_table();
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+		// CBA microStore
+		if (Utilities::OS::get_filesystem()) {
+			INFOF("FileSystem available: %lu", Utilities::OS::get_filesystem().storageAvailable());
+			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
+#if defined(ARDUINO)
+			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
+			_path_store.init(Utilities::OS::get_filesystem(), "/path_store");
+#else
+			_path_store.init(Utilities::OS::get_filesystem(), "path_store");
+#endif
+			// If the filesystem is full then clear the path store since it's of no use full anyway
+			if (Utilities::OS::get_filesystem().storageAvailable() < 1024) {
+				WARNING("FileSystem is full, clearing existing path store");
+				_path_store.clear();
+			}
+		}
+#endif // RNS_USE_FS && RNS_PERSIST_PATHS
 
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
@@ -235,6 +272,9 @@ Transport::DestinationEntry empty_destination_entry;
 
 		VERBOSEF("Transport instance %s started", _identity.toString().c_str());
 		_start_time = OS::time();
+	}
+	else {
+		INFO("Transport mode is disabled");
 	}
 
 	// CBA TODO
@@ -566,7 +606,9 @@ Transport::DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to cull link table: %s", e.what());
 				}
 
+				// CBA TODO perform path expiry in microStore!!!
 				// Cull the path table
+				DEBUG("Culling path table...");
 				try {
 					std::vector<Bytes> stale_paths;
 					stale_paths.reserve(_path_table.size());
@@ -692,7 +734,7 @@ Transport::DestinationEntry empty_destination_entry;
 			//p pass
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERROR("An exception occurred while running Transport jobs.");
 		ERRORF("The contained exception was: %s", e.what());
 	}
@@ -717,7 +759,7 @@ Transport::DestinationEntry empty_destination_entry;
 		try {
 			_callbacks._transmit_packet(raw, interface);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			DEBUGF("Error while executing transmit packet callback. The contained exception was: %s", e.what());
 		}
 	}
@@ -766,7 +808,7 @@ Transport::DestinationEntry empty_destination_entry;
 			interface.send_outgoing(raw);
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while transmitting on %s. The contained exception was: %s", interface.toString().c_str(), e.what());
 	}
 }
@@ -787,7 +829,6 @@ Transport::DestinationEntry empty_destination_entry;
 		TRACE("Transport::outbound: sleeping...");
 		OS::sleep(0.0005);
 	}
-
 	_jobs_locked = true;
 
 	bool sent = false;
@@ -795,7 +836,10 @@ Transport::DestinationEntry empty_destination_entry;
 
 	// Check if we have a known path for the destination in the path table
     //if packet.packet_type != RNS.Packet.ANNOUNCE and packet.destination.type != RNS.Destination.PLAIN and packet.destination.type != RNS.Destination.GROUP and packet.destination_hash in Transport.destination_table:
-	auto& destination_entry = get_path(packet.destination_hash());
+	// CBA microStore
+	//auto& destination_entry = get_path(packet.destination_hash());
+	DestinationEntry destination_entry;
+	_new_path_table.get(packet.destination_hash(), destination_entry);
 	if (packet.packet_type() != Type::Packet::ANNOUNCE && packet.destination().type() != Type::Destination::PLAIN && packet.destination().type() != Type::Destination::GROUP && destination_entry) {
 		TRACE("Transport::outbound: Path to destination is known");
         //outbound_interface = Transport.destination_table[packet.destination_hash][5]
@@ -1036,19 +1080,19 @@ Transport::DestinationEntry empty_destination_entry;
 												//z timer.start()
 
 												if (wait_time < 1000) {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
 												}
 												else {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
 												}
 											}
 											else {
 												double wait_time = std::max(interface.announce_allowed_at() - OS::time(), (double)0);
 												if (wait_time < 1000) {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %d ms", interface.announce_queue().size(), interface.toString().c_str(), (int)wait_time);
 												}
 												else {
-													TRACEF("Added announce to queue (height %zu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
+													TRACEF("Added announce to queue (height %lu) on %s for processing in %.1f s", interface.announce_queue().size(), interface.toString().c_str(), OS::round(wait_time/1000,1));
 												}
 											}
 										}
@@ -1110,7 +1154,7 @@ Transport::DestinationEntry empty_destination_entry;
 			// CBA ACCUMULATES
 			_receipts.push_back(receipt);
 		}
-		
+
 		cache_packet(packet);
 	}
 
@@ -1118,6 +1162,7 @@ Transport::DestinationEntry empty_destination_entry;
 	return sent;
 }
 
+#if 0
 /*static*/ bool Transport::packet_filter(const Packet& packet) {
 	// TODO: Think long and hard about this.
 	// Is it even strictly necessary with the current
@@ -1193,6 +1238,84 @@ Transport::DestinationEntry empty_destination_entry;
 	DEBUGF("Filtered packet with hash %s", packet.packet_hash().toHex().c_str());
 	return false;
 }
+#endif
+
+/*static*/ bool Transport::packet_filter(const Packet& packet) {
+
+	// If connected to a shared instance, it will handle
+	// packet filtering
+	if (_owner && _owner.is_connected_to_shared_instance()) return true;
+
+	// Filter packets intended for other transport instances
+	if (packet.transport_id() && packet.packet_type() != Type::Packet::ANNOUNCE) {
+		if (packet.transport_id() != Transport::identity().hash()) {
+			TRACEF("Ignored packet %s in transport for other transport instance", packet.packet_hash().toHex().c_str());
+			return false;
+		}
+	}
+
+	switch (packet.context()) {
+		case Type::Packet::KEEPALIVE: return true;
+		case Type::Packet::RESOURCE_REQ: return true;
+		case Type::Packet::RESOURCE_PRF: return true;
+		case Type::Packet::RESOURCE: return true;
+		case Type::Packet::CACHE_REQUEST: return true;
+		case Type::Packet::CHANNEL: return true;
+	}
+
+	if (packet.destination_type() == Type::Destination::PLAIN) {
+		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
+			if (packet.hops() > 1) {
+				DEBUGF("Dropped PLAIN packet %s with %u hops", packet.packet_hash().toHex().c_str(), packet.hops());
+				return false;
+			}
+			else {
+				return true;
+			}
+		}
+		else {
+			DEBUG("Dropped invalid PLAIN announce packet");
+			return false;
+		}
+	}
+
+	if (packet.destination_type() == Type::Destination::GROUP) {
+		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
+			if (packet.hops() > 1) {
+				DEBUGF("Dropped GRPUP packet %s with %u hops", packet.packet_hash().toHex().c_str(), packet.hops());
+				return false;
+			}
+			else {
+				return true;
+			}
+		}
+		else {
+			DEBUG("Dropped invalid GROUP announce packet");
+			return false;
+		}
+	}
+
+	//p if not packet.packet_hash in Transport.packet_hashlist and not packet.packet_hash in Transport.packet_hashlist_prev:
+	if (_packet_hashlist.find(packet.packet_hash()) == _packet_hashlist.end()) {
+		TRACE("Transport::packet_filter: packet not previously seen");
+		return true;
+	}
+	else {
+		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
+			if (packet.destination_type() == Type::Destination::SINGLE) {
+				TRACE("Transport::packet_filter: packet previously seen but is SINGLE ANNOUNCE");
+				return true;
+			}
+			else {
+				DEBUG("Dropped invalid announce packet");
+				return false;
+			}
+		}
+	}
+
+	DEBUGF("Filtered packet with hash %s", packet.packet_hash().toHex().c_str());
+	return false;
+}
 
 /*static*/ void Transport::inbound(const Bytes& raw, const Interface& interface /*= {Type::NONE}*/) {
 	TRACEF("Transport::inbound: received %d bytes", raw.size());
@@ -1202,7 +1325,7 @@ Transport::DestinationEntry empty_destination_entry;
 		try {
 			_callbacks._receive_packet(raw, interface);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			DEBUGF("Error while executing receive packet callback. The contained exception was: %s", e.what());
 		}
 	}
@@ -1339,7 +1462,7 @@ Transport::DestinationEntry empty_destination_entry;
 		try {
 			accept = _callbacks._filter_packet(packet);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			DEBUGF("Error while executing filter packet callback. The contained exception was: %s", e.what());
 		}
 	}
@@ -1367,6 +1490,7 @@ Transport::DestinationEntry empty_destination_entry;
 			_packet_hashlist.insert(packet.packet_hash());
 		}
 
+		// CBA Currently this packet cache is a noop since it's not forced
 		cache_packet(packet);
 		
 		// Check special conditions for local clients connected
@@ -1381,7 +1505,10 @@ Transport::DestinationEntry empty_destination_entry;
 		bool for_local_client = false;
 		bool for_local_client_link = false;
 		if (packet.packet_type() != Type::Packet::ANNOUNCE) {
-			auto& destination_entry = get_path(packet.destination_hash());
+			// CBA microStore
+			//auto& destination_entry = get_path(packet.destination_hash());
+			DestinationEntry destination_entry;
+			_new_path_table.get(packet.destination_hash(), destination_entry);
 			if (destination_entry) {
 			 	if (destination_entry._hops == 0) {
 					// Destined for a local destination
@@ -1481,7 +1608,10 @@ Transport::DestinationEntry empty_destination_entry;
 				TRACE("Transport::inbound: Packet is in transport...");
 				if (packet.transport_id() == _identity.hash()) {
 					TRACE("Transport::inbound: We are designated next-hop");
-					auto& destination_entry = get_path(packet.destination_hash());
+					// CBA microStore
+					//auto& destination_entry = get_path(packet.destination_hash());
+					DestinationEntry destination_entry;
+					_new_path_table.get(packet.destination_hash(), destination_entry);
 					if (destination_entry) {
 						TRACE("Transport::inbound: Found next-hop path to destination");
 						Bytes next_hop = destination_entry._received_from;
@@ -1735,7 +1865,11 @@ Transport::DestinationEntry empty_destination_entry;
 					//p random_blobs = []
 					std::set<Bytes> empty_random_blobs;
 					std::set<Bytes>& random_blobs = empty_random_blobs;
-					auto& destination_entry = get_path(packet.destination_hash());
+					TRACEF("Checking for existing path to %s", packet.destination_hash().toHex().c_str());
+					// CBA microStore
+					//auto& destination_entry = get_path(packet.destination_hash());
+					DestinationEntry destination_entry;
+					_new_path_table.get(packet.destination_hash(), destination_entry);
 					if (destination_entry) {
 						//p random_blobs = Transport.destination_table[packet.destination_hash][4]
 						random_blobs = destination_entry._random_blobs;
@@ -2021,13 +2155,19 @@ Transport::DestinationEntry empty_destination_entry;
 							new_announce.send();
 						}
 
+// CBA microStore
+/*
+						// CBA ACCUMULATES
 						// CBA Culling before adding to esnure table does not exceed maxsize
 						TRACEF("Caching packet %s", packet.get_hash().toHex().c_str());
+						// CBA Currently this is the ONLY place that packets get cached
 						if (RNS::Transport::cache_packet(packet, true)) {
 							packet.cached(true);
 						}
 						//TRACEF("Adding packet %s to packet table", packet.get_hash().toHex().c_str());
 						//PacketEntry packet_entry(packet);
+*/
+
 						// CBA ACCUMULATES
 						//_packet_table.insert({packet.get_hash(), packet_entry});
 						TRACEF("Adding destination %s to path table", packet.destination_hash().toHex().c_str());
@@ -2038,13 +2178,16 @@ Transport::DestinationEntry empty_destination_entry;
 							expires,
 							random_blobs,
 							//packet.receiving_interface(),
-							//const_cast<Interface&>(packet.receiving_interface()),
-							packet.receiving_interface().get_hash(),
-							//packet
-							packet.get_hash()
+							const_cast<Interface&>(packet.receiving_interface()),
+							//packet.receiving_interface().get_hash(),
+							packet
+							//packet.get_hash()
 						);
 						// CBA ACCUMULATES
 						try {
+
+// CBA microStore
+/*
 							// CBA First remove any existing path before inserting new one
 							remove_path(packet.destination_hash());
 							if (_path_table.insert({packet.destination_hash(), destination_table_entry}).second) {
@@ -2052,6 +2195,25 @@ Transport::DestinationEntry empty_destination_entry;
 								++_destinations_added;
 								// CBA IMMEDIATE CULL
 								cull_path_table();
+							}
+							else {
+								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());
+							}
+*/
+							// CBA microStore
+							uint32_t ttl = 0;
+							if (packet.receiving_interface().mode() == Type::Interface::MODE_ACCESS_POINT) {
+								ttl = AP_PATH_TIME;
+							}
+							else if (packet.receiving_interface().mode() == Type::Interface::MODE_ROAMING) {
+								ttl = ROAMING_PATH_TIME;
+							}
+							else {
+								ttl = DESTINATION_TIMEOUT;
+							}
+							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry, ttl)) {
+								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
+								++_destinations_added;
 							}
 							else {
 								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());
@@ -2113,7 +2275,7 @@ Transport::DestinationEntry empty_destination_entry;
 										);
 									}
 								}
-								catch (std::exception& e) {
+								catch (const std::exception& e) {
 									ERROR("Error while processing external announce callback.");
 									ERRORF("The contained exception was: %s", e.what());
 								}
@@ -2186,7 +2348,7 @@ Transport::DestinationEntry empty_destination_entry;
 										packet.prove();
 									}
 								}
-								catch (std::exception& e) {
+								catch (const std::exception& e) {
 									ERRORF("Error while executing proof request callback. The contained exception was: %s", e.what());
 								}
 							}
@@ -2245,7 +2407,7 @@ Transport::DestinationEntry empty_destination_entry;
 								}
 							}
 						}
-						catch (std::exception& e) {
+						catch (const std::exception& e) {
 							ERRORF("Error while transporting link request proof. The contained exception was: %s", e.what());
 						}
 					}
@@ -2603,7 +2765,7 @@ Deregisters an announce handler.
 // increased yet! Take note of this when reading from
 // the packet cache.
 /*static*/ bool Transport::cache_packet(const Packet& packet, bool force_cache /*= false*/) {
-	TRACEF("Checking to see if packet %s should be cached", packet.get_hash().toHex().c_str());
+	//TRACEF("Checking to see if packet %s should be cached", packet.get_hash().toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	if (should_cache_packet(packet) || force_cache) {
 		TRACEF("Saving packet %s to storage", packet.get_hash().toHex().c_str());
@@ -2612,7 +2774,7 @@ Deregisters an announce handler.
 			snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet.get_hash().toHex().c_str());
 			return (Persistence::serialize(packet, packet_cache_path) > 0);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Error writing packet to cache. The contained exception was: %s", e.what());
 		}
 	}
@@ -2627,7 +2789,7 @@ Deregisters an announce handler.
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
 		return OS::file_exists(packet_cache_path);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Exception occurred while getting cached packet: %s", e.what());
 	}
 #endif
@@ -2646,7 +2808,7 @@ Deregisters an announce handler.
 		}
 		return packet;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Exception occurred while getting cached packet: %s", e.what());
 	}
 #endif
@@ -2669,7 +2831,7 @@ Deregisters an announce handler.
 			DEBUGF("Remove cached packet in %f s", diff_time);
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERROR("Exception occurred while clearing cached packet.");
 		ERRORF("The contained exception was: %s", e.what());
 	}
@@ -2713,7 +2875,7 @@ Deregisters an announce handler.
 	}
 }
 
-/*static*/ Transport::DestinationEntry& Transport::get_path(const Bytes& destination_hash) {
+/*static*/ DestinationEntry& Transport::get_path(const Bytes& destination_hash) {
 	auto iter = _path_table.find(destination_hash);
 	if (iter == _path_table.end()) return empty_destination_entry;
 	DestinationEntry& destination_entry = (*iter).second;
@@ -2731,6 +2893,8 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::remove_path(const Bytes& destination_hash) {
+// CBA microStore
+/*
 	auto iter = _path_table.find(destination_hash);
 	if (iter == _path_table.end()) return false;
 	// Remove cached packet file associated with this destination
@@ -2744,6 +2908,9 @@ Deregisters an announce handler.
 		return false;
 	}
 	return true;
+*/
+	// CBA microStore
+	return _new_path_table.remove(destination_hash.collection());
 }
 
 /*
@@ -2751,7 +2918,12 @@ Deregisters an announce handler.
 :returns: *True* if a path to the destination is known, otherwise *False*.
 */
 /*static*/ bool Transport::has_path(const Bytes& destination_hash) {
+// CBA microStore
+/*
 	return (_path_table.find(destination_hash) != _path_table.end());
+*/
+	// CBA microStore
+	return _new_path_table.exists(destination_hash.collection());
 }
 
 /*
@@ -2759,7 +2931,10 @@ Deregisters an announce handler.
 :returns: The number of hops to the specified destination, or ``RNS.Transport.PATHFINDER_M`` if the number of hops is unknown.
 */
 /*static*/ uint8_t Transport::hops_to(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		return destination_entry._hops;
 	}
@@ -2773,7 +2948,10 @@ Deregisters an announce handler.
 :returns: The destination hash as *bytes* for the next hop to the specified destination, or *None* if the next hop is unknown.
 */
 /*static*/ Bytes Transport::next_hop(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		return destination_entry._received_from;
 	}
@@ -2787,7 +2965,10 @@ Deregisters an announce handler.
 :returns: The interface for the next hop to the specified destination, or *None* if the interface is unknown.
 */
 /*static*/ Interface Transport::next_hop_interface(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		return destination_entry.receiving_interface();
 	}
@@ -2857,7 +3038,10 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::expire_path(const Bytes& destination_hash) {
-	auto& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//auto& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		destination_entry._timestamp = 0;
 		_tables_last_culled = 0;
@@ -3034,7 +3218,7 @@ will announce it.
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while handling path request. The contained exception was: %s", e.what());
 	}
 }
@@ -3057,7 +3241,10 @@ will announce it.
 
 	bool destination_exists_on_local_client = false;
 	if (_local_client_interfaces.size() > 0) {
-		auto& destination_entry = get_path(destination_hash);
+		// CBA microStore
+		//auto& destination_entry = get_path(destination_hash);
+		DestinationEntry destination_entry;
+		_new_path_table.get(destination_hash, destination_entry);
 		if (destination_entry) {
 			TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
 			if (is_local_client_interface(destination_entry.receiving_interface())) {
@@ -3071,7 +3258,10 @@ will announce it.
 		}
 	}
 
-	DestinationEntry& destination_entry = get_path(destination_hash);
+	// CBA microStore
+	//DestinationEntry& destination_entry = get_path(destination_hash);
+	DestinationEntry destination_entry;
+	_new_path_table.get(destination_hash, destination_entry);
 	//local_destination = next((d for d in Transport.destinations if d.hash == destination_hash), None)
 	auto destinations_iter = _destinations.find(destination_hash);
 	if (destinations_iter != _destinations.end()) {
@@ -3478,7 +3668,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 					for (const auto& destination_hash : invalid_paths) {
 						_path_table.erase(destination_hash);
 					}
-                    VERBOSEF("Loaded %zu path table entries from storage", _path_table.size());
+                    VERBOSEF("Loaded %lu path table entries from storage", _path_table.size());
 					return true;
 				}
 				else {
@@ -3492,7 +3682,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 #else	// CUSTOM
 #endif	// CUSTOM
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Could not load destination table from storage, the contained exception was: %s", e.what());
 		}
 	}
@@ -3574,7 +3764,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 
 			//size_t size = 8192;
 			size_t size = Persistence::_buffer.capacity();
-TRACEF("Transport::write_path_table: obtaining buffer size %zu bytes", size);
+TRACEF("Transport::write_path_table: obtaining buffer size %lu bytes", size);
 			uint8_t* buffer = Persistence::_buffer.writable(size);
 TRACEF("Transport::write_path_table: buffer addr: %ld", (long)buffer);
 #ifdef USE_MSGPACK
@@ -3591,7 +3781,7 @@ TRACEF("Transport::write_path_table: buffer addr: %ld", (long)buffer);
 #ifndef NDEBUG
 			// CBA DEBUG Dump path table
 TRACEF("Transport::write_path_table: buffer addr: %ld", (long)Persistence::_buffer.data());
-TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffer.size());
+TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffer.size());
 			//TRACE("SERIALIZED: destination_table");
 			//TRACE(Persistence::_buffer.toString().c_str());
 #endif
@@ -3648,10 +3838,10 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 #endif	// CUSTOM
 
 		if (success) {
-			DEBUGF("Saved %zu path table entries in %.3f seconds", _path_table.size(), OS::round(OS::time() - save_start, 3));
+			DEBUGF("Saved %lu path table entries in %.3f seconds", _path_table.size(), OS::round(OS::time() - save_start, 3));
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Could not save path table to storage, the contained exception was: %s", e.what());
 	}
 #endif
@@ -3785,7 +3975,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			file.write(umsgpack.packb(serialised_tunnels))
 			file.close()
 
-			DEBUGF("Saved %zu tunnel table entries in %.3f seconds", serialised_tunnels.size(), OS::round(OS::time() - save_start))
+			DEBUGF("Saved %lu tunnel table entries in %.3f seconds", serialised_tunnels.size(), OS::round(OS::time() - save_start))
 		except Exception as e:
 			ERRORF("Could not save tunnel table to storage, the contained exception was: %s", e.what())
 
@@ -3847,7 +4037,9 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	Memory::dump_heap_stats();
 
 	size_t memory = Memory::heap_available();
-	uint8_t memory_pct = (uint8_t)((double)memory / (double)Memory::heap_size() * 100.0);
+	uint8_t memory_pct = 0;
+	size_t memory_size = Memory::heap_size();
+	if (memory_size >0 ) memory_pct = (uint8_t)((double)memory / (double)memory_size * 100.0);
 	if (_last_memory == 0) {
 		_last_memory = memory;
 	}
@@ -3857,7 +4049,9 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// because it appears to always decrease (even to zero) as if PSRAM is being leaked. Maybe it doesn't
 	// accurately reflect PSRAM freed with calls to free()???
 	size_t psram = ESP.getFreePsram();
-	uint8_t psram_pct = (uint8_t)((double)psram / (double)ESP.getPsramSize() * 100.0);
+	uint8_t psram_pct = 0;
+	size_t psram_size = ESP.getPsramSize();
+	if (psram_size > 0) psram_pct = (uint8_t)((double)psram / (double)psram_size * 100.0);
 	if (_last_psram == 0) {
 		_last_psram = psram;
 	}
@@ -3870,7 +4064,9 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	if (_last_flash == 0) {
 		_last_flash = flash;
 	}
-	uint8_t flash_pct = (uint8_t)((double)flash / (double)OS::storage_size() * 100.0);
+	uint8_t flash_pct = 0;
+	size_t flash_size = OS::storage_size();
+	if (flash_size > 0) flash_pct = (uint8_t)((double)flash / (double)flash_size * 100.0);
 
 	// memory
 	// storage
@@ -3879,7 +4075,7 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	HEADF(LOG_VERBOSE, "mem: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
+	HEADF(LOG_VERBOSE, "sram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
 
 	// _path_requests
 	// _discovery_path_requests
@@ -3909,6 +4105,13 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 	_last_memory = memory;
 	_last_psram = psram;
 	_last_flash = flash;
+
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+	if (_path_store) {
+		HEAD("Path Store Stats", LOG_TRACE);
+		_path_store.dumpInfo();
+	}
+#endif
 
 }
 
@@ -3949,7 +4152,10 @@ TRACEF("Transport::write_path_table: buffer size %zu bytes", Persistence::_buffe
 			for (const auto& [timestamp, destination_hash] : sorted_keys) {
 				TRACEF("Transport::cull_path_table: Removing destination %s from path table", destination_hash.toHex().c_str());
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-				auto& destination_entry = get_path(destination_hash);
+				// CBA microStore
+				//auto& destination_entry = get_path(destination_hash);
+				DestinationEntry destination_entry;
+				_new_path_table.get(destination_hash, destination_entry);
 				if (destination_entry) {
 					// Remove cached packet file associated with this destination
 					char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];

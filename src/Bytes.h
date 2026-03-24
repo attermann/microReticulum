@@ -1,9 +1,24 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #pragma once
 
 #include "Log.h"
 #include "Utilities/Memory.h"
 
 #include <ArduinoJson.h>
+#include <microStore/Codec.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -350,7 +365,7 @@ MEM("Creating from data-move...");
 		inline size_t capacity() const { if (!_data) return 0; return _data->capacity(); }
 		inline void reserve(size_t capacity) const { if (!_data) return; _data->reserve(capacity); }
 		inline const uint8_t* data() const { if (!_data) return nullptr; return _data->data(); }
-		inline const Data collection() const { if (!_data) return Data(); return *_data.get(); }
+		inline const Data& collection() const { if (!_data) return Data(); return *_data.get(); }
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = false) const;
@@ -448,4 +463,20 @@ namespace ArduinoJson {
 	inline bool canConvertFromJson(JsonVariantConst src, const RNS::Bytes&) {
 		return src.is<const char*>();
 	}
+}
+
+namespace microStore {
+template<>
+struct Codec<RNS::Bytes>
+{
+	inline static std::vector<uint8_t> encode(const RNS::Bytes& entry) {
+		// CBA Following ok?
+		//return entry.collection();
+		return std::vector<uint8_t>(entry.collection().begin(), entry.collection().end());
+	}
+	inline static bool decode(const std::vector<uint8_t>& data, RNS::Bytes& entry) {
+		entry.assign(data);
+		return true;
+	}
+};
 }

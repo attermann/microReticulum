@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Interface.h"
 
 #include "Identity.h"
@@ -10,13 +24,13 @@ using namespace RNS::Type::Interface;
 
 void InterfaceImpl::handle_outgoing(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", data.toHex().c_str());
-	TRACE("InterfaceImpl.handle_outgoing");
+	//TRACE("InterfaceImpl.handle_outgoing");
 	_txb += data.size();
 }
 
 void InterfaceImpl::handle_incoming(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_incoming: data: %s", data.toHex().c_str());
-	TRACE("InterfaceImpl.handle_incoming");
+	//TRACE("InterfaceImpl.handle_incoming");
 	_rxb += data.size();
 	// Create temporary Interface encapsulating our own shared impl
 	std::shared_ptr<InterfaceImpl> self = shared_from_this();
@@ -42,7 +56,7 @@ void Interface::send_outgoing(const Bytes& data) {
 		NVIC_SystemReset();
 #endif
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
 		ERRORF("Interface::send_outgoing: %s", e.what());
     }
 }
@@ -69,7 +83,7 @@ void Interface::handle_incoming(const Bytes& data) {
 		NVIC_SystemReset();
 #endif
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
 		ERRORF("Interface::handle_incoming: %s", e.what());
     }
 }

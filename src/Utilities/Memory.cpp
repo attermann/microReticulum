@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Memory.h"
 
 #include <new>
@@ -47,6 +61,34 @@ using namespace RNS::Utilities;
 /*static*/ Memory::allocator_info Memory::container_allocator_info;
 
 
+struct tlsf_stats {
+	uint32_t used_count = 0;
+	uint32_t used_size = 0;
+	uint32_t free_count = 0;
+	uint32_t free_size = 0;
+	uint32_t free_max_size = 0;
+};
+
+void tlsf_mem_walker(void* ptr, size_t size, int used, void* user)
+{
+	if (!user) {
+		return;
+	}
+	struct tlsf_stats* stats = (struct tlsf_stats*)user;
+	if (used) {
+		stats->used_count++;
+		stats->used_size += size;
+	}
+	else {
+		stats->free_count++;
+		stats->free_size += size;
+		if (size > stats->free_max_size) {
+			stats->free_max_size = size;
+		}
+	}
+}
+
+
 /*static*/ void Memory::pool_init(Memory::pool_info& pool_info) {
 	if (pool_info.pool_init) {
 		return;
@@ -81,7 +123,7 @@ using namespace RNS::Utilities;
 	}
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
 	heap_pool_info.contiguous_size = dbgHeapFree();
-	altheap_pool_info.buffer_size = dbgHeapFree();
+	altheap_pool_info.contiguous_size = dbgHeapFree();
 	TRACEF("TLSF: contiguous_size: %u", pool_info.contiguous_size);
 	if (pool_info.buffer_size == 0) {
 		pool_info.buffer_size = (size_t)(pool_info.contiguous_size * BUFFER_FRACTION);
@@ -141,22 +183,20 @@ using namespace RNS::Utilities;
 	}
 	void* p;
 	if (pool_info.tlsf != nullptr) {
-		//struct tlsf_stats stats;
-		//memset(&stats, 0, sizeof(stats));
-		//tlsf_walk_pool(tlsf_get_pool(pool_info.tlsf), tlsf_mem_walker, &stats);
-		//if (tlsf_check(pool_info.tlsf) != 0) {
-		//	printf("--- HEAP CORRUPTION DETECTED!!!\n");
-		//}
-		//TRACEF("--- allocating memory from tlsf (%u bytes)", size);
+		struct tlsf_stats stats;
+		memset(&stats, 0, sizeof(stats));
+		tlsf_walk_pool(tlsf_get_pool(pool_info.tlsf), tlsf_mem_walker, &stats);
+		if (tlsf_check(pool_info.tlsf) != 0) {
+			printf("--- HEAP CORRUPTION DETECTED!!!\n");
+		}
 		//printf("--- allocating memory from tlsf (%u bytes) (%u free)\n", size, stats.free_size);
 		p = tlsf_malloc(pool_info.tlsf, size);
-		//TRACEF("--- allocated memory from tlsf (addr=%lx) (%u bytes)", p, size);
 		//printf("--- allocated memory from tlsf (addr=%lx) (%u bytes)\n", p, size);
 	}
 	else {
-		//TRACEF("--- allocating memory (%u bytes)", size);
+		//printf("--- allocating memory (%u bytes)\n", size);
 		p = malloc(size);
-		//TRACEF("--- allocated memory (addr=%lx) (%u bytes)", p, size);
+		//printf("--- allocated memory (addr=%lx) (%u bytes)\n", p, size);
 		++pool_info.alloc_fault;
 	}
 	return p;
@@ -184,33 +224,6 @@ using namespace RNS::Utilities;
 	*/
 }
 
-
-struct tlsf_stats {
-	uint32_t used_count = 0;
-	uint32_t used_size = 0;
-	uint32_t free_count = 0;
-	uint32_t free_size = 0;
-	uint32_t free_max_size = 0;
-};
-
-void tlsf_mem_walker(void* ptr, size_t size, int used, void* user)
-{
-	if (!user) {
-		return;
-	}
-	struct tlsf_stats* stats = (struct tlsf_stats*)user;
-	if (used) {
-		stats->used_count++;
-		stats->used_size += size;
-	}
-	else {
-		stats->free_count++;
-		stats->free_size += size;
-		if (size > stats->free_max_size) {
-			stats->free_max_size = size;
-		}
-	}
-}
 
 /*static*/ void Memory::dump_pool_stats(Memory::pool_info& pool_info, const char* name /*= ""*/) {
 	//TRACEF("TLSF Message: %s", _tlsf_msg);
@@ -348,7 +361,7 @@ size_t maxContiguousAllocation() {
 #if defined(ESP32)
 	return ESP.getHeapSize();
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-	return dbgHeapTotal();
+	return (size_t)dbgHeapTotal();
 #else
 	return 0;
 #endif
@@ -359,7 +372,7 @@ size_t maxContiguousAllocation() {
 	return ESP.getFreeHeap();
 	//return ESP.getMaxAllocHeap();
 #elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-	return dbgHeapFree();
+	return (size_t)dbgHeapFree();
 #else
 	return 0;
 #endif
@@ -386,7 +399,10 @@ size_t maxContiguousAllocation() {
 	}
 #endif
 
+// Only dump default allocator stats if RNS_DEFAULT_ALLOCATOR is not RNS_HEAP_ALLOCATOR
+#if RNS_DEFAULT_ALLOCATOR != RNS_HEAP_ALLOCATOR
 	dump_allocator_stats(default_allocator_info, "Default ");
+#endif
 	dump_allocator_stats(container_allocator_info, "Container ");
 
 	dump_pool_stats(heap_pool_info, "Heap ");

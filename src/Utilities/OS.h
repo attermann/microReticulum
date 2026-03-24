@@ -1,8 +1,22 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #pragma once
 
-#include "../FileSystem.h"
-#include "../FileStream.h"
 #include "../Bytes.h"
+
+#include <microStore/FileSystem.h>
 
 #include <cmath>
 #include <memory>
@@ -26,11 +40,10 @@ namespace RNS { namespace Utilities {
 	class OS {
 
 	public:
-		//using LoopCallback = void(*)();
 		using LoopCallback = std::function<void()>;
 
 	private:
-		static FileSystem _filesystem;
+		static microStore::FileSystem _filesystem;
 		static uint64_t _time_offset;
 		static LoopCallback _on_loop;
 
@@ -39,7 +52,7 @@ namespace RNS { namespace Utilities {
 		inline static void setTimeOffset(uint64_t offset) { _time_offset = offset; }
 
 #ifdef ARDUINO
-        // return current time in milliseconds since startup
+        // return current time in milliseconds since first boot
 		inline static uint64_t ltime() {
 			// handle roll-over of 32-bit millis (approx. 49 days)
 			static uint32_t low32, high32;
@@ -137,24 +150,17 @@ namespace RNS { namespace Utilities {
 			}
 		}
 
-		inline static void register_filesystem(FileSystem& filesystem) {
-			TRACE("Registering filesystem...");
+		inline static void register_filesystem(microStore::FileSystem& filesystem) {
+			//TRACE("Registering filesystem...");
 			_filesystem = filesystem;
 		}
 
-/*
-		inline static void register_filesystem(FileSystemImpl* filesystemimpl) {
-			TRACE("Registering filesystem...");
-			_filesystem = filesystemimpl;
-		}
-*/
-
 		inline static void deregister_filesystem() {
-			TRACE("Deregistering filesystem...");
-			_filesystem = {Type::NONE};
+			//TRACE("Deregistering filesystem...");
+			_filesystem = {};
 		}
 
-		inline static FileSystem& get_filesystem() {
+		inline static microStore::FileSystem& get_filesystem() {
 			return _filesystem;
 		}
 
@@ -164,84 +170,88 @@ namespace RNS { namespace Utilities {
 				WARNING("file_exists: filesystem not registered");
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.file_exists(file_path);
+			return _filesystem.exists(file_path);
 		}
 
 		inline static size_t read_file(const char* file_path, Bytes& data) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.read_file(file_path, data);
+			size_t size = _filesystem.size(file_path);
+			if (size == 0) return 0;
+			size_t read = _filesystem.readFile(file_path, data.writable(size), size);
+			data.resize(read);
+			return read;
 		}
 
 		inline static size_t write_file(const char* file_path, const Bytes& data) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.write_file(file_path, data);
+			return _filesystem.writeFile(file_path, data.data(), data.size());
 		}
 
-		inline static FileStream open_file(const char* file_path, RNS::FileStream::MODE file_mode) {
+		inline static microStore::File open_file(const char* file_path, microStore::File::Mode file_mode) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.open_file(file_path, file_mode);
+			return _filesystem.open(file_path, file_mode);
 		}
 
 		inline static bool remove_file(const char* file_path) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.remove_file(file_path);
+			return _filesystem.remove(file_path);
 		}
 
 		inline static bool rename_file(const char* from_file_path, const char* to_file_path) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.rename_file(from_file_path, to_file_path);
+			return _filesystem.rename(from_file_path, to_file_path);
 		}
 
 		inline static bool directory_exists(const char* directory_path) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.directory_exists(directory_path);
+			return _filesystem.isDirectory(directory_path);
 		}
 
 		inline static bool create_directory(const char* directory_path) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.create_directory(directory_path);
+			return _filesystem.mkdir(directory_path);
 		}
 
 		inline static bool remove_directory(const char* directory_path) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.remove_directory(directory_path);
+			return _filesystem.rmdir(directory_path);
 		}
 
-		inline static std::list<std::string> list_directory(const char* directory_path, FileSystem::Callbacks::DirectoryListing callback = nullptr) {
+		inline static std::list<std::string> list_directory(const char* directory_path, microStore::FileSystem::Callbacks::DirectoryListing callback = nullptr) {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.list_directory(directory_path, callback);
+			return _filesystem.listDirectory(directory_path, callback);
 		}
 
 		inline static size_t storage_size() {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.storage_size();
+			return _filesystem.storageSize();
 		}
 
 		inline static size_t storage_available() {
 			if (!_filesystem) {
 				throw std::runtime_error("FileSystem has not been registered");
 			}
-			return _filesystem.storage_available();
+			return _filesystem.storageAvailable();
 		}
 	
     };

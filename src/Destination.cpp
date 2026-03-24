@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Destination.h"
 
 #include "Transport.h"
@@ -226,7 +240,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 			TRACE("Destination::announce: tag is specified");
 			std::string tagstr((const char*)tag.data(), tag.size());
 			DEBUGF("Destination::announce: tag: %s", tagstr.c_str());
-			DEBUGF("Destination::announce: tag len: %zu", tag.size());
+			DEBUGF("Destination::announce: tag len: %lu", tag.size());
 			TRACE("Destination::announce: searching for tag...");
 			if (_object->_path_responses.find(tag) != _object->_path_responses.end()) {
 				TRACE("Destination::announce: found tag in _path_responses");
@@ -388,7 +402,7 @@ void Destination::receive(const Packet& packet) {
 					try {
 						_object->_callbacks._packet(plaintext, packet);
 					}
-					catch (std::exception& e) {
+					catch (const std::exception& e) {
 						DEBUGF("Error while executing receive callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 					}
 				}

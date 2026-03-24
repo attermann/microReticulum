@@ -1,9 +1,24 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #pragma once
 
 #include "Packet.h"
 #include "Bytes.h"
 #include "Type.h"
 #include "Utilities/Memory.h"
+#include "Persistence/DestinationEntry.h"
 
 #include <map>
 #include <vector>
@@ -17,6 +32,8 @@
 #ifndef RNS_LEAN_PATH_TABLE
 	#define RNS_LEAN_PATH_TABLE 1
 #endif
+
+using namespace RNS::Persistence;
 
 namespace RNS {
 
@@ -100,130 +117,6 @@ namespace RNS {
 #endif
 		};
 		using PacketTable = std::map<Bytes, PacketEntry>;
-
-		// CBA TODO Analyze safety of using Inrerface references here
-		// CBA TODO Analyze safety of using Packet references here
-		class DestinationEntry {
-		public:
-			DestinationEntry() {}
-			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Interface& receiving_interface, const Packet& announce_packet) :
-				_timestamp(timestamp),
-				_received_from(received_from),
-				_hops(announce_hops),
-				_expires(expires),
-				_random_blobs(random_blobs),
-#if RNS_LEAN_PATH_TABLE
-				_receiving_interface(receiving_interface)
-#else
-				_receiving_interface(receiving_interface),
-				_announce_packet(announce_packet)
-#endif
-			{
-				if (receiving_interface) _receiving_interface_hash = receiving_interface.get_hash();
-				if (announce_packet) _announce_packet_hash = announce_packet.get_hash();
-			}
-			DestinationEntry(double timestamp, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, const Bytes& receiving_interface_hash, const Bytes& announce_packet_hash) :
-				_timestamp(timestamp),
-				_received_from(received_from),
-				_hops(announce_hops),
-				_expires(expires),
-				_random_blobs(random_blobs),
-				_receiving_interface_hash(receiving_interface_hash),
-				_announce_packet_hash(announce_packet_hash)
-			{
-			}
-			inline operator bool() const {
-				return (_receiving_interface_hash && _announce_packet_hash);
-			}
-		public:
-			// Lazy load receiving_interface and announce_packet
-			inline Interface& receiving_interface() {
-				if (!_receiving_interface) _receiving_interface = find_interface_from_hash(_receiving_interface_hash);
-				return _receiving_interface;
-			}
-#if RNS_LEAN_PATH_TABLE
-			// Lazy load transient announce packet
-			inline Packet announce_packet() {
-				Packet announce_packet = get_cached_packet(_announce_packet_hash);
-				if (announce_packet) {
-					// Announce packet is cached in packed state
-					// so we need to unpack it before accessing.
-					announce_packet.unpack();
-					// We increase the hops, since reading a packet
-					// from cache is equivalent to receiving it again
-					// over an interface. It is cached with it's non-
-					// increased hop-count.
-					announce_packet.hops(announce_packet.hops() + 1);
-				}
-				return announce_packet;
-			}
-#else
-			// Lazy load and cache announce packet
-			inline Packet& announce_packet() {
-				if (!_announce_packet) _announce_packet = get_cached_packet(_announce_packet_hash);
-				if (_announce_packet) {
-					// Announce packet is cached in packed state
-					// so we need to unpack it before accessing.
-					_announce_packet.unpack();
-					// We increase the hops, since reading a packet
-					// from cache is equivalent to receiving it again
-					// over an interface. It is cached with it's non-
-					// increased hop-count.
-					_announce_packet.hops(_announce_packet.hops() + 1);
-				}
-				return _announce_packet;
-			}
-#endif
-			// Getters and setters for receiving_interface_hash and announce_packet_hash
-			inline Bytes receiving_interface_hash() const { if (_receiving_interface) return _receiving_interface.get_hash(); return _receiving_interface_hash; }
-			inline void receiving_interface_hash(const Bytes& hash) { if (hash == receiving_interface_hash()) return; _receiving_interface_hash = hash; _receiving_interface = {Type::NONE}; }
-#if RNS_LEAN_PATH_TABLE
-			inline Bytes announce_packet_hash() const { return _announce_packet_hash; }
-			inline void announce_packet_hash(const Bytes& hash) { _announce_packet_hash = hash; }
-#else
-			inline Bytes announce_packet_hash() const { if (_announce_packet) return _announce_packet.get_hash(); return _announce_packet_hash; }
-			inline void announce_packet_hash(const Bytes& hash) { if (hash == announce_packet_hash()) return; _announce_packet_hash = hash; _announce_packet = {Type::NONE}; }
-#endif
-		public:
-			double _timestamp = 0;
-			Bytes _received_from;
-			uint8_t _hops = 0;
-			double _expires = 0;
-			std::set<Bytes> _random_blobs;
-			inline bool operator < (const DestinationEntry& entry) const {
-				// sort by ascending timestamp (oldest entries at the top)
-				return _timestamp < entry._timestamp;
-			}
-		private:
-			Interface _receiving_interface = {Type::NONE};
-			Bytes _receiving_interface_hash;
-#if !RNS_LEAN_PATH_TABLE
-			//const Packet& _announce_packet;
-			Packet _announce_packet = {Type::NONE};
-#endif
-			Bytes _announce_packet_hash;
-		public:
-#ifndef NDEBUG
-			inline std::string debugString() const {
-				std::string dump;
-				dump = "DestinationEntry: timestamp=" + std::to_string(_timestamp) +
-					" received_from=" + _received_from.toHex() +
-					" hops=" + std::to_string(_hops) +
-					" expires=" + std::to_string(_expires) +
-					//" random_blobs=" + _random_blobs +
-					" receiving_interface=" + receiving_interface_hash().toHex() +
-					" announce_packet=" + announce_packet_hash().toHex();
-				dump += " random_blobs=(";
-				for (auto& blob : _random_blobs) {
-					dump += blob.toHex() + ",";
-				}
-				dump += ")";
-				return dump;
-			}
-#endif
-		};
-		//using PathTable = std::map<Bytes, DestinationEntry>;
-		using PathTable = std::map<Bytes, DestinationEntry, std::less<Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const Bytes, DestinationEntry>>>;
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		// CBA TODO Analyze safety of using Packet references here
@@ -462,7 +355,7 @@ namespace RNS {
 		static inline const Reticulum& reticulum() { return _owner; }
 		static inline const Identity& identity() { return _identity; }
 		inline static uint16_t path_table_maxsize() { return _path_table_maxsize; }
-		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; }
+		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; _path_store.set_max_recs(_path_table_maxsize); }
 		inline static uint16_t announce_table_maxsize() { return _announce_table_maxsize; }
 		inline static void announce_table_maxsize(uint16_t announce_table_maxsize) { _announce_table_maxsize = announce_table_maxsize; }
 		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
@@ -567,6 +460,10 @@ namespace RNS {
 
 		// CBA Block re-entrance
 		static bool cleaning_caches;
+
+		// CBA microStore
+		static PathStore _path_store;
+		static NewPathTable _new_path_table;
 	};
 
 	template <typename M, typename S> 

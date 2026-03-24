@@ -1,16 +1,35 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #pragma once
 
 // CBA NOTE If headers for classes referenced in this file are not included here,
 //  then they MUST be included BEFORE this header is included.
 #include "Transport.h"
 #include "Type.h"
+#include "Utilities/Crc.h"
+#include "Persistence/DestinationEntry.h"
 
+#include <microStore/File.h>
 #include <ArduinoJson.h>
 
 #include <map>
 #include <vector>
 #include <set>
 #include <string>
+
+using namespace RNS::Persistence;
 
 namespace ArduinoJson {
 
@@ -266,11 +285,11 @@ namespace ArduinoJson {
 	};
 
 #if 1
-	// ArduinoJSON serialization support for RNS::Transport::DestinationEntry
+	// ArduinoJSON serialization support for DestinationEntry
 	template <>
-	struct Converter<RNS::Transport::DestinationEntry> {
-		static bool toJson(const RNS::Transport::DestinationEntry& src, JsonVariant dst) {
-			//TRACE("<<< Serializing Transport::DestinationEntry");
+	struct Converter<DestinationEntry> {
+		static bool toJson(const DestinationEntry& src, JsonVariant dst) {
+			//TRACE("<<< Serializing DestinationEntry");
 			dst["timestamp"] = src._timestamp;
 			dst["received_from"] = src._received_from;
 			dst["announce_hops"] = src._hops;
@@ -309,39 +328,33 @@ namespace ArduinoJson {
 */
 			dst["packet_hash"] = src.announce_packet_hash();
 
-			//TRACE("<<< Finished Serializing Transport::DestinationEntry");
+			//TRACE("<<< Finished Serializing DestinationEntry");
 			return true;
 		}
-		static RNS::Transport::DestinationEntry fromJson(JsonVariantConst src) {
-			//TRACE(">>> Deserializing Transport::DestinationEntry");
-			RNS::Transport::DestinationEntry dst;
+		static DestinationEntry fromJson(JsonVariantConst src) {
+			//TRACE(">>> Deserializing DestinationEntry");
+			DestinationEntry dst;
 			dst._timestamp = src["timestamp"];
 			dst._received_from = src["received_from"];
 			dst._hops = src["announce_hops"];
 			dst._expires = src["expires"];
 			dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
 
-/*
 			RNS::Bytes interface_hash = src["interface_hash"];
 			if (interface_hash) {
 				// Query transport for matching interface
 				dst._receiving_interface = RNS::Transport::find_interface_from_hash(interface_hash);
 			}
-*/
-			dst.receiving_interface_hash(src["interface_hash"]);
 
-/*
 			RNS::Bytes packet_hash = src["packet_hash"];
 			if (packet_hash) {
 				// Query transport for matching cached packet
 				dst._announce_packet = RNS::Transport::get_cached_packet(packet_hash);
 			}
-*/
-			dst.announce_packet_hash(src["packet_hash"]);
 
 /*
-			//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
-			RNS::Transport::DestinationEntry dst(
+			//DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
+			DestinationEntry dst(
 				src["timestamp"].as<double>(),
 				src["received_from"].as<RNS::Bytes>(),
 				src["announce_hops"].as<int>(),
@@ -351,7 +364,19 @@ namespace ArduinoJson {
 				src["packet"].as<RNS::Packet>()
 			);
 */
-			//TRACE(">>> Finished Deserializing Transport::DestinationEntry");
+
+			if (dst._announce_packet) {
+				// Announce packet is cached in packed state
+				// so we need to unpack it before accessing.
+				dst._announce_packet.unpack();
+				// We increase the hops, since reading a packet
+				// from cache is equivalent to receiving it again
+				// over an interface. It is cached with it's non-
+				// increased hop-count.
+				dst._announce_packet.hops(dst._announce_packet.hops() + 1);
+			}
+
+			//TRACE(">>> Finished Deserializing DestinationEntry");
 			return dst;
 		}
 		static bool checkJson(JsonVariantConst src) {
@@ -372,8 +397,8 @@ namespace ArduinoJson {
 #if 0
 namespace RNS {
 
-	inline bool convertToJson(const Transport::DestinationEntry& src, JsonVariant dst) {
-		//TRACE("<<< NEW Serializing Transport::DestinationEntry");
+	inline bool convertToJson(const DestinationEntry& src, JsonVariant dst) {
+		//TRACE("<<< NEW Serializing DestinationEntry");
 		dst["timestamp"] = src._timestamp;
 		dst["received_from"] = src._received_from;
 		dst["announce_hops"] = src._hops;
@@ -413,39 +438,33 @@ namespace RNS {
 */
 		dst["packet_hash"] = src.announce_packet_hash();
 
-		//TRACE("<<< Finished Serializing Transport::DestinationEntry");
+		//TRACE("<<< Finished Serializing DestinationEntry");
 		return true;
 	}
 
-	inline void convertFromJson(JsonVariantConst src, Transport::DestinationEntry& dst) {
-		//TRACE(">>> NEW Deserializing Transport::DestinationEntry");
+	inline void convertFromJson(JsonVariantConst src, DestinationEntry& dst) {
+		//TRACE(">>> NEW Deserializing DestinationEntry");
 		dst._timestamp = src["timestamp"];
 		dst._received_from = src["received_from"];
 		dst._hops = src["announce_hops"];
 		dst._expires = src["expires"];
 		dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
 
-/*
 		RNS::Bytes interface_hash = src["interface_hash"];
 		if (interface_hash) {
 			// Query transport for matching interface
 			dst._receiving_interface = RNS::Transport::find_interface_from_hash(interface_hash);
 		}
-*/
-		dst.receiving_interface_hash(src["interface_hash"]);
 
-/*
 		RNS::Bytes packet_hash = src["packet_hash"];
 		if (packet_hash) {
 			// Query transport for matching packet
 			dst._announce_packet = RNS::Transport::get_cached_packet(packet_hash);
 		}
-*/
-		dst.announce_packet_hash(src["packet_hash"]);
 
 /*
-		//RNS::Transport::DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
-		RNS::Transport::DestinationEntry dst(
+		//DestinationEntry dst(src["timestamp"], src["received_from"], src["announce_hops"], src["expires"], src["random_blobs"], src["receiving_interface"], src["packet"]);
+		DestinationEntry dst(
 			src["timestamp"].as<double>(),
 			src["received_from"].as<RNS::Bytes>(),
 			src["announce_hops"].as<int>(),
@@ -455,11 +474,23 @@ namespace RNS {
 			src["packet"].as<RNS::Packet>()
 		);
 */
-		//TRACE(">>> Finished Deserializing Transport::DestinationEntry");
+
+		if (dst._announce_packet) {
+			// Announce packet is cached in packed state
+			// so we need to unpack it before accessing.
+			dst._announce_packet.unpack();
+			// We increase the hops, since reading a packet
+			// from cache is equivalent to receiving it again
+			// over an interface. It is cached with it's non-
+			// increased hop-count.
+			dst._announce_packet.hops(dst._announce_packet.hops() + 1);
+		}
+
+		//TRACE(">>> Finished Deserializing DestinationEntry");
 	}
 
-	inline bool canConvertFromJson(JsonVariantConst src, const Transport::DestinationEntry&) {
-		TRACE("=== NEW Checking Transport::DestinationEntry");
+	inline bool canConvertFromJson(JsonVariantConst src, const DestinationEntry&) {
+		TRACE("=== NEW Checking DestinationEntry");
 		return
 			src["timestamp"].is<double>() &&
 			src["received_from"].is<RNS::Bytes>() &&
@@ -595,40 +626,40 @@ namespace RNS { namespace Persistence {
 	template <typename T, typename Compare, typename Allocator> size_t serialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path, uint32_t& crc) {
 		//TRACE("Persistence::serialize<map<Bytes,T>>");
 
-		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
-		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_WRITE);
-		if (!stream) {
-			TRACE("Persistence::serialize: failed to open write stream");
+		// CBA TODO: Use file as stream here instead to avoid having to buffer entire structure
+		microStore::File file = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeWrite);
+		if (!file) {
+			TRACE("Persistence::serialize: failed to open write file");
 			return 0;
 		}
 
-		stream.write('{');
+		file.write('{');
 		for (const auto& [key, value] : map) {
-			stream.write('"');
+			file.write('"');
 			std::string hex = key.toHex();
-			stream.write(hex.c_str());
-			stream.write('"');
-			stream.write(':');
+			file.write(hex.c_str());
+			file.write('"');
+			file.write(':');
 
 			_document.set(value);
 #ifdef USE_MSGPACK
-			size_t length = serializeMsgPack(_document, stream);
+			size_t length = serializeMsgPack(_document, file);
 #else
-			size_t length = serializeJson(_document, stream);
+			size_t length = serializeJson(_document, file);
 #endif
 			TRACEF("Persistence::serialize: serialized entry %d bytes", length);
 
 			if (length == 0) {
 				// if failed to serialize entry then write empty entry
-				stream.write("{}");
+				file.write("{}");
 			}
-			stream.write(',');
+			file.write(',');
 		}
-		stream.write('}');
-		stream.flush();
-		TRACEF("Persistence::serialize: stream size: %d bytes", stream.size());
-		crc = stream.crc();
-		return stream.size();
+		file.write('}');
+		file.flush();
+		TRACEF("Persistence::serialize: file size: %d bytes", file.size());
+		crc = file.crc();
+		return file.size();
 	}
 
 	template <typename T, typename Compare, typename Allocator> size_t serialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path) {
@@ -639,39 +670,39 @@ namespace RNS { namespace Persistence {
 	template <typename T, typename Compare, typename Allocator> size_t deserialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path, uint32_t& crc) {
 		//TRACE("Persistence::deserialize<map<Bytes,T>>");
 
-		// CBA TODO: Use stream here instead to avoid having to buffer entire structure
-		RNS::FileStream stream = RNS::Utilities::OS::open_file(file_path, RNS::FileStream::MODE_READ);
-		if (!stream) {
-			TRACE("Persistence::deserialize: failed to open read stream");
+		// CBA TODO: Use file as stream here instead to avoid having to buffer entire structure
+		microStore::File file = RNS::Utilities::OS::open_file(file_path, microStore::File::ModeRead);
+		if (!file) {
+			TRACEF("Persistence::deserialize: failed to open read file: %s", file_path);
 			return 0;
 		}
-		TRACEF("Persistence::deserialize: size: %d bytes", stream.size());
+		TRACEF("Persistence::deserialize: size: %d bytes", file.size());
 
 		map.clear();
 
-		if (stream.size() == 0) {
-			TRACE("Persistence::deserialize: read stream is empty");
+		if (file.size() == 0) {
+			TRACEF("Persistence::deserialize: read file is empty: %s", file_path);
 			return 0;
 		}
 
 		// find opening brace
-		if (stream.find('{')) {
+		if (file.find('{')) {
 			char key_str[RNS::Type::Reticulum::DESTINATION_LENGTH*2+1] = "";
 			do {
 				key_str[0] = 0;
 				// find map key opening quote
-				if (stream.find('"')) {
-					if (stream.readBytesUntil('"', key_str, sizeof(key_str)) > 0) {
+				if (file.find('"')) {
+					if (file.readBytesUntil('"', key_str, sizeof(key_str)) > 0) {
 						Bytes key;
 						key.assignHex(key_str);
 						TRACEF("Persistence::deserialize: key: %s", key.toHex().c_str());
-						if (stream.find(':')) {
+						if (file.find(':')) {
 #ifdef USE_MSGPACK
 							//DeserializationError error = deserializeMsgPack(_document, _buffer.data());
-							DeserializationError error = deserializeMsgPack(_document, stream);
+							DeserializationError error = deserializeMsgPack(_document, file);
 #else
 							//DeserializationError error = deserializeJson(_document, _buffer.data());
-							DeserializationError error = deserializeJson(_document, stream);
+							DeserializationError error = deserializeJson(_document, file);
 #endif
 							if (!error) {
 								TRACE("Persistence::deserialize: successfully deserialized entry");
@@ -688,7 +719,7 @@ namespace RNS { namespace Persistence {
 								//break;
 							}
 
-							if (!stream.find(',')) {
+							if (!file.find(',')) {
 								break;
 							}
 
@@ -697,8 +728,8 @@ namespace RNS { namespace Persistence {
 				}
 			} while (key_str[0] != 0);
 		}
-		crc = stream.crc();
-		return stream.size();
+		crc = file.crc();
+		return file.size();
 	}
 
 	template <typename T, typename Compare, typename Allocator> size_t deserialize(std::map<Bytes, T, Compare, Allocator>& map, const char* file_path) {

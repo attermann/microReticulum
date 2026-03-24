@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Packet.h"
 
 #include "Reticulum.h"
@@ -372,11 +386,12 @@ TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
 
 	_object->_packed = true;
 	update_hash();
+	TRACEF("Packet::pack: packed packet of size %lu bytes", _object->_raw.size());
 }
 
 bool Packet::unpack() {
 	assert(_object);
-	TRACE("Packet::unpack: unpacking packet...");
+	TRACEF("Packet::unpack: unpacking packet of size %lu bytes...", _object->_raw.size());
 	try {
 		if (_object->_raw.size() < Type::Reticulum::HEADER_MINSIZE) {
 			throw std::length_error("Packet size of " + std::to_string(_object->_raw.size()) + " does not meet minimum header size of " + std::to_string(Type::Reticulum::HEADER_MINSIZE) +" bytes");
@@ -423,7 +438,7 @@ bool Packet::unpack() {
 		ERROR("Packet::unpack: bad_alloc - OUT OF MEMORY unpacking packet");
 		return false;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Received malformed packet, dropping it. The contained exception was: %s", e.what());
 		return false;
 	}
@@ -856,7 +871,7 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 					try {
 						_object->_callbacks._delivery(*this);
 					}
-					catch (std::exception& e) {
+					catch (const std::exception& e) {
 						ERRORF("An error occurred while evaluating external delivery callback for %s", link.toString().c_str());
 						ERRORF("The contained exception was: %s", e.what());
 					}
@@ -918,7 +933,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 					try {
 						_object->_callbacks._delivery(*this);
 					}
-					catch (std::exception& e) {
+					catch (const std::exception& e) {
 						ERRORF("Error while executing proof validated callback. The contained exception was: %s", e.what());
 					}
 				}
@@ -949,7 +964,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 				try {
 					_object->_callbacks._delivery(*this);
 				}
-				catch (std::exception& e) {
+				catch (const std::exception& e) {
 					ERRORF("Error while executing proof validated callback. The contained exception was: %s", e.what());
 				}
 			}

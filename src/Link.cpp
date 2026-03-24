@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Link.h"
 
 #include "LinkData.h"
@@ -187,7 +201,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 					uint16_t mtu = mtu_from_lr_packet(packet);
 					link.mtu((mtu != 0) ? mtu : Type::Reticulum::MTU);
 				}
-				catch (std::exception& e) {
+				catch (const std::exception& e) {
 					ERRORF("An error ocurred while validating link request %s", link.link_id().toHex().c_str());
 					link.mtu(Type::Reticulum::MTU);
 				}
@@ -216,13 +230,13 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 			DEBUGF("Incoming link request %s accepted", link.toString().c_str());
 			return link;
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			VERBOSEF("Validating link request failed, exception: %s", e.what());
 			return {Type::NONE};
 		}
 	}
 	else {
-		DEBUGF("Invalid link request payload size (%zu), dropping request", data.size());
+		DEBUGF("Invalid link request payload size (%lu), dropping request", data.size());
 		return {Type::NONE};
 	}
 }
@@ -399,7 +413,7 @@ TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		_object->_status = Type::Link::CLOSED;
 		ERRORF("An error ocurred while validating link request proof on %s.", toString().c_str());
 		ERRORF("The contained exception was: %s", e.what());
@@ -526,12 +540,12 @@ void Link::rtt_packet(const Packet& packet) {
 					_object->_owner.callbacks()._link_established(*this);
 				}
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Error occurred in external link establishment callback. The contained exception was: %s", e.what());
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error occurred while processing RTT packet, tearing down link. The contained exception was: %s", e.what());
 		teardown();
 	}
@@ -697,7 +711,7 @@ void Link::teardown_packet(const Packet& packet) {
 			link_closed();
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Error while decrypting teardown packet from %s. The contained exception was: %s", toString().c_str(), e.what());
 	}
 }
@@ -732,7 +746,7 @@ void Link::link_closed() {
 		try {
 			_object->_callbacks._closed(*this);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Error while executing link closed callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 		}
 	}
@@ -908,7 +922,7 @@ void Link::handle_response(const Bytes& request_id, const Bytes& response_data, 
 					pending_request.response_transfer_size(pending_request.response_transfer_size() + response_transfer_size);
 					pending_request.response_received(response_data);
 				}
-				catch (std::exception& e) {
+				catch (const std::exception& e) {
 					ERRORF("Error occurred while handling response. The contained exception was: %s", e.what());
 				}
 				break;
@@ -1027,7 +1041,7 @@ void Link::receive(const Packet& packet) {
 							try {
 								_object->_callbacks._packet(plaintext, packet);
 							}
-							catch (std::exception& e) {
+							catch (const std::exception& e) {
 								ERRORF("Error while executing packet callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 							}
 						}
@@ -1044,7 +1058,7 @@ void Link::receive(const Packet& packet) {
 										should_query = true;
 									}
 								}
-								catch (std::exception& e) {
+								catch (const std::exception& e) {
 									ERRORF("Error while executing proof request callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 								}
 							}
@@ -1069,7 +1083,7 @@ void Link::receive(const Packet& packet) {
 									try {
 										_object->_callbacks._remote_identified(*this, _object->__remote_identity);
 									}
-									catch (std::exception& e) {
+									catch (const std::exception& e) {
 										ERRORF("Error while executing remote identified callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 									}
 								}
@@ -1099,7 +1113,7 @@ void Link::receive(const Packet& packet) {
 							handle_request(request_id, resource_request);
 						}
 					}
-					catch (std::exception& e) {
+					catch (const std::exception& e) {
 						ERRORF("Error occurred while handling request. The contained exception was: %s", e.what());
 					}
 					break;
@@ -1124,7 +1138,7 @@ void Link::receive(const Packet& packet) {
 							handle_response(Bytes(request_id.data(), request_id.size()), Bytes(response_data.data(), response_data.size()), transfer_size, transfer_size);
 						}
 					}
-					catch (std::exception& e) {
+					catch (const std::exception& e) {
 						ERRORF("Error occurred while handling response. The contained exception was: %s", e.what());
 					}
 					break;
@@ -1187,7 +1201,7 @@ void Link::receive(const Packet& packet) {
 										Resource::accept(packet, _object->_callbacks.resource_concluded);
 									}
 								}
-								catch (std::exception& e) {
+								catch (const std::exception& e) {
 									ERRORF("Error while executing resource accept callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 								}
 						elif _object->_resource_strategy == ACCEPT_ALL:
@@ -1297,14 +1311,14 @@ const Bytes Link::encrypt(const Bytes& plaintext) {
 			try {
 				_object->_token.reset(new Token(_object->_derived_key));
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Could not instantiate Token while performing encryption on link %s. The contained exception was: %s", toString().c_str(), e.what());
 				throw e;
 			}
 		}
 		return _object->_token->encrypt(plaintext);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Encryption on link %s failed. The contained exception was: %s", toString().c_str(), e.what());
 		throw e;
 	}
@@ -1319,7 +1333,7 @@ const Bytes Link::decrypt(const Bytes& ciphertext) {
 		}
 		return _object->_token->decrypt(ciphertext);
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Decryption failed on link %s. The contained exception was: %s", toString().c_str(), e.what());
 		return {Bytes::NONE};
 	}
@@ -1336,7 +1350,7 @@ bool Link::validate(const Bytes& signature, const Bytes& message) {
 		_object->_peer_sig_pub->verify(signature, message);
 		return true;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		return false;
 	}
 }
@@ -1656,7 +1670,7 @@ void RequestReceipt::request_resource_concluded(const Resource& resource) {
 			try {
 				_object->_callbacks._failed(*this);
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Error while executing request failed callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 			}
 		}
@@ -1687,7 +1701,7 @@ void RequestReceipt::request_timed_out(const PacketReceipt& packet_receipt) {
 		try {
 			_object->_callbacks._failed(*this);
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERRORF("Error while executing request timed out callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 		}
 	}
@@ -1716,7 +1730,7 @@ void RequestReceipt::response_resource_progress(const Resource& resource) {
 				try {
 					_object->_callbacks._progress(*this);
 				}
-				catch (std::exception& e) {
+				catch (const std::exception& e) {
 					ERRORF("Error while executing response progress callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 				}
 			}
@@ -1747,7 +1761,7 @@ void RequestReceipt::response_received(const Bytes& response) {
 			try {
 				_object->_callbacks._progress(*this);
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Error while executing response progress callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 			}
 		}
@@ -1755,7 +1769,7 @@ void RequestReceipt::response_received(const Bytes& response) {
 			try {
 				_object->_callbacks._response(*this);
 			}
-			catch (std::exception& e) {
+			catch (const std::exception& e) {
 				ERRORF("Error while executing response received callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 			}
 		}

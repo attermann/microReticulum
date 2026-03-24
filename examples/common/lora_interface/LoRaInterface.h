@@ -6,18 +6,8 @@
 
 #ifdef ARDUINO
 #include <SPI.h>
-#include <LoRa.h>
+#include <RadioLib.h>
 #endif
-
-// LILYGO T-Beam V1.X
-#define RADIO_SCLK_PIN               5
-#define RADIO_MISO_PIN              19
-#define RADIO_MOSI_PIN              27
-#define RADIO_CS_PIN                18
-#define RADIO_DIO0_PIN              26
-#define RADIO_RST_PIN               23
-#define RADIO_DIO1_PIN              33
-#define RADIO_BUSY_PIN              32
 
 #include <stdint.h>
 
@@ -47,12 +37,17 @@ private:
 	const uint8_t message_count = 0;
 	RNS::Bytes buffer;
 
-	const long frequency = 915E6;
+	// Radio parameters (RadioLib units: MHz, kHz)
+	const float frequency = 915.0;   // MHz
+	const float bandwidth = 125.0;   // kHz
+	const int   spreading = 8;
+	const int   coding    = 5;
+	const int   power     = 17;      // dBm
 
-	// Reticulum default
-	const long bandwidth = 125E3;
-	const int spreading = 8;
-	const int coding = 5;
-	const int power = 17;
+#ifdef ARDUINO
+	Module*        _module      = nullptr;
+	PhysicalLayer* _radio       = nullptr;
+	int            _pa_mode_pin = -1;    // V4 FEM PA mode pin; -1 = not present
+#endif
 
 };

@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Fernet.h"
 
 #include "HMAC.h"
@@ -51,7 +65,7 @@ bool Fernet::verify_hmac(const Bytes& token) {
 
 const Bytes Fernet::encrypt(const Bytes& data) {
 
-	DEBUGF("Fernet::encrypt: plaintext length: %zu", data.size());
+	DEBUGF("Fernet::encrypt: plaintext length: %lu", data.size());
 	Bytes iv = random(16);
 	//double current_time = OS::time();
 	TRACEF("Fernet::encrypt: iv:         %s", iv.toHex().c_str());
@@ -62,7 +76,7 @@ const Bytes Fernet::encrypt(const Bytes& data) {
 		_encryption_key,
 		iv
 	);
-	DEBUGF("Fernet::encrypt: padded ciphertext length: %zu", ciphertext.size());
+	DEBUGF("Fernet::encrypt: padded ciphertext length: %lu", ciphertext.size());
 	TRACEF("Fernet::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	Bytes signed_parts = iv + ciphertext;
@@ -71,14 +85,14 @@ const Bytes Fernet::encrypt(const Bytes& data) {
 	Bytes sig(HMAC::generate(_signing_key, signed_parts)->digest());
 	TRACEF("Fernet::encrypt: sig:        %s", sig.toHex().c_str());
 	Bytes token(signed_parts + sig);
-	DEBUGF("Fernet::encrypt: token length: %zu", token.size());
+	DEBUGF("Fernet::encrypt: token length: %lu", token.size());
 	return token;
 }
 
 
 const Bytes Fernet::decrypt(const Bytes& token) {
 
-	DEBUGF("Fernet::decrypt: token length: %zu", token.size());
+	DEBUGF("Fernet::decrypt: token length: %lu", token.size());
 	if (token.size() < 48) {
 		throw std::invalid_argument("Cannot decrypt token of only " + std::to_string(token.size()) + " bytes");
 	}
@@ -103,13 +117,13 @@ const Bytes Fernet::decrypt(const Bytes& token) {
 				iv
 			)
 		);
-		DEBUGF("Fernet::encrypt: unpadded plaintext length: %zu", plaintext.size());
+		DEBUGF("Fernet::encrypt: unpadded plaintext length: %lu", plaintext.size());
 		TRACEF("Fernet::decrypt: plaintext:  %s", plaintext.toHex().c_str());
 
-		DEBUGF("Fernet::decrypt: plaintext length: %zu", plaintext.size());
+		DEBUGF("Fernet::decrypt: plaintext length: %lu", plaintext.size());
 		return plaintext;
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		WARNING("Could not decrypt Fernet token");
 		throw std::runtime_error("Could not decrypt Fernet token");
 	}

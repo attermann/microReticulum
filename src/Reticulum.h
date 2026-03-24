@@ -1,9 +1,24 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #pragma once
 
 #include "Transport.h"
 #include "Log.h"
 #include "Type.h"
 #include "Utilities/OS.h"
+#include "Persistence/DestinationEntry.h"
 
 #include <vector>
 #include <map>
@@ -11,6 +26,8 @@
 #include <memory>
 #include <cassert>
 #include <stdint.h>
+
+using namespace RNS::Persistence;
 
 namespace RNS {
 
@@ -84,7 +101,7 @@ namespace RNS {
 		//void __create_default_config();
 		//void rpc_loop();
 		//void get_interface_stats() const;
-		const Transport::PathTable& get_path_table() const;
+		const PathTable& get_path_table() const;
 		const std::map<Bytes, Transport::RateEntry>& get_rate_table() const;
 		bool drop_path(const Bytes& destination);
 		uint16_t drop_all_via(const Bytes& transport_hash);
@@ -174,8 +191,9 @@ namespace RNS {
 			bool _is_connected_to_shared_instance = false;
 			bool _is_standalone_instance = false;
 			//p _jobs_thread = None
-			double _last_data_persist = Utilities::OS::time();
+			double _last_data_persist = 0.0;
 			double _last_cache_clean = 0.0;
+			double _last_time_persist = 0.0;
 
 			// CBA
 			double _jobs_last_run = Utilities::OS::time();

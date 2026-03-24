@@ -100,9 +100,13 @@ Build all environments (boards):
 pio run
 ```
 
+## Known Limitations
+
+Nordic nrf52840 based boards are severely constrained, especially in avialable flash storage available to the application. Even though the nrf52840 has 1 MB of flash, the `InternalFileSystem` implemented inside of the Adafruit nrf52 BSP hard-codes the flash filesystem size to only 28 KB, which severely limits the amount of data theat microReticulum can persist (especially the path table).
+Use of nrf52840 based boards as a transport node will necessitate the use of external storage for persistence.
+
 ## Known Issues
 
-Use of the custom allocator (enabled by `-DRNS_USE_ALLOCATOR=1`) in conjunction with TLSF (enabled by `-DRNS_USE_TLSF=1`) is not currently working in ESP32 due to TLFS initialization failure at the time that allocator initialization takes place. This causes the allocator to fallback to using regular malloc/free instead of using TLFS as intended.
 
 ## Roadmap
 

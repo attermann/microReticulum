@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2023 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "Reticulum.h"
 
 #include "Transport.h"
@@ -76,7 +90,7 @@ Reticulum::Reticulum() : _object(new Object()) {
 	// Initialize random number generator
 	TRACE("Initializing RNG...");
 	RNG.begin("Reticulum");
-	TRACEF("RNG initial random value: %d", Cryptography::randomnum());
+	TRACEF("RNG initial random value: %u", Cryptography::randomnum());
 
 #ifdef ARDUINO
 	// Add a noise source to the list of sources known to RNG.
@@ -174,8 +188,13 @@ Reticulum::Reticulum() : _object(new Object()) {
 
 void Reticulum::start() {
 
-	INFOF("Total memory: %zu", Memory::heap_size());
-	INFOF("Total flash: %zu", OS::storage_size());
+	INFOF("Total SRAM: %lu bytes", Memory::heap_size());
+	INFOF("Free SRAM: %lu bytes", Memory::heap_available());
+#if defined(ESP32)
+	INFOF("Total PSRAM: %u bytes", ESP.getPsramSize());
+#endif
+	INFOF("Total flash: %lu bytes", OS::storage_size());
+	INFOF("Free flash: %lu bytes", OS::storage_available());
 
 #ifdef ARDUINO
 #if defined(RNS_USE_FS)
@@ -192,7 +211,7 @@ void Reticulum::start() {
 			}
 		}
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
 	}
 #endif
@@ -205,6 +224,7 @@ void Reticulum::start() {
 	_object->_last_data_persist = OS::time();
 	_object->_last_cache_clean = OS::time();
 	_object->_jobs_last_run = OS::time();
+	_object->_last_time_persist = OS::time();
 }
 
 void Reticulum::loop() {
@@ -218,13 +238,13 @@ void Reticulum::loop() {
 				jobs();
 			}
 
-			// Perform interface processing
+			// Perform Interface processing
 			for (auto& [hash, interface] : Transport::get_interfaces()) {
 				interface.loop();
 			}
 
 			// Perform Filesystem processing
-			FileSystem& filesystem = OS::get_filesystem();
+			microStore::FileSystem& filesystem = OS::get_filesystem();
 			if (filesystem) {
 				filesystem.loop();
 			}
@@ -245,7 +265,7 @@ void Reticulum::loop() {
 		NVIC_SystemReset();
 #endif
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
 		ERRORF("Reticulum::loop: %s", e.what());
     }
 }
@@ -279,6 +299,26 @@ void Reticulum::jobs() {
 		persist_data();
 	}
 
+#ifdef ARDUINO
+#if defined(RNS_USE_FS)
+	if (now > _object->_last_time_persist + 600) {
+		// write time offset to file
+		try {
+			char time_offset_path[FILEPATH_MAXSIZE];
+			snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+			uint64_t offset = OS::ltime();
+			DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
+			Bytes buf((uint8_t*)&offset, sizeof(offset));
+			OS::write_file(time_offset_path, buf);
+		}
+		catch (const std::exception& e) {
+			ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
+		}
+		_object->_last_time_persist = Utilities::OS::time();
+	}
+#endif
+#endif
+
 	_object->_jobs_last_run = OS::time();
 }
 
@@ -304,23 +344,6 @@ void Reticulum::persist_data() {
 	Transport::persist_data();
 	Identity::persist_data();
 
-#ifdef ARDUINO
-#if defined(RNS_USE_FS)
-	// write time offset to file
-	try {
-		char time_offset_path[FILEPATH_MAXSIZE];
-		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
-		uint64_t offset = OS::ltime();
-		DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
-		Bytes buf((uint8_t*)&offset, sizeof(offset));
-		OS::write_file(time_offset_path, buf);
-	}
-	catch (std::exception& e) {
-		ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
-	}
-#endif
-#endif
-
 	_object->_last_data_persist = OS::time();
 }
 
@@ -343,7 +366,7 @@ void Reticulum::clean_caches() {
 				//p }
 			}
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERROR("Error while cleaning resources cache, the contained exception was: %s", e.what());
 		}
 	}
@@ -361,7 +384,7 @@ void Reticulum::clean_caches() {
 				//p }
 			}
 		}
-		catch (std::exception& e) {
+		catch (const std::exception& e) {
 			ERROR("Error while cleaning packet cache, the contained exception was: %s", e.what());
 		}
 	}
@@ -392,7 +415,7 @@ void Reticulum::clear_caches() {
 		OS::remove_file(time_offset_path);
 #endif
 	}
-	catch (std::exception& e) {
+	catch (const std::exception& e) {
 		ERRORF("Failed to clear cache file(s), the contained exception was: %s", e.what());
 	}
 }
@@ -415,7 +438,7 @@ void Reticulum::get_interface_stats() const {
 }
 */
 
-const Transport::PathTable& Reticulum::get_path_table() const {
+const PathTable& Reticulum::get_path_table() const {
 /*
 	path_table = []
 	for dst_hash in Transport::destination_table:
