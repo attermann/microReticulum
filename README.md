@@ -61,10 +61,9 @@ There are several pre-built filesystem "adapters" available in the `microStore` 
   `-DUSTORE_USE_UNIVERSALFS`: Best supported file system for any platform
 
 Also note the following preprocessor directives used to tune `microStore::FileStore` which is the Bitcask-style storage engine used by microReticulum to persist the path table and other internal tables:
-  `-DRNS_PATH_TABLE_SEGMENT_SIZE`
-  `-DRNS_PATH_TABLE_SEGMENT_COUNT`
+  `-DRNS_PATH_TABLE_SEGMENT_SIZE`: Size in bytes of each segment file
+  `-DRNS_PATH_TABLE_SEGMENT_COUNT`: Maximum number of segment files to rotate (minimum of 3)
 Appropriate settings should be selected to match the storage and memory resources available on the target platform.
-Note that `RNS_PATH_TABLE_SEGMENT_COUNT` must be at least 3, and `RNS_PATH_TABLE_SEGMENT_COUNT` x `RNS_PATH_TABLE_SEGMENT_SIZE` represents the total approximate storage space available to the the path table.
 
 ## Building
 
