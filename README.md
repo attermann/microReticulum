@@ -29,6 +29,8 @@ Each class of allocator can be configured to use a separate type of allocator. A
 - `RNS_PSRAM_ALLOCATOR`: Basic allocator that uses PSRAM memory (if PSRAM is available)
 - `RNS_PSRAM_POOL_ALLOCATOR`: Optimized TLSF managed PSRAM buffer (if PSRAM is available)
 
+NOTE: When utilizing PSRAM on ESP32 boards, preprocessor directive `-DBOARD_HAS_PSRAM=1` must be included in build flags in order to enable on-board PSRAM.
+
 Each class of allocator pool can have a separate buffer size:
 - `RNS_HEAP_POOL_BUFFER_SIZE=N` Defines the HEAP TLSF memory pool buffer size (N bytes, default 0 which means dynamic)
 - `RNS_PSRAM_POOL_BUFFER_SIZE=N` Defines the PSRAM TLSF memory pool buffer size (N bytes, default 0 which means dynamic)
@@ -44,7 +46,25 @@ build_flags =
   -DRNS_CONTAINER_ALLOCATOR=RNS_PSRAM_POOL_ALLOCATOR
 ```
 
-NOTE: Currently `-DRNS_DEFAULT_ALLOCATOR=RNS_HEAP_POOL_ALLOCATOR` is only required on NRF52 boards since ESP32 already uses TLSF internally.
+NOTE: Currently "POOL" allocators are only required on NRF52 boards since ESP32 already uses TLSF internally for both SRAM and PSRAM resources.
+
+## microStore Options
+
+When using microReticulum to implement a transpport node, storage for the path table and other persistent data must be configured. This is accomplished using the File and FileSystem abstrctions provided in `microStore`. Several pre-build adapters are provided with the library, and optionally custom storage (e.g., external flash and SD card) can be used by deriving custom implementations from `microStore::File` and `microStore::FileSystem` and passing them to microReticulum for internal use.
+There are several pre-built filesystem "adapters" available in the `microStore` library that can be used without modification for the most common supported boards. These can be inluded using the following preprocessor directives:
+  `-DUSTORE_USE_POSIXFS`: Native as well as any ESP-IDF supported POSIX file system
+  `-DUSTORE_USE_STDIOFS`: Native STDIO file system
+  `-DUSTORE_USE_INTERNALFS`: InternalFileSystem for adafruit nrf52
+  `-DUSTORE_USE_LITTLEFS`: LittleFS file system
+  `-DUSTORE_USE_SPIFFS`: SPIFFS file system
+  `-DUSTORE_USE_FLASHFS`: Adafruit FlashFS file system
+  `-DUSTORE_USE_UNIVERSALFS`: Best supported file system for any platform
+
+Also note the following preprocessor directives used to tune `microStore::FileStore` which is the Bitcask-style storage engine used by microReticulum to persist the path table and other internal tables:
+  `-DRNS_PATH_TABLE_SEGMENT_SIZE`
+  `-DRNS_PATH_TABLE_SEGMENT_COUNT`
+Appropriate settings should be selected to match the storage and memory resources available on the target platform.
+Note that `RNS_PATH_TABLE_SEGMENT_COUNT` must be at least 3, and `RNS_PATH_TABLE_SEGMENT_COUNT` x `RNS_PATH_TABLE_SEGMENT_SIZE` represents the total approximate storage space available to the the path table.
 
 ## Building
 

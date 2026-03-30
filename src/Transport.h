@@ -382,10 +382,6 @@ namespace RNS {
 		static std::set<Bytes> _packet_hashlist;	// A list of packet hashes for duplicate detection
 		static std::list<PacketReceipt> _receipts;	// Receipts of all outgoing packets for proof processing
 
-		// TODO: "destination_table" should really be renamed to "path_table"
-		// Notes on memory usage: 1 megabyte of memory can store approximately
-		// 55.100 path table entries or approximately 22.300 link table entries.
-
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
 		static PathTable _path_table;			// A lookup table containing the next hop to a given destination
 		static ReverseTable _reverse_table;		// A lookup table for storing packet hashes used to return proofs and replies

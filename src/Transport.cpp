@@ -38,6 +38,14 @@ using namespace RNS::Persistence;
 #define RNS_PATH_TABLE_MAX 100
 #endif
 
+#ifndef RNS_PATH_TABLE_SEGMENT_SIZE
+#define RNS_PATH_TABLE_SEGMENT_SIZE 65536
+#endif
+
+#ifndef RNS_PATH_TABLE_SEGMENT_COUNT
+#define RNS_PATH_TABLE_SEGMENT_COUNT 8
+#endif
+
 #ifndef RNS_ANNOUNCE_TABLE_MAX
 #define RNS_ANNOUNCE_TABLE_MAX 100
 #endif
@@ -133,7 +141,7 @@ using namespace RNS::Persistence;
 /*static*/ bool Transport::cleaning_caches = false;
 
 // CBA microStore
-/*static*/ PathStore Transport::_path_store;
+/*static*/ PathStore Transport::_path_store(RNS_PATH_TABLE_SEGMENT_SIZE, RNS_PATH_TABLE_SEGMENT_COUNT);
 /*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
 
 DestinationEntry empty_destination_entry;
