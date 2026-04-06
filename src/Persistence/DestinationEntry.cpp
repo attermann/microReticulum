@@ -22,55 +22,55 @@ using namespace RNS::Persistence;
 
 /*static*/ std::vector<uint8_t> microStore::Codec<DestinationEntry>::encode(const DestinationEntry& entry) {
 
-	// If invlaid/empty entry then return empty
+	// If invalid/empty entry then return empty
 	if (!entry) return {};
 
 	std::vector<uint8_t> out;
 
-	auto append = [&](const void* ptr, size_t len)
+	auto write = [&](const void* ptr, size_t len)
 	{
 		const uint8_t* p=(const uint8_t*)ptr;
 		out.insert(out.end(), p, p+len);
 	};
 
 	// timestamp
-//TRACEF("Adding %lu byte timestamp: %f", sizeof(entry._timestamp), entry._timestamp);
-	append(&entry._timestamp, sizeof(entry._timestamp));
+//TRACEF("Writing %lu byte timestamp: %f", sizeof(entry._timestamp), entry._timestamp);
+	write(&entry._timestamp, sizeof(entry._timestamp));
 
 	// hops
-//TRACEF("Adding %lu byte hops: %u", sizeof(entry._hops), entry._hops);
-	append(&entry._hops, sizeof(entry._hops));
+//TRACEF("Writing %lu byte hops: %u", sizeof(entry._hops), entry._hops);
+	write(&entry._hops, sizeof(entry._hops));
 
 	// expires
-//TRACEF("Adding %lu byte expires: %f", sizeof(entry._expires), entry._expires);
-	append(&entry._expires, sizeof(entry._expires));
+//TRACEF("Writing %lu byte expires: %f", sizeof(entry._expires), entry._expires);
+	write(&entry._expires, sizeof(entry._expires));
 
 	// received_from
-//TRACEF("Adding %lu byte received_from", entry._received_from.collection().size());
+//TRACEF("Writing %lu byte received_from", entry._received_from.collection().size());
 	out.insert(out.end(), entry._received_from.collection().begin(), entry._received_from.collection().end());
 
 	// random_blobs
 	uint16_t blob_count = entry._random_blobs.size();
-//TRACEF("Adding %lu byte blob_count: %u", sizeof(blob_count), blob_count);
-	append(&blob_count, sizeof(blob_count));
+//TRACEF("Writing %lu byte blob_count: %u", sizeof(blob_count), blob_count);
+	write(&blob_count, sizeof(blob_count));
 	for (auto& blob : entry._random_blobs) {
 		uint16_t blob_size = blob.collection().size();
-//TRACEF("Adding %lu byte blob_size: %u", sizeof(blob_size), blob_size);
-		append(&blob_size, sizeof(blob_size));
-//TRACEF("Adding %lu byte blob", blob.collection().size());
+//TRACEF("Writing %lu byte blob_size: %u", sizeof(blob_size), blob_size);
+		write(&blob_size, sizeof(blob_size));
+//TRACEF("Writing %lu byte blob", blob.collection().size());
 		out.insert(out.end(), blob.collection().begin(), blob.collection().end());
 	}
 
 	// receiving_interface
 	Bytes interface_hash(entry._receiving_interface.get_hash());
-//TRACEF("Adding %lu byte receiving_interface hash", interface_hash.collection().size());
+//TRACEF("Writing %lu byte receiving_interface hash", interface_hash.collection().size());
 	out.insert(out.end(), interface_hash.collection().begin(), interface_hash.collection().end());
 
 	// announce_packet
 	uint16_t packet_size = entry._announce_packet.raw().size();
-//TRACEF("Adding %lu byte packet_size: %u", sizeof(packet_size), packet_size);
-	append(&packet_size, sizeof(packet_size));
-//TRACEF("Adding %lu byte packet", entry._announce_packet.raw().collection().size());
+//TRACEF("Writing %lu byte packet_size: %u", sizeof(packet_size), packet_size);
+	write(&packet_size, sizeof(packet_size));
+//TRACEF("Writing %lu byte packet", entry._announce_packet.raw().collection().size());
 	out.insert(out.end(), entry._announce_packet.raw().collection().begin(), entry._announce_packet.raw().collection().end());
 
 //TRACEF("Encoded %lu byte DestinationEntry", out.size());

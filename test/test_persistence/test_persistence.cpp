@@ -1067,6 +1067,54 @@ void testMsgpackDeserializeSeries() {
 }
 
 
+void test_codec_destination_entry() {
+
+	// CBA Must register interface in order for deserializing to find it
+	RNS::Interface test_interface(new TestInterface());
+	RNS::Transport::register_interface(test_interface);
+
+	RNS::Bytes raw;
+	raw.assignHex("eaeaeaea");
+	RNS::Packet test_packet(raw);
+
+	RNS::Bytes received;
+	received.assignHex("deadbeefdeadbeefdeadbeefdeadbeef");
+
+	RNS::Bytes blob;
+	blob.assignHex("b10bb10b");
+	std::set<RNS::Bytes> blobs({received, blob});
+
+	microStore::Codec<RNS::Persistence::DestinationEntry> codec;
+
+	RNS::Persistence::DestinationEntry pre_entry;
+	pre_entry._timestamp = 1.0;
+	pre_entry._hops = 5;
+	pre_entry._expires = 2.0;
+	pre_entry._received_from = received;
+	pre_entry._random_blobs = blobs;
+	pre_entry._receiving_interface = test_interface;
+	pre_entry._announce_packet = test_packet;
+	RNS::Bytes hash;
+	hash.assignHex("1111111111111111");
+	TRACEF("test_codec_destination_entry: pre-entry: %s", pre_entry.debugString().c_str());
+	std::vector<uint8_t> buffer = codec.encode(pre_entry);
+
+	TRACEF("test_codec_destination_entry: buffer: len=%zu", buffer.size());
+
+	RNS::Persistence::DestinationEntry post_entry;
+	codec.decode(buffer, post_entry);
+	TRACEF("test_codec_destination_entry: post-entry: %s", post_entry.debugString().c_str());
+
+	TEST_ASSERT_EQUAL_FLOAT(pre_entry._timestamp, post_entry._timestamp);
+	TEST_ASSERT_EQUAL_FLOAT(pre_entry._hops, post_entry._hops);
+	TEST_ASSERT_EQUAL_FLOAT(pre_entry._expires, post_entry._expires);
+	TEST_ASSERT_EQUAL_MEMORY(pre_entry._received_from.data(), post_entry._received_from.data(), pre_entry._received_from.size());
+	TEST_ASSERT_EQUAL_MEMORY(pre_entry._receiving_interface.get_hash().data(), post_entry._receiving_interface.get_hash().data(), pre_entry._receiving_interface.get_hash().size());
+	TEST_ASSERT_EQUAL_MEMORY(pre_entry._announce_packet.get_hash().data(), post_entry._announce_packet.get_hash().data(), pre_entry._announce_packet.get_hash().size());
+
+}
+
+
 void setUp(void) {
 	// set stuff up here before each test
 #ifdef ARDUINO
@@ -1117,6 +1165,8 @@ int runUnityTests(void) {
 	RUN_TEST(testMsgpackDeserializeArray);
 	RUN_TEST(testMsgpackSerializeSeries);
 	RUN_TEST(testMsgpackDeserializeSeries);
+
+	RUN_TEST(test_codec_destination_entry);
 
 	// Suite-level teardown
 	RNS::Utilities::OS::remove_file(test_file_path);
