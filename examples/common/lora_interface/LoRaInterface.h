@@ -37,6 +37,15 @@ private:
 	const uint8_t message_count = 0;
 	RNS::Bytes buffer;
 
+	// Split-packet protocol constants
+	static constexpr uint8_t HEADER_SPLIT     = 0x08;  // bit 3: split-packet flag
+	static constexpr uint8_t HEADER_SEQ_MASK  = 0x07;  // bits 2:0: sequence number
+	static constexpr uint8_t SEQ_UNSET        = 0xFF;  // sentinel: no split in progress
+	static constexpr int     LORA_MAX_PAYLOAD = 254;   // 255 - 1 header byte
+
+	uint8_t _rx_seq     = SEQ_UNSET;  // sequence of split RX in progress
+	uint8_t _tx_seq_ctr = 0;          // rolling TX split sequence counter
+
 	// Radio parameters (RadioLib units: MHz, kHz)
 	const float frequency = 915.0;   // MHz
 	const float bandwidth = 125.0;   // kHz

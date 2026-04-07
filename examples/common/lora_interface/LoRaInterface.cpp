@@ -62,6 +62,9 @@
 
 using namespace RNS;
 
+static inline bool    isSplitPacket(uint8_t h)  { return (h & LoRaInterface::HEADER_SPLIT)   != 0; }
+static inline uint8_t packetSequence(uint8_t h) { return  h & LoRaInterface::HEADER_SEQ_MASK;      }
+
 /*
 @staticmethod
 def get_address_for_if(name):
@@ -191,20 +194,38 @@ void LoRaInterface::loop() {
 		if (_radio->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
 			int len = _radio->getPacketLength();
 
-			// Buffer sized for max HW_MTU (508) + 1 header byte
-			uint8_t rxBuf[509];
+			uint8_t rxBuf[255];
 			int state = _radio->readData(rxBuf, len);
 
 			if (state == RADIOLIB_ERR_NONE && len > 1) {
 				Serial.println("RSSI: " + String(_radio->getRSSI()));
 				Serial.println("Snr: "  + String(_radio->getSNR()));
 
-				// Skip the 1-byte split-packet header, forward payload
-				buffer.clear();
-				for (int i = 1; i < len; i++) {
-					buffer << rxBuf[i];
+				uint8_t hdr = rxBuf[0];
+				uint8_t seq = packetSequence(hdr);
+
+				if (isSplitPacket(hdr)) {
+					if (_rx_seq == SEQ_UNSET || _rx_seq != seq) {
+						// First part of a split (or restart after a lost first part)
+						_rx_seq = seq;
+						buffer.clear();
+						buffer.append(rxBuf + 1, len - 1);
+					} else {
+						// Second part — sequence matches; assemble and deliver
+						buffer.append(rxBuf + 1, len - 1);
+						_rx_seq = SEQ_UNSET;
+						on_incoming(buffer);
+					}
+				} else {
+					// Non-split: discard any stale partial reassembly, deliver immediately
+					if (_rx_seq != SEQ_UNSET) {
+						buffer.clear();
+						_rx_seq = SEQ_UNSET;
+					}
+					buffer.clear();
+					buffer.append(rxBuf + 1, len - 1);
+					on_incoming(buffer);
 				}
-				on_incoming(buffer);
 			} else if (state != RADIOLIB_ERR_NONE) {
 				DEBUGF("LoRaInterface: readData failed, code %d", state);
 			}
@@ -223,22 +244,55 @@ void LoRaInterface::loop() {
 		if (_online) {
 			TRACEF("LoRaInterface: sending %lu bytes...", data.size());
 #ifdef ARDUINO
-			// Prepend 1-byte header (high nibble random, reserved for split-packet support)
-			// CBA TODO add support for split packets
-			uint8_t txBuf[509];
-			txBuf[0] = Cryptography::randomnum(256) & 0xF0;
-			memcpy(txBuf + 1, data.data(), data.size());
+			uint8_t txBuf[255];
+			uint8_t rand_nibble = (uint8_t)(Cryptography::randomnum(256)) & 0xF0;
 
-			// V4: switch FEM to TX mode before transmitting
-			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+			if ((int)data.size() <= LORA_MAX_PAYLOAD) {
+				// Single-frame send
+				txBuf[0] = rand_nibble;
+				memcpy(txBuf + 1, data.data(), data.size());
 
-			int state = _radio->transmit(txBuf, 1 + data.size());
-			if (state != RADIOLIB_ERR_NONE) {
-				ERRORF("LoRaInterface: transmit failed, code %d", state);
+				// V4: switch FEM to TX mode before transmitting
+				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+				int state = _radio->transmit(txBuf, 1 + data.size());
+				// V4: return FEM to RX mode, then re-arm receive
+				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
+				if (state != RADIOLIB_ERR_NONE) {
+					ERRORF("LoRaInterface: transmit failed, code %d", state);
+				}
+			} else {
+				// Split send — two frames with matching sequence number
+				uint8_t seq       = (_tx_seq_ctr++) & HEADER_SEQ_MASK;
+				uint8_t split_hdr = rand_nibble | HEADER_SPLIT | seq;
+
+				// Frame 1: first LORA_MAX_PAYLOAD bytes
+				txBuf[0] = split_hdr;
+				memcpy(txBuf + 1, data.data(), LORA_MAX_PAYLOAD);
+
+				// V4: switch FEM to TX mode before transmitting
+				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+				int state = _radio->transmit(txBuf, 1 + LORA_MAX_PAYLOAD);
+				// V4: return FEM to RX mode, then re-arm receive
+				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
+				if (state != RADIOLIB_ERR_NONE) {
+					ERRORF("LoRaInterface: transmit part 1 failed, code %d", state);
+				}
+
+				// Frame 2: remaining bytes
+				size_t remainder = data.size() - LORA_MAX_PAYLOAD;
+				txBuf[0] = split_hdr;
+				memcpy(txBuf + 1, data.data() + LORA_MAX_PAYLOAD, remainder);
+
+				// V4: switch FEM to TX mode before transmitting
+				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+				state = _radio->transmit(txBuf, 1 + remainder);
+				// V4: return FEM to RX mode, then re-arm receive
+				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
+				if (state != RADIOLIB_ERR_NONE) {
+					ERRORF("LoRaInterface: transmit part 2 failed, code %d", state);
+				}
 			}
 
-			// V4: return FEM to RX mode, then re-arm receive
-			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 			_radio->startReceive();
 #endif
 			TRACE("LoRaInterface: sent bytes");
