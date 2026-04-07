@@ -208,12 +208,18 @@ void LoRaInterface::loop() {
 		uint32_t now_ms = (uint32_t)millis();
 
 		// --- RX path ---
-		// checkIrq() polls the hardware IRQ register — no ISR required
+		// checkIrq() polls the hardware IRQ register — no ISR required.
+		// Read from hardware and re-arm receiver immediately, then enqueue
+		// the assembled packet for delivery on the next loop iteration.
+		// This minimises the window where an arriving packet would be lost.
 		if (_radio->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
 			int len = _radio->getPacketLength();
 
 			uint8_t rxBuf[255];
 			int state = _radio->readData(rxBuf, len);
+
+			// Re-arm receive mode immediately after reading, before any processing
+			_radio->startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, CSMA_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
 
 			if (state == RADIOLIB_ERR_NONE && len > 1) {
 				DEBUGF("LoRaInterface: RX rssi=%.0f snr=%.1f",
@@ -229,27 +235,34 @@ void LoRaInterface::loop() {
 						buffer.clear();
 						buffer.append(rxBuf + 1, len - 1);
 					} else {
-						// Second part — sequence matches; assemble and deliver
+						// Second part — sequence matches; assemble and enqueue
 						buffer.append(rxBuf + 1, len - 1);
 						_rx_seq = SEQ_UNSET;
-						on_incoming(buffer);
+						if (_rx_pending_valid) {
+							DEBUGF("LoRaInterface: RX queue full, dropping packet (%lu bytes)", buffer.size());
+						} else {
+							_rx_pending       = buffer;
+							_rx_pending_valid = true;
+						}
 					}
 				} else {
-					// Non-split: discard any stale partial reassembly, deliver immediately
+					// Non-split: discard any stale partial reassembly, enqueue
 					if (_rx_seq != SEQ_UNSET) {
 						buffer.clear();
 						_rx_seq = SEQ_UNSET;
 					}
 					buffer.clear();
 					buffer.append(rxBuf + 1, len - 1);
-					on_incoming(buffer);
+					if (_rx_pending_valid) {
+						DEBUGF("LoRaInterface: RX queue full, dropping packet (%lu bytes)", buffer.size());
+					} else {
+						_rx_pending       = buffer;
+						_rx_pending_valid = true;
+					}
 				}
 			} else if (state != RADIOLIB_ERR_NONE) {
 				DEBUGF("LoRaInterface: readData failed, code %d", state);
 			}
-
-			// Re-arm receive mode with preamble detection enabled
-			_radio->startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, CSMA_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
 		}
 
 		// --- TX path: CSMA gate ---
@@ -265,6 +278,15 @@ void LoRaInterface::loop() {
 
 		if (cts && _tx_pending_valid) {
 			do_transmit();
+		}
+
+		// --- RX delivery ---
+		// Deliver any queued incoming packet to Transport now that the
+		// radio has been re-armed and the CSMA/TX work is done.
+		if (_rx_pending_valid) {
+			on_incoming(_rx_pending);
+			_rx_pending.clear();
+			_rx_pending_valid = false;
 		}
 #endif
 	}

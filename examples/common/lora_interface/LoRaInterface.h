@@ -69,6 +69,12 @@ private:
 	RNS::Bytes     _tx_pending;
 	bool           _tx_pending_valid = false;
 
+	// Single-packet RX queue: assembled packet is enqueued here after
+	// readData(); on_incoming() is called by loop() on the next iteration
+	// so the radio can be re-armed immediately after the read.
+	RNS::Bytes     _rx_pending;
+	bool           _rx_pending_valid = false;
+
 	// startReceive() IRQ flags: default set + preamble-detected latch
 	// (preamble-detected is needed by the SX126x DCD polling logic)
 	static constexpr RadioLibIrqFlags_t CSMA_RX_FLAGS =
