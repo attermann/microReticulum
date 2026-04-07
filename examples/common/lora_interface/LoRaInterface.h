@@ -7,6 +7,7 @@
 #ifdef ARDUINO
 #include <SPI.h>
 #include <RadioLib.h>
+#include "LoRaCSMA.h"
 #endif
 
 #include <stdint.h>
@@ -31,6 +32,7 @@ public:
 private:
 	virtual void send_outgoing(const RNS::Bytes& data);
 	void on_incoming(const RNS::Bytes& data);
+	void do_transmit();   // performs the actual radio transmit after CSMA clears it
 
 private:
 	//uint8_t buffer[Type::Reticulum::MTU] = {0};
@@ -56,7 +58,21 @@ private:
 #ifdef ARDUINO
 	Module*        _module      = nullptr;
 	PhysicalLayer* _radio       = nullptr;
-	int            _pa_mode_pin = -1;    // V4 FEM PA mode pin; -1 = not present
+	SX127x*        _radio_127x  = nullptr;   // non-null for SX127x boards; used by CSMA
+	int            _pa_mode_pin = -1;        // V4 FEM PA mode pin; -1 = not present
+
+	// CSMA/CCA engine
+	LoRaCSMA       _csma;
+
+	// Single-packet TX queue: send_outgoing() enqueues here;
+	// do_transmit() is called by loop() once CSMA grants access.
+	RNS::Bytes     _tx_pending;
+	bool           _tx_pending_valid = false;
+
+	// startReceive() IRQ flags: default set + preamble-detected latch
+	// (preamble-detected is needed by the SX126x DCD polling logic)
+	static constexpr RadioLibIrqFlags_t CSMA_RX_FLAGS =
+	    RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
 #endif
 
 };

@@ -105,7 +105,8 @@ bool LoRaInterface::start() {
 	SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
 	_module = new Module(RADIO_CS_PIN, RADIO_DIO0_PIN, RADIO_RST_PIN, RADIO_DIO1_PIN, SPI);
 	SX1276* chip = new SX1276(_module);
-	_radio = chip;
+	_radio     = chip;
+	_radio_127x = chip;   // typed pointer for CSMA getModemStatus() on SX127x
 	// begin(freq MHz, bw kHz, sf, cr, syncWord, power dBm, preamble symbols, LNA gain 0=AGC)
 	int state = chip->begin(frequency, bandwidth, spreading, coding,
 	                        RADIOLIB_SX127X_SYNC_WORD, power, 20, 0);
@@ -164,8 +165,22 @@ bool LoRaInterface::start() {
 		return false;
 	}
 
-	// Enter continuous receive mode
-	_radio->startReceive();
+	// Initialise CSMA engine with radio parameters
+	{
+		LoRaCSMA::RadioParams cp;
+		cp.bw_khz           = bandwidth;
+		cp.sf               = spreading;
+		cp.cr               = coding;
+		cp.preamble_symbols = 20;
+		cp.bitrate_bps      = (float)_bitrate;
+		LoRaCSMA::ChipFamily fam = _radio_127x ? LoRaCSMA::ChipFamily::SX127x
+		                                        : LoRaCSMA::ChipFamily::SX126x;
+		_csma.init(fam, _radio_127x, _radio, cp);
+	}
+
+	// Enter continuous receive mode with preamble-detection IRQ enabled
+	// (required for the SX126x DCD polling in LoRaCSMA)
+	_radio->startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, CSMA_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
 
 	INFO("LoRa init succeeded.");
 	TRACEF("LoRa bandwidth is %.2f Kbps", Utilities::OS::round(_bitrate/1000.0, 2));
@@ -190,6 +205,9 @@ void LoRaInterface::loop() {
 
 	if (_online) {
 #ifdef ARDUINO
+		uint32_t now_ms = (uint32_t)millis();
+
+		// --- RX path ---
 		// checkIrq() polls the hardware IRQ register — no ISR required
 		if (_radio->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
 			int len = _radio->getPacketLength();
@@ -198,8 +216,8 @@ void LoRaInterface::loop() {
 			int state = _radio->readData(rxBuf, len);
 
 			if (state == RADIOLIB_ERR_NONE && len > 1) {
-				Serial.println("RSSI: " + String(_radio->getRSSI()));
-				Serial.println("Snr: "  + String(_radio->getSNR()));
+				DEBUGF("LoRaInterface: RX rssi=%.0f snr=%.1f",
+				       (double)_radio->getRSSI(), (double)_radio->getSNR());
 
 				uint8_t hdr = rxBuf[0];
 				uint8_t seq = packetSequence(hdr);
@@ -230,9 +248,23 @@ void LoRaInterface::loop() {
 				DEBUGF("LoRaInterface: readData failed, code %d", state);
 			}
 
-			// Re-arm receive mode (required after every packet on SX1262;
-			// harmless on SX1276)
-			_radio->startReceive();
+			// Re-arm receive mode with preamble detection enabled
+			_radio->startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, CSMA_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
+		}
+
+		// --- TX path: CSMA gate ---
+		// update() always runs to keep DCD/RSSI polling alive regardless of
+		// whether a packet is pending.
+		bool cts = _csma.update(now_ms);
+
+		// False-preamble recovery on SX126x: CSMA requests a startReceive()
+		// to escape the latched modem state after a timed-out preamble detect.
+		if (_csma.needs_rearm()) {
+			_radio->startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, CSMA_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
+		}
+
+		if (cts && _tx_pending_valid) {
+			do_transmit();
 		}
 #endif
 	}
@@ -240,70 +272,93 @@ void LoRaInterface::loop() {
 
 /*virtual*/ void LoRaInterface::send_outgoing(const Bytes& data) {
 	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
-	try {
-		if (_online) {
-			TRACEF("LoRaInterface: sending %lu bytes...", data.size());
+	if (!_online) return;
+
 #ifdef ARDUINO
-			uint8_t txBuf[255];
-			uint8_t rand_nibble = (uint8_t)(Cryptography::randomnum(256)) & 0xF0;
+	if (_tx_pending_valid) {
+		// Queue full — drop this packet; Reticulum transport will retry
+		DEBUGF("LoRaInterface: TX queue full, dropping packet (%lu bytes)", data.size());
+		return;
+	}
+	_tx_pending       = data;
+	_tx_pending_valid = true;
+	TRACEF("LoRaInterface: %lu bytes queued for CSMA transmission", data.size());
+#endif
+}
 
-			if ((int)data.size() <= LORA_MAX_PAYLOAD) {
-				// Single-frame send
-				txBuf[0] = rand_nibble;
-				memcpy(txBuf + 1, data.data(), data.size());
+// do_transmit — called by loop() after CSMA grants channel access.
+// Contains the actual radio transmit logic (single and split frames).
+void LoRaInterface::do_transmit() {
+#ifdef ARDUINO
+	if (!_tx_pending_valid) return;
+	const Bytes& data = _tx_pending;
 
-				// V4: switch FEM to TX mode before transmitting
-				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
-				int state = _radio->transmit(txBuf, 1 + data.size());
-				// V4: return FEM to RX mode, then re-arm receive
-				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
-				if (state != RADIOLIB_ERR_NONE) {
-					ERRORF("LoRaInterface: transmit failed, code %d", state);
-				}
-			} else {
-				// Split send — two frames with matching sequence number
-				uint8_t seq       = (_tx_seq_ctr++) & HEADER_SEQ_MASK;
-				uint8_t split_hdr = rand_nibble | HEADER_SPLIT | seq;
+	TRACEF("LoRaInterface: transmitting %lu bytes after CSMA backoff", data.size());
+	try {
+		uint8_t txBuf[255];
+		uint8_t rand_nibble = (uint8_t)(Cryptography::randomnum(256)) & 0xF0;
 
-				// Frame 1: first LORA_MAX_PAYLOAD bytes
-				txBuf[0] = split_hdr;
-				memcpy(txBuf + 1, data.data(), LORA_MAX_PAYLOAD);
+		if ((int)data.size() <= LORA_MAX_PAYLOAD) {
+			// Single-frame send
+			txBuf[0] = rand_nibble;
+			memcpy(txBuf + 1, data.data(), data.size());
 
-				// V4: switch FEM to TX mode before transmitting
-				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
-				int state = _radio->transmit(txBuf, 1 + LORA_MAX_PAYLOAD);
-				// V4: return FEM to RX mode, then re-arm receive
-				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
-				if (state != RADIOLIB_ERR_NONE) {
-					ERRORF("LoRaInterface: transmit part 1 failed, code %d", state);
-				}
+			// V4: switch FEM to TX mode before transmitting
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+			int state = _radio->transmit(txBuf, 1 + data.size());
+			// V4: return FEM to RX mode
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
+			if (state != RADIOLIB_ERR_NONE) {
+				ERRORF("LoRaInterface: transmit failed, code %d", state);
+			}
+		} else {
+			// Split send — two frames with matching sequence number
+			uint8_t seq       = (_tx_seq_ctr++) & HEADER_SEQ_MASK;
+			uint8_t split_hdr = rand_nibble | HEADER_SPLIT | seq;
 
-				// Frame 2: remaining bytes
-				size_t remainder = data.size() - LORA_MAX_PAYLOAD;
-				txBuf[0] = split_hdr;
-				memcpy(txBuf + 1, data.data() + LORA_MAX_PAYLOAD, remainder);
+			// Frame 1: first LORA_MAX_PAYLOAD bytes
+			txBuf[0] = split_hdr;
+			memcpy(txBuf + 1, data.data(), LORA_MAX_PAYLOAD);
 
-				// V4: switch FEM to TX mode before transmitting
-				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
-				state = _radio->transmit(txBuf, 1 + remainder);
-				// V4: return FEM to RX mode, then re-arm receive
-				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
-				if (state != RADIOLIB_ERR_NONE) {
-					ERRORF("LoRaInterface: transmit part 2 failed, code %d", state);
-				}
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+			int state = _radio->transmit(txBuf, 1 + LORA_MAX_PAYLOAD);
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
+			if (state != RADIOLIB_ERR_NONE) {
+				ERRORF("LoRaInterface: transmit part 1 failed, code %d", state);
 			}
 
-			_radio->startReceive();
-#endif
-			TRACE("LoRaInterface: sent bytes");
+			// Frame 2: remaining bytes
+			size_t remainder = data.size() - LORA_MAX_PAYLOAD;
+			txBuf[0] = split_hdr;
+			memcpy(txBuf + 1, data.data() + LORA_MAX_PAYLOAD, remainder);
+
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
+			state = _radio->transmit(txBuf, 1 + remainder);
+			if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
+			if (state != RADIOLIB_ERR_NONE) {
+				ERRORF("LoRaInterface: transmit part 2 failed, code %d", state);
+			}
 		}
 
-		// Perform post-send housekeeping
+		// Account airtime and reset CSMA state machine
+		_csma.notify_tx_complete(data.size(), (uint32_t)millis());
+
+		// Update TX byte counter (was previously done in handle_outgoing inside send_outgoing)
 		InterfaceImpl::handle_outgoing(data);
+
+		TRACE("LoRaInterface: TX complete");
 	}
 	catch (const std::exception& e) {
-		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
+		ERRORF("Could not transmit on %s: %s", toString().c_str(), e.what());
 	}
+
+	// Clear queue entry
+	_tx_pending.clear();
+	_tx_pending_valid = false;
+
+	// Re-arm receive with preamble detection enabled
+	_radio->startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, CSMA_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
+#endif
 }
 
 /*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
