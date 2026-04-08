@@ -19,8 +19,8 @@
 // Button / 'r' over serial: re-run all tests.
 
 #include <Arduino.h>
-#include <SD.h>
 #include <SPI.h>
+#include <SD.h>
 
 #include "password.h"
 #include "encrypted_store.h"
@@ -69,6 +69,8 @@ static void testPacketCallback(const RNS::Bytes& data, const RNS::Packet&) {
     _test_packet_data     = data;
     _test_packet_received = true;
 }
+
+microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
 
 RNS::Reticulum   reticulum({RNS::Type::NONE});
 RNS::Identity    identity({RNS::Type::NONE});
@@ -176,7 +178,7 @@ static void test_storage() {
     Serial.println("[ 3/3 SD encrypted storage ]");
     Serial.print("    writing to: "); Serial.println(MSG_PATH);
 
-    if (!SD.exists("/msgs")) SD.mkdir("/msgs");
+    if (!RNS::Utilities::OS::directory_exists("/msgs")) RNS::Utilities::OS::create_directory("/msgs");
 
     const uint8_t* plain = (const uint8_t*)TEST_PAYLOAD;
     size_t len = strlen(TEST_PAYLOAD);
@@ -215,10 +217,6 @@ static void run_all_tests() {
 
 static void reticulum_setup() {
     try {
-        microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
-        filesystem.init();
-        RNS::Utilities::OS::register_filesystem(filesystem);
-
         reticulum = RNS::Reticulum();
         reticulum.transport_enabled(false);
         reticulum.start();
@@ -268,10 +266,14 @@ void setup() {
     }
     Serial.println("SD ready.");
 
+    // ── filesystem init (must happen before any OS:: calls) ───────────────────
+    filesystem.init();
+    RNS::Utilities::OS::register_filesystem(filesystem);
+
     // DEBUG: wipe identity and stored messages so you can re-enrol with a new password.
     // Comment these out once everything is working.
-    // SD.remove(IDENTITY_PATH);
-    // SD.remove(MSG_PATH);
+    // RNS::Utilities::OS::remove_file(IDENTITY_PATH);
+    // RNS::Utilities::OS::remove_file(MSG_PATH);
     // Serial.println("DEBUG: wiped identity and messages.");
 
     // ── button ────────────────────────────────────────────────────────────────
@@ -282,10 +284,10 @@ void setup() {
 
     // ── identity load / create ────────────────────────────────────────────────
     char password[PASSWORD_BUF_LEN] = {0};
-    
+
     uint8_t id_blob[IDENTITY_BLOB_LEN];
 
-    if (!SD.exists(IDENTITY_PATH)) {
+    if (!RNS::Utilities::OS::file_exists(IDENTITY_PATH)) {
         Serial.println("No identity file — generating new identity...");
         readPasswordSerial("Password: ", password, sizeof(password));
         RNS::Identity new_id;

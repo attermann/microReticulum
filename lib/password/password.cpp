@@ -1,4 +1,6 @@
 #include "password.h"
+#include <Utilities/OS.h>
+#include <Bytes.h>
 
 // ── constant-time comparison ──────────────────────────────────────────────────
 // Always iterates all `len` bytes so timing doesn't reveal where the first
@@ -90,36 +92,34 @@ bool password_protect(const char* path, const char* password,
     hmac_sha256(keys + 32, auth, auth_len, mac);
     free(auth);
 
-    File f = SD.open(path, FILE_WRITE);
-    if (!f) { free(ct); memset(keys, 0, 64); return false; }
-    f.write((uint8_t)PASSWORD_FILE_VERSION);
-    f.write(salt, 16);
-    f.write(iv,   16);
-    f.write(ct,   len);
-    f.write(mac,  32);
-    f.close();
+    // Assemble: version(1) + salt(16) + IV(16) + ciphertext(len) + HMAC(32)
+    size_t file_len = PASSWORD_FILE_OVERHEAD + len;
+    RNS::Bytes file_data;
+    uint8_t* fbuf = file_data.writable(file_len);
+    fbuf[0] = (uint8_t)PASSWORD_FILE_VERSION;
+    memcpy(fbuf + 1,        salt, 16);
+    memcpy(fbuf + 17,       iv,   16);
+    memcpy(fbuf + 33,       ct,   len);
+    memcpy(fbuf + 33 + len, mac,  32);
+    file_data.resize(file_len);
 
     free(ct);
     memset(keys, 0, 64);
-    return true;
+    return RNS::Utilities::OS::write_file(path, file_data) == file_len;
 }
 
 bool password_open(const char* path, const char* password,
                    uint8_t* data, size_t len) {
-    File f = SD.open(path, FILE_READ);
-    if (!f) return false;
-    if ((size_t)f.size() != len + PASSWORD_FILE_OVERHEAD) { f.close(); return false; }
+    RNS::Bytes file_data;
+    size_t read = RNS::Utilities::OS::read_file(path, file_data);
+    if (read != len + PASSWORD_FILE_OVERHEAD) return false;
 
-    uint8_t version, salt[16], iv[16], mac_stored[32];
-    if (f.read(&version, 1)    != 1)        { f.close(); return false; }
-    if (f.read(salt,    16)    != 16)       { f.close(); return false; }
-    if (f.read(iv,      16)    != 16)       { f.close(); return false; }
-
-    uint8_t* ct = (uint8_t*)malloc(len);
-    if (!ct) { f.close(); return false; }
-    if (f.read(ct,       len)  != (int)len) { f.close(); free(ct); return false; }
-    if (f.read(mac_stored, 32) != 32)       { f.close(); free(ct); return false; }
-    f.close();
+    const uint8_t* fbuf       = file_data.data();
+    uint8_t        version    = fbuf[0];
+    const uint8_t* salt       = fbuf + 1;
+    const uint8_t* iv         = fbuf + 17;
+    const uint8_t* ct         = fbuf + 33;
+    const uint8_t* mac_stored = fbuf + 33 + len;
 
     uint8_t keys[64];
     pbkdf2_64(password, salt, keys);
@@ -127,7 +127,7 @@ bool password_open(const char* path, const char* password,
     // Verify HMAC before decrypting — avoids decryption oracle attacks
     size_t auth_len = 1 + 16 + 16 + len;
     uint8_t* auth = (uint8_t*)malloc(auth_len);
-    if (!auth) { free(ct); memset(keys, 0, 64); return false; }
+    if (!auth) { memset(keys, 0, 64); return false; }
     auth[0] = version;
     memcpy(auth + 1,  salt, 16);
     memcpy(auth + 17, iv,   16);
@@ -138,7 +138,6 @@ bool password_open(const char* path, const char* password,
     free(auth);
 
     if (!ct_equal(mac_expected, mac_stored, 32)) {
-        free(ct);
         memset(keys, 0, 64);
         return false;   // wrong password or tampered file
     }
@@ -148,7 +147,6 @@ bool password_open(const char* path, const char* password,
     ctr.setIV(iv, 16);
     ctr.decrypt(data, ct, len);
 
-    free(ct);
     memset(keys, 0, 64);
     return true;
 }

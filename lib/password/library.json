@@ -8,6 +8,10 @@
 		{
 			"name": "Crypto",
 			"url": "https://github.com/attermann/Crypto.git"
+		},
+		{
+			"name": "microReticulum",
+			"url": "https://github.com/attermann/microReticulum.git"
 		}
 	],
 	"frameworks": "arduino",

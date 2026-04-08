@@ -2,6 +2,8 @@
 #include <Cryptography/HKDF.h>
 #include <Cryptography/HMAC.h>
 #include <Cryptography/Random.h>
+#include <Utilities/OS.h>
+#include <microStore/File.h>
 
 // ── constant-time comparison ──────────────────────────────────────────────────
 static bool ct_equal(const uint8_t* a, const uint8_t* b, size_t len) {
@@ -60,34 +62,32 @@ bool encstore_write(const char* path, const RNS::Identity& identity,
 
     RNS::Bytes mac = compute_mac(keys + 32, ENCSTORE_FILE_VERSION, iv, ct, len);
 
-    File f = SD.open(path, FILE_WRITE);
-    if (!f) { free(ct); memset(keys, 0, 64); return false; }
-    f.write((uint8_t)ENCSTORE_FILE_VERSION);
-    f.write(iv, 16);
-    f.write(ct, len);
-    f.write(mac.data(), 32);
-    f.close();
+    // Assemble: version(1) + IV(16) + ciphertext(len) + HMAC(32)
+    size_t file_len = ENCSTORE_FILE_OVERHEAD + len;
+    RNS::Bytes file_data;
+    uint8_t* fbuf = file_data.writable(file_len);
+    fbuf[0] = (uint8_t)ENCSTORE_FILE_VERSION;
+    memcpy(fbuf + 1,        iv,         16);
+    memcpy(fbuf + 17,       ct,         len);
+    memcpy(fbuf + 17 + len, mac.data(), 32);
+    file_data.resize(file_len);
 
     free(ct);
     memset(keys, 0, 64);
-    return true;
+    return RNS::Utilities::OS::write_file(path, file_data) == file_len;
 }
 
 bool encstore_read(const char* path, const RNS::Identity& identity,
                    uint8_t* data, size_t len) {
-    File f = SD.open(path, FILE_READ);
-    if (!f) return false;
-    if ((size_t)f.size() != len + ENCSTORE_FILE_OVERHEAD) { f.close(); return false; }
+    RNS::Bytes file_data;
+    size_t read = RNS::Utilities::OS::read_file(path, file_data);
+    if (read != len + ENCSTORE_FILE_OVERHEAD) return false;
 
-    uint8_t version, iv[16], mac_stored[32];
-    if (f.read(&version, 1)    != 1)        { f.close(); return false; }
-    if (f.read(iv,       16)   != 16)       { f.close(); return false; }
-
-    uint8_t* ct = (uint8_t*)malloc(len);
-    if (!ct) { f.close(); return false; }
-    if (f.read(ct,         len) != (int)len) { f.close(); free(ct); return false; }
-    if (f.read(mac_stored,  32) != 32)       { f.close(); free(ct); return false; }
-    f.close();
+    const uint8_t* fbuf       = file_data.data();
+    uint8_t        version    = fbuf[0];
+    const uint8_t* iv         = fbuf + 1;
+    const uint8_t* ct         = fbuf + 17;
+    const uint8_t* mac_stored = fbuf + 17 + len;
 
     uint8_t keys[64];
     derive_keys(identity, keys);
@@ -95,7 +95,6 @@ bool encstore_read(const char* path, const RNS::Identity& identity,
     // Verify HMAC before decrypting — wrong identity or tampered file detected here
     RNS::Bytes mac_expected = compute_mac(keys + 32, version, iv, ct, len);
     if (!ct_equal(mac_expected.data(), mac_stored, 32)) {
-        free(ct);
         memset(keys, 0, 64);
         return false;
     }
@@ -105,15 +104,13 @@ bool encstore_read(const char* path, const RNS::Identity& identity,
     ctr.setIV(iv, 16);
     ctr.decrypt(data, ct, len);
 
-    free(ct);
     memset(keys, 0, 64);
     return true;
 }
 
 size_t encstore_size(const char* path) {
-    File f = SD.open(path, FILE_READ);
+    microStore::File f = RNS::Utilities::OS::open_file(path, microStore::File::ModeRead);
     if (!f) return 0;
     size_t sz = f.size();
-    f.close();
     return (sz > ENCSTORE_FILE_OVERHEAD) ? (sz - ENCSTORE_FILE_OVERHEAD) : 0;
 }

@@ -1,6 +1,5 @@
 #pragma once
 #include <Arduino.h>
-#include <SD.h>
 #include <SHA256.h>
 #include <CTR.h>
 #include <AES.h>
