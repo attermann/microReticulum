@@ -20,7 +20,9 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#ifdef SPI_SCK
 #include <SD.h>
+#endif
 
 #include "password.h"
 #include "encrypted_store.h"
@@ -245,26 +247,24 @@ void setup() {
     for (int i = 0; i < 300 && !Serial; i++) { delay(10); }
     Serial.println("\nencrypted_announce offline test");
 
-    // ── SD init ───────────────────────────────────────────────────────────────
-    // If SPI_SCK/MISO/MOSI are defined, bring up an explicit bus.
-    // Useful on boards where SD shares a bus with other peripherals (e.g. LoRa).
-    // Define LORA_CS (and any other peripheral CS pins) to assert them HIGH
-    // before touching the bus so they don't respond to SD traffic.
+    // ── SPI / SD hardware setup ───────────────────────────────────────────────
+    // On boards where SD shares a SPI bus with other peripherals (e.g. LoRa),
+    // the bus and CS pins must be configured before microStore initialises SD.
+    // microStore::UniversalFileSystem::init() handles SD.begin() for standard
+    // pin layouts, so no explicit SD.begin() is needed in that case.
 #ifdef LORA_CS
     pinMode(LORA_CS, OUTPUT); digitalWrite(LORA_CS, HIGH);
 #endif
 #ifdef SPI_SCK
+    // Custom SPI bus — bring it up manually so SD.begin() can use the right pins.
     pinMode(SD_CS_PIN, OUTPUT); digitalWrite(SD_CS_PIN, HIGH);
     SPIClass spi(HSPI);
     spi.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
     if (!SD.begin(SD_CS_PIN, spi, SD_SPEED)) {
-#else
-    if (!SD.begin(SD_CS_PIN)) {
-#endif
         Serial.println("SD init failed — check wiring and SD_CS_PIN");
         while (true) { delay(1000); }
     }
-    Serial.println("SD ready.");
+#endif
 
     // ── filesystem init (must happen before any OS:: calls) ───────────────────
     filesystem.init();
