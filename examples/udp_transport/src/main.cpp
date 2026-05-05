@@ -105,8 +105,15 @@ void loop() {
 }
 
 #ifdef ARDUINO
-int _write(int file, char *ptr, int len){
-    return Serial.write(ptr, len);
+extern "C" int _write(int file, char *ptr, int len) {
+	if (file == STDOUT_FILENO || file == STDERR_FILENO) {
+		if (Serial) {
+			size_t wrote = Serial.write((const uint8_t*)ptr, len);
+			Serial.flush();
+			return wrote;
+		}
+	}
+	return 0;
 }
 #else
 int getch( ) {
