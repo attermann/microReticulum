@@ -268,8 +268,16 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		else {
 			Bytes destination_hash = _object->_hash;
 			//p random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
-			// CBA TODO add in time to random hash
-			Bytes random_hash = Cryptography::random(Type::Identity::RANDOM_HASH_LENGTH/8);
+			// CBA Append 5-byte big-endian timestamp to random_hash
+			uint64_t now = (uint64_t)OS::time();
+			uint8_t time_bytes[5] = {
+				(uint8_t)((now >> 32) & 0xFF),
+				(uint8_t)((now >> 24) & 0xFF),
+				(uint8_t)((now >> 16) & 0xFF),
+				(uint8_t)((now >>  8) & 0xFF),
+				(uint8_t)( now        & 0xFF)
+			};
+			Bytes random_hash = Cryptography::random(5) + Bytes(time_bytes, 5);
 
 			Bytes new_app_data(app_data);
 			if (new_app_data.empty() && !_object->_default_app_data.empty()) {
