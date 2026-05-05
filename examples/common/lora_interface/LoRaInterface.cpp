@@ -110,6 +110,13 @@ bool LoRaInterface::start() {
 	// begin(freq MHz, bw kHz, sf, cr, syncWord, power dBm, preamble symbols, LNA gain 0=AGC)
 	int state = chip->begin(frequency, bandwidth, spreading, coding,
 	                        RADIOLIB_SX127X_SYNC_WORD, power, 20, 0);
+	// SX127x hardware default leaves RxPayloadCrcOn=0 and RadioLib's
+	// SX127x::begin() does not touch it. Upstream RNode firmware enables
+	// CRC unconditionally (sx127x::enableCrc, RNode_Firmware.ino:531), so
+	// real RNodes silently drop frames without a CRC. Enable it here to
+	// interoperate. SX126x branches below inherit CRC-on from
+	// SX126x::begin() (setCRC(2)), so no explicit call is needed there.
+	if (state == RADIOLIB_ERR_NONE) state = chip->setCRC(true);
 
 #elif defined(BOARD_RAK4631)
 	// nRF52: SPI pins must be configured before SPI.begin()
