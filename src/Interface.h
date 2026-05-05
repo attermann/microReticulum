@@ -29,6 +29,7 @@
 namespace RNS {
 
 	class Interface;
+	class Reticulum;
 	using HInterface = std::shared_ptr<Interface>;
 
 	class AnnounceEntry {
@@ -85,7 +86,13 @@ namespace RNS {
 		size_t _rxb = 0;
 		size_t _txb = 0;
 		bool _online = false;
-		Bytes _ifac_identity;
+		Identity _ifac_identity{RNS::Type::NONE};
+		Bytes _ifac_key;
+		Bytes _ifac_signature;
+		uint8_t _ifac_size = 0;
+		uint8_t _DEFAULT_IFAC_SIZE = 16;
+		std::string _ifac_netname;
+		std::string _ifac_netkey;
 		Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 		uint32_t _bitrate = 0;
 		uint16_t _HW_MTU = 0;
@@ -101,6 +108,7 @@ namespace RNS {
 		//Transport& _owner;
 
 	friend class Interface;
+	friend class Reticulum;
 	};
 
 	class Interface {
@@ -199,7 +207,17 @@ namespace RNS {
 		inline bool RPT() const { assert(_impl); return _impl->_RPT; }
 		inline bool online() const { assert(_impl); return _impl->_online; }
 		inline std::string name() const { assert(_impl); return _impl->_name; }
-		inline const Bytes& ifac_identity() const { assert(_impl); return _impl->_ifac_identity; }
+		inline const Identity& ifac_identity() const { assert(_impl); return _impl->_ifac_identity; }
+		inline const Bytes& ifac_key() const { assert(_impl); return _impl->_ifac_key; }
+		inline const Bytes& ifac_signature() const { assert(_impl); return _impl->_ifac_signature; }
+		inline uint8_t ifac_size() const { assert(_impl); return _impl->_ifac_size; }
+		inline void ifac_size(uint8_t size) { assert(_impl); _impl->_ifac_size = size; }
+		inline uint8_t default_ifac_size() const { assert(_impl); return _impl->_DEFAULT_IFAC_SIZE; }
+		inline void default_ifac_size(uint8_t size) { assert(_impl); _impl->_DEFAULT_IFAC_SIZE = size; }
+		inline const std::string& ifac_netname() const { assert(_impl); return _impl->_ifac_netname; }
+		inline void ifac_netname(const std::string& name) { assert(_impl); _impl->_ifac_netname = name; }
+		inline const std::string& ifac_netkey() const { assert(_impl); return _impl->_ifac_netkey; }
+		inline void ifac_netkey(const std::string& key) { assert(_impl); _impl->_ifac_netkey = key; }
 		inline Type::Interface::modes mode() const { assert(_impl); return _impl->_mode; }
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }
@@ -229,6 +247,7 @@ namespace RNS {
 		std::shared_ptr<InterfaceImpl> _impl;
 
 	friend class Transport;
+	friend class Reticulum;
 	};
 
 }
