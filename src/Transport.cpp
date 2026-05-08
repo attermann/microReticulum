@@ -141,6 +141,8 @@ using namespace RNS::Persistence;
 /*static*/ bool Transport::cleaning_caches = false;
 
 // CBA microStore
+/*static*/ uint32_t Transport::_path_store_segment_size = 0;
+/*static*/ uint8_t Transport::_path_store_segment_count = 0;
 /*static*/ PathStore Transport::_path_store(RNS_PATH_TABLE_SEGMENT_SIZE, RNS_PATH_TABLE_SEGMENT_COUNT);
 /*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
 
@@ -246,9 +248,9 @@ DestinationEntry empty_destination_entry;
 			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
 #if defined(ARDUINO)
 			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
-			_path_store.init(Utilities::OS::get_filesystem(), "/path_store");
+			_path_store.init(Utilities::OS::get_filesystem(), "/path_store", false, _path_store_segment_size, _path_store_segment_count);
 #else
-			_path_store.init(Utilities::OS::get_filesystem(), "path_store");
+			_path_store.init(Utilities::OS::get_filesystem(), "path_store", false, _path_store_segment_size, _path_store_segment_count);
 #endif
 			// If the filesystem is full then clear the path store since it's of no use full anyway
 			if (Utilities::OS::get_filesystem().storageAvailable() < 1024) {

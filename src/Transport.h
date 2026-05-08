@@ -363,7 +363,11 @@ namespace RNS {
 		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
 		inline static void max_pr_tags(uint16_t max_pr_tags) { _max_pr_tags = max_pr_tags; }
 		inline static uint16_t path_table_maxpersist() { return _path_table_maxpersist; }
-		inline static void path_table_maxpersist(uint16_t path_table_maxpersist) { _path_table_maxpersist = path_table_maxpersist; }
+		inline static void path_table_maxpersist(uint16_t value) { _path_table_maxpersist = value; }
+		inline static uint32_t path_store_segment_size() { return _path_store_segment_size; }
+		inline static void path_store_segment_size(uint32_t value) { _path_store_segment_size = value; }
+		inline static uint8_t path_store_segment_count() { return _path_store_segment_count; }
+		inline static void path_store_segment_count(uint8_t value) { _path_store_segment_count = value; }
 		// CBA TEST
 		static inline void identity(Identity& identity) { _identity = identity; }
 
@@ -458,6 +462,8 @@ namespace RNS {
 		static bool cleaning_caches;
 
 		// CBA microStore
+		static uint32_t _path_store_segment_size;
+		static uint8_t _path_store_segment_count;
 		static PathStore _path_store;
 		static NewPathTable _new_path_table;
 	};
