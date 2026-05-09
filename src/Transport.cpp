@@ -143,7 +143,11 @@ using namespace RNS::Persistence;
 // CBA microStore
 /*static*/ uint32_t Transport::_path_store_segment_size = 0;
 /*static*/ uint8_t Transport::_path_store_segment_count = 0;
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 /*static*/ PathStore Transport::_path_store(RNS_PATH_TABLE_SEGMENT_SIZE, RNS_PATH_TABLE_SEGMENT_COUNT);
+#else
+/*static*/ PathStore Transport::_path_store;
+#endif
 /*static*/ NewPathTable Transport::_new_path_table(Transport::_path_store);
 
 DestinationEntry empty_destination_entry;
@@ -253,7 +257,7 @@ DestinationEntry empty_destination_entry;
 			_path_store.init(Utilities::OS::get_filesystem(), "path_store", false, _path_store_segment_size, _path_store_segment_count);
 #endif
 			// If the filesystem is full then clear the path store since it's of no use full anyway
-			if (Utilities::OS::get_filesystem().storageAvailable() < 1024) {
+			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
 				WARNING("FileSystem is full, clearing existing path store");
 				_path_store.clear();
 			}
@@ -4116,12 +4120,10 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	_last_psram = psram;
 	_last_flash = flash;
 
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 	if (_path_store) {
 		HEAD("Path Store Stats", LOG_TRACE);
 		_path_store.dumpInfo();
 	}
-#endif
 
 }
 

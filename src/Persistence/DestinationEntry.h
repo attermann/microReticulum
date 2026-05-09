@@ -19,7 +19,11 @@
 #include "Bytes.h"
 
 // CBA microStore
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 #include <microStore/FileStore.h>
+#else
+#include <microStore/HeapStore.h>
+#endif
 #include <microStore/TypedStore.h>
 #include <microStore/Codec.h>
 
@@ -85,9 +89,11 @@ public:
 //using PathTable = std::map<RNS::Bytes, DestinationEntry>;
 using PathTable = std::map<RNS::Bytes, DestinationEntry, std::less<RNS::Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const RNS::Bytes, DestinationEntry>>>;
 
-//using PathStore = microStore::FileStore;
-//using NewPathTable = microStore::TypedStore<Bytes, DestinationEntry, PathStore>;
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 using PathStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+#else
+using PathStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+#endif
 using NewPathTable = microStore::TypedStore<Bytes, DestinationEntry, PathStore>;
 
 } }
