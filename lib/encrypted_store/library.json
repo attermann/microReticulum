@@ -1,0 +1,19 @@
+{
+	"name": "encrypted_store",
+	"version": "1.0.0",
+	"description": "AES-256-CTR encrypted file storage for microReticulum messages using the identity encryption key",
+	"keywords": "reticulum, encryption, aes, storage, identity",
+	"license": "Apache-2.0",
+	"dependencies": [
+		{
+			"name": "Crypto",
+			"url": "https://github.com/attermann/Crypto.git"
+		},
+		{
+			"name": "microReticulum",
+			"url": "https://github.com/attermann/microReticulum.git"
+		}
+	],
+	"frameworks": "arduino",
+	"platforms": "*"
+}
