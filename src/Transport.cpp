@@ -2225,9 +2225,13 @@ DestinationEntry empty_destination_entry;
 							else {
 								ttl = DESTINATION_TIMEOUT;
 							}
+							const bool path_already_known = _new_path_table.exists(packet.destination_hash().collection());
 							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry, ttl)) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
 								++_destinations_added;
+							}
+							else if (path_already_known || _new_path_table.exists(packet.destination_hash().collection())) {
+								NOTICEF("Path table already has destination %s; keeping existing path entry", packet.destination_hash().toHex().c_str());
 							}
 							else {
 								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());
