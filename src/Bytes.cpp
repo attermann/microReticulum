@@ -16,7 +16,7 @@
 
 using namespace RNS;
 
-/*static*/ Bytes::Data Bytes::empty_data;
+/*static*/ Bytes::Data Bytes::_empty_data;
 
 // Creates new shared data for instance
 // - If capacity is specified (>0) then create empty shared data with initial reserved capacity
