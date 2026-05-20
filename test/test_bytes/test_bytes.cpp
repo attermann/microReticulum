@@ -646,6 +646,13 @@ void test_mid_zero_size_bytes() {
 	TEST_ASSERT_EQUAL_size_t(0, mid.size());
 }
 
+void test_empty_collection() {
+	RNS::Bytes empty;
+	empty.clear();
+	const std::vector<uint8_t>& vec = empty.collection();
+	TEST_ASSERT_EQUAL_size_t(0, vec.size());
+}
+
 
 void setUp(void) {
 	// set stuff up here before each test
@@ -684,6 +691,7 @@ int runUnityTests(void) {
 	RUN_TEST(test_hex_roundtrip_stability);
 	RUN_TEST(test_mid_large_len);
 	RUN_TEST(test_mid_zero_size_bytes);
+	RUN_TEST(test_empty_collection);
 
 	// Suite-level teardown
 	size_t post_memory = RNS::Utilities::Memory::heap_available();

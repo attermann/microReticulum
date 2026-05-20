@@ -29,6 +29,7 @@
 #include <set>
 #include <cassert>
 #include <stdint.h>
+//#include <initializer_list>
 
 namespace RNS {
 
@@ -41,6 +42,18 @@ namespace RNS {
 		//p response_generator(path, data, request_id, link_id, remote_identity, requested_at)
 		using response_generator = Bytes(*)(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
 	public:
+		RequestHandler(const Bytes& path, RequestHandler::response_generator resp_gen = nullptr, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, std::initializer_list<Bytes> allowed_list = {}) {
+			_path = path;
+			_response_generator = resp_gen;
+			_allow = allow;
+			_allowed_list = allowed_list;
+		}
+		RequestHandler(const Bytes& path, RequestHandler::response_generator resp_gen = nullptr, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, const std::set<Bytes>& allowed_list = {}) {
+			_path = path;
+			_response_generator = resp_gen;
+			_allow = allow;
+			_allowed_list = allowed_list;
+		}
 		RequestHandler(const RequestHandler& handler) {
 			_path = handler._path;
 			_response_generator = handler._response_generator;
@@ -130,6 +143,10 @@ namespace RNS {
 		//Packet announce(const Bytes& app_data = {}, bool path_response = false, const Interface& attached_interface = {Type::NONE}, const Bytes& tag = {}, bool send = true);
 		Packet announce(const Bytes& app_data, bool path_response, const Interface& attached_interface, const Bytes& tag = {}, bool send = true);
 		Packet announce(const Bytes& app_data = {}, bool path_response = false);
+
+		void register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, std::initializer_list<Bytes> allowed_list = {});
+		void register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow, const std::set<Bytes>& allowed_list);
+		bool deregister_request_handler(const Bytes& path);
 
 		/*
 		Set or query whether the destination accepts incoming link requests.

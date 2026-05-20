@@ -35,13 +35,8 @@ private:
 
 };
 
-#ifdef ARDUINO
-const char test_path_table_path[] = "/test_path_table";
-const char test_empty_path_table_path[] = "/test_empty_path_table";
-#else
-const char test_path_table_path[] = "test_path_table";
-const char test_empty_path_table_path[] = "test_empty_path_table";
-#endif
+const char test_path_table_path[] = "./test_path_table";
+const char test_empty_path_table_path[] = "./test_empty_path_table";
 
 void testSerializeDestinationTable() {
 	HEAD("testSerializeDestinationTable", RNS::LOG_TRACE);

@@ -307,9 +307,9 @@ Recall last heard app_data for a destination hash.
 		std::map<Bytes, IdentityEntry> storage_known_destinations;
 // TODO
 /*
-		if os.path.isfile(RNS.Reticulum.storagepath+"/known_destinations"):
+		if os.path.isfile(RNS.Reticulum.storagepath+"./known_destinations"):
 			try:
-				file = open(RNS.Reticulum.storagepath+"/known_destinations","rb")
+				file = open(RNS.Reticulum.storagepath+"./known_destinations","rb")
 				storage_known_destinations = umsgpack.load(file)
 				file.close()
 			except:
@@ -330,7 +330,7 @@ Recall last heard app_data for a destination hash.
 // TODO
 /*
 		DEBUGF("Saving %lu known destinations to storage...", _known_destinations.size());
-		file = open(RNS.Reticulum.storagepath+"/known_destinations","wb")
+		file = open(RNS.Reticulum.storagepath+"./known_destinations","wb")
 		umsgpack.dump(Identity.known_destinations, file)
 		file.close()
 		DEBUGF("Saved known destinations to storage in %.3f seconds", OS::round(OS::time() - save_start, 3));
@@ -350,9 +350,9 @@ Recall last heard app_data for a destination hash.
 /*static*/ void Identity::load_known_destinations() {
 // TODO
 /*
-	if os.path.isfile(RNS.Reticulum.storagepath+"/known_destinations"):
+	if os.path.isfile(RNS.Reticulum.storagepath+"./known_destinations"):
 		try:
-			file = open(RNS.Reticulum.storagepath+"/known_destinations","rb")
+			file = open(RNS.Reticulum.storagepath+"./known_destinations","rb")
 			loaded_known_destinations = umsgpack.load(file)
 			file.close()
 

@@ -80,6 +80,8 @@ using namespace RNS::Persistence;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
+/*static*/ std::set<Destination> Transport::_mgmt_destinations;
+/*static*/ std::set<Bytes> Transport::_mgmt_hashes;
 
 ///*static*/ std::set<Interface> Transport::_local_client_interfaces;
 /*static*/ std::set<std::reference_wrapper<const Interface>, std::less<const Interface>> Transport::_local_client_interfaces;
@@ -106,6 +108,8 @@ using namespace RNS::Persistence;
 // CBA MCU
 /*static*/ //float Transport::_tables_cull_interval		= 5.0;
 /*static*/ float Transport::_tables_cull_interval		= 60.0;
+/*static*/ double Transport::_last_mgmt_announce		= 0.0;
+/*static*/ float Transport::_mgmt_announce_interval		= 7200.0;
 /*static*/ bool Transport::_saving_path_table			= false;
 // CBA ACCUMULATES
 // CBA MCU
@@ -126,6 +130,14 @@ using namespace RNS::Persistence;
 
 /*static*/ Reticulum Transport::_owner({Type::NONE});
 /*static*/ Identity Transport::_identity({Type::NONE});
+/*static*/ Identity Transport::_network_identity({Type::NONE});
+
+/*static*/ std::set<Bytes> Transport::_remote_management_allowed;
+/*static*/ Destination Transport::_probe_destination({Type::NONE});
+/*static*/ Destination Transport::_remote_management_destination({Type::NONE});
+/*static*/ Destination Transport::_blackhole_destination({Type::NONE});
+/*static*/ Destination Transport::_instance_destination({Type::NONE});
+/*static*/ Destination Transport::_network_destination({Type::NONE});
 
 // CBA
 /*static*/ Transport::Callbacks Transport::_callbacks;
@@ -233,6 +245,37 @@ DestinationEntry empty_destination_entry;
 	_control_hashes.insert(tunnel_synthesize_destination.hash());
 	DEBUGF("Created transport-specific tunnel synthesize destination %s", tunnel_synthesize_destination.hash().toHex().c_str());
 
+	// Create remote management destinations
+	//if RNS.Reticulum.remote_management_enabled() and not Transport.owner.is_connected_to_shared_instance:
+		_remote_management_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "remote.management"};
+		//_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+		_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_ALL);
+		//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+		_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
+		_mgmt_destinations.insert(_remote_management_destination);
+		_mgmt_hashes.insert(_remote_management_destination.hash());
+		NOTICEF("Enabled remote management on %s", _remote_management_destination.toString().c_str());
+
+/*p
+	//if RNS.Reticulum.publish_blackhole_enabled() and not Transport.owner.is_connected_to_shared_instance:
+		_blackhole_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "info.blackhole"};
+		_blackhole_destination.register_request_handler({"/list"}, blackhole_list_handler, Type::Destination::ALLOW_ALL);
+		_mgmt_destinations.insert(_blackhole_destination);
+		_mgmt_hashes.insert(_blackhole_destination.hash());
+		NOTICEF("Enabled blackhole list publishing for transport identity %s", _identity.hash().toHex().c_str());
+
+	//if Transport.network_identity and not Transport.owner.is_connected_to_shared_instance:
+		//p Transport.instance_destination = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network", "instance", RNS.hexrep(Transport.network_identity.hash, delimit=False))
+		std::string instance_aspect = "network.instance." + _network_identity.hash().toHex();
+		_instance_destination = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, instance_aspect.c_str()};
+		//p Transport.network_destination  = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network")
+		_network_destination  = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "network"};
+		_mgmt_destinations.insert(_instance_destination);
+		_mgmt_destinations.insert(_network_destination);
+		_mgmt_hashes.insert(_instance_destination.hash());
+		_mgmt_hashes.insert(_network_destination.hash());
+*/
+
 	// Start job loops
 	_jobs_running = false;
 	// CBA Threading
@@ -252,10 +295,8 @@ DestinationEntry empty_destination_entry;
 			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
 #if defined(ARDUINO)
 			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
-			_path_store.init(Utilities::OS::get_filesystem(), "/path_store", false, _path_store_segment_size, _path_store_segment_count);
-#else
-			_path_store.init(Utilities::OS::get_filesystem(), "path_store", false, _path_store_segment_size, _path_store_segment_count);
 #endif
+			_path_store.init(Utilities::OS::get_filesystem(), "./path_store", false, _path_store_segment_size, _path_store_segment_count);
 			// If the filesystem is full then clear the path store since it's of no use full anyway
 			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
 				WARNING("FileSystem is full, clearing existing path store");
@@ -276,12 +317,13 @@ DestinationEntry empty_destination_entry;
 
 		// Create transport-specific destination for probe requests
 		if (Reticulum::probe_destination_enabled()) {
-			Destination probe_destination(_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "probe");
-			probe_destination.accepts_links(false);
-			probe_destination.set_proof_strategy(Type::Destination::PROVE_ALL);
-			DEBUGF("Created probe responder destination %s", probe_destination.hash().toHex().c_str());
-			probe_destination.announce();
-			NOTICEF("Transport Instance will respond to probe requests on %s", probe_destination.toString().c_str());
+			_probe_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "probe"};
+			_probe_destination.accepts_links(false);
+			_probe_destination.set_proof_strategy(Type::Destination::PROVE_ALL);
+			DEBUGF("Created probe responder destination %s", _probe_destination.hash().toHex().c_str());
+			//_probe_destination.announce();
+			_mgmt_destinations.insert(_probe_destination);
+			NOTICEF("Transport Instance will respond to probe requests on %s", _probe_destination.toString().c_str());
 		}
 
 		VERBOSEF("Transport instance %s started", _identity.toString().c_str());
@@ -763,6 +805,23 @@ DestinationEntry empty_destination_entry;
 	// CBA send link-related path requests
 	for (auto& destination_hash : path_requests) {
 		request_path(destination_hash);
+	}
+
+	// Send announces for management destinations
+	if (OS::time() > (_last_mgmt_announce + _mgmt_announce_interval)) {
+		_last_mgmt_announce = OS::time();
+		TRACE("Sending management announces...");
+		try {
+			//p def job():
+			//p 	for destination in Transport.mgmt_destinations: destination.announce()
+			//p threading.Thread(target=job, daemon=True).start()
+			for (auto destination : _mgmt_destinations) {
+				destination.announce();
+			}
+		}
+		catch (const std::exception& e) {
+			ERRORF("Error while sending management announces: %s", e.what());
+		}
 	}
 }
 
@@ -1423,7 +1482,7 @@ DestinationEntry empty_destination_entry;
 
 	_jobs_locked = true;
 
-	Packet packet(RNS::Destination(RNS::Type::NONE), raw);
+	Packet packet(Destination(Type::NONE), raw);
 	if (!packet.unpack()) {
 		WARNING("Transport::inbound: Packet unpack failed!");
 		return;
@@ -2175,7 +2234,7 @@ DestinationEntry empty_destination_entry;
 						// CBA Culling before adding to esnure table does not exceed maxsize
 						TRACEF("Caching packet %s", packet.get_hash().toHex().c_str());
 						// CBA Currently this is the ONLY place that packets get cached
-						if (RNS::Transport::cache_packet(packet, true)) {
+						if (Transport::cache_packet(packet, true)) {
 							packet.cached(true);
 						}
 						//TRACEF("Adding packet %s to packet table", packet.get_hash().toHex().c_str());
@@ -2836,7 +2895,7 @@ Deregisters an announce handler.
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
 		double start_time = OS::time();
-		bool success = RNS::Utilities::OS::remove_file(packet_cache_path);
+		bool success = Utilities::OS::remove_file(packet_cache_path);
 		double diff_time = OS::time() - start_time;
 		if (diff_time < 1.0) {
 			DEBUGF("Remove cached packet in %d ms", (int)(diff_time*1000));
@@ -3035,16 +3094,16 @@ Deregisters an announce handler.
 /*static*/ double Transport::first_hop_timeout(const Bytes& destination_hash) {
 	double latency = next_hop_per_byte_latency(destination_hash);
 	if (latency > 0.0) {
-		return RNS::Type::Reticulum::MTU * latency + RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
+		return Type::Reticulum::MTU * latency + Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
 	}
 	else {
-		return RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
+		return Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
 	}
 }
 
 /*static*/ double Transport::extra_link_proof_timeout(const Interface& interface) {
 	if (interface) {
-		return ((1.0/(double)interface.bitrate())*8.0)*RNS::Type::Reticulum::MTU;
+		return ((1.0/(double)interface.bitrate())*8.0)*Type::Reticulum::MTU;
 	}
 	else {
 		return 0.0;
@@ -3100,6 +3159,26 @@ Deregisters an announce handler.
 
         return False
 
+*/
+
+
+/*p
+    @staticmethod
+    def await_path(destination_hash, timeout=None, on_interface=None):
+        """
+        Requests a path to the destination from the network and
+        blocks until the path is available, or the timeout is reached.
+
+        :param destination_hash: A destination hash as *bytes*.
+        :param timeout: An optional timeout in seconds.
+        :param on_interface: If specified, the path request will only be sent on this interface. In normal use, Reticulum handles this automatically, and this parameter should not be used.
+        :returns: *True* if a path to the destination is found, otherwise *False*.
+        """
+        timeout = time.time()+(timeout if timeout else Transport.PATH_REQUEST_TIMEOUT)
+        if Transport.has_path(destination_hash): return True
+        else: Transport.request_path(destination_hash, on_interface=on_interface)
+        while not Transport.has_path(destination_hash) and time.time() < timeout: time.sleep(0.05)
+        return Transport.has_path(destination_hash)
 */
 
 /*
@@ -3173,6 +3252,64 @@ will announce it.
 
 /*static*/ void Transport::request_path(const Bytes& destination_hash) {
 	return request_path(destination_hash, {Type::NONE});
+}
+
+/*static*/ Bytes Transport::remote_status_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
+/*p
+	if remote_identity != None:
+		response = None
+		try:
+			if isinstance(data, list) and len(data) > 0:
+				response = []
+				response.append(Transport.owner.get_interface_stats())
+				if data[0] == True: response.append(Transport.owner.get_link_count())
+
+				return response
+
+		except Exception as e:
+			RNS.log("An error occurred while processing remote status request from "+str(remote_identity), RNS.LOG_ERROR)
+			RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+
+		return None
+*/
+	return {"remote_status"};
+}
+
+/*static*/ Bytes Transport::remote_path_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
+/*p
+	if remote_identity != None:
+		response = None
+		try:
+			if isinstance(data, list) and len(data) > 0:
+				command = data[0]
+				destination_hash = None
+				max_hops = None
+				if len(data) > 1: destination_hash = data[1]
+				if len(data) > 2: max_hops = data[2]
+
+				if command == "table":
+					table = Transport.owner.get_path_table(max_hops=max_hops)
+					response = []
+					for path in table:
+						if destination_hash == None or destination_hash == path["hash"]:
+							response.append(path)
+
+				elif command == "rates":
+					table = Transport.owner.get_rate_table()
+					response = []
+					for path in table:
+						if destination_hash == None or destination_hash == path["hash"]:
+							response.append(path)
+
+				return response
+
+		except Exception as e:
+			RNS.log("An error occurred while processing remote status request from "+str(remote_identity), RNS.LOG_ERROR)
+			RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+
+		return None
+*/
+	return {"remote_path"};
 }
 
 /*static*/ void Transport::path_request_handler(const Bytes& data, const Packet& packet) {
@@ -3565,10 +3702,25 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 */
 }
 
+/*p
+    @staticmethod
+    def timebase_from_random_blob(random_blob):
+        return int.from_bytes(random_blob[5:10], "big")
+
+    @staticmethod
+    def timebase_from_random_blobs(random_blobs):
+        timebase = 0
+        for random_blob in random_blobs:
+            emitted = Transport.timebase_from_random_blob(random_blob)
+            if emitted > timebase: timebase = emitted
+
+        return timebase
+*/
+
 /*static*/ uint64_t Transport::announce_emitted(const Packet& packet) {
 	//p random_blob = packet.data[RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8:RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8+10]
 	//p announce_emitted = int.from_bytes(random_blob[5:10], "big")
-	Bytes random_blob = packet.data().mid(RNS::Type::Identity::KEYSIZE/8+RNS::Type::Identity::NAME_HASH_LENGTH/8, 10);
+	Bytes random_blob = packet.data().mid(Type::Identity::KEYSIZE/8+Type::Identity::NAME_HASH_LENGTH/8, 10);
 	if (random_blob) {
 		return OS::from_bytes_big_endian(random_blob.data() + 5, 5);
 	}
@@ -3625,7 +3777,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 		try {
 #if CUSTOM
 TRACEF("Transport::read_path_table: buffer capacity %d bytes", Persistence::_buffer.capacity());
-			if (RNS::Utilities::OS::read_file(destination_table_path, Persistence::_buffer) > 0) {
+			if (Utilities::OS::read_file(destination_table_path, Persistence::_buffer) > 0) {
 				TRACEF("Transport::read_path_table: read: %d bytes", Persistence::_buffer.size());
 #ifndef NDEBUG
 				// CBA DEBUG Dump path table
@@ -3809,7 +3961,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 				DEBUGF("Saving %d path table entries to storage...", _path_table.size());
 				char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
 				snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
-				if (RNS::Utilities::OS::write_file(destination_table_path, Persistence::_buffer) == Persistence::_buffer.size()) {
+				if (Utilities::OS::write_file(destination_table_path, Persistence::_buffer) == Persistence::_buffer.size()) {
 					TRACEF("Transport::write_path_table: wrote %d entries, %d bytes", _path_table.size(), Persistence::_buffer.size());
 					_path_table_crc = crc;
 					success = true;
@@ -3817,7 +3969,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 #ifndef NDEBUG
 					// CBA DEBUG Dump path table
 					//TRACE("FILE: destination_table");
-					//if (OS::read_file("/destination_table", Persistence::_buffer) > 0) {
+					//if (OS::read_file("./destination_table", Persistence::_buffer) > 0) {
 					//	TRACE(Persistence::_buffer.toString().c_str());
 					//}
 #endif
@@ -4048,8 +4200,11 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 /*static*/ void Transport::dump_stats() {
 
+#ifdef RNS_DEBUG_HEAP
 	Memory::dump_heap_stats();
+#endif // RNS_DEBUG_HEAP
 
+#ifdef RNS_DEBUG_MEMORY
 	size_t memory = Memory::heap_available();
 	uint8_t memory_pct = 0;
 	size_t memory_size = Memory::heap_size();
@@ -4090,7 +4245,9 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	// _announce_table
 	// _held_announces
 	HEADF(LOG_VERBOSE, "sram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
+#endif // RNS_DEBUG_MEMORY
 
+#ifdef RNS_DEBUG_METRICS
 	// _path_requests
 	// _discovery_path_requests
 	// _pending_local_path_requests
@@ -4115,17 +4272,28 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 	VERBOSEF("phl: %u rcp: %u lt: %u pl: %u al: %u tun: %u", _packet_hashlist.size(), _receipts.size(), _link_table.size(), _pending_links.size(), _active_links.size(), _tunnels.size());
 	VERBOSEF("pin: %u pout: %u padd: %u dpr: %u ikd: %u ia: %u\r\n", _packets_received, _packets_sent, _destinations_added, destination_path_responses, Identity::_known_destinations.size(), interface_announces);
+#endif // RNS_DEBUG_METRICS
 
 	_last_memory = memory;
 	_last_psram = psram;
 	_last_flash = flash;
 
+#ifdef RNS_DEBUG_PATHSTORE
 	if (_path_store) {
 		HEAD("Path Store Stats", LOG_TRACE);
 		_path_store.dumpInfo();
 	}
+#endif // RNS_DEBUG_PATHSTORE
 
 }
+
+/*p
+    @staticmethod
+    def void_queues():
+        Transport.held_announces = {}
+        Transport.receipts = []
+        Transport.reverse_table = {}
+*/
 
 /*static*/ void Transport::exit_handler() {
 	TRACE("Transport::exit_handler()");
@@ -4133,6 +4301,130 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		persist_data();
 	}
 }
+
+/*p
+
+    @staticmethod
+    def blackhole_identity(identity_hash, until=None, reason=None):
+        try:
+            if not identity_hash in Transport.blackholed_identities:
+                entry = {"source": Transport.identity.hash, "until": until, "reason": reason}
+                Transport.blackholed_identities[identity_hash] = entry
+                Transport.persist_blackhole()
+                Transport.remove_blackholed_paths()
+                RNS.log(f"Blackholed identity {RNS.prettyhexrep(identity_hash)}", RNS.LOG_INFO)
+                return True
+
+            else: return None
+        
+        except Exception as e:
+            RNS.log(f"Error while blackholing identity: {e}", RNS.LOG_ERROR)
+            return False
+
+    @staticmethod
+    def unblackhole_identity(identity_hash):
+        try:
+            if identity_hash in Transport.blackholed_identities:
+                Transport.blackholed_identities.pop(identity_hash)
+                Transport.persist_blackhole()
+                RNS.log(f"Lifted blackhole for identity {RNS.prettyhexrep(identity_hash)}", RNS.LOG_INFO)
+                return True
+
+            else: return None
+
+        except Exception as e:
+            RNS.log(f"Error while unblackholing identity: {e}", RNS.LOG_ERROR)
+            return False
+
+    @staticmethod
+    def reload_blackhole():
+        now = time.time()
+        source_count = 0
+        dest_len = (RNS.Reticulum.TRUNCATED_HASHLENGTH//8)*2
+        for filename in os.listdir(RNS.Reticulum.blackholepath):
+            try:
+                if filename == "local": source_identity_hash = Transport.identity.hash
+                else:
+                    if len(filename) != dest_len: raise ValueError(f"Identity hash length for blackhole source {filename} is invalid")
+                    source_identity_hash = bytes.fromhex(filename)
+                    if not source_identity_hash in RNS.Reticulum.blackhole_sources():
+                        RNS.log(f"Skipping disabled blackhole source {RNS.prettyhexrep(source_identity_hash)}", RNS.LOG_VERBOSE) if RNS.sl(RNS.LOG_VERBOSE) else None
+                        continue
+
+                sourcepath = os.path.join(RNS.Reticulum.blackholepath, filename)
+                with open(sourcepath, "rb") as f:
+                    packed = f.read()
+                    source_list = umsgpack.unpackb(packed)
+                    for identity_hash in source_list:
+                        if len(identity_hash) == RNS.Reticulum.TRUNCATED_HASHLENGTH//8:
+                            if identity_hash in Transport.blackholed_identities:
+                                if Transport.blackholed_identities[identity_hash]["source"] == Transport.identity.hash:
+                                    continue
+                            
+                            se        = source_list[identity_hash]
+                            until     = se["until"] if "until" in se else None
+                            reason    = se["reason"] if "reason" in se else None
+                            entry     = {"source": source_identity_hash, "until": until, "reason": reason}
+                            
+                            if until == None or now < until: Transport.blackholed_identities[identity_hash] = entry
+
+                source_count += 1
+
+            except Exception as e:
+                RNS.log(f"Could not load blackholed identities from source file {filename}: {e}", RNS.LOG_ERROR)
+                RNS.trace_exception(e)
+
+        Transport.remove_blackholed_paths()
+
+    def remove_blackholed_paths():
+        drop_destinations = []
+        for destination_hash in Transport.path_table.copy():
+            try:
+                associated_identity = RNS.Identity.recall(destination_hash, _no_use=True)
+                if associated_identity and associated_identity.hash in Transport.blackholed_identities:
+                    if not destination_hash in drop_destinations: drop_destinations.append(destination_hash)
+            except Exception as e:
+                RNS.log(f"Error while enumerating blackhole-associated destinations: {e}", RNS.LOG_ERROR)
+
+        for destination_hash in drop_destinations:
+            try:
+                with Transport.path_table_lock:
+                    if destination_hash in Transport.path_table: Transport.path_table.pop(destination_hash)
+            except Exception as e:
+                RNS.log(f"Error while dropping blackhole-associated destination from path table: {e}", RNS.LOG_ERROR)
+
+        if len(drop_destinations) > 0:
+            ms = "" if len(drop_destinations) == 1 else "s"
+            RNS.log(f"Removed {len(drop_destinations)} destination{ms} associated with blackholed identities from path table", RNS.LOG_INFO)
+
+    @staticmethod
+    def blackhole_list_handler(path, data, request_id, link_id, remote_identity, requested_at):
+        try: return Transport.blackholed_identities
+        except Exception as e:
+            RNS.log("An error occurred while processing blackhole list request from "+str(remote_identity), RNS.LOG_ERROR)
+            RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+
+        return None
+
+    @staticmethod
+    def persist_blackhole():
+        try:
+            local_blackhole = {}
+            for identity_hash in Transport.blackholed_identities:
+                if Transport.blackholed_identities[identity_hash]["source"] == Transport.identity.hash:
+                    local_blackhole[identity_hash] = Transport.blackholed_identities[identity_hash]
+
+            packed = umsgpack.packb(local_blackhole)
+            localpath = os.path.join(RNS.Reticulum.blackholepath, "local")
+            tmppath = f"{localpath}.tmp"
+            with open(tmppath, "wb") as f: f.write(packed)
+            if os.path.isfile(localpath): os.unlink(localpath)
+            os.rename(tmppath, localpath)
+
+        except Exception as e:
+            RNS.log(f"Error while persisting blackhole list: {e}", RNS.LOG_ERROR)
+            RNS.trace_exception(e)
+*/
 
 /*static*/ Destination Transport::find_destination_from_hash(const Bytes& destination_hash) {
 	TRACEF("Transport::find_destination_from_hash: Searching for destination %s", destination_hash.toHex().c_str());

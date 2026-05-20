@@ -51,12 +51,12 @@ public:
 		Serial.println(" MB");
 		// ensure FileSystem is writable and format if not
 		RNS::Bytes test("test");
-		if (write_file("/test", test) < 4) {
+		if (write_file("./test", test) < 4) {
 			INFO("SPIFFS FileSystem is being formatted, please wait...");
 			SPIFFS.format();
 		}
 		else {
-			remove_file("/test");
+			remove_file("./test");
 		}
 		DEBUG("SPIFFS FileSystem is ready");
 #elif BOARD_NRF52

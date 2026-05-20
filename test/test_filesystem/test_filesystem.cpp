@@ -9,13 +9,8 @@
 #include <ostream>
 #include <iostream>
 
-#ifdef ARDUINO
-const char test_file_path[] = "/test_file";
-const char test_stream_path[] = "/test_stream";
-#else
-const char test_file_path[] = "test_file";
-const char test_stream_path[] = "test_stream";
-#endif
+const char test_file_path[] = "./test_file";
+const char test_stream_path[] = "./test_stream";
 
 
 void writeFile(const char* file_path) {
@@ -168,7 +163,7 @@ void testListDirectory() {
 	INFOF("testListDirectory: pre-mem: %lu", pre_memory);
 
 	{
-		RNS::Utilities::OS::list_directory("/", [](const char* file_path) {
+		RNS::Utilities::OS::list_directory("./", [](const char* file_path) {
 			INFOF("FILE: %s", file_path);
 		});
 	}
@@ -256,8 +251,8 @@ void testStdStream() {
 void testCacheWrite() {
 
 	// CBA Attempt to reproduce failure to open file for write that is leaking mmeory
-	if (!RNS::Utilities::OS::directory_exists("/cache")) {
-		RNS::Utilities::OS::create_directory("/cache");
+	if (!RNS::Utilities::OS::directory_exists("./cache")) {
+		RNS::Utilities::OS::create_directory("./cache");
 	}
 	writeFile("./cache/test");
 	writeFile("./cache/45c50662af11f1b26889efaab547942b45c50662af11f1b26889efaab547942b");
@@ -282,8 +277,8 @@ int runUnityTests(void) {
 	// Suite-level setup
     microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
 	filesystem.init();
-	//FileSystem::listDir("/");
-	//FileSystem::listDir("/cache");
+	//FileSystem::listDir("./");
+	//FileSystem::listDir("./cache");
 	RNS::Utilities::OS::register_filesystem(filesystem);
 
 	size_t pre_memory = RNS::Utilities::Memory::heap_available();

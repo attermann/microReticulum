@@ -121,17 +121,10 @@ Reticulum::Reticulum() : _object(new Object()) {
 	Reticulum.identitypath  = Reticulum.configdir+"/storage/identities"
 */
 // CBA TEST
-#ifdef ARDUINO
-	//_storagepath = "";
-	strncpy(_storagepath, "", FILEPATH_MAXSIZE);
-	//_cachepath = "/cache";
-	strncpy(_cachepath, "/cache", FILEPATH_MAXSIZE);
-#else
 	//_storagepath = ".";
 	strncpy(_storagepath, ".", FILEPATH_MAXSIZE);
 	//_cachepath = "./cache";
 	strncpy(_cachepath, "./cache", FILEPATH_MAXSIZE);
-#endif
 
 /*p TODO
 	if not os.path.isdir(Reticulum.storagepath):

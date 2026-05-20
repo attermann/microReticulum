@@ -316,6 +316,8 @@ namespace RNS {
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);
+		static Bytes remote_status_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
+		static Bytes remote_path_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
 		static void path_request_handler(const Bytes& data, const Packet& packet);
 		static void path_request(const Bytes& destination_hash, bool is_from_local_client, const Interface& attached_interface, const Bytes& requestor_transport_id = {}, const Bytes& tag = {});
 		static bool from_local_client(const Packet& packet);
@@ -403,6 +405,8 @@ namespace RNS {
 		// for control purposes like path requests
 		static std::set<Destination> _control_destinations;
 		static std::set<Bytes> _control_hashes;
+		static std::set<Destination> _mgmt_destinations;
+		static std::set<Bytes> _mgmt_hashes;
 
 		// Interfaces for communicating with
 		// local clients connected to a shared
@@ -432,6 +436,8 @@ namespace RNS {
 		static float _announces_check_interval;
 		static double _tables_last_culled;
 		static float _tables_cull_interval;
+		static double _last_mgmt_announce;
+		static float _mgmt_announce_interval;
 		static bool _saving_path_table;
 		static uint16_t _hashlist_maxsize;
 		static uint16_t _max_pr_tags;
@@ -446,6 +452,14 @@ namespace RNS {
 
 		static Reticulum _owner;
 		static Identity _identity;
+		static Identity _network_identity;
+
+		static std::set<Bytes> _remote_management_allowed;
+		static Destination _probe_destination;
+		static Destination _remote_management_destination;
+		static Destination _blackhole_destination;
+		static Destination _instance_destination;
+		static Destination _network_destination;
 
 		// CBA
 		static Callbacks _callbacks;

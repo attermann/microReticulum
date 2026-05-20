@@ -6,11 +6,7 @@
 #include <Transport.h>
 #include <Log.h>
 
-#ifdef ARDUINO
-const char destination_table_path[] = "/destination_table";
-#else
-const char destination_table_path[] = "destination_table";
-#endif
+const char destination_table_path[] = "./destination_table";
 
 class InInterface : public RNS::InterfaceImpl {
 public:

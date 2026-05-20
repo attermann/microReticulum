@@ -2,6 +2,9 @@
 
 #include "Bytes.h"
 #include "Log.h"
+#include "Identity.h"
+#include "Destination.h"
+#include "Link.h"
 
 #include <map>
 #include <string>
@@ -120,6 +123,45 @@ void testNewMap() {
 
 }
 
+bool request_generated = false;
+
+RNS::Bytes on_request_generator(const RNS::Bytes& path, const RNS::Bytes& data, const RNS::Bytes& request_id, const RNS::Bytes& link_id, const RNS::Identity& remote_identity, double requested_at) {
+	request_generated = true;
+	TEST_ASSERT_EQUAL_STRING("some data", data.toString().c_str());
+	TEST_ASSERT_EQUAL_STRING("some request_id", request_id.toString().c_str());
+	TEST_ASSERT_EQUAL_STRING("some link_id", link_id.toString().c_str());
+	TEST_ASSERT_EQUAL_FLOAT(1.2, requested_at);
+	return {"some content"};
+}
+
+void test_request_handlers() {
+
+	std::map<RNS::Bytes, RNS::RequestHandler> request_handlers;
+	RNS::Bytes path("some path");
+	RNS::Bytes allow("some allow");
+	RNS::Bytes path_hash("some path_hash");
+
+	// Add request handler
+	{
+		//RequestHandler handler(path, generator, allow, allowed_list);
+		//_object->_request_handlers.insert({path_hash, handler});
+		request_handlers.insert({path_hash, {path, &on_request_generator, RNS::Type::Destination::request_policies::ALLOW_NONE, {allow}}});
+	}
+
+	// Retrieve request handler and call request generator
+	{
+		auto handler_iter = request_handlers.find(path_hash);
+		TEST_ASSERT_TRUE(handler_iter != request_handlers.end());
+		//RNS::RequestHandler handler = *handler_iter;
+		RNS::RequestHandler handler = (*handler_iter).second;
+		RNS::Identity identity;
+		RNS::Bytes content = handler._response_generator(handler._path, {"some data"}, {"some request_id"}, {"some link_id"}, identity, 1.2);
+		TEST_ASSERT_EQUAL_STRING("some content", content.toString().c_str());
+	}
+
+	TEST_ASSERT_TRUE(request_generated);
+}
+
 
 void setUp(void) {
 	// set stuff up here before each test
@@ -134,6 +176,7 @@ int runUnityTests(void) {
 	RUN_TEST(testBytesMap);
 	RUN_TEST(testOldMap);
 	RUN_TEST(testNewMap);
+	RUN_TEST(test_request_handlers);
 	return UNITY_END();
 }
 
