@@ -3,6 +3,27 @@
 This directory holds tests that validate the C++ port's behaviour against the
 Python Reticulum reference implementation. Two flavours, in increasing scope:
 
+## Top-level driver
+
+`test_interop/run_all.sh` builds each C++ test app and runs all four
+interop scenarios sequentially, reporting per-test PASS/FAIL and an
+aggregated exit status. Run from the repo root:
+
+```
+bash test_interop/run_all.sh
+```
+
+Each scenario also has its own driver script if you only want to run one:
+
+| Test         | Driver script                            | What it covers                                                  |
+|--------------|------------------------------------------|------------------------------------------------------------------|
+| resource     | `test_interop/run_resource_transfer.sh`  | Full Resource transfer over a Link (1024-byte payload)           |
+| packet       | `test_interop/run_packet_exchange.sh`    | DATA packets to a Destination, bidirectional, 256-byte patterns  |
+| link         | `test_interop/run_link_lifecycle.sh`     | Link establish + two-pass teardown (initiator and destination)   |
+| request      | `test_interop/run_request_response.sh`   | `Link::request("/echo", ...)` single-packet RPC (200-byte payload) |
+
+All four currently PASS against Python RNS 1.2.9 at `/Users/chad/python/Reticulum-latest`.
+
 ## 1. Wire-format cross-validation (implemented)
 
 The C++ unit test `test/test_resource_advertisement` includes a
@@ -29,7 +50,7 @@ A driver that:
 1. Spawns `python_resource_receiver.py` on UDP port 14242 (avoids the
    common RNS desktop-app conflict on 4242).
 2. Spawns the C++ sender binary built from
-   `examples/resource_interop_sender/` on UDP port 14243, configured to
+   `test_interop/resource_interop_sender/` on UDP port 14243, configured to
    send to 127.0.0.1:14242.
 3. Watches both stdouts and exits 0 iff both report SUCCESS.
 
@@ -57,7 +78,7 @@ Architectural caveats:
 
 ```
 # Build the C++ sender once
-cd examples/resource_interop_sender
+cd test_interop/resource_interop_sender
 pio run -e native17
 cd ../..
 
@@ -88,3 +109,16 @@ new Resource implementation:
   failing the integrity check. Fixed in `src/Resource.cpp`.
 - **`UDPInterface.h` macros** — `DEFAULT_UDP_PORT` etc. lacked `#ifndef`
   guards, so build-flag overrides were silently ignored.
+
+Additional pre-existing bugs uncovered by the broader interop suite
+(`test_interop/run_all.sh`):
+
+- **`RequestReceiptData::_link`** declared as bare `Link _link;` instead
+  of `Link _link = {Type::NONE};`. The default Link constructor with no
+  destination and no owner generates `_prv` but leaves `_sig_prv` null,
+  then dereferences `_sig_prv->public_key()` → SIGSEGV. Every call to
+  `Link::request()` constructs a `RequestReceipt` containing a
+  `RequestReceiptData`, so this crashed the RPC path entirely. Fixed in
+  `src/LinkData.h`.
+- **Embedded `Link` members in `RequestReceiptData`** required by the
+  fix above are now self-consistent across all four interop scenarios.

@@ -1015,7 +1015,7 @@ DestinationEntry empty_destination_entry;
 						should_transmit = false;
 					}
 				}
-				
+
 				if (packet.attached_interface() && interface != packet.attached_interface()) {
 					TRACE("Transport::outbound: Packet has wrong attached interface, not transmitting");
 					should_transmit = false;

@@ -82,9 +82,7 @@ inline Bytes pack_request_envelope(double timestamp, const Bytes& path_hash, con
 // packed prefix is byte-identical to what was on the wire.
 
 // Parse [bin(request_id), <raw_payload>] -> request_id, remainder.
-inline bool unpack_response_envelope(const Bytes& packed,
-                                     Bytes& out_request_id,
-                                     Bytes& out_raw_payload) {
+inline bool unpack_response_envelope(const Bytes& packed, Bytes& out_request_id, Bytes& out_raw_payload) {
     if (!packed || packed.size() < 2) return false;
     MsgPack::Unpacker u;
     u.feed(packed.data(), packed.size());
@@ -165,9 +163,8 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		_object->_initiator = false;
 		_object->_prv     = Cryptography::X25519PrivateKey::generate();
 		// CBA BUG: not checking for owner
-		if (_object->_owner) {
-			_object->_sig_prv = _object->_owner.identity().sig_prv();
-		}
+		if (_object->_owner) _object->_sig_prv = _object->_owner.identity().sig_prv();
+		else _object->_sig_prv = Cryptography::Ed25519PrivateKey::generate();
 	}
 	else {
 		_object->_initiator = true;
@@ -176,12 +173,16 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		_object->_prv     = Cryptography::X25519PrivateKey::generate();
 		_object->_sig_prv = Cryptography::Ed25519PrivateKey::generate();
 	}
+	assert(_object->_prv);
+	assert(_object->_sig_prv);
 
 	_object->_pub           = _object->_prv->public_key();
+	assert(_object->_pub);
 	_object->_pub_bytes     = _object->_pub->public_bytes();
 	TRACEF("Link::load_private_key: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
 
 	_object->_sig_pub       = _object->_sig_prv->public_key();
+	assert(_object->_sig_pub);
 	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
 	TRACEF("Link::load_private_key: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
 
@@ -378,7 +379,7 @@ void Link::handshake() {
 		uint16_t derived_key_length;
 		if (_object->_mode == RNS::Type::Link::MODE_AES128_CBC) derived_key_length = 32;
 		else if (_object->_mode == RNS::Type::Link::MODE_AES256_CBC) derived_key_length = 64;
-		else throw new std::invalid_argument("Invalid link mode "+std::to_string(_object->_mode)+" on "+toString());
+		else throw std::invalid_argument("Invalid link mode "+std::to_string(_object->_mode)+" on "+toString());
 
 		_object->_derived_key = Cryptography::hkdf(
 			derived_key_length,
@@ -1518,12 +1519,14 @@ const Bytes Link::decrypt(const Bytes& ciphertext) {
 
 const Bytes Link::sign(const Bytes& message) {
 	assert(_object);
+	assert(_object->_sig_prv);
 	return _object->_sig_prv->sign(message);
 }
 
 bool Link::validate(const Bytes& signature, const Bytes& message) {
 	assert(_object);
 	try {
+		assert(_object->_peer_sig_pub);
 		_object->_peer_sig_pub->verify(signature, message);
 		return true;
 	}
@@ -1843,7 +1846,7 @@ RequestReceipt::RequestReceipt(const Link& link, const PacketReceipt& packet_rec
 		_object->_timeout = timeout;
 	}
 	else {
-		throw new std::invalid_argument("No timeout specified for request receipt");
+		throw std::invalid_argument("No timeout specified for request receipt");
 	}
 
 	_object->_callbacks._response = response_callback;
