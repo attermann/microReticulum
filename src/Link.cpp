@@ -1269,58 +1269,64 @@ void Link::receive(const Packet& packet) {
 					teardown_packet(packet);
 					break;
 				}
-/*z
 				case Type::Packet::RESOURCE_ADV:
 				{
 					TRACEF("Link %s received DATA packet with context RESOURCE_ADV", hash().toHex().c_str());
-					//p packet.plaintext = decrypt(packet.data)
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						const_cast<Packet&>(packet).plaintext(plaintext);
 						if (ResourceAdvertisement::is_request(packet)) {
-							Resource::accept(packet, callback=_object->_request_resource_concluded);
+							// Dispatch to Link::request_resource_concluded() happens
+							// via Link::resource_concluded() on completion;
+							// no trampoline callback required at accept-time.
+							Resource::accept(packet,
+							                 /*callback=*/nullptr,
+							                 /*progress_callback=*/nullptr,
+							                 ResourceAdvertisement::read_request_id(packet));
 						}
 						else if (ResourceAdvertisement::is_response(packet)) {
-							Bytes request_id = ResourceAdvertisement::read_request_id(packet)
-							for (auto& pending_request : _object->_pending_requests) {
-								if (pending_request.request_id == request_id) {
-									const Bytes response_resource = Resource::accept(packet, callback=_object->_response_resource_concluded, progress_callback=pending_request.response_resource_progress, request_id = request_id);
+							Bytes request_id = ResourceAdvertisement::read_request_id(packet);
+							// std::set yields const refs; RequestReceipt uses pimpl
+							// so a value copy still mutates the underlying data.
+							for (RequestReceipt pending_request : _object->_pending_requests) {
+								if (pending_request.request_id() == request_id) {
+									Resource response_resource = Resource::accept(packet,
+									                                              /*callback=*/nullptr,
+									                                              /*progress_callback=*/nullptr,
+									                                              request_id);
 									if (response_resource) {
-										//p if pending_request.response_size == None:
-										if (pending_request.response_size == 0) {
-											pending_request.response_size = ResourceAdvertisement::read_size(packet);
+										if (pending_request.response_transfer_size() == 0) {
+											pending_request.response_size(ResourceAdvertisement::read_size(packet));
 										}
-										//p if pending_request.response_transfer_size == None:
-										if (pending_request.response_transfer_size == 0) {
-											pending_request.response_transfer_size = 0;
-										}
-										pending_request.response_transfer_size += ResourceAdvertisement::read_transfer_size(packet);
-										//p if pending_request.started_at == None:
-										if (pending_request.started_at == 0.0) {
-											pending_request.started_at = OS::time();
-										}
-										pending_request.response_resource_progress(response_resource);
+										const size_t prev = pending_request.response_transfer_size();
+										pending_request.response_transfer_size(prev + ResourceAdvertisement::read_transfer_size(packet));
 									}
 								}
 							}
 						}
-						else if (_object->_resource_strategy == ACCEPT_NONE) {
-							//p pass
+						else if (_object->_resource_strategy == Type::Link::ACCEPT_NONE) {
+							// drop
 						}
-						else if (_object->_resource_strategy == ACCEPT_APP) {
-							if (_object->_callbacks.resource) {
+						else if (_object->_resource_strategy == Type::Link::ACCEPT_APP) {
+							if (_object->_callbacks._resource) {
 								try {
-									resource_advertisement = RNS.ResourceAdvertisement.unpack(packet.plaintext());
-									resource_advertisement.link = *this;
-									if (_object->_callbacks.resource(resource_advertisement)) {
-										Resource::accept(packet, _object->_callbacks.resource_concluded);
-									}
+									ResourceAdvertisement resource_advertisement =
+										ResourceAdvertisement::unpack(packet.plaintext());
+									resource_advertisement._link = *this;
+									_object->_callbacks._resource(resource_advertisement);
+									// Currently the resource() callback returns void on the
+									// C++ port; accept unconditionally if a callback is set.
+									Resource::accept(packet, _object->_callbacks._resource_concluded);
 								}
 								catch (const std::exception& e) {
 									ERRORF("Error while executing resource accept callback from %s. The contained exception was: %s", toString().c_str(), e.what());
 								}
-						elif _object->_resource_strategy == ACCEPT_ALL:
-							RNS.Resource.accept(packet, _object->_callbacks.resource_concluded)
+							}
+						}
+						else if (_object->_resource_strategy == Type::Link::ACCEPT_ALL) {
+							Resource::accept(packet, _object->_callbacks._resource_concluded);
+						}
+					}
 					break;
 				}
 				case Type::Packet::RESOURCE_REQ:
@@ -1328,18 +1334,36 @@ void Link::receive(const Packet& packet) {
 					TRACEF("Link %s received DATA packet with context RESOURCE_REQ", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
-						if ord(plaintext[:1]) == RNS.Resource.HASHMAP_IS_EXHAUSTED:
-							resource_hash = plaintext[1+RNS.Resource.MAPHASH_LEN:Type::Identity::HASHLENGTH//8+1+RNS.Resource.MAPHASH_LEN]
-						else:
-							resource_hash = plaintext[1:Type::Identity::HASHLENGTH//8+1]
+						// Layout: [hmu_flag (1 byte) || maybe last_map_hash (4 bytes)
+						//         || resource_hash (HASHLENGTH/8 bytes) || requested_hashes...]
+						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
+						const size_t maphash_len = Type::Resource::MAPHASH_LEN;
+						Bytes resource_hash;
+						if (plaintext.size() >= 1
+						    && plaintext.data()[0] == Type::Resource::HASHMAP_IS_EXHAUSTED) {
+							if (plaintext.size() >= 1 + maphash_len + hash_bytes) {
+								resource_hash = plaintext.mid(1 + maphash_len, hash_bytes);
+							}
+						}
+						else if (plaintext.size() >= 1 + hash_bytes) {
+							resource_hash = plaintext.mid(1, hash_bytes);
+						}
 
-						for resource in _object->_outgoing_resources:
-							if resource.hash == resource_hash:
-								// We need to check that this request has not been
-								// received before in order to avoid sequencing errors.
-								if not packet.packet_hash in resource.req_hashlist:
-									resource.req_hashlist.append(packet.packet_hash)
-									resource.request(plaintext)
+						if (resource_hash) {
+							for (auto& resource_const : _object->_outgoing_resources) {
+								Resource& resource = const_cast<Resource&>(resource_const);
+								if (resource.hash() == resource_hash) {
+									// Dedupe retransmitted requests (mirror Python
+									// Resource.req_hashlist).
+									if (!resource.has_request_hash(packet.packet_hash())) {
+										resource.note_request_hash(packet.packet_hash());
+										resource.request(plaintext);
+									}
+									break;
+								}
+							}
+						}
+					}
 					break;
 				}
 				case Type::Packet::RESOURCE_HMU:
@@ -1347,10 +1371,18 @@ void Link::receive(const Packet& packet) {
 					TRACEF("Link %s received DATA packet with context RESOURCE_HMU", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
-						resource_hash = plaintext[:Type::Identity::HASHLENGTH//8]
-						for resource in _object->_incoming_resources:
-							if resource_hash == resource.hash:
-								resource.hashmap_update_packet(plaintext)
+						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
+						if (plaintext.size() >= hash_bytes) {
+							Bytes resource_hash = plaintext.left(hash_bytes);
+							for (auto& resource_const : _object->_incoming_resources) {
+								Resource& resource = const_cast<Resource&>(resource_const);
+								if (resource.hash() == resource_hash) {
+									resource.hashmap_update_packet(plaintext);
+									break;
+								}
+							}
+						}
+					}
 					break;
 				}
 				case Type::Packet::RESOURCE_ICL:
@@ -1358,13 +1390,20 @@ void Link::receive(const Packet& packet) {
 					TRACEF("Link %s received DATA packet with context RESOURCE_ICL", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
-						resource_hash = plaintext[:Type::Identity::HASHLENGTH//8]
-						for resource in _object->_incoming_resources:
-							if resource_hash == resource.hash:
-								resource.cancel()
+						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
+						if (plaintext.size() >= hash_bytes) {
+							Bytes resource_hash = plaintext.left(hash_bytes);
+							for (auto& resource_const : _object->_incoming_resources) {
+								Resource& resource = const_cast<Resource&>(resource_const);
+								if (resource.hash() == resource_hash) {
+									resource.cancel();
+									break;
+								}
+							}
+						}
+					}
 					break;
 				}
-*/
 				case Type::Packet::KEEPALIVE:
 				{
 					TRACEF("Link %s received DATA packet with context KEEPALIVE", hash().toHex().c_str());
@@ -1383,8 +1422,8 @@ void Link::receive(const Packet& packet) {
 				case Type::Packet::RESOURCE:
 				{
 					TRACEF("Link %s received DATA packet with context RESOURCE", hash().toHex().c_str());
-					for (auto& resource : _object->_incoming_resources) {
-						//z resource.receive_part(packet);
+					for (auto& resource_const : _object->_incoming_resources) {
+						const_cast<Resource&>(resource_const).receive_part(packet);
 					}
 					break;
 				}
@@ -1412,9 +1451,9 @@ void Link::receive(const Packet& packet) {
 				if (packet.context() == Type::Packet::RESOURCE_PRF) {
 					TRACEF("Link %s received PROOF packet with context RESOURCE_PRF", hash().toHex().c_str());
 					Bytes resource_hash = packet.data().left(Type::Identity::HASHLENGTH/8);
-					for (const auto& resource : _object->_outgoing_resources) {
-						if (resource_hash == resource.hash()) {
-							//z resource.validate_proof(packet.data());
+					for (auto& resource_const : _object->_outgoing_resources) {
+						if (resource_hash == resource_const.hash()) {
+							const_cast<Resource&>(resource_const).validate_proof(packet.data());
 						}
 					}
 				}
@@ -1521,11 +1560,26 @@ void Link::set_resource_concluded_callback(Callbacks::resource_concluded callbac
 
 void Link::resource_concluded(const Resource& resource) {
 	assert(_object);
-	if (_object->_incoming_resources.count(resource) > 0) {
+	const bool was_incoming = _object->_incoming_resources.count(resource) > 0;
+	if (was_incoming) {
 		_object->_incoming_resources.erase(resource);
 	}
 	if (_object->_outgoing_resources.count(resource) > 0) {
 		_object->_outgoing_resources.erase(resource);
+	}
+
+	// Dispatch by role. The RESOURCE_ADV handler in Link::receive() reads the
+	// request/response flag bits from the advertisement and stores them on
+	// the Resource via accept(); here we route a completed request-resource
+	// or response-resource to the corresponding handler.
+	if (was_incoming && resource.status() == Type::Resource::COMPLETE
+	    && resource.request_id() && resource.request_id().size() > 0) {
+		if (resource.is_response()) {
+			response_resource_concluded(resource);
+		}
+		else {
+			request_resource_concluded(resource);
+		}
 	}
 }
 
@@ -1598,6 +1652,11 @@ std::string Link::toString() const {
 }
 
 // getters
+
+const Link::Callbacks& Link::callbacks() const {
+	assert(_object);
+	return _object->_callbacks;
+}
 
 double Link::rtt() const {
 	assert(_object);

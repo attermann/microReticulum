@@ -129,6 +129,14 @@ namespace RNS {
 		Type::Resource::status status() const;
 		size_t size() const;
 		size_t total_size() const;
+		bool is_response() const;
+		bool initiator() const;
+
+		// Per-resource RESOURCE_REQ packet-hash dedupe (used by the Link
+		// dispatcher to drop retransmitted requests). Mirror Python
+		// Resource.req_hashlist.
+		bool has_request_hash(const Bytes& packet_hash) const;
+		void note_request_hash(const Bytes& packet_hash);
 
 	protected:
 		std::shared_ptr<ResourceData> _object;

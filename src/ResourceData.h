@@ -147,6 +147,10 @@ namespace RNS {
 		// Packets
 		Packet _advertisement_packet = {Type::NONE};
 
+		// Per-resource dedupe of incoming RESOURCE_REQ packets so a
+		// retransmitted request does not cause duplicate part sends.
+		std::vector<Bytes> _req_hashlist;
+
 		// Progress tracking
 		uint32_t _processed_parts = 0;
 		uint32_t _progress_total_parts = 0;

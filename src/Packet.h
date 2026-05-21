@@ -282,6 +282,9 @@ namespace RNS {
 		inline void transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; }
 		//CBA Following method is only used by Link to provide Resource access to decrypted resource advertisement. Consider a better way.
 		inline void plaintext(const Bytes& plaintext) { assert(_object); _object->_plaintext = plaintext; }
+		// Used by Resource::receive_part to file an incoming packet's raw
+		// payload into the receiver-side assembly buffer.
+		inline void data(const Bytes& data) { assert(_object); _object->_data = data; }
 
 #ifndef NDEBUG
 		std::string debugString() const;

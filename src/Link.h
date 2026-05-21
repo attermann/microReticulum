@@ -244,6 +244,7 @@ namespace RNS {
 		std::string toString() const;
 
 		// getters
+		const Callbacks& callbacks() const;
 		double rtt() const;
 		const Destination& destination() const;
 		// CBA LINK
