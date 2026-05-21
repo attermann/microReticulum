@@ -14,9 +14,24 @@
 
 #include <stdint.h>
 
+#ifndef DEFAULT_UDP_PORT
 #define DEFAULT_UDP_PORT		4242
+#endif
+// Separate local/remote ports are useful for point-to-point loopback on a
+// single host where broadcast doesn't reach the other process; default to
+// the common DEFAULT_UDP_PORT for backward compatibility.
+#ifndef DEFAULT_UDP_LOCAL_PORT
+#define DEFAULT_UDP_LOCAL_PORT		DEFAULT_UDP_PORT
+#endif
+#ifndef DEFAULT_UDP_REMOTE_PORT
+#define DEFAULT_UDP_REMOTE_PORT		DEFAULT_UDP_PORT
+#endif
+#ifndef DEFAULT_UDP_LOCAL_HOST
 #define DEFAULT_UDP_LOCAL_HOST	"0.0.0.0"
+#endif
+#ifndef DEFAULT_UDP_REMOTE_HOST
 #define DEFAULT_UDP_REMOTE_HOST	"255.255.255.255"
+#endif
 
 class UDPInterface : public RNS::InterfaceImpl {
 
@@ -55,9 +70,9 @@ private:
 	// it can be ip address of the server or 
 	// broadcast
 	std::string _local_host = DEFAULT_UDP_LOCAL_HOST;
-	int _local_port = DEFAULT_UDP_PORT;
+	int _local_port = DEFAULT_UDP_LOCAL_PORT;
 	std::string _remote_host = DEFAULT_UDP_REMOTE_HOST;
-	int _remote_port = DEFAULT_UDP_PORT;
+	int _remote_port = DEFAULT_UDP_REMOTE_PORT;
 
 	// create UDP instance
 #ifdef ARDUINO

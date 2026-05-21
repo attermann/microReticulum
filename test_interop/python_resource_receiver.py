@@ -76,6 +76,10 @@ def on_link_established(link):
 
 def write_config(config_dir: str, port: int) -> None:
     config_path = os.path.join(config_dir, "config")
+    # Point-to-point loopback on a non-default port (avoids the user's
+    # RNS desktop apps on 4242). macOS doesn't reliably loop 255.255.255.255
+    # broadcast between two localhost processes, so use 127.0.0.1 explicitly.
+    forward_port = port + 1
     cfg = f"""
 [reticulum]
   enable_transport = No
@@ -85,7 +89,7 @@ def write_config(config_dir: str, port: int) -> None:
   panic_on_interface_error = No
 
 [logging]
-  loglevel = 4
+  loglevel = 7
 
 [interfaces]
 
@@ -95,7 +99,7 @@ def write_config(config_dir: str, port: int) -> None:
     listen_ip = 127.0.0.1
     listen_port = {port}
     forward_ip = 127.0.0.1
-    forward_port = {port + 1}
+    forward_port = {forward_port}
 """
     with open(config_path, "w") as f:
         f.write(cfg)
@@ -103,8 +107,8 @@ def write_config(config_dir: str, port: int) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=4242,
-                    help="UDP port the Python receiver listens on")
+    ap.add_argument("--port", type=int, default=14242,
+                    help="UDP port the Python receiver listens on (default 14242 to avoid clashing with the system RNS instance on 4242)")
     ap.add_argument("--timeout", type=float, default=60.0,
                     help="seconds to wait for a resource before giving up")
     ap.add_argument("--identity-file", default=None,
@@ -114,6 +118,10 @@ def main():
     args = ap.parse_args()
 
     config_dir = tempfile.mkdtemp(prefix="rns_interop_recv_")
+    # RNS expects the storage/resources/ subdirectory to exist (used to
+    # stage incoming resources to disk before the assembled callback). The
+    # default ~/.reticulum auto-creates it; with a fresh tempdir we have to.
+    os.makedirs(os.path.join(config_dir, "storage", "resources"), exist_ok=True)
     write_config(config_dir, args.port)
     print(f"[python] config dir: {config_dir}", flush=True)
 
@@ -146,9 +154,17 @@ def main():
 
     print(f"[python] destination hash: {destination.hash.hex()}", flush=True)
     destination.announce()
+    print("[python] announced", flush=True)
 
     start = time.time()
+    last_announce = time.time()
     while time.time() - start < args.timeout:
+        # Re-announce periodically so a sender that starts after us still
+        # has a chance to learn our destination.
+        if time.time() - last_announce >= 5.0 and not state["link"]:
+            destination.announce()
+            last_announce = time.time()
+            print("[python] re-announced", flush=True)
         if state["received"]:
             payload = state["payload_bytes"]
             if payload is None:

@@ -23,38 +23,68 @@ The test:
 constants in the C++ test can be updated whenever the Python reference's
 wire format changes.
 
-## 2. Full Resource transfer over UDP (not yet implemented)
+## 2. Full Resource transfer over UDP — C++ initiator -> Python receiver
 
-Goal: drive an actual `RNS.Resource` transfer end-to-end between a Python
-peer and the C++ port over a UDP loopback interface and verify byte-exact
-payload reception.
+A driver that:
+1. Spawns `python_resource_receiver.py` on UDP port 14242 (avoids the
+   common RNS desktop-app conflict on 4242).
+2. Spawns the C++ sender binary built from
+   `examples/resource_interop_sender/` on UDP port 14243, configured to
+   send to 127.0.0.1:14242.
+3. Watches both stdouts and exits 0 iff both report SUCCESS.
 
-Sketch:
+Wire path on each side:
 
-- `python_resource_receiver.py` — Python script that runs an `RNS.Reticulum`
-  instance on a known UDP port, with a known `Identity` (fixed private key
-  for reproducibility) and a `Destination` that accepts links with
-  `ACCEPT_ALL`. Waits for a `Resource`, verifies its payload, and exits
-  with a status code.
-- A C++ test binary or extended example that runs an `RNS::Reticulum`
-  instance, opens a UDP interface to the Python peer, receives the
-  announce, builds a `Link`, sends a `Resource` with a known payload, and
-  exits on proof arrival or timeout.
-- `run.sh` — driver script that launches both processes, collects their
-  stdout, and exits with success iff both report SUCCESS.
+- Python: listens on `127.0.0.1:14242`, sends to `127.0.0.1:14243`.
+- C++:    listens on `127.0.0.1:14243`, sends to `127.0.0.1:14242`.
+
+Point-to-point loopback is used instead of `255.255.255.255` broadcast
+because macOS doesn't reliably loop limited-broadcast traffic between two
+processes on the same host. The example's `platformio.ini` sets
+`DEFAULT_UDP_LOCAL_HOST`, `DEFAULT_UDP_REMOTE_HOST`,
+`DEFAULT_UDP_LOCAL_PORT` and `DEFAULT_UDP_REMOTE_PORT` build flags;
+`examples/common/udp_interface/UDPInterface.h` has been extended with
+matching `#ifndef` guards so these are overridable per-example without
+touching the library code.
 
 Architectural caveats:
 
-- microReticulum currently uses a global static `RNS::Transport`. A
-  two-instance C++ loopback within the same process is not currently
-  possible, which is why this test is structured as two OS processes
-  communicating over UDP.
-- The Python side must use a UDP interface configuration that mirrors the
-  C++ `UDPInterface` (port 4242 by default, broadcast or
-  point-to-point loopback). The Python `UDPInterface` config goes in
-  Python's `~/.reticulum/config` (or a dedicated `--config` dir).
+- microReticulum uses a global static `RNS::Transport`. A two-instance
+  C++ loopback inside the same process is not possible — this is why the
+  test is structured as two OS processes communicating over UDP.
 
-This work is deferred from sub-phase 1.7 to a follow-up because building
-a robust two-process driver and debugging the live-network interop has a
-significant time cost. The wire-format cross-validation in #1 is the most
-error-prone single piece and is covered now.
+### Running
+
+```
+# Build the C++ sender once
+cd examples/resource_interop_sender
+pio run -e native17
+cd ../..
+
+# Run the interop driver
+bash test_interop/run_resource_transfer.sh
+```
+
+Expected last line: `[driver] PASS` with both processes exiting 0.
+
+### Bugs found and fixed during live interop
+
+The interop test exposed several pre-existing bugs as well as ones in the
+new Resource implementation:
+
+- **`Link::ready_for_new_resource()`** — boolean returned the inverse of
+  what it should (true when an outgoing resource already existed,
+  blocking new ones). Fixed in `src/Link.cpp`.
+- **`Link::link_closed()`** — iterated `_incoming_resources` /
+  `_outgoing_resources` while `Resource::cancel()` erases from those same
+  sets, invalidating the iterator and crashing. Now snapshots first.
+- **`Link::receive()` PROOF / RESOURCE_PRF dispatch** — same iterator
+  invalidation pattern when `validate_proof()` calls
+  `resource_concluded()` which erases. Now snapshots first.
+- **`Resource` hash & expected-proof input order** — Python computes
+  `full_hash(data || random_hash)` and `full_hash(data || hash)`; the C++
+  port was computing `full_hash(random_hash || data || ...)`. Receiver
+  computed the right thing locally but the advertised hash didn't match,
+  failing the integrity check. Fixed in `src/Resource.cpp`.
+- **`UDPInterface.h` macros** — `DEFAULT_UDP_PORT` etc. lacked `#ifndef`
+  guards, so build-flag overrides were silently ignored.

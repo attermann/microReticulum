@@ -824,11 +824,16 @@ void Link::teardown_packet(const Packet& packet) {
 
 void Link::link_closed() {
 	assert(_object);
-	for (auto& resource : _object->_incoming_resources) {
-		const_cast<Resource&>(resource).cancel();
+	// Snapshot the resource sets first — Resource::cancel() calls back into
+	// Link::cancel_outgoing_resource / cancel_incoming_resource which erase
+	// from the same set, invalidating the iterator on the live container.
+	std::vector<Resource> incoming(_object->_incoming_resources.begin(), _object->_incoming_resources.end());
+	std::vector<Resource> outgoing(_object->_outgoing_resources.begin(), _object->_outgoing_resources.end());
+	for (auto& resource : incoming) {
+		resource.cancel();
 	}
-	for (auto& resource : _object->_outgoing_resources) {
-		const_cast<Resource&>(resource).cancel();
+	for (auto& resource : outgoing) {
+		resource.cancel();
 	}
 	if (_object->_channel) {
 		_object->_channel._shutdown();
@@ -1451,9 +1456,14 @@ void Link::receive(const Packet& packet) {
 				if (packet.context() == Type::Packet::RESOURCE_PRF) {
 					TRACEF("Link %s received PROOF packet with context RESOURCE_PRF", hash().toHex().c_str());
 					Bytes resource_hash = packet.data().left(Type::Identity::HASHLENGTH/8);
-					for (auto& resource_const : _object->_outgoing_resources) {
-						if (resource_hash == resource_const.hash()) {
-							const_cast<Resource&>(resource_const).validate_proof(packet.data());
+					// Snapshot — validate_proof() may call resource_concluded()
+					// which erases from _outgoing_resources, invalidating any
+					// in-flight iterator on the live set.
+					std::vector<Resource> outgoing(_object->_outgoing_resources.begin(),
+					                               _object->_outgoing_resources.end());
+					for (auto& resource : outgoing) {
+						if (resource_hash == resource.hash()) {
+							resource.validate_proof(packet.data());
 						}
 					}
 				}
@@ -1641,7 +1651,10 @@ void Link::cancel_incoming_resource(const Resource& resource) {
 
 bool Link::ready_for_new_resource() {
 	assert(_object);
-	return (_object->_outgoing_resources.size() > 0);
+	// Mirror Python RNS.Link.ready_for_new_resource (Link.py:1311):
+	// new resources are accepted only when no resource is currently in
+	// the outgoing queue.
+	return _object->_outgoing_resources.empty();
 }
 
 std::string Link::toString() const {

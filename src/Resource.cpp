@@ -226,7 +226,10 @@ Resource::Resource(const Bytes& data, const Link& link, bool advertise /*= true*
 		_object->_uncompressed_size = data_size;
 		_object->_total_size        = data_size + _object->_metadata_size;
 
-		// Build the payload: random_hash || data. (No bz2 compression.)
+		// Build the payload: prefix_random_hash || data. (No bz2 compression.)
+		// Mirror Python Resource.py:411-413 — the prefix is a random hash
+		// included in the encrypted stream so identical user payloads still
+		// produce different ciphertexts.
 		_object->_random_hash = Identity::get_random_hash().left(Type::Resource::RANDOM_HASH_SIZE);
 
 		Bytes payload;
@@ -237,12 +240,16 @@ Resource::Resource(const Bytes& data, const Link& link, bool advertise /*= true*
 		_object->_compressed       = false;
 		_object->_compressed_data  = {Bytes::NONE};
 
-		// Hash & expected proof are derived from the pre-encryption payload
-		// (which the receiver will get back after Link::decrypt).
-		// Mirror Python Resource.py:441-443.
-		_object->_hash            = Identity::full_hash(payload);
-		_object->_truncated_hash  = Identity::truncated_hash(payload);
-		_object->_expected_proof  = Identity::full_hash(payload + _object->_hash);
+		// The hash and expected_proof are computed over (user data || random_hash),
+		// NOT over the prefixed payload — see Python Resource.py:441-443.
+		// The receiver's assemble() decrypts, strips the leading random_hash,
+		// then computes full_hash(self.data + self.random_hash) which is the
+		// user payload followed by the advertised random_hash. We must match
+		// that exactly for byte-level interop.
+		Bytes hash_input = data + _object->_random_hash;
+		_object->_hash            = Identity::full_hash(hash_input);
+		_object->_truncated_hash  = Identity::truncated_hash(hash_input);
+		_object->_expected_proof  = Identity::full_hash(data + _object->_hash);
 		_object->_original_hash   = (original_hash.size() > 0) ? original_hash : _object->_hash;
 
 		// Resources encrypt their payload themselves so each chunk sits in
