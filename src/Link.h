@@ -276,6 +276,41 @@ namespace RNS {
 		void mtu(uint16_t mtu);
 		void mode(RNS::Type::Link::link_mode mode);
 
+/*
+		// getters
+		inline double rtt() const { assert(_object); return _object->_rtt; }
+		inline const Destination& destination() const { assert(_object); return _object->_destination; }
+		inline const Interface& attached_interface() const { assert(_object); return _object->_attached_interface; }
+		// CBA LINK
+		//inline const Destination& link_destination() const { assert(_object); return _object->_link_destination; }
+		inline const Bytes& link_id() const { assert(_object); return _object->_link_id; }
+		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
+		inline uint16_t mtu() const { assert(_object); return _object->_mtu; }
+		inline Type::Link::status status() const { assert(_object); return _object->_status; }
+		inline double establishment_timeout() const { assert(_object); return _object->_establishment_timeout; }
+		inline uint16_t establishment_cost() const { assert(_object); return _object->_establishment_cost; }
+		inline uint8_t traffic_timeout_factor() const { assert(_object); return _object->_traffic_timeout_factor; }
+		inline double request_time() const { assert(_object); return _object->_request_time; }
+		inline double last_inbound() const { assert(_object); return _object->_last_inbound; }
+		inline std::set<RNS::RequestReceipt>& pending_requests() const { assert(_object); return _object->_pending_requests; }
+		inline Type::Link::teardown_reason teardown_reason() const { assert(_object); return _object->_teardown_reason; }
+		inline bool initiator() const { assert(_object); return _object->_initiator; }
+
+		// setters
+		inline void destination(const Destination& destination) { assert(_object); _object->_destination = destination; }
+		inline void attached_interface(const Interface& interface) { assert(_object); _object->_attached_interface = interface; }
+		inline void establishment_timeout(double timeout) { assert(_object); _object->_establishment_timeout = timeout; }
+		inline void establishment_cost(uint16_t cost) { assert(_object); _object->_establishment_cost = cost; }
+		inline void request_time(double time) { assert(_object); _object->_request_time = time; }
+		inline void last_inbound(double time) { assert(_object); _object->_last_inbound = time; }
+		inline void last_outbound(double time) { assert(_object); _object->_last_outbound = time; }
+		inline void increment_tx() { assert(_object); _object->_tx++; }
+		inline void increment_txbytes(uint16_t bytes) { assert(_object); _object->_txbytes += bytes; }
+		inline void status(Type::Link::status status) { assert(_object); _object->_status = status; }
+		inline void mtu(uint16_t mtu) { assert(_object); _object->_mtu = mtu; }
+		inline void mode(RNS::Type::Link::link_mode mode) { assert(_object); _object->_mode = mode; }
+*/
+
 	protected:
 		std::shared_ptr<LinkData> _object;
 

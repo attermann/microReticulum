@@ -39,6 +39,111 @@ using namespace RNS::Type::Link;
 using namespace RNS::Cryptography;
 using namespace RNS::Utilities;
 
+namespace {
+
+// Outer-envelope splice helpers. Python Reticulum recursively encodes the
+// user payload into the outer msgpack array (umsgpack.packb([...])). In
+// C++14 with typed callbacks we make the callback return its payload as
+// already-msgpack-encoded bytes, and splice them directly into the outer
+// array. Because msgpack is a streaming, self-describing format, the
+// concatenation produces a stream byte-identical to what Python emits.
+//
+// Using Packer::to_array(request_id, response) instead would wrap the
+// callback's bytes as a msgpack `bin` value, breaking Python interop.
+
+// [bin(request_id), <raw_payload>]
+inline Bytes pack_response_envelope(const Bytes& request_id, const Bytes& raw_payload) {
+    MsgPack::Packer p;
+    p.packArraySize(2);
+    p.packBinary(request_id.data(), request_id.size());
+    Bytes out(p.data(), p.size());
+    out.append(raw_payload);
+    return out;
+}
+
+// [float64(timestamp), bin(path_hash), <raw_payload>]
+inline Bytes pack_request_envelope(double timestamp, const Bytes& path_hash, const Bytes& raw_payload) {
+    MsgPack::Packer p;
+    p.packArraySize(3);
+    p.packFloat64(timestamp);
+    p.packBinary(path_hash.data(), path_hash.size());
+    Bytes out(p.data(), p.size());
+    out.append(raw_payload);
+    return out;
+}
+
+// The MsgPack library does not expose the byte position of the unpacker
+// (Unpacker::index() returns an OBJECT index -- number of values consumed --
+// and the internal byte-offset table is private). To find where the trailing
+// raw payload begins, we re-pack the parsed prefix values with a fresh Packer
+// and use Packer::size() as the prefix byte length. msgpack mandates
+// "shortest form" encoding (fixarray for <=15 elements, bin8 for <=255 bytes,
+// etc.) and both Python umsgpack and this C++ Packer follow it, so the re-
+// packed prefix is byte-identical to what was on the wire.
+
+// Parse [bin(request_id), <raw_payload>] -> request_id, remainder.
+inline bool unpack_response_envelope(const Bytes& packed,
+                                     Bytes& out_request_id,
+                                     Bytes& out_raw_payload) {
+    if (!packed || packed.size() < 2) return false;
+    MsgPack::Unpacker u;
+    u.feed(packed.data(), packed.size());
+
+    if (!u.isArray()) return false;
+    const size_t n = u.unpackArraySize();
+    if (n < 2) return false;
+
+    if (!u.isBin()) return false;
+    MsgPack::bin_t<uint8_t> rid;
+    u.deserialize(rid);
+    out_request_id = Bytes(rid.data(), rid.size());
+
+    MsgPack::Packer prefix;
+    prefix.packArraySize(n);
+    prefix.packBinary(rid.data(), rid.size());
+    const size_t cursor = prefix.size();
+    if (cursor > packed.size()) return false;
+
+    out_raw_payload = Bytes(packed.data() + cursor, packed.size() - cursor);
+    return true;
+}
+
+// Parse [float64(ts), bin(path_hash), <raw_payload>] -> ts, path_hash, remainder.
+inline bool unpack_request_envelope(const Bytes& packed,
+                                    double& out_ts,
+                                    Bytes& out_path_hash,
+                                    Bytes& out_raw_payload) {
+    if (!packed || packed.size() < 2) return false;
+    MsgPack::Unpacker u;
+    u.feed(packed.data(), packed.size());
+
+    if (!u.isArray()) return false;
+    const size_t n = u.unpackArraySize();
+    if (n < 3) return false;
+
+    const bool ts_is_float32 = u.isFloat32();
+    if (!ts_is_float32 && !u.isFloat64()) return false;
+    u.deserialize(out_ts);
+
+    if (!u.isBin()) return false;
+    MsgPack::bin_t<uint8_t> ph;
+    u.deserialize(ph);
+    out_path_hash = Bytes(ph.data(), ph.size());
+
+    MsgPack::Packer prefix;
+    prefix.packArraySize(n);
+    if (ts_is_float32) prefix.packFloat32(static_cast<float>(out_ts));
+    else               prefix.packFloat64(out_ts);
+    prefix.packBinary(ph.data(), ph.size());
+    const size_t cursor = prefix.size();
+    if (cursor > packed.size()) return false;
+
+    out_raw_payload = Bytes(packed.data() + cursor, packed.size() - cursor);
+    return true;
+}
+
+} // anonymous namespace
+
 /*static*/ uint8_t Link::resource_strategies = ACCEPT_NONE | ACCEPT_APP | ACCEPT_ALL;
 
 /*static*/ std::set<link_mode> Link::ENABLED_MODES = {MODE_AES256_CBC};
@@ -460,9 +565,10 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 
 	//p unpacked_request = [OS::time(), request_path_hash, data]
 	//p packed_request = umsgpack.packb(unpacked_request)
-    MsgPack::Packer packer;
-	packer.to_array(OS::time(), request_path_hash, data);
-	Bytes packed_request(packer.data(), packer.size());
+	// `data` is the caller's already-msgpack-encoded payload (or empty).
+	// We splice it verbatim so the wire format matches Python recursively
+	// encoding the third array element.
+	Bytes packed_request = pack_request_envelope(OS::time(), request_path_hash, data);
 
 	if (timeout == 0.0) {
 		timeout = _object->_rtt * _object->_traffic_timeout_factor + Type::Resource::RESPONSE_MAX_GRACE_TIME * 1.125;
@@ -868,6 +974,7 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 
 			if (allowed) {
 				DEBUGF("Handling request %s for: %s", request_id.toHex().c_str(), request_handler._path.toString().c_str());
+				//DEBUGF("Handling request %s from %s for: %s", request_id.toHex().c_str(), get_remote_identity().hash().toHex().c_str(), request_handler._path.toString().c_str());
 				//p if len(inspect.signature(response_generator).parameters) == 5:
 				//p 	response = response_generator(path, request_data, request_id, _object->__remote_identity, requested_at)
 				//p elif len(inspect.signature(response_generator).parameters) == 6:
@@ -875,12 +982,14 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 				//p else:
 				//p 	raise TypeError("Invalid signature for response generator callback")
 				Bytes response(request_handler._response_generator(request_handler._path, resource_request._request_data, request_id, _object->_link_id, _object->__remote_identity, resource_request._requested_at));
+				DEBUGF("Received %u byte response from response generator", response.size());
 
 				if (response) {
 					//p packed_response = umsgpack.packb([request_id, response])
-					MsgPack::Packer packer;
-					packer.to_array(request_id, response);
-					Bytes packed_response(packer.data(), packer.size());
+					// `response` is the callback's already-msgpack-encoded payload.
+					// Splice it verbatim so the wire format matches Python's
+					// umsgpack.packb([request_id, response]).
+					Bytes packed_response = pack_response_envelope(request_id, response);
 
 					if (packed_response.size() <= MDU) {
 						//p RNS.Packet(self, packed_response, Type::Packet::DATA, context = Type::Packet::RESPONSE).send()
@@ -942,20 +1051,19 @@ void Link::request_resource_concluded(const Resource& resource) {
 		//p packed_request = resource.data().read()
 		Bytes packed_request = resource.data();
 		//p unpacked_request = umsgpack.unpackb(packed_request)
-		MsgPack::Unpacker unpacker;
-		unpacker.feed(packed_request.data(), packed_request.size());
-		// CBA TODO OPTIMIZE MSGPACK
-		double requested_at;
-		MsgPack::bin_t<uint8_t> path_hash;
-		MsgPack::bin_t<uint8_t> request_data;
-		unpacker.from_array(requested_at, path_hash, request_data);
+		// Splice: parse the fixed [timestamp, path_hash] prefix and slice the
+		// trailing raw msgpack bytes out as the user payload (so callbacks
+		// receive the same Bytes whether the request was a Packet or a Resource).
 		ResourceRequest resource_request;
-		resource_request._requested_at = requested_at;
-		resource_request._path_hash = path_hash;
-		resource_request._request_data = request_data;
+		if (!unpack_request_envelope(packed_request,
+		                             resource_request._requested_at,
+		                             resource_request._path_hash,
+		                             resource_request._request_data)) {
+			DEBUG("Failed to parse incoming request resource envelope");
+			return;
+		}
         //p request_id        = RNS.Identity.truncated_hash(packed_request)
 		Bytes request_id(Identity::truncated_hash(resource.data()));
-		//p request_data = unpacked_request
 
 		//p handle_request(request_id, request_data)
 		handle_request(request_id, resource_request);
@@ -973,11 +1081,15 @@ void Link::response_resource_concluded(const Resource& resource) {
 		//p unpacked_response = umsgpack.unpackb(packed_response)
 		//p request_id        = unpacked_response[0]
 		//p response_data     = unpacked_response[1]
-		MsgPack::Unpacker unpacker;
-		unpacker.feed(packed_response.data(), packed_response.size());
-		MsgPack::bin_t<uint8_t> request_id;
-		MsgPack::bin_t<uint8_t> response_data;
-		unpacker.from_array(request_id, response_data);
+		// Splice: parse the leading [request_id] and slice the trailing raw
+		// msgpack bytes as response_data, so client-side callbacks receive
+		// the same payload whether the response was a Packet or a Resource.
+		Bytes request_id;
+		Bytes response_data;
+		if (!unpack_response_envelope(packed_response, request_id, response_data)) {
+			DEBUG("Failed to parse incoming response resource envelope");
+			return;
+		}
 
 		handle_response(request_id, response_data, resource.total_size(), resource.size());
 	}
@@ -1032,6 +1144,7 @@ void Link::receive(const Packet& packet) {
 				switch (packet.context()) {
 				case Type::Packet::CONTEXT_NONE:
 				{
+					TRACEF("Link %s received DATA packet with context CONTEXT_NONE", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						if (_object->_callbacks._packet) {
@@ -1068,6 +1181,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LINKIDENTIFY:
 				{
+					TRACEF("Link %s received DATA packet with context LINKIDENTIFY", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						if (!(_object->_initiator) && plaintext.size() == Type::Identity::KEYSIZE/8 + Type::Identity::SIGLENGTH/8) {
@@ -1094,22 +1208,19 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::REQUEST:
 				{
+					TRACEF("Link %s received DATA packet with context REQUEST", hash().toHex().c_str());
 					try {
 						const Bytes request_id = packet.getTruncatedHash();
 						const Bytes packed_request = decrypt(packet.data());
 						if (packed_request) {
-                            //p unpacked_request = umsgpack.unpackb(packed_request)
-							MsgPack::Unpacker unpacker;
-							unpacker.feed(packed_request.data(), packed_request.size());
-							// CBA TODO OPTIMIZE MSGPACK
-							double requested_at;
-							MsgPack::bin_t<uint8_t> path_hash;
-							MsgPack::bin_t<uint8_t> request_data;
-							unpacker.from_array(requested_at, path_hash, request_data);
 							ResourceRequest resource_request;
-							resource_request._requested_at = requested_at;
-							resource_request._path_hash = path_hash;
-							resource_request._request_data = request_data;
+							if (!unpack_request_envelope(packed_request,
+							                             resource_request._requested_at,
+							                             resource_request._path_hash,
+							                             resource_request._request_data)) {
+								DEBUG("Failed to parse incoming request packet envelope");
+								break;
+							}
 							handle_request(request_id, resource_request);
 						}
 					}
@@ -1120,6 +1231,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESPONSE:
 				{
+					TRACEF("Link %s received DATA packet with context RESPONSE", hash().toHex().c_str());
 					try {
 						const Bytes packed_response = decrypt(packet.data());
 						if (packed_response) {
@@ -1145,6 +1257,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LRRTT:
 				{
+					TRACEF("Link %s received DATA packet with context LRRTT", hash().toHex().c_str());
 					if (!_object->_initiator) {
 						rtt_packet(packet);
 					}
@@ -1152,12 +1265,14 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LINKCLOSE:
 				{
+					TRACEF("Link %s received DATA packet with context LINKCLOSE", hash().toHex().c_str());
 					teardown_packet(packet);
 					break;
 				}
 /*z
 				case Type::Packet::RESOURCE_ADV:
 				{
+					TRACEF("Link %s received DATA packet with context RESOURCE_ADV", hash().toHex().c_str());
 					//p packet.plaintext = decrypt(packet.data)
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
@@ -1210,6 +1325,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESOURCE_REQ:
 				{
+					TRACEF("Link %s received DATA packet with context RESOURCE_REQ", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						if ord(plaintext[:1]) == RNS.Resource.HASHMAP_IS_EXHAUSTED:
@@ -1228,6 +1344,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESOURCE_HMU:
 				{
+					TRACEF("Link %s received DATA packet with context RESOURCE_HMU", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						resource_hash = plaintext[:Type::Identity::HASHLENGTH//8]
@@ -1238,6 +1355,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESOURCE_ICL:
 				{
+					TRACEF("Link %s received DATA packet with context RESOURCE_ICL", hash().toHex().c_str());
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						resource_hash = plaintext[:Type::Identity::HASHLENGTH//8]
@@ -1249,6 +1367,7 @@ void Link::receive(const Packet& packet) {
 */
 				case Type::Packet::KEEPALIVE:
 				{
+					TRACEF("Link %s received DATA packet with context KEEPALIVE", hash().toHex().c_str());
 					if (!_object->_initiator && packet.data() == "\xFF") {
                         //p keepalive_packet = RNS.Packet(self, bytes([0xFE]), context=RNS.Packet.KEEPALIVE)
 						Packet keepalive_packet(*this, Bytes("\xFE"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
@@ -1263,6 +1382,7 @@ void Link::receive(const Packet& packet) {
 				// of hash -> sequence map
 				case Type::Packet::RESOURCE:
 				{
+					TRACEF("Link %s received DATA packet with context RESOURCE", hash().toHex().c_str());
 					for (auto& resource : _object->_incoming_resources) {
 						//z resource.receive_part(packet);
 					}
@@ -1271,6 +1391,7 @@ void Link::receive(const Packet& packet) {
 /*z
 				case Type::Packet::CHANNEL:
 				{
+					TRACEF("Link %s received DATA packet with context CHANNEL", hash().toHex().c_str());
 					//z if (!_object->_channel) {
 					if (true) {
 						DEBUG(f"Channel data received without open channel")
@@ -1289,6 +1410,7 @@ void Link::receive(const Packet& packet) {
 			}
 			else if (packet.packet_type() == Type::Packet::PROOF) {
 				if (packet.context() == Type::Packet::RESOURCE_PRF) {
+					TRACEF("Link %s received PROOF packet with context RESOURCE_PRF", hash().toHex().c_str());
 					Bytes resource_hash = packet.data().left(Type::Identity::HASHLENGTH/8);
 					for (const auto& resource : _object->_outgoing_resources) {
 						if (resource_hash == resource.hash()) {
@@ -1296,6 +1418,12 @@ void Link::receive(const Packet& packet) {
 						}
 					}
 				}
+				else {
+					WARNINGF("Link %s received PROOF packet with UNKNOWN context", hash().toHex().c_str());
+				}
+			}
+			else {
+				WARNINGF("Link %s received UNKNOWN packet", hash().toHex().c_str());
 			}
 		}
 	}
@@ -1479,6 +1607,11 @@ double Link::rtt() const {
 const Destination& Link::destination() const {
 	assert(_object);
 	return _object->_destination;
+}
+
+const Interface& Link::attached_interface() const {
+	assert(_object);
+	return _object->_attached_interface;
 }
 
 // CBA LINK

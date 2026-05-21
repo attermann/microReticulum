@@ -25,6 +25,8 @@
 #include "Utilities/OS.h"
 #include "Utilities/Persistence.h"
 
+#include <MsgPack.h>
+
 #include <algorithm>
 #include <unistd.h>
 #include <time.h>
@@ -1007,10 +1009,11 @@ DestinationEntry empty_destination_entry;
 						TRACE("Transport::outbound: Pscket destination is link-closed, not transmitting");
 						should_transmit = false;
 					}
-					// CBA Bug? Destination has no member attached_interface
-					//z if (interface != packet.destination().attached_interface()) {
-					//z 	should_transmit = false;
-					//z }
+					// CBA TODO Check the following logic which is meant to send Link packets only on the same interface the Link was established on
+					else if (packet.destination_link().attached_interface() && interface != packet.destination_link().attached_interface()) {
+						TRACE("Transport::outbound: Packet destination link has different attached interface, not transmitting");
+						should_transmit = false;
+					}
 				}
 				
 				if (packet.attached_interface() && interface != packet.attached_interface()) {
@@ -3254,62 +3257,366 @@ will announce it.
 	return request_path(destination_hash, {Type::NONE});
 }
 
+// Parse the request payload from the client. Python sends a list
+// [bool include_link_count] (and treats missing as False). To stay tolerant
+// of older/newer clients we accept either bare false-y or [true]/[false].
+//
+// Note: `data` is raw msgpack bytes (the spliced 3rd element of the request
+// envelope -- see Link::request and the pack_request_envelope helper in
+// Link.cpp). It is NOT bin-wrapped.
+static bool remote_status_parse_include_link_count(const Bytes& data) {
+	if (!data || data.size() == 0) return false;
+	const uint8_t b0 = data.data()[0];
+	if ((b0 & 0xf0) != 0x90) return false;  // not a fixarray
+	const size_t n = b0 & 0x0f;
+	if (n == 0 || data.size() < 2) return false;
+	const uint8_t b1 = data.data()[1];
+	return b1 == 0xc3;  // msgpack true
+}
+
+// Strip "TypeName[detail]" -> "TypeName" for the "type" field, matching
+// Python's class-name emission in Reticulum.py get_interface_stats().
+static std::string remote_status_interface_type_name(const Interface& iface) {
+	std::string s = iface.toString();
+	auto pos = s.find('[');
+	if (pos == std::string::npos) return s;
+	return s.substr(0, pos);
+}
+
+// Builds the per-interface map. Only fields the C++ Interface actually
+// tracks are emitted; rnstatus.py is robust to missing optional fields.
+// Insertion order matches Reticulum.py:1294-1482 so the wire bytes stay
+// aligned with Python's umsgpack output.
+//
+// Strings are packed via Packer::pack(const char*) / pack(c_str, size).
+// MsgPack's std::string serialize path fails on some embedded targets
+// (e.g. heltec_wifi_lora_32_V4); the const-char-pointer overload produces
+// the same msgpack str wire format on all platforms.
+static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& iface) {
+	// 11 entries: name, short_name, hash, type, status, mode, clients,
+	//             bitrate, rxb, txb, announce_queue.
+	//
+	// `clients` is accessed unguarded at rnstatus.py:429 (ifstat["clients"]),
+	// so the key MUST be present even when no meaningful value -- emit nil
+	// to signal "not a shared instance / no connected clients".
+	p.packMapSize(11);
+
+	// Cache std::string values so .c_str() / .size() reference stable storage.
+	const std::string name_str = iface.toString();
+	const std::string short_name_str = iface.name();
+	const std::string type_str = remote_status_interface_type_name(iface);
+
+	p.pack("name");
+	p.pack(name_str.c_str(), name_str.size());
+
+	p.pack("short_name");
+	p.pack(short_name_str.c_str(), short_name_str.size());
+
+	p.pack("hash");
+	Bytes h = iface.get_hash();
+	p.packBinary(h.data(), h.size());
+
+	p.pack("type");
+	p.pack(type_str.c_str(), type_str.size());
+
+	p.pack("status");
+	p.packBool(iface.online());
+
+	p.pack("mode");
+	p.serialize(static_cast<uint32_t>(iface.mode()));
+
+	// microReticulum is a leaf node, not a shared-instance host. Order
+	// matches Python's get_interface_stats() (clients after mode).
+	p.pack("clients");
+	p.packNil();
+
+	p.pack("bitrate");
+	if (iface.bitrate() > 0) {
+		p.serialize(static_cast<uint32_t>(iface.bitrate()));
+	} else {
+		p.packNil();
+	}
+
+	p.pack("rxb");
+	p.serialize(static_cast<uint64_t>(iface.rxb()));
+
+	p.pack("txb");
+	p.serialize(static_cast<uint64_t>(iface.txb()));
+
+	p.pack("announce_queue");
+	p.serialize(static_cast<uint32_t>(iface.announce_queue().size()));
+}
+
+// Builds the top-level stats map. Order matches Python's get_interface_stats().
+// Emits 5 keys: interfaces, rxb, txb, rxs, txs. transport_id /
+// transport_uptime can be added once Transport exposes them.
+static Bytes remote_status_build_stats_payload() {
+	MsgPack::Packer p;
+	p.packMapSize(5);
+
+	auto& interfaces = Transport::get_interfaces();
+
+	p.pack("interfaces");
+	p.packArraySize(static_cast<size_t>(interfaces.size()));
+	for (auto& kv : interfaces) {
+		remote_status_pack_interface(p, kv.second);
+	}
+
+	uint64_t total_rxb = 0;
+	uint64_t total_txb = 0;
+	for (auto& kv : interfaces) {
+		total_rxb += kv.second.rxb();
+		total_txb += kv.second.txb();
+	}
+
+	p.pack("rxb");
+	p.serialize(total_rxb);
+
+	p.pack("txb");
+	p.serialize(total_txb);
+
+	// Current rx/tx speeds: C++ Interface base does not track these yet;
+	// rnstatus renders 0 sensibly. Emit as float64 to match Python.
+	p.pack("rxs");
+	p.packFloat64(0.0);
+
+	p.pack("txs");
+	p.packFloat64(0.0);
+
+	return Bytes(p.data(), p.size());
+}
+
 /*static*/ Bytes Transport::remote_status_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
-/*p
-	if remote_identity != None:
-		response = None
-		try:
-			if isinstance(data, list) and len(data) > 0:
-				response = []
-				response.append(Transport.owner.get_interface_stats())
-				if data[0] == True: response.append(Transport.owner.get_link_count())
 
-				return response
+	const bool include_link_count = remote_status_parse_include_link_count(data);
 
-		except Exception as e:
-			RNS.log("An error occurred while processing remote status request from "+str(remote_identity), RNS.LOG_ERROR)
-			RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+	Bytes stats = remote_status_build_stats_payload();
 
-		return None
-*/
-	return {"remote_status"};
+	// Outer: [stats_map] or [stats_map, link_count]. The Link layer wraps
+	// this return value as [bin(request_id), <these bytes>] via
+	// pack_response_envelope -- splice-compatible with Python's
+	// umsgpack.packb([request_id, response]).
+	MsgPack::Packer outer;
+	outer.packArraySize(include_link_count ? 2 : 1);
+
+	Bytes result(outer.data(), outer.size());
+	result.append(stats);
+
+	if (include_link_count) {
+		MsgPack::Packer lc;
+		const size_t link_count = Transport::get_link_table().size();
+		lc.serialize(static_cast<uint32_t>(link_count));
+		Bytes lc_bytes(lc.data(), lc.size());
+		result.append(lc_bytes);
+	}
+
+	return result;
+}
+
+// Parsed request payload from rnpath. Mirrors Python's [command, dest_hash?, max_hops?].
+struct RemotePathRequest {
+	MsgPack::str_t command;          // empty if absent
+	Bytes dest_hash;                 // empty if absent / nil
+	uint32_t max_hops = 0;
+	bool max_hops_present = false;
+};
+
+// Parse the msgpack request payload sent by rnpath:
+//   ["table"|"rates", destination_hash_or_nil, max_hops_or_nil]
+// rnpath always sends a 2- or 3-element array; the trailing slots may be nil
+// (Python None) when the user did not pass a filter. Returns false on any
+// malformed input; the handler then sends no response.
+static bool remote_path_parse_request(const Bytes& data, RemotePathRequest& out) {
+	if (!data || data.size() == 0) return false;
+	MsgPack::Unpacker u;
+	u.feed(data.data(), data.size());
+
+	if (!u.isArray()) {
+		TRACE("remote_path_parse_request: Data is not array of elements");
+		return false;
+	}
+	size_t n = u.unpackArraySize();
+	if (n < 1) {
+		TRACE("remote_path_parse_request: No elements in data array");
+		return false;
+	}
+
+	// Element 0: command (required)
+	if (!u.isStr()) {
+		TRACE("remote_path_parse_request: Command element is not a string");
+		return false;
+	}
+	if (!u.deserialize(out.command)) {
+		TRACE("remote_path_parse_request: Failed to deseriaize command element");
+		return false;
+	}
+
+	// Element 1: destination_hash (optional, may be nil)
+	if (n >= 2) {
+		if (u.isNil()) {
+			u.unpackNil();
+		} else if (u.isBin()) {
+			MsgPack::bin_t<uint8_t> ph;
+			if (!u.deserialize(ph)) return false;
+			out.dest_hash = Bytes(ph.data(), ph.size());
+		} else {
+			TRACE("remote_path_parse_request: Failed to deseriaize destination_hash element");
+			return false;
+		}
+	}
+
+	// Element 2: max_hops (optional, may be nil)
+	if (n >= 3) {
+		if (u.isNil()) {
+			u.unpackNil();
+		} else if (u.isUInt() || u.isInt()) {
+			uint32_t hops = 0;
+			if (!u.deserialize(hops)) return false;
+			out.max_hops = hops;
+			out.max_hops_present = true;
+		} else {
+			TRACE("remote_path_parse_request: Failed to deseriaize max_hops element");
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Packs one path-table entry as a 6-key map. Insertion order matches
+// Reticulum.py:get_path_table (lines 1495-1502): hash, timestamp, via, hops,
+// expires, interface. rnpath.py:283-289 accesses every field unguarded.
+static void remote_path_pack_path_entry(MsgPack::Packer& p,
+                                        const Bytes& dest_hash,
+                                        const DestinationEntry& entry) {
+	p.packMapSize(6);
+
+	p.pack("hash");
+	p.packBinary(dest_hash.data(), dest_hash.size());
+
+	p.pack("timestamp");
+	p.packFloat64(entry._timestamp);
+
+	p.pack("via");
+	p.packBinary(entry._received_from.data(), entry._received_from.size());
+
+	p.pack("hops");
+	p.serialize(static_cast<uint32_t>(entry._hops));
+
+	p.pack("expires");
+	p.packFloat64(entry._expires);
+
+	p.pack("interface");
+	// Cache the std::string so its c_str() points at stable storage for the
+	// duration of the pack call.
+	const std::string iface_str = entry._receiving_interface.toString();
+	p.pack(iface_str.c_str(), iface_str.size());
+}
+
+// Packs one announce-rate-table entry as a 5-key map. Insertion order matches
+// Reticulum.py:get_rate_table (lines 1517-1524): hash, last, rate_violations,
+// blocked_until, timestamps. rnpath.py:339-369 accesses every field unguarded.
+static void remote_path_pack_rate_entry(MsgPack::Packer& p,
+                                        const Bytes& dest_hash,
+                                        const Transport::RateEntry& entry) {
+	p.packMapSize(5);
+
+	p.pack("hash");
+	p.packBinary(dest_hash.data(), dest_hash.size());
+
+	p.pack("last");
+	p.packFloat64(entry._last);
+
+	// Python stores this as int (counter incremented by 1); C++ field is
+	// double for legacy reasons. Emit as uint to match Python's wire bytes --
+	// rnpath.py:351 only checks `> 0` and stringifies, both work either way.
+	p.pack("rate_violations");
+	p.serialize(static_cast<uint32_t>(entry._rate_violations));
+
+	p.pack("blocked_until");
+	p.packFloat64(entry._blocked_until);
+
+	// timestamps must always be a (possibly empty) list -- rnpath.py:344
+	// does entry["timestamps"][0] unguarded. RateEntry::RateEntry(double now)
+	// at Transport.h:259 seeds the vector with `now`, so >=1 element in practice.
+	p.pack("timestamps");
+	p.packArraySize(entry._timestamps.size());
+	for (double ts : entry._timestamps) {
+		p.packFloat64(ts);
+	}
 }
 
 /*static*/ Bytes Transport::remote_path_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
-/*p
-	if remote_identity != None:
-		response = None
-		try:
-			if isinstance(data, list) and len(data) > 0:
-				command = data[0]
-				destination_hash = None
-				max_hops = None
-				if len(data) > 1: destination_hash = data[1]
-				if len(data) > 2: max_hops = data[2]
 
-				if command == "table":
-					table = Transport.owner.get_path_table(max_hops=max_hops)
-					response = []
-					for path in table:
-						if destination_hash == None or destination_hash == path["hash"]:
-							response.append(path)
+	TRACEF("remote_path_handler: Parsing remote path request of %u bytes", data.size());
+	RemotePathRequest req;
+	if (!remote_path_parse_request(data, req)) {
+		WARNING("remote_path_handler: Failed to parse remote path request");
+		return {Bytes::NONE};
+	}
+	TRACEF("remote_path_handler: Remote path request command: %s", req.command.c_str());
 
-				elif command == "rates":
-					table = Transport.owner.get_rate_table()
-					response = []
-					for path in table:
-						if destination_hash == None or destination_hash == path["hash"]:
-							response.append(path)
+	const bool cmd_is_table = (req.command == "table");
+	const bool cmd_is_rates = (req.command == "rates");
+	if (!cmd_is_table && !cmd_is_rates) {
+		WARNING("remote_path_handler: Unknown command in remote path request");
+		return {Bytes::NONE};
+	}
 
-				return response
+	MsgPack::Packer p;
 
-		except Exception as e:
-			RNS.log("An error occurred while processing remote status request from "+str(remote_identity), RNS.LOG_ERROR)
-			RNS.log("The contained exception was: "+str(e), RNS.LOG_ERROR)
+	if (cmd_is_table) {
+		// For single destination
+		if (req.dest_hash.size() > 0) {
+			DestinationEntry destination_entry;
+			_new_path_table.get(req.dest_hash, destination_entry);
+			if (destination_entry) {
+				p.packArraySize(1);
+				remote_path_pack_path_entry(p, req.dest_hash, destination_entry);
+			}
+			else {
+				p.packArraySize(0);
+			}
+		}
+		// For filtering all paths
+		else {
+			// CBA NOTE Transport::get_path_table() is currently empty since migrating to microStore path store,
+			// but leaving this as-is for now since we don't currently ahve the ability to stream the entire path
+			// list (nor do we likely want to on resource-constrained devices) so leaving this as a no-op for now.
+			auto& table = Transport::get_path_table();
+			// First pass: count entries that survive the filters, so we can emit
+			// the correct fixarray/array header before packing the entries.
+			size_t match_count = 0;
+			for (auto& kv : table) {
+				if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
+				if (req.max_hops_present && kv.second._hops > req.max_hops) continue;
+				match_count++;
+			}
+			p.packArraySize(match_count);
+			// Second pass: emit.
+			for (auto& kv : table) {
+				if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
+				if (req.max_hops_present && kv.second._hops > req.max_hops) continue;
+				remote_path_pack_path_entry(p, kv.first, kv.second);
+			}
+		}
+	}
+	else {
+		// cmd_is_rates
+		auto& table = Transport::get_announce_rate_table();
+		size_t match_count = 0;
+		for (auto& kv : table) {
+			if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
+			match_count++;
+		}
+		p.packArraySize(match_count);
+		for (auto& kv : table) {
+			if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
+			remote_path_pack_rate_entry(p, kv.first, kv.second);
+		}
+	}
 
-		return None
-*/
-	return {"remote_path"};
+	return Bytes(p.data(), p.size());
 }
 
 /*static*/ void Transport::path_request_handler(const Bytes& data, const Packet& packet) {
@@ -3397,7 +3704,7 @@ will announce it.
 		DestinationEntry destination_entry;
 		_new_path_table.get(destination_hash, destination_entry);
 		if (destination_entry) {
-			TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
+			TRACEF("Transport::path_request_handler: path entry found for destination %s", destination_hash.toHex().c_str());
 			if (is_local_client_interface(destination_entry.receiving_interface())) {
 				destination_exists_on_local_client = true;
 				// CBA ACCUMULATES
@@ -4316,7 +4623,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
                 return True
 
             else: return None
-        
+
         except Exception as e:
             RNS.log(f"Error while blackholing identity: {e}", RNS.LOG_ERROR)
             return False
@@ -4360,12 +4667,12 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
                             if identity_hash in Transport.blackholed_identities:
                                 if Transport.blackholed_identities[identity_hash]["source"] == Transport.identity.hash:
                                     continue
-                            
+
                             se        = source_list[identity_hash]
                             until     = se["until"] if "until" in se else None
                             reason    = se["reason"] if "reason" in se else None
                             entry     = {"source": source_identity_hash, "until": until, "reason": reason}
-                            
+
                             if until == None or now < until: Transport.blackholed_identities[identity_hash] = entry
 
                 source_count += 1
