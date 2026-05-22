@@ -40,7 +40,7 @@ namespace RNS { namespace Cryptography {
 		static inline const Bytes generate_key(RNS::Type::Cryptography::Token::token_mode mode = RNS::Type::Cryptography::Token::MODE_AES_256_CBC) {
 			if (mode == RNS::Type::Cryptography::Token::MODE_AES_128_CBC) return random(32);
 			else if (mode == RNS::Type::Cryptography::Token::MODE_AES_256_CBC) return random(64);
-			else throw new std::invalid_argument("Invalid token mode: " + std::to_string(mode));
+			else throw std::invalid_argument("Invalid token mode: " + std::to_string(mode));
 		}
 
 	public:

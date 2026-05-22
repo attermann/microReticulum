@@ -45,7 +45,7 @@ public:
 		_announce_packet(announce_packet)
 	{
 	}
-	inline operator bool() const {
+	inline explicit operator bool() const {
 		return (_receiving_interface && _announce_packet);
 	}
 	inline bool operator < (const DestinationEntry& entry) const {

@@ -77,7 +77,7 @@ namespace RNS {
 			_object = packet_receipt._object;
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const RequestReceipt& packet_receipt) const {
@@ -244,6 +244,7 @@ namespace RNS {
 		std::string toString() const;
 
 		// getters
+		const Callbacks& callbacks() const;
 		double rtt() const;
 		const Destination& destination() const;
 		// CBA LINK

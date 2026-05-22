@@ -175,7 +175,7 @@ MEM("Creating from data-move...");
 			return (*_data)[index];
 		}
 
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return (_data && !_data->empty());
 		}
 		inline operator const Data() const {

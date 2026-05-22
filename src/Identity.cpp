@@ -55,21 +55,25 @@ void Identity::createKeys() {
 
 	// CRYPTO: create encryption private keys
 	_object->_prv           = Cryptography::X25519PrivateKey::generate();
+	assert(_object->_prv);
 	_object->_prv_bytes     = _object->_prv->private_bytes();
 	//TRACEF("Identity::createKeys: prv bytes:     %s", _object->_prv_bytes.toHex().c_str());
 
 	// CRYPTO: create signature private keys
 	_object->_sig_prv       = Cryptography::Ed25519PrivateKey::generate();
+	assert(_object->_sig_prv);
 	_object->_sig_prv_bytes = _object->_sig_prv->private_bytes();
 	//TRACEF("Identity::createKeys: sig prv bytes: %s", _object->_sig_prv_bytes.toHex().c_str());
 
 	// CRYPTO: create encryption public keys
 	_object->_pub           = _object->_prv->public_key();
+	assert(_object->_pub);
 	_object->_pub_bytes     = _object->_pub->public_bytes();
 	//TRACEF("Identity::createKeys: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
 
 	// CRYPTO: create signature public keys
 	_object->_sig_pub       = _object->_sig_prv->public_key();
+	assert(_object->_sig_pub);
 	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
 	//TRACEF("Identity::createKeys: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
 
@@ -92,18 +96,22 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 		//p self.prv_bytes     = prv_bytes[:Identity.KEYSIZE//8//2]
 		_object->_prv_bytes     = prv_bytes.left(Type::Identity::KEYSIZE/8/2);
 		_object->_prv           = X25519PrivateKey::from_private_bytes(_object->_prv_bytes);
+		assert(_object->_prv);
 		//TRACEF("Identity::load_private_key: prv bytes:     %s", _object->_prv_bytes.toHex().c_str());
 
 		//p self.sig_prv_bytes = prv_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
 		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
+		assert(_object->_sig_prv);
 		//TRACEF("Identity::load_private_key: sig prv bytes: %s", _object->_sig_prv_bytes.toHex().c_str());
 
 		_object->_pub           = _object->_prv->public_key();
+		assert(_object->_pub);
 		_object->_pub_bytes     = _object->_pub->public_bytes();
 		//TRACEF("Identity::load_private_key: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
 
 		_object->_sig_pub       = _object->_sig_prv->public_key();
+		assert(_object->_sig_pub);
 		_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
 		//TRACEF("Identity::load_private_key: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
 
@@ -590,6 +598,7 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		//peer_pub = X25519PublicKey.from_public_bytes(peer_pub_bytes)
 		//Cryptography::X25519PublicKey::Ptr peer_pub = Cryptography::X25519PublicKey::from_public_bytes(peer_pub_bytes);
 		TRACEF("Identity::decrypt: peer public key:      %s", peer_pub_bytes.toHex().c_str());
+
 
 		// CRYPTO: create shared key for key exchange using peer public key
 		//shared_key = _object->_prv->exchange(peer_pub);

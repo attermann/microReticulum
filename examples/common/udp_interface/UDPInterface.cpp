@@ -48,11 +48,10 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 /*virtual*/ bool UDPInterface::start() {
 	const char* wifi_ssid = "wifi_ssid";
 	const char* wifi_password = "wifi_password";
-	int port = DEFAULT_UDP_PORT;
 	const char* local_host = nullptr;
 
 	_online = false;
- 
+
 	if (wifi_ssid != nullptr) {
 		_wifi_ssid = wifi_ssid;
 	}
@@ -62,8 +61,8 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	if (local_host != nullptr) {
 		_local_host = local_host;
 	}
-	_local_port = port;
-	_remote_port = port;
+	// _local_port / _remote_port already initialised from
+	// DEFAULT_UDP_LOCAL_PORT / DEFAULT_UDP_REMOTE_PORT — see UDPInterface.h.
 	TRACEF("UDPInterface: local host: %s", _local_host.c_str());
 	TRACEF("UDPInterface: local port: %d", _local_port);
 	TRACEF("UDPInterface: remote host: %s", _remote_host.c_str());

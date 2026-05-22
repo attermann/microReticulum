@@ -485,27 +485,40 @@ namespace RNS { namespace Type {
 		static const uint8_t WINDOW               = 4;
 
 		// Absolute minimum window size during transfer
-		static const uint8_t WINDOW_MIN           = 1;
+		static const uint8_t WINDOW_MIN           = 2;
 
 		// The maximum window size for transfers on slow links
 		static const uint8_t WINDOW_MAX_SLOW      = 10;
 
+		// The maximum window size for transfers on very slow links
+		static const uint8_t WINDOW_MAX_VERY_SLOW = 4;
+
 		// The maximum window size for transfers on fast links
 		static const uint8_t WINDOW_MAX_FAST      = 75;
-		
+
 		// For calculating maps and guard segments, this
 		// must be set to the global maximum window.
 		static const uint8_t WINDOW_MAX           = WINDOW_MAX_FAST;
-		
+
 		// If the fast rate is sustained for this many request
 		// rounds, the fast link window size will be allowed.
 		static const uint8_t FAST_RATE_THRESHOLD  = WINDOW_MAX_SLOW - WINDOW - 2;
+
+		// If the very slow rate is sustained for this many request
+		// rounds, window will be capped to the very slow limit.
+		static const uint8_t VERY_SLOW_RATE_THRESHOLD = 2;
 
 		// If the RTT rate is higher than this value,
 		// the max window size for fast links will be used.
 		// The default is 50 Kbps (the value is stored in
 		// bytes per second, hence the "/ 8").
 		static const uint16_t RATE_FAST            = (50*1000) / 8;
+
+		// If the RTT rate is lower than this value,
+		// the window size will be capped at the very slow limit.
+		// The default is 2 Kbps (the value is stored in
+		// bytes per second, hence the "/ 8").
+		static const uint16_t RATE_VERY_SLOW       = (2*1000) / 8;
 
 		// The minimum allowed flexibility of the window size.
 		// The difference between window_max and window_min
@@ -534,16 +547,22 @@ namespace RNS { namespace Type {
 		// fit in 3 bytes in resource advertisements.
 		static const uint32_t MAX_EFFICIENT_SIZE      = 16 * 1024 * 1024 - 1;
 		static const uint8_t RESPONSE_MAX_GRACE_TIME = 10;
-		
+
+		// Max metadata size is 16777215 (0xFFFFFF) bytes
+		static const uint32_t METADATA_MAX_SIZE       = 16 * 1024 * 1024 - 1;
+
 		// The maximum size to auto-compress with
 		// bz2 before sending.
 		static const uint32_t AUTO_COMPRESS_MAX_SIZE = MAX_EFFICIENT_SIZE;
 
 		static const uint8_t PART_TIMEOUT_FACTOR           = 4;
 		static const uint8_t PART_TIMEOUT_FACTOR_AFTER_RTT = 2;
+		static const uint8_t PROOF_TIMEOUT_FACTOR          = 3;
+		static const float HMU_WAIT_FACTOR                 = 3.5;
 		static const uint8_t MAX_RETRIES                   = 8;
 		static const uint8_t MAX_ADV_RETRIES               = 4;
 		static const uint8_t SENDER_GRACE_TIME             = 10;
+		static const float PROCESSING_GRACE                = 1.0;
 		static const float RETRY_GRACE_TIME              = 0.25;
 		static const float PER_RETRY_DELAY               = 0.5;
 
@@ -562,7 +581,8 @@ namespace RNS { namespace Type {
 			ASSEMBLING      = 0x05,
 			COMPLETE        = 0x06,
 			FAILED          = 0x07,
-			CORRUPT         = 0x08
+			CORRUPT         = 0x08,
+			REJECTED        = 0x00
 		};
 
 		namespace ResourceAdvertisement {

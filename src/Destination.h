@@ -42,28 +42,32 @@ namespace RNS {
 		//p response_generator(path, data, request_id, link_id, remote_identity, requested_at)
 		using response_generator = Bytes(*)(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
 	public:
-		RequestHandler(const Bytes& path, RequestHandler::response_generator resp_gen = nullptr, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, std::initializer_list<Bytes> allowed_list = {}) {
+		RequestHandler(const Bytes& path, RequestHandler::response_generator resp_gen = nullptr, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, std::initializer_list<Bytes> allowed_list = {}, bool auto_compress = true) {
 			_path = path;
 			_response_generator = resp_gen;
 			_allow = allow;
 			_allowed_list = allowed_list;
+			_auto_compress = auto_compress;
 		}
-		RequestHandler(const Bytes& path, RequestHandler::response_generator resp_gen = nullptr, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, const std::set<Bytes>& allowed_list = {}) {
+		RequestHandler(const Bytes& path, RequestHandler::response_generator resp_gen = nullptr, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, const std::set<Bytes>& allowed_list = {}, bool auto_compress = true) {
 			_path = path;
 			_response_generator = resp_gen;
 			_allow = allow;
 			_allowed_list = allowed_list;
+			_auto_compress = auto_compress;
 		}
 		RequestHandler(const RequestHandler& handler) {
 			_path = handler._path;
 			_response_generator = handler._response_generator;
 			_allow = handler._allow;
 			_allowed_list = handler._allowed_list;
+			_auto_compress = handler._auto_compress;
 		}
 		Bytes _path;
 		response_generator _response_generator = nullptr;
 		Type::Destination::request_policies _allow = Type::Destination::ALLOW_NONE;
 		std::set<Bytes> _allowed_list;
+		bool _auto_compress = true;
 	};
 
     /**
@@ -125,7 +129,7 @@ namespace RNS {
 			MEMF("Destination object copy created by assignment, this: %p, data: %p", (void*)this, (void*)_object.get());
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Destination& destination) const {
@@ -144,8 +148,8 @@ namespace RNS {
 		Packet announce(const Bytes& app_data, bool path_response, const Interface& attached_interface, const Bytes& tag = {}, bool send = true);
 		Packet announce(const Bytes& app_data = {}, bool path_response = false);
 
-		void register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, std::initializer_list<Bytes> allowed_list = {});
-		void register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow, const std::set<Bytes>& allowed_list);
+		void register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow = Type::Destination::request_policies::ALLOW_NONE, std::initializer_list<Bytes> allowed_list = {}, bool auto_compress = true);
+		void register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow, const std::set<Bytes>& allowed_list, bool auto_compress = true);
 		bool deregister_request_handler(const Bytes& path);
 
 		/*

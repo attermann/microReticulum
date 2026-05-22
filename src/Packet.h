@@ -71,11 +71,14 @@ namespace RNS {
 			_object = packet_receipt._object;
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const PacketReceipt& packet_receipt) const {
 			return _object.get() < packet_receipt._object.get();
+		}
+		inline bool operator == (const PacketReceipt& packet_receipt) const {
+			return _object.get() == packet_receipt._object.get();
 		}
 
 	public:
@@ -207,7 +210,7 @@ namespace RNS {
 			MEMF("Packet object copy created by assignment, this: %p, data: %p", (void*)this, (void*)_object.get());
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Packet& packet) const {
@@ -266,7 +269,7 @@ namespace RNS {
 		// CBA LINK
 		inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
 		//CBA Following method is only used by Resource to access decrypted resource advertisement form Link. Consider a better way.
-		inline const Bytes& plaintext() { assert(_object); return _object->_plaintext; }
+		inline const Bytes& plaintext() const { assert(_object); return _object->_plaintext; }
 		inline bool packed() const { assert(_object); return _object->_packed; }
 		inline bool from_packed() const { assert(_object); return _object->_fromPacked; }
 
@@ -282,6 +285,9 @@ namespace RNS {
 		inline void transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; }
 		//CBA Following method is only used by Link to provide Resource access to decrypted resource advertisement. Consider a better way.
 		inline void plaintext(const Bytes& plaintext) { assert(_object); _object->_plaintext = plaintext; }
+		// Used by Resource::receive_part to file an incoming packet's raw
+		// payload into the receiver-side assembly buffer.
+		inline void data(const Bytes& data) { assert(_object); _object->_data = data; }
 
 #ifndef NDEBUG
 		std::string debugString() const;
