@@ -148,7 +148,7 @@ Use of nrf52840 based boards as a transport node will necessitate the use of ext
 - [x] Implement Link
 - [x] Implement AES256
 - [ ] Implement Ratchets
-- [ ] Implement Resource
+- [x] Implement Resource
 - [ ] Implement Channel and Buffer
 - [x] Add example applications utilizing the C++ API
 - [x] Configure PlatformIO to easily build and upload test applications to board

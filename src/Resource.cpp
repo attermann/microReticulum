@@ -64,13 +64,11 @@ Resource Resource::accept(const Packet& advertisement_packet, Callbacks::conclud
 		return {Type::NONE};
 	}
 
-	// Allocate a receiver-side Resource via the main constructor with
-	// data == empty (triggers the receiver branch of __init__).
+	// Allocate a receiver-side Resource via the minimal constructor. The
+	// per-advertisement fields below overwrite the constructor's defaults
+	// directly, so no fluent configuration is needed here.
 	Link link = advertisement_packet.link();
-	Resource resource({Bytes::NONE}, link, /*advertise=*/false, /*auto_compress=*/false,
-	                  callback, progress_callback,
-	                  /*timeout=*/0.0, /*segment_index=*/1, /*original_hash=*/adv._o,
-	                  request_id);
+	Resource resource({Bytes::NONE}, link);
 	assert(resource._object);
 
 	resource._object->_status            = Type::Resource::TRANSFERRING;
@@ -155,34 +153,30 @@ Resource Resource::accept(const Packet& advertisement_packet, Callbacks::conclud
 // Constructors
 // ============================================================================
 
-// Compact form used by Link::request() at Link.cpp:601 for the
-// "request as resource" pattern. Delegates to the main constructor.
-Resource::Resource(const Bytes& data, const Link& link, const Bytes& request_id, bool is_response, double timeout) :
-	Resource(data, link, /*advertise=*/true, /*auto_compress=*/true, /*callback=*/nullptr,
-	         /*progress_callback=*/nullptr, timeout, /*segment_index=*/1,
-	         /*original_hash=*/{Bytes::NONE}, request_id, is_response, /*sent_metadata_size=*/0)
-{
-}
-
-Resource::Resource(const Bytes& data, const Link& link, bool advertise /*= true*/, bool auto_compress /*= true*/, Callbacks::concluded callback /*= nullptr*/, Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/, uint16_t segment_index /*= 1*/, const Bytes& original_hash /*= {Bytes::NONE}*/, const Bytes& request_id /*= {Bytes::NONE}*/, bool is_response /*= false*/, size_t sent_metadata_size /*= 0*/) :
+// Minimal constructor — stores the payload and link, sets baseline state, but
+// performs NO network work. Use the fluent setters to configure optional
+// parameters, then call start() to kick off the transfer (initiator side).
+// The receiver side is built via Resource::accept(), which uses this
+// constructor and then populates per-advertisement fields directly.
+Resource::Resource(const Bytes& data, const Link& link) :
 	_object(new ResourceData(link))
 {
 	assert(_object);
 	MEM("Resource object created");
 
+	// Stash the pending payload until start() is called (initiator side).
+	// For the receiver branch (accept() with empty data) this stays empty.
+	_object->_data = data;
+
 	// Metadata handling — auto-compress and metadata serialisation are
 	// not yet supported on the C++ port (see plan: "no bz2 on MCU";
 	// metadata support deferred). Always emit uncompressed, no metadata.
 	_object->_metadata        = {Bytes::NONE};
-	_object->_has_metadata    = (sent_metadata_size > 0);
-	_object->_metadata_size   = sent_metadata_size;
+	_object->_has_metadata    = false;
+	_object->_metadata_size   = 0;
 
 	_object->_status               = Type::Resource::NONE;
 	_object->_link                 = link;
-	_object->_callbacks._concluded = callback;
-	_object->_callbacks._progress  = progress_callback;
-	_object->_request_id           = request_id;
-	_object->_is_response          = is_response;
 
 	// SDU: mirror Python Resource.__init__ (Resource.py:337-340)
 	// Use the non-const Link stored in _object->_link since Link::get_mtu/
@@ -197,113 +191,150 @@ Resource::Resource(const Bytes& data, const Link& link, bool advertise /*= true*
 		_object->_sdu = Type::Resource::SDU;
 	}
 
-	_object->_max_retries        = Type::Resource::MAX_RETRIES;
-	_object->_max_adv_retries    = Type::Resource::MAX_ADV_RETRIES;
-	_object->_retries_left       = _object->_max_retries;
-	_object->_timeout_factor     = link.traffic_timeout_factor();
-	_object->_part_timeout_factor = Type::Resource::PART_TIMEOUT_FACTOR;
-	_object->_sender_grace_time  = Type::Resource::SENDER_GRACE_TIME;
-	_object->_auto_compress_option = auto_compress;
-	_object->_auto_compress      = false;  // bz2 not available on MCU; see plan
-	_object->_auto_compress_limit = Type::Resource::AUTO_COMPRESS_MAX_SIZE;
+	_object->_max_retries          = Type::Resource::MAX_RETRIES;
+	_object->_max_adv_retries      = Type::Resource::MAX_ADV_RETRIES;
+	_object->_retries_left         = _object->_max_retries;
+	_object->_timeout_factor       = link.traffic_timeout_factor();
+	_object->_part_timeout_factor  = Type::Resource::PART_TIMEOUT_FACTOR;
+	_object->_sender_grace_time    = Type::Resource::SENDER_GRACE_TIME;
+	_object->_auto_compress_option = true;   // default; override via auto_compress()
+	_object->_auto_compress        = false;  // bz2 not available on MCU; see plan
+	_object->_auto_compress_limit  = Type::Resource::AUTO_COMPRESS_MAX_SIZE;
 	_object->_max_decompressed_size = Type::Resource::AUTO_COMPRESS_MAX_SIZE;
 	_object->_receiver_min_consecutive_height = 0;
 
-	_object->_timeout = (timeout != 0.0) ? timeout
-	                                     : link.rtt() * link.traffic_timeout_factor();
+	// Default timeout derived from the link; timeout() setter overrides.
+	_object->_timeout = link.rtt() * link.traffic_timeout_factor();
 
 	// Always single-segment, no compression, no metadata on the C++ port.
 	_object->_total_segments = 1;
 	_object->_segment_index  = 1;
 	_object->_split          = false;
 
-	if (data && data.size() > 0) {
-		// ====================================================================
-		// Initiator branch
-		// ====================================================================
-		_object->_initiator = true;
+	// _initiator is finalised by start() (true) or by accept() (false).
+	_object->_initiator = false;
+}
 
-		const size_t data_size = data.size();
-		_object->_uncompressed_size = data_size;
-		_object->_total_size        = data_size + _object->_metadata_size;
+// Compact deprecated form — delegates to minimal constructor + fluent setters
+// and auto-starts (old API always advertised immediately).
+Resource::Resource(const Bytes& data, const Link& link, const Bytes& request_id, bool is_response, double timeout) :
+	Resource(data, link)
+{
+	this->request_id(request_id);
+	this->is_response(is_response);
+	if (timeout != 0.0) this->timeout(timeout);
+	this->start();
+}
 
-		// Build the payload: prefix_random_hash || data. (No bz2 compression.)
-		// Mirror Python Resource.py:411-413 — the prefix is a random hash
-		// included in the encrypted stream so identical user payloads still
-		// produce different ciphertexts.
-		_object->_random_hash = Identity::get_random_hash().left(Type::Resource::RANDOM_HASH_SIZE);
+// Full deprecated form — delegates to minimal constructor + fluent setters.
+// Auto-starts only when the caller passed advertise=true (matching old API).
+Resource::Resource(const Bytes& data, const Link& link, bool advertise, bool auto_compress, Callbacks::concluded callback /*= nullptr*/, Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/, uint16_t segment_index /*= 1*/, const Bytes& original_hash /*= {Bytes::NONE}*/, const Bytes& request_id /*= {Bytes::NONE}*/, bool is_response /*= false*/, size_t sent_metadata_size /*= 0*/) :
+	Resource(data, link)
+{
+	this->auto_compress(auto_compress);
+	this->set_callback(callback);
+	this->set_progress_callback(progress_callback);
+	if (timeout != 0.0) this->timeout(timeout);
+	this->segment_index(segment_index);
+	this->original_hash(original_hash);
+	this->request_id(request_id);
+	this->is_response(is_response);
+	_object->_has_metadata  = (sent_metadata_size > 0);
+	_object->_metadata_size = sent_metadata_size;
+	if (advertise) this->start();
+}
 
-		Bytes payload;
-		payload.append(_object->_random_hash);
-		payload.append(data);
-		_object->_uncompressed_data = payload;
 
-		_object->_compressed       = false;
-		_object->_compressed_data  = {Bytes::NONE};
+// ============================================================================
+// start() — initiator-side kickoff
+// ============================================================================
 
-		// The hash and expected_proof are computed over (user data || random_hash),
-		// NOT over the prefixed payload — see Python Resource.py:441-443.
-		// The receiver's assemble() decrypts, strips the leading random_hash,
-		// then computes full_hash(self.data + self.random_hash) which is the
-		// user payload followed by the advertised random_hash. We must match
-		// that exactly for byte-level interop.
-		Bytes hash_input = data + _object->_random_hash;
-		_object->_hash            = Identity::full_hash(hash_input);
-		_object->_truncated_hash  = Identity::truncated_hash(hash_input);
-		_object->_expected_proof  = Identity::full_hash(data + _object->_hash);
-		_object->_original_hash   = (original_hash.size() > 0) ? original_hash : _object->_hash;
-
-		// Resources encrypt their payload themselves so each chunk sits in
-		// the cipher stream contiguously (Python Resource.py:423-428).
-		_object->_data       = _object->_link.encrypt(payload);
-		_object->_encrypted  = true;
-		_object->_size       = _object->_data.size();
-
-		_object->_uncompressed_data = {Bytes::NONE};
-
-		// Slice the encrypted stream into SDU-sized parts and compute the
-		// hashmap. Mirror Python Resource.py:432-473 — minus the collision
-		// guard, which is not strictly necessary for byte-exact interop
-		// (random_hash already provides per-resource entropy).
-		const uint32_t hashmap_entries = static_cast<uint32_t>((_object->_size + _object->_sdu - 1) / _object->_sdu);
-		_object->_total_parts = hashmap_entries;
-		_object->_sent_parts  = 0;
-
-		_object->_parts.clear();
-		_object->_parts.reserve(hashmap_entries);
-		_object->_hashmap = {Bytes::NONE};
-
-		for (uint32_t i = 0; i < hashmap_entries; ++i) {
-			const size_t offset = static_cast<size_t>(i) * _object->_sdu;
-			size_t chunk_size = _object->_sdu;
-			if (offset + chunk_size > _object->_data.size()) {
-				chunk_size = _object->_data.size() - offset;
-			}
-			Bytes chunk = _object->_data.mid(offset, chunk_size);
-
-			Packet part(link, chunk, Type::Packet::DATA, Type::Packet::RESOURCE);
-			part.pack();
-
-			Bytes map_hash = get_map_hash(chunk);
-			_object->_hashmap.append(map_hash);
-			_object->_parts.push_back(part);
-		}
-
-		// Drop the buffered stream now that parts and hashmap are computed.
-		_object->_data = {Bytes::NONE};
-
-		if (advertise) {
-			this->advertise();
-		}
+/*
+Encrypt the payload, slice it into parts, compute the hashmap, register the
+resource with the link, and emit the RESOURCE_ADV packet. Mirror the Python
+__init__ initiator branch (Resource.py:402-475) plus the trailing advertise()
+call.
+*/
+const Resource& Resource::start() {
+	assert(_object);
+	if (!_object->_data || _object->_data.size() == 0) {
+		DEBUG("Resource::start() called with empty payload; nothing to do");
+		return *this;
 	}
-	else {
-		// ====================================================================
-		// Receiver branch — TODO 1.4: full receiver initialisation lives in
-		// Resource::accept(). This constructor is the no-op shell used by
-		// accept() to allocate the underlying ResourceData.
-		// ====================================================================
-		_object->_initiator = false;
+
+	_object->_initiator = true;
+
+	// The payload was stashed in _data by the constructor; pull it back out
+	// so we can free that slot once we've built parts.
+	Bytes data = _object->_data;
+	_object->_data = {Bytes::NONE};
+
+	const size_t data_size = data.size();
+	_object->_uncompressed_size = data_size;
+	_object->_total_size        = data_size + _object->_metadata_size;
+
+	// Build the payload: prefix_random_hash || data. (No bz2 compression.)
+	// Mirror Python Resource.py:411-413 — the prefix is a random hash
+	// included in the encrypted stream so identical user payloads still
+	// produce different ciphertexts.
+	_object->_random_hash = Identity::get_random_hash().left(Type::Resource::RANDOM_HASH_SIZE);
+
+	Bytes payload;
+	payload.append(_object->_random_hash);
+	payload.append(data);
+	_object->_uncompressed_data = payload;
+
+	_object->_compressed       = false;
+	_object->_compressed_data  = {Bytes::NONE};
+
+	// The hash and expected_proof are computed over (user data || random_hash),
+	// NOT over the prefixed payload — see Python Resource.py:441-443.
+	Bytes hash_input = data + _object->_random_hash;
+	_object->_hash            = Identity::full_hash(hash_input);
+	_object->_truncated_hash  = Identity::truncated_hash(hash_input);
+	_object->_expected_proof  = Identity::full_hash(data + _object->_hash);
+	if (_object->_original_hash.size() == 0) {
+		_object->_original_hash = _object->_hash;
 	}
+
+	// Resources encrypt their payload themselves so each chunk sits in
+	// the cipher stream contiguously (Python Resource.py:423-428).
+	Bytes encrypted = _object->_link.encrypt(payload);
+	_object->_encrypted  = true;
+	_object->_size       = encrypted.size();
+
+	_object->_uncompressed_data = {Bytes::NONE};
+
+	// Slice the encrypted stream into SDU-sized parts and compute the
+	// hashmap. Mirror Python Resource.py:432-473 — minus the collision
+	// guard, which is not strictly necessary for byte-exact interop
+	// (random_hash already provides per-resource entropy).
+	const uint32_t hashmap_entries = static_cast<uint32_t>((_object->_size + _object->_sdu - 1) / _object->_sdu);
+	_object->_total_parts = hashmap_entries;
+	_object->_sent_parts  = 0;
+
+	_object->_parts.clear();
+	_object->_parts.reserve(hashmap_entries);
+	_object->_hashmap = {Bytes::NONE};
+
+	for (uint32_t i = 0; i < hashmap_entries; ++i) {
+		const size_t offset = static_cast<size_t>(i) * _object->_sdu;
+		size_t chunk_size = _object->_sdu;
+		if (offset + chunk_size > encrypted.size()) {
+			chunk_size = encrypted.size() - offset;
+		}
+		Bytes chunk = encrypted.mid(offset, chunk_size);
+
+		Packet part(_object->_link, chunk, Type::Packet::DATA, Type::Packet::RESOURCE);
+		part.pack();
+
+		Bytes map_hash = get_map_hash(chunk);
+		_object->_hashmap.append(map_hash);
+		_object->_parts.push_back(part);
+	}
+
+	this->advertise();
+	return *this;
 }
 
 
@@ -1235,25 +1266,69 @@ void Resource::rejected() {
 
 
 // ============================================================================
-// Callbacks
+// Callbacks (fluent — names retained for compatibility, return Resource&)
 // ============================================================================
 
-void Resource::set_callback(Callbacks::concluded callback) {
+Resource& Resource::set_callback(Callbacks::concluded callback) {
 	assert(_object);
 	_object->_callbacks._concluded = callback;
+	return *this;
 }
 
-void Resource::progress_callback(Callbacks::progress callback) {
+Resource& Resource::progress_callback(Callbacks::progress callback) {
 	assert(_object);
 	_object->_callbacks._progress = callback;
+	return *this;
 }
 
-void Resource::set_concluded_callback(Callbacks::concluded callback) {
-	set_callback(callback);
+Resource& Resource::set_concluded_callback(Callbacks::concluded callback) {
+	return set_callback(callback);
 }
 
-void Resource::set_progress_callback(Callbacks::progress callback) {
-	progress_callback(callback);
+Resource& Resource::set_progress_callback(Callbacks::progress callback) {
+	return progress_callback(callback);
+}
+
+
+// ============================================================================
+// Fluent setters (no set_ prefix per project convention)
+// ============================================================================
+
+Resource& Resource::timeout(double seconds) {
+	assert(_object);
+	_object->_timeout = seconds;
+	return *this;
+}
+
+Resource& Resource::auto_compress(bool enabled) {
+	assert(_object);
+	_object->_auto_compress_option = enabled;
+	// _auto_compress (actual) stays false on the C++ port — bz2 unsupported.
+	return *this;
+}
+
+Resource& Resource::request_id(const Bytes& id) {
+	assert(_object);
+	_object->_request_id = id;
+	return *this;
+}
+
+Resource& Resource::is_response(bool value) {
+	assert(_object);
+	_object->_is_response = value;
+	return *this;
+}
+
+Resource& Resource::segment_index(uint16_t index) {
+	assert(_object);
+	_object->_segment_index = index;
+	return *this;
+}
+
+Resource& Resource::original_hash(const Bytes& hash) {
+	assert(_object);
+	_object->_original_hash = hash;
+	return *this;
 }
 
 

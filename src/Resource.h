@@ -22,6 +22,16 @@
 #include <memory>
 #include <cassert>
 
+// [[deprecated(msg)]] requires C++14. Fall back to GCC/Clang's attribute
+// syntax under C++11 so the native (gnu++11) build still compiles.
+#if __cplusplus >= 201402L
+#define RNS_DEPRECATED(msg) [[deprecated(msg)]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define RNS_DEPRECATED(msg) __attribute__((deprecated(msg)))
+#else
+#define RNS_DEPRECATED(msg)
+#endif
+
 namespace RNS {
 
 	class ResourceData;
@@ -64,8 +74,19 @@ namespace RNS {
 		Resource(const Resource& resource) : _object(resource._object) {
 			MEM("Resource object copy created");
 		}
+		// Minimal constructor — stores the payload and link only; the
+		// initiator-side encrypt/split/advertise work is deferred until
+		// start() is called. Use the fluent setters below to configure
+		// optional parameters between construction and start().
+		Resource(const Bytes& data, const Link& link);
+
+		// Deprecated constructors retained as compatibility shims for
+		// out-of-tree firmware. New code should use the minimal
+		// constructor + fluent setters + start().
+		RNS_DEPRECATED("use fluent API + start()")
 		Resource(const Bytes& data, const Link& link, const Bytes& request_id, bool is_response, double timeout);
-		Resource(const Bytes& data, const Link& link, bool advertise = true, bool auto_compress = true, Callbacks::concluded callback = nullptr, Callbacks::progress progress_callback = nullptr, double timeout = 0.0, uint16_t segment_index = 1, const Bytes& original_hash = {Bytes::NONE}, const Bytes& request_id = {Bytes::NONE}, bool is_response = false, size_t sent_metadata_size = 0);
+		RNS_DEPRECATED("use fluent API + start()")
+		Resource(const Bytes& data, const Link& link, bool advertise, bool auto_compress, Callbacks::concluded callback = nullptr, Callbacks::progress progress_callback = nullptr, double timeout = 0.0, uint16_t segment_index = 1, const Bytes& original_hash = {Bytes::NONE}, const Bytes& request_id = {Bytes::NONE}, bool is_response = false, size_t sent_metadata_size = 0);
 		virtual ~Resource(){
 			MEM("Resource object destroyed");
 		}
@@ -105,8 +126,31 @@ namespace RNS {
 		void request(const Bytes& request_data);
 		void cancel();
 		void rejected();
-		void set_callback(Callbacks::concluded callback);
-		void progress_callback(Callbacks::progress callback);
+
+		// Initiator-side kickoff: encrypt the payload, slice it into parts,
+		// register with the link, and send the advertisement. Call after
+		// configuring the resource via fluent setters. Returns a const
+		// reference to *this so the whole chain can be assigned (the
+		// const-ness prevents further setters from being appended).
+		const Resource& start();
+
+		// Fluent setters — return *this for chaining. Per project convention,
+		// new setters share names with their corresponding getter (where one
+		// exists) and disambiguate by signature.
+		Resource& timeout(double seconds);
+		Resource& auto_compress(bool enabled);
+		Resource& request_id(const Bytes& id);
+		Resource& is_response(bool value);
+		Resource& segment_index(uint16_t index);
+		Resource& original_hash(const Bytes& hash);
+
+		// Existing callback setters — converted to fluent in place; same
+		// names, return type changed from void to Resource&.
+		Resource& set_callback(Callbacks::concluded callback);
+		Resource& progress_callback(Callbacks::progress callback);
+		Resource& set_concluded_callback(Callbacks::concluded callback);
+		Resource& set_progress_callback(Callbacks::progress callback);
+
 		float get_progress() const;
 		float get_segment_progress() const;
 		size_t get_transfer_size() const;
@@ -115,10 +159,6 @@ namespace RNS {
 		uint16_t get_segments() const;
 		const Bytes& get_hash() const;
 		bool is_compressed() const;
-
-		// CBA legacy names kept for backwards compatibility
-		void set_concluded_callback(Callbacks::concluded callback);
-		void set_progress_callback(Callbacks::progress callback);
 
 		std::string toString() const;
 

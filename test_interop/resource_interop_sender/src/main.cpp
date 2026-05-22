@@ -72,10 +72,10 @@ static void on_link_established(RNS::Link& link) {
 	RNS::Bytes payload = build_payload();
 	printf("[cpp] sending resource: %lu bytes\n", (unsigned long)payload.size());
 
-	// auto_compress=false (bz2 not supported on C++ port). advertise=true so
-	// the resource starts transmitting immediately.
-	RNS::Resource resource(payload, link, /*advertise=*/true, /*auto_compress=*/false,
-	                       on_resource_concluded);
+	RNS::Resource resource = RNS::Resource(payload, link)
+		.auto_compress(false)
+		.set_concluded_callback(on_resource_concluded)
+		.start();
 	// The Resource is captured by Link::_outgoing_resources; the local
 	// stack variable can go out of scope safely (pimpl/shared_ptr).
 }

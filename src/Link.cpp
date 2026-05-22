@@ -599,7 +599,10 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 	else {
 		const Bytes request_id(Identity::truncated_hash(packed_request));
 		DEBUGF("Sending request %s as resource.", request_id.toHex().c_str());
-		Resource request_resource(packed_request, *this, request_id, false, timeout);
+		Resource request_resource = Resource(packed_request, *this)
+			.request_id(request_id)
+			.timeout(timeout)
+			.start();
 
 		return RequestReceipt(
 			*this,
@@ -1006,7 +1009,10 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 					else {
 						TRACE("handle_request: Sending response as resource");
 						// CBA TODO Determine why unused Resource is created here
-						Resource response_resource = RNS::Resource(packed_response, *this, request_id, true, 0.0);
+						Resource response_resource = Resource(packed_response, *this)
+							.request_id(request_id)
+							.is_response(true)
+							.start();
 					}
 				}
 			}
@@ -1287,10 +1293,7 @@ void Link::receive(const Packet& packet) {
 							// Dispatch to Link::request_resource_concluded() happens
 							// via Link::resource_concluded() on completion;
 							// no trampoline callback required at accept-time.
-							Resource::accept(packet,
-							                 /*callback=*/nullptr,
-							                 /*progress_callback=*/nullptr,
-							                 ResourceAdvertisement::read_request_id(packet));
+							Resource::accept(packet, /*callback=*/nullptr, /*progress_callback=*/nullptr, ResourceAdvertisement::read_request_id(packet));
 						}
 						else if (ResourceAdvertisement::is_response(packet)) {
 							Bytes request_id = ResourceAdvertisement::read_request_id(packet);
@@ -1298,10 +1301,7 @@ void Link::receive(const Packet& packet) {
 							// so a value copy still mutates the underlying data.
 							for (RequestReceipt pending_request : _object->_pending_requests) {
 								if (pending_request.request_id() == request_id) {
-									Resource response_resource = Resource::accept(packet,
-									                                              /*callback=*/nullptr,
-									                                              /*progress_callback=*/nullptr,
-									                                              request_id);
+									Resource response_resource = Resource::accept(packet, /*callback=*/nullptr, /*progress_callback=*/nullptr, request_id);
 									if (response_resource) {
 										if (pending_request.response_transfer_size() == 0) {
 											pending_request.response_size(ResourceAdvertisement::read_size(packet));
