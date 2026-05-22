@@ -998,13 +998,15 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 					Bytes packed_response = pack_response_envelope(request_id, response);
 
 					if (packed_response.size() <= MDU) {
+						TRACE("handle_request: Sending response as single packet");
 						//p RNS.Packet(self, packed_response, Type::Packet::DATA, context = Type::Packet::RESPONSE).send()
 						RNS::Packet response_packet(*this, packed_response, Type::Packet::DATA, Type::Packet::RESPONSE);
 						response_packet.send();
 					}
 					else {
+						TRACE("handle_request: Sending response as resource");
 						// CBA TODO Determine why unused Resource is created here
-						Resource response_resource = RNS::Resource(packed_response, *this, request_id, true);
+						Resource response_resource = RNS::Resource(packed_response, *this, request_id, true, 0.0);
 					}
 				}
 			}

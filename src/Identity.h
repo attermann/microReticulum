@@ -77,7 +77,7 @@ namespace RNS {
 			MEMF("Identity object copy created by assignment, this: %p, data: %p", (void*)this, (void*)_object.get());
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Identity& identity) const {

@@ -362,20 +362,20 @@ Registers a request handler.
 :param allowed_list: A list of *bytes-like* :ref:`RNS.Identity<api-identity>` hashes.
 :raises: ``ValueError`` if any of the supplied arguments are invalid.
 */
-void Destination::register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow /*= Type::Destination::request_policies::ALLOW_NONE*/, std::initializer_list<Bytes> allowed_list /*= {}*/) {
+void Destination::register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow /*= Type::Destination::request_policies::ALLOW_NONE*/, std::initializer_list<Bytes> allowed_list /*= {}*/, bool auto_compress /*= true*/) {
 	assert(_object);
 	if (!path) throw std::invalid_argument("Invalid path specified");
 	else if (generator == nullptr) throw std::invalid_argument("Invalid response generator specified");
 	Bytes path_hash(Identity::truncated_hash(path));
-	_object->_request_handlers.insert({path_hash, {path, generator, allow, allowed_list}});
+	_object->_request_handlers.insert({path_hash, {path, generator, allow, allowed_list, auto_compress}});
 }
 
-void Destination::register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow, const std::set<Bytes>& allowed_list) {
+void Destination::register_request_handler(const Bytes& path, RequestHandler::response_generator generator, Type::Destination::request_policies allow, const std::set<Bytes>& allowed_list, bool auto_compress /*= true*/) {
 	assert(_object);
 	if (!path) throw std::invalid_argument("Invalid path specified");
 	else if (generator == nullptr) throw std::invalid_argument("Invalid response generator specified");
 	Bytes path_hash(Identity::truncated_hash(path));
-	_object->_request_handlers.insert({path_hash, {path, generator, allow, allowed_list}});
+	_object->_request_handlers.insert({path_hash, {path, generator, allow, allowed_list, auto_compress}});
 }
 
 /*

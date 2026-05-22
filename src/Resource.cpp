@@ -40,6 +40,7 @@ initiator carrying the advertised resource hash. Mirror Python Resource.py:155.
 */
 void Resource::reject(const Packet& advertisement_packet) {
 	try {
+		TRACE("Resource::reject: Sending resource reject packet");
 		ResourceAdvertisement adv = ResourceAdvertisement::unpack(advertisement_packet.plaintext());
 		Bytes resource_hash = adv._h;
 		Packet reject_packet(advertisement_packet.link(), resource_hash, Type::Packet::DATA, Type::Packet::RESOURCE_RCL);
@@ -420,6 +421,7 @@ void Resource::advertise_job() {
 	}
 
 	try {
+		TRACE("Resource::advertise_job: Sending resource advertisement packet");
 		_object->_advertisement_packet.send();
 		_object->_last_activity        = Utilities::OS::time();
 		_object->_started_transferring = _object->_last_activity;
@@ -510,6 +512,7 @@ void Resource::__watchdog_job() {
 			try {
 				DEBUG("No part requests received, retrying resource advertisement...");
 				_object->_retries_left--;
+				TRACE("Resource::advertise_job: Re-sending resource advertisement packet");
 				ResourceAdvertisement adv(*this, _object->_request_id, _object->_is_response);
 				_object->_advertisement_packet = Packet(_object->_link, adv.pack(), Type::Packet::DATA, Type::Packet::RESOURCE_ADV);
 				_object->_advertisement_packet.send();
@@ -633,6 +636,7 @@ C++-port differences vs. Python:
   as the entire resource body.
 */
 void Resource::assemble() {
+	TRACE("Resource::assemble: Reassembling received parts");
 	assert(_object);
 	if (_object->_status == Type::Resource::FAILED) return;
 
@@ -704,6 +708,7 @@ Send a RESOURCE_PRF proof packet to the initiator confirming successful
 receipt. Mirror Python Resource.py:752.
 */
 void Resource::prove() {
+	TRACE("Resource::prove: Sending proof packet");
 	assert(_object);
 	if (_object->_status == Type::Resource::FAILED) return;
 
@@ -713,6 +718,7 @@ void Resource::prove() {
 		proof_data.append(_object->_hash);
 		proof_data.append(proof);
 
+		TRACE("Resource::advertise_job: Sending resource proof packet");
 		Packet proof_packet(_object->_link, proof_data, Type::Packet::PROOF, Type::Packet::RESOURCE_PRF);
 		proof_packet.send();
 		Transport::cache_packet(proof_packet, /*force_cache=*/true);
@@ -743,6 +749,7 @@ proof matches the expected proof we transition to COMPLETE and fire the
 concluded callback. Mirror Python Resource.py:782.
 */
 void Resource::validate_proof(const Bytes& proof_data) {
+	TRACE("Resource::validate_proof: Validating proof");
 	assert(_object);
 	if (_object->_status == Type::Resource::FAILED) return;
 
@@ -785,6 +792,7 @@ parts[], and either kicks off assemble() when all parts have arrived or
 requests the next window. Mirror Python Resource.py:828.
 */
 void Resource::receive_part(const Packet& packet) {
+	TRACE("Resource::receive_part: Received resource part");
 	assert(_object);
 	if (_object->_receive_lock) return;
 	_object->_receive_lock = true;
@@ -929,6 +937,7 @@ Send a RESOURCE_REQ packet asking the initiator for the next window of parts.
 Mirror Python Resource.py:931.
 */
 void Resource::request_next() {
+	TRACE("Resource::request_)next: Requesting next part");
 	assert(_object);
 	if (_object->_status == Type::Resource::FAILED) return;
 	if (_object->_waiting_for_hmu) return;
@@ -987,6 +996,7 @@ void Resource::request_next() {
 	request_data.append(requested_hashes);
 
 	try {
+		TRACE("Resource::request_next: Sending next segment request packet");
 		Packet request_packet(_object->_link, request_data, Type::Packet::DATA, Type::Packet::RESOURCE_REQ);
 		request_packet.send();
 		_object->_last_activity            = Utilities::OS::time();
@@ -1012,6 +1022,7 @@ arrives from the receiver containing a list of map_hashes the receiver wants.
 Mirror Python Resource.py:982.
 */
 void Resource::request(const Bytes& request_data) {
+	TRACE("Resource::request: Received request");
 	assert(_object);
 	if (_object->_status == Type::Resource::FAILED) return;
 	if (request_data.size() < 1) return;
@@ -1063,10 +1074,12 @@ void Resource::request(const Bytes& request_data) {
 		try {
 			Packet& part = _object->_parts[i];
 			if (!part.sent()) {
+				TRACEF("Resource::request: Sending resource part of size: %u", part.raw().size());
 				part.send();
 				_object->_sent_parts++;
 			}
 			else {
+				TRACEF("Resource::request: Re-sending resource part of size: %u", part.raw().size());
 				part.resend();
 			}
 			_object->_last_activity  = Utilities::OS::time();
@@ -1119,6 +1132,7 @@ void Resource::request(const Bytes& request_data) {
 		hmu_payload.append(hmu_packer.data(), hmu_packer.size());
 
 		try {
+			TRACEF("Resource::request: Sending resource hashmap of size: %u", hmu_payload.size());
 			Packet hmu_packet(_object->_link, hmu_payload, Type::Packet::DATA, Type::Packet::RESOURCE_HMU);
 			hmu_packet.send();
 			_object->_last_activity = Utilities::OS::time();
@@ -1173,6 +1187,7 @@ void Resource::cancel() {
 	if (_object->_initiator) {
 		if (_object->_link.status() == Type::Link::ACTIVE) {
 			try {
+				TRACE("Resource::cancel: Sending resource cancel packet");
 				Packet cancel_packet(_object->_link, _object->_hash, Type::Packet::DATA, Type::Packet::RESOURCE_ICL);
 				cancel_packet.send();
 			}

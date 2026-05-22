@@ -71,11 +71,14 @@ namespace RNS {
 			_object = packet_receipt._object;
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const PacketReceipt& packet_receipt) const {
 			return _object.get() < packet_receipt._object.get();
+		}
+		inline bool operator == (const PacketReceipt& packet_receipt) const {
+			return _object.get() == packet_receipt._object.get();
 		}
 
 	public:
@@ -207,7 +210,7 @@ namespace RNS {
 			MEMF("Packet object copy created by assignment, this: %p, data: %p", (void*)this, (void*)_object.get());
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			return _object.get() != nullptr;
 		}
 		inline bool operator < (const Packet& packet) const {

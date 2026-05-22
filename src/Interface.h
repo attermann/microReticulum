@@ -137,7 +137,7 @@ namespace RNS {
 			MEMF("Interface object copy created by assignment, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return *this;
 		}
-		inline operator bool() const {
+		inline explicit operator bool() const {
 			MEMF("Interface object bool, this: 0x%X, impl: 0x%X", this, _impl.get());
 			return _impl.get() != nullptr;
 		}

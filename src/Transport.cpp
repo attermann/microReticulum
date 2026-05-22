@@ -3583,21 +3583,30 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			// CBA NOTE Transport::get_path_table() is currently empty since migrating to microStore path store,
 			// but leaving this as-is for now since we don't currently ahve the ability to stream the entire path
 			// list (nor do we likely want to on resource-constrained devices) so leaving this as a no-op for now.
-			auto& table = Transport::get_path_table();
-			// First pass: count entries that survive the filters, so we can emit
-			// the correct fixarray/array header before packing the entries.
+
 			size_t match_count = 0;
-			for (auto& kv : table) {
-				if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
-				if (req.max_hops_present && kv.second._hops > req.max_hops) continue;
+			for (auto& path : _new_path_table) {
+				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
+				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
 				match_count++;
+				if (match_count >= 100) break;
 			}
 			p.packArraySize(match_count);
+/*
 			// Second pass: emit.
 			for (auto& kv : table) {
 				if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
 				if (req.max_hops_present && kv.second._hops > req.max_hops) continue;
 				remote_path_pack_path_entry(p, kv.first, kv.second);
+			}
+*/
+			match_count = 0;
+			for (auto& path : _new_path_table) {
+				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
+				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
+				remote_path_pack_path_entry(p, path.key, path.value);
+				match_count++;
+				if (match_count >= 100) break;
 			}
 		}
 	}
