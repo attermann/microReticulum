@@ -27,6 +27,20 @@
 #include <stdint.h>
 #include <time.h>
 
+// [[deprecated(msg)]] requires C++14. Fall back to GCC/Clang's attribute
+// syntax under C++11 so the native (gnu++11) build still compiles. Defined
+// identically in Resource.h; duplicate here to avoid creating a dependency
+// on Resource.h just for the macro.
+#ifndef RNS_DEPRECATED
+#if __cplusplus >= 201402L
+#define RNS_DEPRECATED(msg) [[deprecated(msg)]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define RNS_DEPRECATED(msg) __attribute__((deprecated(msg)))
+#else
+#define RNS_DEPRECATED(msg)
+#endif
+#endif
+
 namespace RNS {
 
 	class ProofDestination;
@@ -170,11 +184,24 @@ namespace RNS {
 		Packet(const Bytes& raw) : _object(new Object(raw)) {
 			MEMF("Packet object created from raw, this: %p, data: %p", (void*)this, (void*)_object.get());
 		}
+
+		// New minimal constructors — store the target + payload only. Use the
+		// fluent setters below to configure optional parameters between
+		// construction and send().
+		Packet(const Destination& destination, const Bytes& data);
+		Packet(const Link& link, const Bytes& data);
+
+		// Deprecated constructors retained as compatibility shims for
+		// out-of-tree firmware. `packet_type` has no default so the two-arg
+		// `Packet(target, data)` resolves unambiguously to the new minimal
+		// constructor; behavior is unchanged for callers that previously
+		// relied on the `packet_type = DATA` default.
+		RNS_DEPRECATED("use fluent API")
 		Packet(
 			const Destination& destination,
 			const Interface& attached_interface,
 			const Bytes& data,
-			Type::Packet::types packet_type = Type::Packet::DATA,
+			Type::Packet::types packet_type,
 			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
 			Type::Transport::types transport_type = Type::Transport::BROADCAST,
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
@@ -182,22 +209,23 @@ namespace RNS {
 			bool create_receipt = true,
 			Type::Packet::context_flags context_flag = Type::Packet::FLAG_UNSET
 		);
+		RNS_DEPRECATED("use fluent API")
 		Packet(
 			const Destination& destination,
 			const Bytes& data,
-			Type::Packet::types packet_type = Type::Packet::DATA,
+			Type::Packet::types packet_type,
 			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
 			Type::Transport::types transport_type = Type::Transport::BROADCAST,
 			Type::Packet::header_types header_type = Type::Packet::HEADER_1,
 			const Bytes& transport_id = {Bytes::NONE},
 			bool create_receipt = true,
 			Type::Packet::context_flags context_flag = Type::Packet::FLAG_UNSET
-		) : Packet(destination, {Type::NONE}, data, packet_type, context, transport_type, header_type, transport_id, create_receipt, context_flag) {}
-		// CBA LINK
+		);
+		RNS_DEPRECATED("use fluent API")
 		Packet(
 			const Link& link,
 			const Bytes& data,
-			Type::Packet::types packet_type = Type::Packet::DATA,
+			Type::Packet::types packet_type,
 			Type::Packet::context_types context = Type::Packet::CONTEXT_NONE,
 			Type::Packet::context_flags context_flag = Type::Packet::FLAG_UNSET
 		);
@@ -230,9 +258,14 @@ namespace RNS {
 		void unpack_flags(uint8_t flags);
 		void pack();
 		bool unpack();
-		PacketReceipt send();
+		PacketReceipt receipt_send();
 		bool resend();
 		void prove(const Destination& destination = {Type::NONE});
+
+		// Send-and-return: calls send(), discards the receipt, and returns
+		// *this so the chain can be assigned to a Packet. The const return
+		// blocks any further setters from being chained after send().
+		inline const Packet& send() { receipt_send(); return *this; }
 		ProofDestination generate_proof_destination() const;
 		bool validate_proof_packet(const Packet& proof_packet);
 		bool validate_proof(const Bytes& proof);
@@ -273,21 +306,37 @@ namespace RNS {
 		inline bool packed() const { assert(_object); return _object->_packed; }
 		inline bool from_packed() const { assert(_object); return _object->_fromPacked; }
 
-		// setters
-		inline void destination(const Destination& destination) { assert(_object); _object->_destination = destination; }
-		inline void link(const Link& link) { assert(_object); _object->_link = link; }
-		inline void receiving_interface(const Interface& receiving_interface) { assert(_object); _object->_receiving_interface = receiving_interface; }
-		inline void sent(bool sent) { assert(_object); _object->_sent = sent; }
-		inline void sent_at(double sent_at) { assert(_object); _object->_sent_at = sent_at; }
-		inline void receipt(const PacketReceipt& receipt) { assert(_object); _object->_receipt = receipt; }
-		inline void hops(uint8_t hops) { assert(_object); _object->_hops = hops; }
-		inline void cached(bool cached) { assert(_object); _object->_cached = cached; }
-		inline void transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; }
+		// Fluent setters — return Packet& for chaining. Setters that change
+		// a flag-contributing field (packet_type/context/context_flag/
+		// transport_type/header_type/destination) recompute _flags so it
+		// stays in sync. Names match the corresponding const getters; the
+		// non-const parameter signature disambiguates.
+
+		// Existing setters (converted in place from void to Packet&)
+		inline Packet& destination(const Destination& destination) { assert(_object); _object->_destination = destination; _object->_flags = get_packed_flags(); return *this; }
+		inline Packet& link(const Link& link) { assert(_object); _object->_link = link; return *this; }
+		inline Packet& receiving_interface(const Interface& receiving_interface) { assert(_object); _object->_receiving_interface = receiving_interface; return *this; }
+		inline Packet& sent(bool sent) { assert(_object); _object->_sent = sent; return *this; }
+		inline Packet& sent_at(double sent_at) { assert(_object); _object->_sent_at = sent_at; return *this; }
+		inline Packet& receipt(const PacketReceipt& receipt) { assert(_object); _object->_receipt = receipt; return *this; }
+		inline Packet& hops(uint8_t hops) { assert(_object); _object->_hops = hops; return *this; }
+		inline Packet& cached(bool cached) { assert(_object); _object->_cached = cached; return *this; }
+		inline Packet& transport_id(const Bytes& transport_id) { assert(_object); _object->_transport_id = transport_id; return *this; }
 		//CBA Following method is only used by Link to provide Resource access to decrypted resource advertisement. Consider a better way.
-		inline void plaintext(const Bytes& plaintext) { assert(_object); _object->_plaintext = plaintext; }
+		inline Packet& plaintext(const Bytes& plaintext) { assert(_object); _object->_plaintext = plaintext; return *this; }
 		// Used by Resource::receive_part to file an incoming packet's raw
 		// payload into the receiver-side assembly buffer.
-		inline void data(const Bytes& data) { assert(_object); _object->_data = data; }
+		inline Packet& data(const Bytes& data) { assert(_object); _object->_data = data; return *this; }
+
+		// New fluent setters for fields that were previously only settable
+		// via constructor parameters.
+		inline Packet& packet_type(Type::Packet::types value)          { assert(_object); _object->_packet_type    = value; _object->_flags = get_packed_flags(); return *this; }
+		inline Packet& context(Type::Packet::context_types value)      { assert(_object); _object->_context        = value; _object->_flags = get_packed_flags(); return *this; }
+		inline Packet& context_flag(Type::Packet::context_flags value) { assert(_object); _object->_context_flag   = value; _object->_flags = get_packed_flags(); return *this; }
+		inline Packet& transport_type(Type::Transport::types value)    { assert(_object); _object->_transport_type = value; _object->_flags = get_packed_flags(); return *this; }
+		inline Packet& header_type(Type::Packet::header_types value)   { assert(_object); _object->_header_type    = value; _object->_flags = get_packed_flags(); return *this; }
+		inline Packet& attached_interface(const Interface& iface)      { assert(_object); _object->_attached_interface = iface; return *this; }
+		inline Packet& create_receipt(bool enabled)                    { assert(_object); _object->_create_receipt = enabled; return *this; }
 
 #ifndef NDEBUG
 		std::string debugString() const;

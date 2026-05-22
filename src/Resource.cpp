@@ -43,7 +43,7 @@ void Resource::reject(const Packet& advertisement_packet) {
 		TRACE("Resource::reject: Sending resource reject packet");
 		ResourceAdvertisement adv = ResourceAdvertisement::unpack(advertisement_packet.plaintext());
 		Bytes resource_hash = adv._h;
-		Packet reject_packet(advertisement_packet.link(), resource_hash, Type::Packet::DATA, Type::Packet::RESOURCE_RCL);
+		Packet reject_packet = Packet(advertisement_packet.link(), resource_hash).context(Type::Packet::RESOURCE_RCL);
 		reject_packet.send();
 	}
 	catch (const std::exception& e) {
@@ -325,7 +325,7 @@ const Resource& Resource::start() {
 		}
 		Bytes chunk = encrypted.mid(offset, chunk_size);
 
-		Packet part(_object->_link, chunk, Type::Packet::DATA, Type::Packet::RESOURCE);
+		Packet part = Packet(_object->_link, chunk).context(Type::Packet::RESOURCE);
 		part.pack();
 
 		Bytes map_hash = get_map_hash(chunk);
@@ -441,7 +441,7 @@ void Resource::advertise_job() {
 
 	// Build the advertisement packet. Mirror Python Resource.py:521.
 	ResourceAdvertisement adv(*this, _object->_request_id, _object->_is_response);
-	_object->_advertisement_packet = Packet(_object->_link, adv.pack(), Type::Packet::DATA, Type::Packet::RESOURCE_ADV);
+	_object->_advertisement_packet = Packet(_object->_link, adv.pack()).context(Type::Packet::RESOURCE_ADV);
 
 	// Python loops until the link is ready (Resource.py:522-524). On the
 	// cooperative C++ runtime we cannot busy-wait; if the link is not ready
@@ -545,7 +545,7 @@ void Resource::__watchdog_job() {
 				_object->_retries_left--;
 				TRACE("Resource::advertise_job: Re-sending resource advertisement packet");
 				ResourceAdvertisement adv(*this, _object->_request_id, _object->_is_response);
-				_object->_advertisement_packet = Packet(_object->_link, adv.pack(), Type::Packet::DATA, Type::Packet::RESOURCE_ADV);
+				_object->_advertisement_packet = Packet(_object->_link, adv.pack()).context(Type::Packet::RESOURCE_ADV);
 				_object->_advertisement_packet.send();
 				_object->_last_activity = Utilities::OS::time();
 				_object->_adv_sent      = _object->_last_activity;
@@ -750,7 +750,7 @@ void Resource::prove() {
 		proof_data.append(proof);
 
 		TRACE("Resource::advertise_job: Sending resource proof packet");
-		Packet proof_packet(_object->_link, proof_data, Type::Packet::PROOF, Type::Packet::RESOURCE_PRF);
+		Packet proof_packet = Packet(_object->_link, proof_data).packet_type(Type::Packet::PROOF).context(Type::Packet::RESOURCE_PRF);
 		proof_packet.send();
 		Transport::cache_packet(proof_packet, /*force_cache=*/true);
 	}
@@ -1028,7 +1028,7 @@ void Resource::request_next() {
 
 	try {
 		TRACE("Resource::request_next: Sending next segment request packet");
-		Packet request_packet(_object->_link, request_data, Type::Packet::DATA, Type::Packet::RESOURCE_REQ);
+		Packet request_packet = Packet(_object->_link, request_data).context(Type::Packet::RESOURCE_REQ);
 		request_packet.send();
 		_object->_last_activity            = Utilities::OS::time();
 		_object->_req_sent                 = _object->_last_activity;
@@ -1164,7 +1164,7 @@ void Resource::request(const Bytes& request_data) {
 
 		try {
 			TRACEF("Resource::request: Sending resource hashmap of size: %u", hmu_payload.size());
-			Packet hmu_packet(_object->_link, hmu_payload, Type::Packet::DATA, Type::Packet::RESOURCE_HMU);
+			Packet hmu_packet = Packet(_object->_link, hmu_payload).context(Type::Packet::RESOURCE_HMU);
 			hmu_packet.send();
 			_object->_last_activity = Utilities::OS::time();
 		}
@@ -1219,7 +1219,7 @@ void Resource::cancel() {
 		if (_object->_link.status() == Type::Link::ACTIVE) {
 			try {
 				TRACE("Resource::cancel: Sending resource cancel packet");
-				Packet cancel_packet(_object->_link, _object->_hash, Type::Packet::DATA, Type::Packet::RESOURCE_ICL);
+				Packet cancel_packet = Packet(_object->_link, _object->_hash).context(Type::Packet::RESOURCE_ICL);
 				cancel_packet.send();
 			}
 			catch (const std::exception& e) {

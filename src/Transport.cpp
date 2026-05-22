@@ -489,20 +489,14 @@ DestinationEntry empty_destination_entry;
 //TRACEF("[1] interface: %s", announce_entry._attached_interface.debugString().c_str());
 //TRACEF("[1] interface: %s", announce_entry._attached_interface.toString().c_str());
 //}
-							Packet new_packet(
-								announce_destination,
-								//{Type::NONE},
-								announce_entry._attached_interface,
-								//{Type::NONE},
-								announce_entry._packet.data(),
-								Type::Packet::ANNOUNCE,
-								announce_context,
-								Type::Transport::TRANSPORT,
-								Type::Packet::HEADER_2,
-								Transport::_identity.hash(),
-								true,
-								announce_entry._packet.context_flag()
-							);
+							Packet new_packet = Packet(announce_destination, announce_entry._packet.data())
+								.attached_interface(announce_entry._attached_interface)
+								.packet_type(Type::Packet::ANNOUNCE)
+								.context(announce_context)
+								.transport_type(Type::Transport::TRANSPORT)
+								.header_type(Type::Packet::HEADER_2)
+								.transport_id(Transport::_identity.hash())
+								.context_flag(announce_entry._packet.context_flag());
 
 							new_packet.hops(announce_entry._hops);
 							if (announce_entry._block_rebroadcasts) {
@@ -2156,18 +2150,14 @@ DestinationEntry empty_destination_entry;
 							if (Transport::from_local_client(packet) && packet.context() == Type::Packet::PATH_RESPONSE) {
 								for (const Interface& local_interface : _local_client_interfaces) {
 									if (packet.receiving_interface() != local_interface) {
-										Packet new_announce(
-											announce_destination,
-											local_interface,
-											announce_data,
-											Type::Packet::ANNOUNCE,
-											announce_context,
-											Type::Transport::TRANSPORT,
-											Type::Packet::HEADER_2,
-											_identity.hash(),
-											true,
-											packet.context_flag()
-										);
+										Packet new_announce = Packet(announce_destination, announce_data)
+											.attached_interface(local_interface)
+											.packet_type(Type::Packet::ANNOUNCE)
+											.context(announce_context)
+											.transport_type(Type::Transport::TRANSPORT)
+											.header_type(Type::Packet::HEADER_2)
+											.transport_id(_identity.hash())
+											.context_flag(packet.context_flag());
 
 										new_announce.hops(packet.hops());
 										new_announce.send();
@@ -2177,18 +2167,14 @@ DestinationEntry empty_destination_entry;
 							else {
 								for (const Interface& local_interface : _local_client_interfaces) {
 									if (packet.receiving_interface() != local_interface) {
-										Packet new_announce(
-											announce_destination,
-											local_interface,
-											announce_data,
-											Type::Packet::ANNOUNCE,
-											announce_context,
-											Type::Transport::TRANSPORT,
-											Type::Packet::HEADER_2,
-											_identity.hash(),
-											true,
-											packet.context_flag()
-										);
+										Packet new_announce = Packet(announce_destination, announce_data)
+											.attached_interface(local_interface)
+											.packet_type(Type::Packet::ANNOUNCE)
+											.context(announce_context)
+											.transport_type(Type::Transport::TRANSPORT)
+											.header_type(Type::Packet::HEADER_2)
+											.transport_id(_identity.hash())
+											.context_flag(packet.context_flag());
 
 										new_announce.hops(packet.hops());
 										new_announce.send();
@@ -2214,18 +2200,14 @@ DestinationEntry empty_destination_entry;
 							Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 							Bytes announce_data = packet.data();
 
-							Packet new_announce(
-								announce_destination,
-								attached_interface,
-								announce_data,
-								Type::Packet::ANNOUNCE,
-								Type::Packet::PATH_RESPONSE,
-								Type::Transport::TRANSPORT,
-								Type::Packet::HEADER_2,
-								_identity.hash(),
-								true,
-								packet.context_flag()
-							);
+							Packet new_announce = Packet(announce_destination, announce_data)
+								.attached_interface(attached_interface)
+								.packet_type(Type::Packet::ANNOUNCE)
+								.context(Type::Packet::PATH_RESPONSE)
+								.transport_type(Type::Transport::TRANSPORT)
+								.header_type(Type::Packet::HEADER_2)
+								.transport_id(_identity.hash())
+								.context_flag(packet.context_flag());
 
 							new_announce.hops(packet.hops());
 							new_announce.send();
@@ -2946,8 +2928,7 @@ Deregisters an announce handler.
 	else {
 		// The packet is not in the local cache,
 		// query the network.
-		Packet request(destination, packet_hash, Type::Packet::DATA, Type::Packet::CACHE_REQUEST);
-		request.send();
+		Packet(destination, packet_hash).context(Type::Packet::CACHE_REQUEST).send();
 	}
 }
 
@@ -3211,7 +3192,8 @@ will announce it.
 	}
 
 	Destination path_request_dst({Type::NONE}, Type::Destination::OUT, Type::Destination::PLAIN, Type::Transport::APP_NAME, "path.request");
-	Packet packet(path_request_dst, on_interface, path_request_data, Type::Packet::DATA, Type::Packet::CONTEXT_NONE, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
+	Packet packet = Packet(path_request_dst, path_request_data).attached_interface(on_interface);
+	// packet_type=DATA, context=CONTEXT_NONE, transport_type=BROADCAST, header_type=HEADER_1 are all defaults.
 
 	if (on_interface && recursive) {
 // TODO
@@ -3834,18 +3816,14 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 					Identity imm_identity(Identity::recall(announce_packet.destination_hash()));
 					if (imm_identity) {
 						Destination imm_destination(imm_identity, Type::Destination::OUT, Type::Destination::SINGLE, announce_packet.destination_hash());
-						Packet imm_packet(
-							imm_destination,
-							attached_interface,
-							announce_packet.data(),
-							Type::Packet::ANNOUNCE,
-							Type::Packet::PATH_RESPONSE,
-							Type::Transport::TRANSPORT,
-							Type::Packet::HEADER_2,
-							_identity.hash(),
-							true,
-							announce_packet.context_flag()
-						);
+						Packet imm_packet = Packet(imm_destination, announce_packet.data())
+							.attached_interface(attached_interface)
+							.packet_type(Type::Packet::ANNOUNCE)
+							.context(Type::Packet::PATH_RESPONSE)
+							.transport_type(Type::Transport::TRANSPORT)
+							.header_type(Type::Packet::HEADER_2)
+							.transport_id(_identity.hash())
+							.context_flag(announce_packet.context_flag());
 						imm_packet.hops(announce_hops);
 						imm_packet.send();
 						_announce_table.erase(announce_packet.destination_hash());

@@ -32,52 +32,41 @@ ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NO
 {
 }
 
-Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, context_flags context_flag /*= FLAG_UNSET*/) :
-	_object(new Object(destination, attached_interface))
+// ============================================================================
+// New minimal constructors — store target + payload only. Fluent setters
+// configure optional parameters; send()/receipt_send() emits the packet.
+// ============================================================================
+
+Packet::Packet(const Destination& destination, const Bytes& data) :
+	_object(new Object(destination, {Type::NONE}))
 {
-
 	if (_object->_destination) {
-		//TRACE("Creating packet with destination...");
-		// CBA Should never see empty transport_type
-		//if (transport_type == NONE) {
-		//	transport_type = Type::Transport::BROADCAST;
-		//}
-		// following moved to object constructor to avoid extra NONE object
-		//_destination = destination;
-		_object->_header_type = header_type;
-		_object->_packet_type = packet_type;
-		_object->_transport_type = transport_type;
-		_object->_context = context;
-        _object->_context_flag = context_flag;
-
-		_object->_transport_id = transport_id;
+		// Defaults are applied via Object's in-class member initializers
+		// (HEADER_1, DATA, CONTEXT_NONE, BROADCAST, FLAG_UNSET).
 		_object->_data = data;
 		if (_object->_data.size() > MDU) {
 			_object->_truncated = true;
 			_object->_data.resize(MDU);
 		}
 		_object->_flags = get_packed_flags();
-
-		_object->_create_receipt = create_receipt;
+		_object->_create_receipt = true;
 	}
 	else {
-		//TRACE("Creating packet without destination...");
-		// CBA NOTE: This variant is for creating a new packet from a received raw buffer
+		// Fallback: empty destination means treat data as a raw inbound
+		// buffer. Preserved from the legacy constructor's behaviour for
+		// out-of-tree callers that may rely on this path.
 		_object->_raw = data;
 		_object->_packed = true;
 		_object->_fromPacked = true;
 		_object->_create_receipt = false;
 	}
-
 	MEMF("Packet object created, this: %p, data: %p", (void*)this, (void*)_object.get());
 }
 
-// CBA LINK
-Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/, context_flags context_flag /*= FLAG_UNSET*/) :
-	//_object(new Object(link))
-	//Packet(link.destination(), data, packet_type, context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, {Bytes::NONE}, true, context_flag)
-	// CBA Must use a destination that targets the Link itself instead of the original destination used to create the link
-	Packet(Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::LINK, link.hash()), data, packet_type, context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, {Bytes::NONE}, true, context_flag)
+Packet::Packet(const Link& link, const Bytes& data) :
+	// CBA Must use a destination that targets the Link itself instead of the
+	// original destination used to create the link.
+	Packet(Destination({Type::NONE}, Type::Destination::OUT, Type::Destination::LINK, link.hash()), data)
 {
 	TRACE("Creating packet with link...");
 	_object->_destination_link = link;
@@ -85,6 +74,47 @@ Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_t
 	// CBA HACK: Need to re-build packed flags since Link was assigned
 	_object->_flags = get_packed_flags();
 	MEMF("Packet link object created, this: %p, data: %p", (void*)this, (void*)_object.get());
+}
+
+
+// ============================================================================
+// Deprecated constructors — delegate to the new minimal constructor and the
+// fluent setters. Retained as compatibility shims for out-of-tree firmware.
+// ============================================================================
+
+Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, context_flags context_flag /*= FLAG_UNSET*/) :
+	Packet(destination, data)
+{
+	if (!_object->_destination) return;  // raw-fallback path; nothing to configure
+	this->attached_interface(attached_interface)
+	     .packet_type(packet_type)
+	     .context(context)
+	     .transport_type(transport_type)
+	     .header_type(header_type)
+	     .transport_id(transport_id)
+	     .create_receipt(create_receipt)
+	     .context_flag(context_flag);
+}
+
+Packet::Packet(const Destination& destination, const Bytes& data, types packet_type, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, context_flags context_flag /*= FLAG_UNSET*/) :
+	Packet(destination, data)
+{
+	if (!_object->_destination) return;
+	this->packet_type(packet_type)
+	     .context(context)
+	     .transport_type(transport_type)
+	     .header_type(header_type)
+	     .transport_id(transport_id)
+	     .create_receipt(create_receipt)
+	     .context_flag(context_flag);
+}
+
+Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_type, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/, context_flags context_flag /*= FLAG_UNSET*/) :
+	Packet(link, data)
+{
+	this->packet_type(packet_type)
+	     .context(context)
+	     .context_flag(context_flag);
 }
 
 
@@ -451,7 +481,7 @@ Sends the packet.
 
 :returns: A :ref:`RNS.PacketReceipt<api-packetreceipt>` instance if *create_receipt* was set to *True* when the packet was instantiated, if not returns *None*. If the packet could not be sent *False* is returned.
 */
-PacketReceipt Packet::send() {
+PacketReceipt Packet::receipt_send() {
 	assert(_object);
 	TRACE("Packet::send: sending packet...");
 	if (_object->_sent) {

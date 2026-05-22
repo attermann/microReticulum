@@ -691,13 +691,17 @@ void Identity::prove(const Packet& packet, const Destination& destination /*= {T
 	if (!destination) {
 		TRACE("Identity::prove: proving packet with proof destination...");
 		ProofDestination proof_destination = packet.generate_proof_destination();
-		Packet proof(proof_destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
-		proof.send();
+		Packet(proof_destination, proof_data)
+			.attached_interface(packet.receiving_interface())
+			.packet_type(Type::Packet::PROOF)
+			.send();
 	}
 	else {
 		TRACE("Identity::prove: proving packet with specified destination...");
-		Packet proof(destination, packet.receiving_interface(), proof_data, Type::Packet::PROOF);
-		proof.send();
+		Packet(destination, proof_data)
+			.attached_interface(packet.receiving_interface())
+			.packet_type(Type::Packet::PROOF)
+			.send();
 	}
 }
 

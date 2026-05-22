@@ -327,7 +327,11 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		//TRACE("Destination::announce: creating announce packet...");
 		//p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
 		//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
-		Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
+		Packet announce_packet = Packet(*this, announce_data)
+			.attached_interface(attached_interface)
+			.packet_type(Type::Packet::ANNOUNCE)
+			.context(announce_context);
+		// transport_type=BROADCAST and header_type=HEADER_1 are the defaults.
 
 		if (send) {
 			TRACE("Destination::announce: sending announce packet...");

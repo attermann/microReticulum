@@ -215,7 +215,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		TRACEF("Establishing link with mode %d", _object->_mode);
         //p self.request_data = self.pub_bytes+self.sig_pub_bytes+signalling_bytes
 		_object->_request_data = _object->_pub_bytes + _object->_sig_pub_bytes + signalling_bytes;
-		_object->_packet = Packet(destination, _object->_request_data, RNS::Type::Packet::LINKREQUEST);
+		_object->_packet = Packet(destination, _object->_request_data).packet_type(RNS::Type::Packet::LINKREQUEST);
 		_object->_packet.pack();
 		_object->_establishment_cost += _object->_packet.raw().size();
 		set_link_id(_object->_packet);
@@ -403,7 +403,7 @@ void Link::prove() {
 	Bytes proof_data = signature + _object->_pub_bytes + signalling_bytes;
 	// CBA LINK
 	// CBA TODO: Determine which approach is better, passing liunk to packet or passing _link_destination
-	Packet proof(*this, proof_data, Type::Packet::PROOF, Type::Packet::LRPROOF);
+	Packet proof = Packet(*this, proof_data).packet_type(Type::Packet::PROOF).context(Type::Packet::LRPROOF);
 	proof.send();
 	_object->_establishment_cost += proof.raw().size();
 	had_outbound();
@@ -420,8 +420,7 @@ void Link::prove_packet(const Packet& packet) {
 	//   proof_data = packet.packet_hash + signature
 	Bytes proof_data = packet.packet_hash() + signature;
 
-	Packet proof(*this, proof_data, Type::Packet::PROOF);
-	proof.send();
+	Packet(*this, proof_data).packet_type(Type::Packet::PROOF).send();
 	had_outbound();
 }
 
@@ -489,7 +488,7 @@ void Link::validate_proof(const Packet& packet) {
 					Bytes rtt_data(packer.data(), packer.size());
 TRACEF("***** RTT data size: %d", rtt_data.size());
                     //p rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
-					Packet rtt_packet(*this, rtt_data, Type::Packet::DATA, Type::Packet::LRRTT);
+					Packet rtt_packet = Packet(*this, rtt_data).context(Type::Packet::LRRTT);
 TRACEF("***** RTT packet data: %s", rtt_packet.data().toHex().c_str());
 rtt_packet.pack();
 Packet test_packet(RNS::Destination(RNS::Type::NONE), rtt_packet.raw());
@@ -543,8 +542,7 @@ void Link::identify(const Identity& identity) {
 		const Bytes signature(identity.sign(signed_data));
 		const Bytes proof_data(identity.get_public_key() + signature);
 
-		Packet proof(*this, proof_data, Type::Packet::DATA, Type::Packet::LINKIDENTIFY);
-		proof.send();
+		Packet(*this, proof_data).context(Type::Packet::LINKIDENTIFY).send();
 		had_outbound();
 	}
 }
@@ -576,7 +574,7 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 	}
 
 	if (packed_request.size() <= MDU) {
-		Packet request_packet(*this, packed_request, Type::Packet::DATA, Type::Packet::REQUEST);
+		Packet request_packet = Packet(*this, packed_request).context(Type::Packet::REQUEST);
 		PacketReceipt packet_receipt = request_packet.send();
 
 		if (!packet_receipt) {
@@ -792,8 +790,7 @@ be used if a new link to the same destination is established.
 void Link::teardown() {
 	assert(_object);
 	if (_object->_status != Type::Link::PENDING && _object->_status != Type::Link::CLOSED) {
-		Packet teardown_packet(*this, _object->_link_id, Type::Packet::DATA, Type::Packet::LINKCLOSE);
-		teardown_packet.send();
+		Packet(*this, _object->_link_id).context(Type::Packet::LINKCLOSE).send();
 		had_outbound();
 	}
 	_object->_status = Type::Link::CLOSED;
@@ -951,8 +948,7 @@ void Link::__watchdog_job() {
 void Link::send_keepalive() {
 	assert(_object);
     //p keepalive_packet = RNS.Packet(self, bytes([0xFF]), context=RNS.Packet.KEEPALIVE)
-	RNS::Packet keepalive_packet(*this, Bytes("\xFF"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
-	keepalive_packet.send();
+	RNS::Packet(*this, Bytes("\xFF")).context(Type::Packet::KEEPALIVE).send();
 	had_outbound(true);
 }
 
@@ -1003,8 +999,7 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 					if (packed_response.size() <= MDU) {
 						TRACE("handle_request: Sending response as single packet");
 						//p RNS.Packet(self, packed_response, Type::Packet::DATA, context = Type::Packet::RESPONSE).send()
-						RNS::Packet response_packet(*this, packed_response, Type::Packet::DATA, Type::Packet::RESPONSE);
-						response_packet.send();
+						RNS::Packet(*this, packed_response).context(Type::Packet::RESPONSE).send();
 					}
 					else {
 						TRACE("handle_request: Sending response as resource");
@@ -1417,8 +1412,7 @@ void Link::receive(const Packet& packet) {
 					TRACEF("Link %s received DATA packet with context KEEPALIVE", hash().toHex().c_str());
 					if (!_object->_initiator && packet.data() == "\xFF") {
                         //p keepalive_packet = RNS.Packet(self, bytes([0xFE]), context=RNS.Packet.KEEPALIVE)
-						Packet keepalive_packet(*this, Bytes("\xFE"), Type::Packet::DATA, Type::Packet::KEEPALIVE);
-						keepalive_packet.send();
+						Packet(*this, Bytes("\xFE")).context(Type::Packet::KEEPALIVE).send();
 						had_outbound(true);
 					}
 					break;

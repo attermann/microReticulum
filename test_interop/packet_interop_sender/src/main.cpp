@@ -90,8 +90,7 @@ public:
 
 		RNS::Bytes payload = build_cpp_to_python_payload();
 		try {
-			RNS::Packet packet(outgoing_destination, payload, RNS::Type::Packet::DATA);
-			packet.send();
+			RNS::Packet(outgoing_destination, payload).send();
 			printf("[cpp] packet sent: %lu bytes\n", (unsigned long)payload.size());
 			cpp_sent_packet = true;
 		}
