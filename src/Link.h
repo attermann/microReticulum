@@ -213,6 +213,12 @@ namespace RNS {
 		void link_closed();
 		void start_watchdog();
 		void __watchdog_job();
+		// Cooperative pump: iterate this link's incoming/outgoing resources
+		// and tick each Resource::__watchdog_job(). Safe to call from
+		// Transport::jobs() — snapshots both sets before pumping so that a
+		// resource cancelling mid-tick (which would erase from the set)
+		// doesn't dangle the iterator or *this.
+		void tick_resources();
 		void send_keepalive();
 		void handle_request(const Bytes& request_id, const ResourceRequest& unpacked_request);
 		void handle_response(const Bytes& request_id, const Bytes& response_data, size_t response_size, size_t response_transfer_size);

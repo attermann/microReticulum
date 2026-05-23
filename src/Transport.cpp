@@ -414,6 +414,20 @@ DestinationEntry empty_destination_entry;
 					}
 				}
 
+				// Pump each active link's resource watchdogs. Resource
+				// retransmit/timeout retries depend on this — without it,
+				// a dropped resource part stalls the transfer forever
+				// (we never re-request the missing part, server gives up).
+				// const_cast mirrors the pattern used elsewhere when
+				// iterating std::set<Link> — the wrapper is const but
+				// shared_ptr-backed mutation is the codebase convention.
+				for (auto& link_const : active_links) {
+					Link& link = const_cast<Link&>(link_const);
+					if (link.status() != Type::Link::CLOSED) {
+						link.tick_resources();
+					}
+				}
+
 				_links_last_checked = OS::time();
 			}
 
@@ -4568,9 +4582,11 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	VERBOSEF("pin: %u pout: %u padd: %u dpr: %u ikd: %u ia: %u\r\n", _packets_received, _packets_sent, _destinations_added, destination_path_responses, Identity::_known_destinations.size(), interface_announces);
 #endif // RNS_DEBUG_METRICS
 
+#ifdef RNS_DEBUG_MEMORY
 	_last_memory = memory;
 	_last_psram = psram;
 	_last_flash = flash;
+#endif // RNS_DEBUG_MEMORY
 
 #ifdef RNS_DEBUG_PATHSTORE
 	if (_path_store) {

@@ -154,6 +154,10 @@ Use of nrf52840 based boards as a transport node will necessitate the use of ext
 - [x] Configure PlatformIO to easily build and upload test applications to board
 - [x] Add build tagets for all boards currently supported by RNode
 - [x] Implement new combination caching/storage manager for managing persistent data
+- [x] Announce example app
+- [x] Transport Node example app
+- [x] Link example app
+- [x] NomadNet example app
 
 Please open an Issue if you have trouble building ior using the API, and feel free to start a new Discussion for anything else.
 

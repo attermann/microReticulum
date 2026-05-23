@@ -697,8 +697,17 @@ void Resource::assemble() {
 		// Strip random_hash prefix (Python Resource.py:682).
 		Bytes data = plaintext.mid(Type::Resource::RANDOM_HASH_SIZE);
 
-		// Verify hash matches advertised hash.
-		Bytes calculated_hash = Identity::full_hash(plaintext);
+		// Verify hash matches advertised hash. The on-wire layout is
+		//   plaintext = prepended_random_hash || content
+		// but the advertised hash is computed by the sender as
+		//   hash = full_hash(content || advertisement_random_hash)
+		// where advertisement_random_hash is sent separately in the
+		// ResourceAdvertisement (_r field, stored in _object->_random_hash).
+		// The two random hashes are *different* — the prepended one is
+		// just to prevent IV reuse on the wire; the appended one is what
+		// commits to the content via the advertised hash.
+		// Python Resource.py:694: `calculated_hash = RNS.Identity.full_hash(self.data+self.random_hash)`
+		Bytes calculated_hash = Identity::full_hash(data + _object->_random_hash);
 		if (calculated_hash != _object->_hash) {
 			_object->_status = Type::Resource::CORRUPT;
 		}
@@ -882,11 +891,16 @@ void Resource::receive_part(const Packet& packet) {
 		Bytes map_hash_j = _object->_hashmap.mid(j * maphash_len, maphash_len);
 		if (map_hash_j == part_hash) {
 			if (!_object->_parts[i]) {
-				// File this part into the slot.
-				Packet stored(part_data);
-				stored.pack();   // mirror Python: parts hold packed bytes
-				_object->_parts[i] = stored;
-				// Update via raw data (not the wrapper) — we want the actual data bytes.
+				// File this part into the slot. Python stores the raw part
+				// bytes directly (Resource.py:870 `self.parts[i] = part_data`);
+				// we wrap them in a Packet purely so the slot has the same
+				// shared_ptr-based truthiness as the rest of the codebase.
+				// Do NOT call Packet::pack() here — pack() requires a
+				// destination, this Packet has none (it's just a data
+				// carrier), and the throw propagates up to Reticulum::loop()
+				// as "Packet destination is required", leaving the slot
+				// unfilled and stalling the transfer.
+				_object->_parts[i] = Packet(part_data);
 				_object->_parts[i].data(part_data);
 
 				_object->_rtt_rxd_bytes  += part_data.size();

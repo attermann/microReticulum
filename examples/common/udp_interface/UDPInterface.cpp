@@ -217,16 +217,28 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 			on_incoming(_buffer);
 		}
 #else
-		size_t available = 0;
-		ioctl(_socket, FIONREAD, &available);
-		if (available > 0) {
-			size_t len = read(_socket, _buffer.writable(available), available);
-			if (len > 0) {
-				if (len < available) {
-					_buffer.resize(len);
-				}
-				on_incoming(_buffer);
+		// Drain all queued datagrams in one loop tick. The previous
+		// ioctl(FIONREAD)+read pattern returned a stale/zero `available`
+		// count on macOS for a UDP socket carrying back-to-back datagrams,
+		// which caused larger packets (~470B resource parts) to appear
+		// "lost" — they'd sit in the kernel queue while smaller follow-up
+		// packets were drained instead. recvfrom() with MSG_DONTWAIT reads
+		// exactly one datagram per call, sized to fit any link-layer MTU,
+		// and lets us loop until the queue is empty.
+		while (true) {
+			sockaddr_in src_addr{};
+			socklen_t src_addr_len = sizeof(src_addr);
+			ssize_t len = recvfrom(_socket,
+			                       _buffer.writable(_HW_MTU),
+			                       _HW_MTU,
+			                       MSG_DONTWAIT,
+			                       (struct sockaddr*)&src_addr,
+			                       &src_addr_len);
+			if (len <= 0) {
+				break;
 			}
+			_buffer.resize(static_cast<size_t>(len));
+			on_incoming(_buffer);
 		}
 #endif
 	}

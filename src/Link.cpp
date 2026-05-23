@@ -864,6 +864,23 @@ void Link::link_closed() {
 	}
 }
 
+void Link::tick_resources() {
+	assert(_object);
+	if (_object->_status == Type::Link::CLOSED) return;
+
+	// Snapshot before pumping: Resource::__watchdog_job() can trigger
+	// cancel() / request_next() which erase from these sets (and would
+	// dangle both the iterator and *this inside the called method —
+	// same pattern as the RESOURCE/RESOURCE_HMU/RESOURCE_ICL fixes in
+	// receive()).
+	std::vector<Resource> incoming(_object->_incoming_resources.begin(),
+	                               _object->_incoming_resources.end());
+	std::vector<Resource> outgoing(_object->_outgoing_resources.begin(),
+	                               _object->_outgoing_resources.end());
+	for (auto& r : incoming) r.__watchdog_job();
+	for (auto& r : outgoing) r.__watchdog_job();
+}
+
 // CBA TODO Implement watchdog
 void Link::start_watchdog() {
 	//z thread = threading.Thread(target=_object->___watchdog_job)
@@ -1104,7 +1121,13 @@ void Link::response_resource_concluded(const Resource& resource) {
 	}
 	else {
 		DEBUGF("Incoming response resource failed with status: %d", resource.status());
-		for (RNS::RequestReceipt pending_request : _object->_pending_requests) {
+		// Snapshot before invoking: request_timed_out() calls
+		// _link.pending_requests().erase(*this), mutating the very set
+		// we're iterating. The by-value loop variable is safe, but the
+		// underlying iterator's post-erase increment is undefined.
+		std::vector<RequestReceipt> pending(_object->_pending_requests.begin(),
+		                                    _object->_pending_requests.end());
+		for (RequestReceipt& pending_request : pending) {
 			if (pending_request.request_id() == resource.request_id()) {
 				pending_request.request_timed_out({Type::NONE});
 			}
@@ -1353,16 +1376,23 @@ void Link::receive(const Packet& packet) {
 						}
 
 						if (resource_hash) {
-							for (auto& resource_const : _object->_outgoing_resources) {
-								Resource& resource = const_cast<Resource&>(resource_const);
+							// Snapshot before invoking: Resource::request() can
+							// fail to send a part and call cancel(), which
+							// erases this resource from _outgoing_resources
+							// and dangles both the iterator and *this.
+							std::vector<Resource> outgoing;
+							for (const Resource& resource : _object->_outgoing_resources) {
 								if (resource.hash() == resource_hash) {
-									// Dedupe retransmitted requests (mirror Python
-									// Resource.req_hashlist).
-									if (!resource.has_request_hash(packet.packet_hash())) {
-										resource.note_request_hash(packet.packet_hash());
-										resource.request(plaintext);
-									}
+									outgoing.push_back(resource);
 									break;
+								}
+							}
+							for (Resource& resource : outgoing) {
+								// Dedupe retransmitted requests (mirror Python
+								// Resource.req_hashlist).
+								if (!resource.has_request_hash(packet.packet_hash())) {
+									resource.note_request_hash(packet.packet_hash());
+									resource.request(plaintext);
 								}
 							}
 						}
@@ -1377,12 +1407,19 @@ void Link::receive(const Packet& packet) {
 						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
 						if (plaintext.size() >= hash_bytes) {
 							Bytes resource_hash = plaintext.left(hash_bytes);
-							for (auto& resource_const : _object->_incoming_resources) {
-								Resource& resource = const_cast<Resource&>(resource_const);
+							// Snapshot before invoking the resource: an HMU
+							// can transitively trigger cancel(), which
+							// erase()s from _incoming_resources and would
+							// dangle the iterator + *this here. Holding a
+							// local copy keeps the shared_ptr alive.
+							std::vector<Resource> matches;
+							for (const Resource& resource : _object->_incoming_resources) {
 								if (resource.hash() == resource_hash) {
-									resource.hashmap_update_packet(plaintext);
-									break;
+									matches.push_back(resource);
 								}
+							}
+							for (Resource& r : matches) {
+								r.hashmap_update_packet(plaintext);
 							}
 						}
 					}
@@ -1396,12 +1433,23 @@ void Link::receive(const Packet& packet) {
 						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
 						if (plaintext.size() >= hash_bytes) {
 							Bytes resource_hash = plaintext.left(hash_bytes);
-							for (auto& resource_const : _object->_incoming_resources) {
-								Resource& resource = const_cast<Resource&>(resource_const);
+							// Snapshot matching resources before invoking cancel().
+							// resource.cancel() calls Link::cancel_incoming_resource()
+							// which erase()s from _incoming_resources — that
+							// destroys the std::set value, leaving the `this`
+							// pointer dangling inside the still-running cancel()
+							// body (it goes on to dereference _object for the
+							// concluded-callback check → SEGV). Holding the
+							// Resource in a local vector keeps the shared_ptr
+							// alive past the erase.
+							std::vector<Resource> to_cancel;
+							for (const Resource& resource : _object->_incoming_resources) {
 								if (resource.hash() == resource_hash) {
-									resource.cancel();
-									break;
+									to_cancel.push_back(resource);
 								}
+							}
+							for (Resource& r : to_cancel) {
+								r.cancel();
 							}
 						}
 					}
@@ -1424,8 +1472,20 @@ void Link::receive(const Packet& packet) {
 				case Type::Packet::RESOURCE:
 				{
 					TRACEF("Link %s received DATA packet with context RESOURCE", hash().toHex().c_str());
-					for (auto& resource_const : _object->_incoming_resources) {
-						const_cast<Resource&>(resource_const).receive_part(packet);
+					// Snapshot before invoking receive_part: assemble() can
+					// trigger cancel() (e.g. when the assembled resource is
+					// flagged compressed and we reject it), which erase()s
+					// from _incoming_resources mid-iteration and would
+					// dangle both the iterator and *this inside the called
+					// method. Holding a local copy keeps the shared_ptr
+					// alive past the erase.
+					std::vector<Resource> resources;
+					resources.reserve(_object->_incoming_resources.size());
+					for (const Resource& resource : _object->_incoming_resources) {
+						resources.push_back(resource);
+					}
+					for (Resource& r : resources) {
+						r.receive_part(packet);
 					}
 					break;
 				}
