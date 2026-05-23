@@ -1,116 +1,174 @@
-cmake_minimum_required(VERSION 3.14)
-project(Reticulum LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.15)
+project(microReticulum LANGUAGES C CXX VERSION 0.1.0)
 
-# Set C++ standard (can be overridden via command line)
-set(CMAKE_CXX_STANDARD 11)
+# -----------------------------------------------------------------------------
+# Defaults
+# -----------------------------------------------------------------------------
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option to fetch external libraries
-option(FETCH_EXTERNAL_LIBS "Download and include external dependencies" ON)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
+# -----------------------------------------------------------------------------
+# Options
+# -----------------------------------------------------------------------------
+option(RNS_BUILD_TESTS    "Build Unity test suites under test/"          ON)
+option(RNS_BUILD_EXAMPLES "Build native example applications"            ON)
+option(RNS_BUILD_INTEROP  "Build interop senders under test_interop/"    ON)
+option(RNS_USE_FS         "Enable filesystem persistence"                ON)
+option(RNS_PERSIST_PATHS  "Persist path table to storage"                ON)
+option(RNS_DEBUG_MEMORY   "Enable memory/heap/metrics debug logging"     OFF)
+option(RNS_SANITIZE       "Build with AddressSanitizer + frame pointers" OFF)
+
+set(RNS_DEFAULT_ALLOCATOR      "" CACHE STRING "Override RNS_DEFAULT_ALLOCATOR (e.g. RNS_HEAP_POOL_ALLOCATOR)")
+set(RNS_CONTAINER_ALLOCATOR    "" CACHE STRING "Override RNS_CONTAINER_ALLOCATOR")
+set(RNS_HEAP_POOL_BUFFER_SIZE  "" CACHE STRING "TLSF heap pool size (bytes)")
+
+# Local-checkout overrides for each fetched dependency. Mirrors PIO's symlink://
+# option: point a CMake var at a local clone and skip the network fetch.
+set(RNS_ARDUINOJSON_SOURCE_DIR    "" CACHE PATH "Use local ArduinoJson checkout instead of FetchContent")
+set(RNS_MSGPACK_SOURCE_DIR        "" CACHE PATH "Use local MsgPack checkout instead of FetchContent")
+set(RNS_CRYPTO_SOURCE_DIR         "" CACHE PATH "Use local Crypto checkout instead of FetchContent")
+set(RNS_MICROSTORE_SOURCE_DIR     "" CACHE PATH "Use local microStore checkout instead of FetchContent")
+set(RNS_ARXCONTAINER_SOURCE_DIR   "" CACHE PATH "Use local ArxContainer checkout instead of FetchContent")
+set(RNS_ARXTYPETRAITS_SOURCE_DIR  "" CACHE PATH "Use local ArxTypeTraits checkout instead of FetchContent")
+set(RNS_DEBUGLOG_SOURCE_DIR       "" CACHE PATH "Use local DebugLog checkout instead of FetchContent")
+set(RNS_UNITY_SOURCE_DIR          "" CACHE PATH "Use local Unity checkout instead of FetchContent")
+
+# -----------------------------------------------------------------------------
+# Dependency fetching
+# -----------------------------------------------------------------------------
 include(FetchContent)
 
-# Fetch external libraries
-if(FETCH_EXTERNAL_LIBS)
-    message(STATUS "Fetching external dependencies...")
-
-    # ArduinoJson
-    FetchContent_Declare(
-        arduinojson
-        GIT_REPOSITORY https://github.com/bblanchon/ArduinoJson.git
-        GIT_TAG v7.4.2
-    )
-    FetchContent_MakeAvailable(arduinojson)
-
-    # MsgPack (non-CMake library)
-    FetchContent_Declare(
-        msgpack
-        GIT_REPOSITORY https://github.com/hideakitai/MsgPack.git
-        GIT_TAG v0.4.2
-    )
-    FetchContent_MakeAvailable(msgpack)
-
-    # Crypto (non-CMake library)
-    FetchContent_Declare(
-        crypto
-        GIT_REPOSITORY https://github.com/attermann/Crypto.git
-        GIT_TAG master
-    )
-    FetchContent_MakeAvailable(crypto)
-endif()
-
-# Include MsgPack (non-CMake library) library header files
-set(MSGPACK_INCLUDE_DIR ${msgpack_SOURCE_DIR})
-
-# Include Crypto (non-CMake library) library header files
-set(CRYPTO_INCLUDE_DIR ${crypto_SOURCE_DIR})
-
-# Include Crypto (non-CMake library) library source files
-file(GLOB CRYPTO_SOURCES ${crypto_SOURCE_DIR}/*.cpp)
-add_library(CryptoLib STATIC ${CRYPTO_SOURCES})
-target_include_directories(CryptoLib PUBLIC ${CRYPTO_INCLUDE_DIR})
-
-# Include directories
-include_directories(src include)
-
-# Gather source files
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
-
-# Create shared library
-add_library(ReticulumShared SHARED ${SOURCES})
-set_target_properties(ReticulumShared PROPERTIES OUTPUT_NAME "Reticulum")
-
-# Create static library
-add_library(ReticulumStatic STATIC ${SOURCES})
-set_target_properties(ReticulumStatic PROPERTIES OUTPUT_NAME "Reticulum")
-
-# Common compiler flags and defines
-foreach(target ReticulumShared ReticulumStatic)
-    target_compile_options(${target} PRIVATE
-        -Wall
-        -Wno-missing-field-initializers
-        -Wno-format
-        -Wno-unused-parameter
-    )
-
-    target_compile_definitions(${target} PRIVATE
-        LIBRARY_TEST
-        RNS_USE_FS
-        RNS_PERSIST_PATHS
-        NATIVE
-    )
-
-    target_include_directories(${target} PUBLIC
-        ${PROJECT_SOURCE_DIR}/src
-        ${PROJECT_SOURCE_DIR}/include
-    )
-
-    # Include MsgPack (non-CMake library) headers
-    target_include_directories(${target} PUBLIC
-        ${MSGPACK_INCLUDE_DIR}
-    )
-
-    # Include Crypto (non-CMake library) headers
-    target_include_directories(${target} PUBLIC
-        ${CRYPTO_INCLUDE_DIR}
-    )
-
-    # Link external libraries if available
-    if(FETCH_EXTERNAL_LIBS)
-        target_link_libraries(${target} PRIVATE
-            ArduinoJson
-            msgpackc-cxx
-            crypto
-            CryptoLib
-            MsgPack
-        )
+# rns_fetch(<name> <override_path_var> <git url> <git tag>)
+# Either uses the local override path (if set) or fetches from upstream.
+# Defined as a macro (not a function) so the <name>_SOURCE_DIR variable that
+# FetchContent_MakeAvailable sets is visible in the parent scope.
+macro(rns_fetch name override_var url tag)
+    if(${override_var} AND IS_DIRECTORY "${${override_var}}")
+        message(STATUS "Using local ${name} from ${${override_var}}")
+        FetchContent_Declare(${name} SOURCE_DIR "${${override_var}}")
+    else()
+        FetchContent_Declare(${name} GIT_REPOSITORY "${url}" GIT_TAG "${tag}")
     endif()
-endforeach()
+    FetchContent_MakeAvailable(${name})
+endmacro()
 
-# Optional test executable
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
-    add_executable(ReticulumTest main.cpp)
-    target_link_libraries(ReticulumTest PRIVATE ReticulumStatic)
+rns_fetch(arduinojson    RNS_ARDUINOJSON_SOURCE_DIR    https://github.com/bblanchon/ArduinoJson.git v7.4.2)
+rns_fetch(msgpack        RNS_MSGPACK_SOURCE_DIR        https://github.com/hideakitai/MsgPack.git v0.4.2)
+rns_fetch(arxcontainer   RNS_ARXCONTAINER_SOURCE_DIR   https://github.com/hideakitai/ArxContainer.git v0.7.0)
+rns_fetch(arxtypetraits  RNS_ARXTYPETRAITS_SOURCE_DIR  https://github.com/hideakitai/ArxTypeTraits.git v0.3.2)
+rns_fetch(debuglog       RNS_DEBUGLOG_SOURCE_DIR       https://github.com/hideakitai/DebugLog.git v0.8.4)
+# Crypto and microStore have no upstream tags suitable for pinning, so pin commit SHAs.
+# Refresh by running `git ls-remote <url> HEAD` and updating the hex below.
+rns_fetch(crypto         RNS_CRYPTO_SOURCE_DIR         https://github.com/attermann/Crypto.git    984dc891330986c302a86c4e312d4f5abcc28359)
+rns_fetch(microstore     RNS_MICROSTORE_SOURCE_DIR     https://github.com/attermann/microStore.git c5fb69d68229e684c7fbd17692a67ae8193b84e2)
+
+# -----------------------------------------------------------------------------
+# Third-party targets that don't ship CMakeLists.txt
+# -----------------------------------------------------------------------------
+# Crypto: flat directory of .cpp files at the root.
+file(GLOB CRYPTO_SOURCES CONFIGURE_DEPENDS "${crypto_SOURCE_DIR}/*.cpp")
+add_library(CryptoLib STATIC ${CRYPTO_SOURCES})
+target_include_directories(CryptoLib PUBLIC "${crypto_SOURCE_DIR}")
+set_target_properties(CryptoLib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Header-only / Arduino-style libraries — expose their include roots.
+add_library(MsgPackHeaders       INTERFACE)
+target_include_directories(MsgPackHeaders       INTERFACE "${msgpack_SOURCE_DIR}")
+add_library(ArxContainerHeaders  INTERFACE)
+target_include_directories(ArxContainerHeaders  INTERFACE "${arxcontainer_SOURCE_DIR}")
+add_library(ArxTypeTraitsHeaders INTERFACE)
+target_include_directories(ArxTypeTraitsHeaders INTERFACE "${arxtypetraits_SOURCE_DIR}")
+add_library(DebugLogHeaders      INTERFACE)
+target_include_directories(DebugLogHeaders      INTERFACE "${debuglog_SOURCE_DIR}")
+add_library(microStoreHeaders    INTERFACE)
+target_include_directories(microStoreHeaders    INTERFACE "${microstore_SOURCE_DIR}/include")
+
+# -----------------------------------------------------------------------------
+# microReticulum library
+# -----------------------------------------------------------------------------
+# src/main.cpp self-gates on `LIBRARY_TEST && !PIO_UNIT_TESTING`. As long as we
+# don't define LIBRARY_TEST here, it compiles to an empty TU. Glob is safe.
+file(GLOB_RECURSE RNS_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.c)
+
+add_library(microReticulum ${RNS_SOURCES})
+set_target_properties(microReticulum PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_include_directories(microReticulum PUBLIC
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/include"
+)
+
+target_compile_options(microReticulum PRIVATE
+    -Wall
+    -Wno-missing-field-initializers
+    -Wno-format
+    -Wno-unused-parameter
+)
+
+# PUBLIC compile definitions — translation units that consume our public
+# headers (tests, examples, interop senders) must see the same macros or
+# things like the OS.h filesystem wrappers and persistence types ODR-diverge.
+target_compile_definitions(microReticulum PUBLIC
+    NATIVE
+    USTORE_USE_UNIVERSALFS
+)
+if(RNS_USE_FS)
+    target_compile_definitions(microReticulum PUBLIC RNS_USE_FS)
+endif()
+if(RNS_PERSIST_PATHS)
+    target_compile_definitions(microReticulum PUBLIC RNS_PERSIST_PATHS)
+endif()
+if(RNS_DEBUG_MEMORY)
+    target_compile_definitions(microReticulum PUBLIC
+        RNS_DEBUG_HEAP RNS_DEBUG_MEMORY RNS_DEBUG_METRICS RNS_DEBUG_PATHSTORE)
+endif()
+if(RNS_DEFAULT_ALLOCATOR)
+    target_compile_definitions(microReticulum PUBLIC "RNS_DEFAULT_ALLOCATOR=${RNS_DEFAULT_ALLOCATOR}")
+endif()
+if(RNS_CONTAINER_ALLOCATOR)
+    target_compile_definitions(microReticulum PUBLIC "RNS_CONTAINER_ALLOCATOR=${RNS_CONTAINER_ALLOCATOR}")
+endif()
+if(RNS_HEAP_POOL_BUFFER_SIZE)
+    target_compile_definitions(microReticulum PUBLIC "RNS_HEAP_POOL_BUFFER_SIZE=${RNS_HEAP_POOL_BUFFER_SIZE}")
 endif()
 
+if(RNS_SANITIZE)
+    target_compile_options(microReticulum PUBLIC -fsanitize=address -fno-omit-frame-pointer -g)
+    target_link_options(microReticulum    PUBLIC -fsanitize=address)
+endif()
+
+target_link_libraries(microReticulum
+    PUBLIC
+        ArduinoJson
+        MsgPackHeaders
+        ArxContainerHeaders
+        ArxTypeTraitsHeaders
+        DebugLogHeaders
+        microStoreHeaders
+        CryptoLib
+)
+
+# -----------------------------------------------------------------------------
+# Tests, examples, interop senders
+# -----------------------------------------------------------------------------
+if(RNS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()
+
+if(RNS_BUILD_EXAMPLES OR RNS_BUILD_INTEROP)
+    # examples/ defines the shared udp_interface target used by both examples
+    # and the interop senders, so it must be added first.
+    add_subdirectory(examples)
+endif()
+
+if(RNS_BUILD_INTEROP)
+    add_subdirectory(test_interop)
+endif()

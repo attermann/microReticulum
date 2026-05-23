@@ -3,6 +3,52 @@
 This directory holds tests that validate the C++ port's behaviour against the
 Python Reticulum reference implementation. Two flavours, in increasing scope:
 
+## Targets
+
+Four C++ sender executables, one per interop scenario. Each is a CMake
+target of the same name and is configured at compile time with its own
+UDP port pair so the scenarios can coexist on a single host:
+
+| CMake target              | UDP local | UDP remote | Scenario                                                |
+|---------------------------|-----------|------------|---------------------------------------------------------|
+| `packet_interop_sender`   | 14253     | 14252      | DATA packets to a Destination, bidirectional            |
+| `link_interop_sender`     | 14255     | 14254      | Link establish + two-pass teardown                      |
+| `request_interop_sender`  | 14257     | 14256      | `Link::request("/echo", ...)` single-packet RPC         |
+| `resource_interop_sender` | 14243     | 14242      | Full Resource transfer over a Link (1024-byte payload)  |
+
+## CMake
+
+The four C++ interop senders are built by the top-level CMake project.
+Configure and build from the repository root:
+
+Configure:
+```
+cmake -S . -B build
+```
+
+Build all interop senders:
+```
+cmake --build build -j --target packet_interop_sender link_interop_sender request_interop_sender resource_interop_sender
+```
+
+Build a single sender:
+```
+cmake --build build -j --target packet_interop_sender
+```
+
+After building, point the existing driver scripts at the binaries in
+`build/test_interop/` (the scripts default to the PlatformIO output path —
+adjust `PIO_BUILD_DIR` or the binary path inside the script as needed):
+```
+bash test_interop/run_all.sh
+bash test_interop/run_packet_exchange.sh
+```
+
+Skip building interop senders entirely when configuring the parent project:
+```
+cmake -S . -B build -DRNS_BUILD_INTEROP=OFF
+```
+
 ## Top-level driver
 
 `test_interop/run_all.sh` builds each C++ test app and runs all four

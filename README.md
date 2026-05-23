@@ -67,6 +67,8 @@ Appropriate settings should be selected to match the storage and memory resource
 
 ## Building
 
+### PlatformIO IDE
+
 Building and uploading to hardware is simple through the VSCode PlatformIO IDE
 - Install VSCode and PlatformIO
 - Clone this repo
@@ -74,9 +76,7 @@ Building and uploading to hardware is simple through the VSCode PlatformIO IDE
 - In PlatformIO, select the environment for intended board
 - Build, Upload, and Monitor to observe application logging
 
-Instructions for command line builds and building of individual example applications coming soon.
-
-## PlatformIO Command Line
+### PlatformIO CLI
 
 Clean all environments (boards):
 ```
@@ -118,6 +118,127 @@ Build all environments (boards):
 ```
 pio run
 ```
+
+### CMake
+
+A standalone CMake build is provided for native targets (Linux, macOS, Raspberry Pi). It requires only CMake (≥ 3.15), a C++17-capable compiler, and `git` — all external dependencies are downloaded automatically via `FetchContent` on the first configure. ESP32 and NRF52 cross-builds remain on PlatformIO.
+
+Configure the build (defaults: C++17, Release, all targets enabled):
+```
+cmake -S . -B build
+```
+
+Build everything (library, tests, examples, interop senders):
+```
+cmake --build build -j
+```
+
+Run unit tests:
+```
+ctest --test-dir build --output-on-failure
+ctest --test-dir build -R test_msgpack
+```
+
+Build only the library:
+```
+cmake --build build -j --target microReticulum
+```
+
+Build as a shared library instead of static:
+```
+cmake -S . -B build -DBUILD_SHARED_LIBS=ON
+```
+
+Build with a different C++ standard:
+```
+cmake -S . -B build -DCMAKE_CXX_STANDARD=11
+cmake -S . -B build -DCMAKE_CXX_STANDARD=20
+```
+
+Debug build with AddressSanitizer:
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DRNS_SANITIZE=ON
+```
+
+Skip building optional components:
+```
+cmake -S . -B build -DRNS_BUILD_TESTS=OFF -DRNS_BUILD_EXAMPLES=OFF -DRNS_BUILD_INTEROP=OFF
+```
+
+Use a local checkout of a dependency instead of fetching (mirrors PIO's `symlink://`). `<DEP>` is one of `MICROSTORE`, `CRYPTO`, `ARDUINOJSON`, `MSGPACK`, `ARXCONTAINER`, `ARXTYPETRAITS`, `DEBUGLOG`, `UNITY`:
+```
+cmake -S . -B build -DRNS_MICROSTORE_SOURCE_DIR=../microStore
+```
+
+Clean the build:
+```
+cmake --build build --target clean
+```
+
+Full clean (including fetched dependencies):
+```
+rm -rf build
+```
+
+#### Targets
+
+The CMake build defines the following named targets. Any of them can be
+passed to `cmake --build build --target <name>` to build that target alone
+(plus its dependencies); ctest invokes the `test_*` targets.
+
+Library:
+
+| Target           | Kind            | What it is                                              |
+|------------------|-----------------|---------------------------------------------------------|
+| `microReticulum` | static / shared | The library itself; `BUILD_SHARED_LIBS` picks the kind  |
+| `CryptoLib`      | static          | Compiled from the fetched `attermann/Crypto` sources    |
+| `udp_interface`  | static          | Shared UDP interface used by examples and interop tests |
+
+Unit-test suites (each is an executable; see [`test/`](test/README.md)):
+
+```
+test_allocator                 test_msgpack             test_resource_advertisement
+test_bytes                     test_objects             test_rns_loopback
+test_collections               test_os                  test_rns_persistence
+test_crypto                    test_persistence         test_transport
+test_example                   test_reference
+test_filesystem
+test_general
+```
+
+Native example applications (see [`examples/`](examples/README.md)):
+
+```
+udp_transport   udp_announce   link_native   nomadnet
+```
+
+Interop senders (see [`test_interop/`](test_interop/README.md)):
+
+```
+packet_interop_sender   link_interop_sender   request_interop_sender   resource_interop_sender
+```
+
+#### CMake-specific options
+
+Knobs that only make sense in the CMake build (no PlatformIO equivalent):
+
+| Option                                                         | Default   | Effect                                                                                            |
+|----------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------|
+| `-DBUILD_SHARED_LIBS=ON`                                       | `OFF`     | Build `microReticulum` as a shared library instead of a static archive                            |
+| `-DCMAKE_CXX_STANDARD=11\|14\|17\|20`                          | `17`      | Override the C++ standard                                                                         |
+| `-DCMAKE_BUILD_TYPE=Debug\|Release\|RelWithDebInfo\|MinSizeRel` | `Release` | CMake build type                                                                                  |
+| `-DRNS_BUILD_TESTS=OFF`                                        | `ON`      | Skip the `test/test_*` Unity suites                                                               |
+| `-DRNS_BUILD_EXAMPLES=OFF`                                     | `ON`      | Skip the native examples in `examples/`                                                           |
+| `-DRNS_BUILD_INTEROP=OFF`                                      | `ON`      | Skip the interop senders in `test_interop/`                                                       |
+| `-DRNS_SANITIZE=ON`                                            | `OFF`     | Add `-fsanitize=address -fno-omit-frame-pointer -g`                                               |
+| `-DRNS_<DEP>_SOURCE_DIR=/path`                                 | (unset)   | Use a local checkout of a dependency instead of fetching (mirrors PIO's `symlink://`). `<DEP>` is one of `MICROSTORE`, `CRYPTO`, `ARDUINOJSON`, `MSGPACK`, `ARXCONTAINER`, `ARXTYPETRAITS`, `DEBUGLOG`, `UNITY`. |
+
+The env-agnostic preprocessor flags documented above in [Build Options](#build-options), [Memory Management Build Options](#memory-management-build-options), and [microStore Options](#microstore-options) work in the CMake build too — pass them with `-D` on the configure line, same name and value as you would in `platformio.ini`:
+```
+cmake -S . -B build -DRNS_USE_FS=OFF -DRNS_DEFAULT_ALLOCATOR=RNS_HEAP_POOL_ALLOCATOR
+```
+
+One naming overlap to be aware of: the CMake build defines `-DRNS_DEBUG_MEMORY=ON` as a *convenience switch* that turns on `-DRNS_DEBUG_HEAP`, `-DRNS_DEBUG_MEMORY`, `-DRNS_DEBUG_METRICS`, and `-DRNS_DEBUG_PATHSTORE` together. In PlatformIO, those four preprocessor flags are added individually in `build_flags`.
 
 ## Known Limitations
 
