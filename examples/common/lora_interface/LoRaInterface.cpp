@@ -245,8 +245,9 @@ void LoRaInterface::loop() {
 	}
 }
 
-/*virtual*/ void LoRaInterface::send_outgoing(const Bytes& data) {
+/*virtual*/ bool LoRaInterface::send_outgoing(const Bytes& data) {
 	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
+	bool success = true;
 	try {
 		if (_online) {
 			TRACEF("LoRaInterface: sending %lu bytes...", data.size());
@@ -266,6 +267,7 @@ void LoRaInterface::loop() {
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 				if (state != RADIOLIB_ERR_NONE) {
 					ERRORF("LoRaInterface: transmit failed, code %d", state);
+					success = false;
 				}
 			} else {
 				// Split send — two frames with matching sequence number
@@ -283,6 +285,7 @@ void LoRaInterface::loop() {
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 				if (state != RADIOLIB_ERR_NONE) {
 					ERRORF("LoRaInterface: transmit part 1 failed, code %d", state);
+					success = false;
 				}
 
 				// Frame 2: remaining bytes
@@ -297,6 +300,7 @@ void LoRaInterface::loop() {
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 				if (state != RADIOLIB_ERR_NONE) {
 					ERRORF("LoRaInterface: transmit part 2 failed, code %d", state);
+					success = false;
 				}
 			}
 
@@ -310,7 +314,9 @@ void LoRaInterface::loop() {
 	}
 	catch (const std::exception& e) {
 		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
+		success = false;
 	}
+	return success;
 }
 
 /*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {

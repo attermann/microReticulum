@@ -243,7 +243,7 @@ One naming overlap to be aware of: the CMake build defines `-DRNS_DEBUG_MEMORY=O
 ## Known Limitations
 
 Nordic nrf52840 based boards are severely constrained, especially in avialable flash storage available to the application. Even though the nrf52840 has 1 MB of flash, the `InternalFileSystem` implemented inside of the Adafruit nrf52 BSP hard-codes the flash filesystem size to only 28 KB, which severely limits the amount of data theat microReticulum can persist (especially the path table).
-Use of nrf52840 based boards as a transport node will necessitate the use of external storage for persistence.
+Use of nrf52840 based boards as a transport node will necessitate the use of external storage for persistence, for example the RAK15001 module for RAK4631 boards which is now supported in this project.
 
 ## Known Issues
 

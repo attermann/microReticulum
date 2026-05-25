@@ -835,8 +835,9 @@ DestinationEntry empty_destination_entry;
 	}
 }
 
-/*static*/ void Transport::transmit(Interface& interface, const Bytes& raw) {
+/*static*/ bool Transport::transmit(Interface& interface, const Bytes& raw) {
 	TRACE("Transport::transmit()");
+	bool sent = false;
 	// CBA
 	if (_callbacks._transmit_packet) {
 		try {
@@ -884,16 +885,17 @@ DestinationEntry empty_destination_entry;
 				i += 1
 
 			// Send it
-			interface.on_outgoing(masked_raw)
+			sent = interface.on_outgoing(masked_raw)
 */
 		}
 		else {
-			interface.send_outgoing(raw);
+			sent = interface.send_outgoing(raw);
 		}
 	}
 	catch (const std::exception& e) {
 		ERRORF("Error while transmitting on %s. The contained exception was: %s", interface.toString().c_str(), e.what());
 	}
+	return sent;
 }
 
 /*static*/ bool Transport::outbound(Packet& packet) {
@@ -951,10 +953,9 @@ DestinationEntry empty_destination_entry;
 				new_raw << destination_entry._received_from;
 				//new_raw += packet.raw[2:]
 				new_raw << packet.raw().mid(2);
-				transmit(outbound_interface, new_raw);
+				sent = transmit(outbound_interface, new_raw);
 				//_path_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
-				sent = true;
 			}
 		}
 
@@ -983,10 +984,9 @@ DestinationEntry empty_destination_entry;
 				new_raw << destination_entry._received_from;
 				//new_raw += packet.raw[2:]
 				new_raw << packet.raw().mid(2);
-				transmit(outbound_interface, new_raw);
+				sent = transmit(outbound_interface, new_raw);
 				//Transport.destination_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
-				sent = true;
 			}
 		}
 
@@ -995,8 +995,7 @@ DestinationEntry empty_destination_entry;
 		// simply transmit the packet directly on that one.
 		else {
 			TRACE("Transport::outbound: Sending packet over directly connected interface...");
-			transmit(outbound_interface, packet.raw());
-			sent = true;
+			sent = transmit(outbound_interface, packet.raw());
 		}
 	}
 	// If we don't have a known path for the destination, we'll
@@ -1208,8 +1207,7 @@ DestinationEntry empty_destination_entry;
 					// thread.daemon = True
 					// thread.start()
 
-					transmit(interface, packet.raw());
-					sent = true;
+					sent = transmit(interface, packet.raw());
 				}
 				else {
 					TRACE("Transport::outbound: Packet transmission refused");

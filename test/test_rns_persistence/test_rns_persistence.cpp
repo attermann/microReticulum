@@ -22,10 +22,11 @@ public:
 	virtual ~TestInterface() {}
 
 private:
-	virtual void send_outgoing(const RNS::Bytes& data) {
+	virtual bool send_outgoing(const RNS::Bytes& data) {
 		DEBUGF("TestInterface.send_outgoing: data: %s", data.toHex().c_str());
 		// Perform post-send housekeeping
 		InterfaceImpl::handle_outgoing(data);
+		return true;
 	}
 	void on_incoming(const RNS::Bytes& data) {
 		DEBUGF("TestInterface.on_incoming: data: %s", data.toHex().c_str());

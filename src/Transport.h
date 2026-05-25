@@ -273,7 +273,7 @@ namespace RNS {
 		static void start(const Reticulum& reticulum_instance);
 		static void loop();
 		static void jobs();
-		static void transmit(Interface& interface, const Bytes& raw);
+		static bool transmit(Interface& interface, const Bytes& raw);
 		static bool outbound(Packet& packet);
 		static bool packet_filter(const Packet& packet);
 		//static void inbound(const Bytes& raw, const Interface& interface = {Type::NONE});

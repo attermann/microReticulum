@@ -24,7 +24,7 @@ public:
 		_IN = true;
 	}
 	virtual ~InInterface() { _name = "(deleted)"; }
-	virtual void send_outgoing(const RNS::Bytes &data) {}
+	virtual bool send_outgoing(const RNS::Bytes &data) { return true; }
 	virtual void handle_incoming(const RNS::Bytes &data) {
 		try {
 			InterfaceImpl::handle_incoming(data);
@@ -46,17 +46,20 @@ public:
 		_IN = false;
 	}
 	virtual ~OutInterface() { _name = "(deleted)"; }
-	virtual void send_outgoing(const RNS::Bytes &data) {
+	virtual bool send_outgoing(const RNS::Bytes &data) {
 		_in_interface.handle_incoming(data);
 		try {
 			InterfaceImpl::handle_outgoing(data);
 		}
 		catch (const std::bad_alloc&) {
 			ERROR("handle_outgoing: bad_alloc - OUT OF MEMORY");
+			return false;
 		}
 		catch (const std::exception& e) {
 			ERRORF("handle_outgoing: exception: %s", e.what());
+			return false;
 		}
+		return true;
 	}
 private:
 	RNS::Interface& _in_interface;

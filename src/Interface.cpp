@@ -39,13 +39,13 @@ void InterfaceImpl::handle_incoming(const Bytes& data) {
 	Transport::inbound(data, interface);
 }
 
-void Interface::send_outgoing(const Bytes& data) {
+bool Interface::send_outgoing(const Bytes& data) {
 	assert(_impl);
 	//TRACEF("Interface.send_outgoing: data: %s", data.toHex().c_str());
 	//TRACE("Interface.send_outgoing");
 	// Catch exceptions from calls into Interface implementation
 	try {
-		_impl->send_outgoing(data);
+		return _impl->send_outgoing(data);
     }
     catch (const std::bad_alloc&) {
 		ERROR("Interface::send_outgoing: bad_alloc - OUT OF MEMORY");
@@ -59,6 +59,7 @@ void Interface::send_outgoing(const Bytes& data) {
     catch (const std::exception& e) {
 		ERRORF("Interface::send_outgoing: %s", e.what());
     }
+	return false;
 }
 
 void Interface::handle_incoming(const Bytes& data) {

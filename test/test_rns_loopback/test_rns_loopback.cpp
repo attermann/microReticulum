@@ -18,7 +18,7 @@ public:
 		_name = "(deleted)";
 	}
 	// Incoming interface only, send_outgoing not currently implemented
-	virtual void send_outgoing(const RNS::Bytes &data) {}
+	virtual bool send_outgoing(const RNS::Bytes &data) { return true; }
 	// Incoming is be handled automatically by InterfaceImpl::handle_incoming called via Interface::handle_incoming from OutInterface
 };
 
@@ -31,7 +31,7 @@ public:
 	virtual ~OutInterface() {
 		_name = "(deleted)";
 	}
-	virtual void send_outgoing(const RNS::Bytes &data) {
+	virtual bool send_outgoing(const RNS::Bytes &data) {
 		HEADF(RNS::LOG_TRACE, "OutInterface.send_outgoing: data: %s", data.toHex().c_str());
 
 		// Loop data back to InInterface for testing
@@ -41,6 +41,8 @@ public:
 
 		// Perform post-send housekeeping
 		InterfaceImpl::handle_outgoing(data);
+
+		return true;
 	}
 private:
 	RNS::Interface& _in_interface;

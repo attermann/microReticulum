@@ -55,7 +55,7 @@ public:
 	//virtual inline std::string toString() const { return "UDPInterface[" + name() + "]"; }
 
 protected:
-	virtual void send_outgoing(const RNS::Bytes& data);
+	virtual bool send_outgoing(const RNS::Bytes& data);
 	void on_incoming(const RNS::Bytes& data);
 
 private:

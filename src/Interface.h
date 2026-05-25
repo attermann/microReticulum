@@ -62,7 +62,7 @@ namespace RNS {
 		virtual void loop() {}
 
 		// CBA Virtual override method for custom interface to send outgoing data
-		virtual void send_outgoing(const Bytes& data) = 0;
+		virtual bool send_outgoing(const Bytes& data) = 0;
 		
 		// CBA Internal method to handle housekeeping for data going out on interface
 		void handle_outgoing(const Bytes& data);
@@ -176,7 +176,7 @@ namespace RNS {
 
 	protected:
 		// Internal method to handle data going out on interface and pass on to impl
-		void send_outgoing(const Bytes& data);
+		bool send_outgoing(const Bytes& data);
 	public:
 		// Public method to handle data coming in on interface and pass on to impl
 		void handle_incoming(const Bytes& data);

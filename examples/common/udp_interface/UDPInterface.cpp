@@ -244,8 +244,9 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	}
 }
 
-/*virtual*/ void UDPInterface::send_outgoing(const Bytes& data) {
+/*virtual*/ bool UDPInterface::send_outgoing(const Bytes& data) {
 	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
+	bool success = true;
 	try {
 		if (_online) {
 			// Send packet
@@ -261,6 +262,10 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 			sock_addr.sin_port = htons(_remote_port);
 			int sent = sendto(_socket, data.data(), data.size(), 0, (struct sockaddr*)&sock_addr, sizeof(sock_addr));
 			TRACEF("Sent %d bytes to %s:%d", sent, _remote_host.c_str(), _remote_port);
+			if (sent != data.size()) {
+				WARNINGF("Failed sending %d bytes to %s:%d", sent, _remote_host.c_str(), _remote_port);
+				success = false;
+			}
 #endif
 		}
 
@@ -269,7 +274,9 @@ UDPInterface::UDPInterface(const char* name /*= "UDPInterface"*/) : RNS::Interfa
 	}
 	catch (const std::exception& e) {
 		ERRORF("Could not transmit on %s. The contained exception was: %s", toString().c_str(), e.what());
+		success = false;
 	}
+	return success;
 }
 
 void UDPInterface::on_incoming(const Bytes& data) {
