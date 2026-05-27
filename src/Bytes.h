@@ -143,6 +143,18 @@ MEM("Creating from data-move...");
 			return *this;
 		}
 
+		// CBA TODO Resolve ambiguity in JsonVariantConst assignments before enabling the following
+/*
+		inline const Bytes& operator = (const char* str) {
+			assign(str);
+			return *this;
+		}
+*/
+		inline const Bytes& operator += (const char* str) {
+			append(str);
+			return *this;
+		}
+
 		inline Bytes operator + (const Bytes& bytes) const {
 			Bytes newbytes(*this);
 			newbytes.append(bytes);

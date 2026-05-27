@@ -107,10 +107,7 @@ inline bool unpack_response_envelope(const Bytes& packed, Bytes& out_request_id,
 }
 
 // Parse [float64(ts), bin(path_hash), <raw_payload>] -> ts, path_hash, remainder.
-inline bool unpack_request_envelope(const Bytes& packed,
-                                    double& out_ts,
-                                    Bytes& out_path_hash,
-                                    Bytes& out_raw_payload) {
+inline bool unpack_request_envelope(const Bytes& packed, ResourceRequest& request) {
     if (!packed || packed.size() < 2) return false;
     MsgPack::Unpacker u;
     u.feed(packed.data(), packed.size());
@@ -121,22 +118,22 @@ inline bool unpack_request_envelope(const Bytes& packed,
 
     const bool ts_is_float32 = u.isFloat32();
     if (!ts_is_float32 && !u.isFloat64()) return false;
-    u.deserialize(out_ts);
+    u.deserialize(request._requested_at);
 
     if (!u.isBin()) return false;
     MsgPack::bin_t<uint8_t> ph;
     u.deserialize(ph);
-    out_path_hash = Bytes(ph.data(), ph.size());
+    request._path_hash = Bytes(ph.data(), ph.size());
 
     MsgPack::Packer prefix;
     prefix.packArraySize(n);
-    if (ts_is_float32) prefix.packFloat32(static_cast<float>(out_ts));
-    else               prefix.packFloat64(out_ts);
+    if (ts_is_float32) prefix.packFloat32(static_cast<float>(request._requested_at));
+    else               prefix.packFloat64(request._requested_at);
     prefix.packBinary(ph.data(), ph.size());
     const size_t cursor = prefix.size();
     if (cursor > packed.size()) return false;
 
-    out_raw_payload = Bytes(packed.data() + cursor, packed.size() - cursor);
+    request._request_data = Bytes(packed.data() + cursor, packed.size() - cursor);
     return true;
 }
 
@@ -1081,10 +1078,7 @@ void Link::request_resource_concluded(const Resource& resource) {
 		// trailing raw msgpack bytes out as the user payload (so callbacks
 		// receive the same Bytes whether the request was a Packet or a Resource).
 		ResourceRequest resource_request;
-		if (!unpack_request_envelope(packed_request,
-		                             resource_request._requested_at,
-		                             resource_request._path_hash,
-		                             resource_request._request_data)) {
+		if (!unpack_request_envelope(packed_request, resource_request)) {
 			DEBUG("Failed to parse incoming request resource envelope");
 			return;
 		}
@@ -1246,10 +1240,7 @@ void Link::receive(const Packet& packet) {
 						const Bytes packed_request = decrypt(packet.data());
 						if (packed_request) {
 							ResourceRequest resource_request;
-							if (!unpack_request_envelope(packed_request,
-							                             resource_request._requested_at,
-							                             resource_request._path_hash,
-							                             resource_request._request_data)) {
+							if (!unpack_request_envelope(packed_request, resource_request)) {
 								DEBUG("Failed to parse incoming request packet envelope");
 								break;
 							}

@@ -168,118 +168,129 @@ DestinationEntry empty_destination_entry;
 
 /*static*/ void Transport::start(const Reticulum& reticulum_instance) {
 	INFO("Transport starting...");
-	_jobs_running = true;
 	_owner = reticulum_instance;
 
-	// Initialize time-based variables *after* time offset update
-	_jobs_last_run = OS::time();
-	_links_last_checked = OS::time();
-	_receipts_last_checked = OS::time();
-	_announces_last_checked = OS::time();
-	_tables_last_culled = OS::time();
-	_last_saved = OS::time();
+	_jobs_running = true;
 
-	// Ensure required directories exist
-	if (!OS::directory_exists(Reticulum::_cachepath)) {
-		VERBOSE("No cache directory, creating...");
-		OS::create_directory(Reticulum::_cachepath);
-	}
+	try {
+		// Initialize time-based variables *after* time offset update
+		_jobs_last_run = OS::time();
+		_links_last_checked = OS::time();
+		_receipts_last_checked = OS::time();
+		_announces_last_checked = OS::time();
+		_tables_last_culled = OS::time();
+		_last_saved = OS::time();
 
-	// Load transport identity
-	if (!_identity) {
-		char transport_identity_path[Type::Reticulum::FILEPATH_MAXSIZE];
-		snprintf(transport_identity_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/transport_identity", Reticulum::_storagepath);
-		DEBUG("Checking for transport identity...");
-		try {
-			if (OS::file_exists(transport_identity_path)) {
-				_identity = Identity::from_file(transport_identity_path);
+		// Ensure required directories exist
+		if (!OS::directory_exists(Reticulum::_cachepath)) {
+			VERBOSE("No cache directory, creating...");
+			OS::create_directory(Reticulum::_cachepath);
+		}
+
+		// Load transport identity
+		if (!_identity) {
+			char transport_identity_path[Type::Reticulum::FILEPATH_MAXSIZE];
+			snprintf(transport_identity_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/transport_identity", Reticulum::_storagepath);
+			DEBUG("Checking for transport identity...");
+			try {
+				if (OS::file_exists(transport_identity_path)) {
+					_identity = Identity::from_file(transport_identity_path);
+				}
+
+				if (!_identity) {
+					VERBOSE("No valid Transport Identity in storage, creating...");
+					_identity = Identity();
+					_identity.to_file(transport_identity_path);
+				}
+				else {
+					VERBOSE("Loaded Transport Identity from storage");
+				}
 			}
-
-			if (!_identity) {
-				VERBOSE("No valid Transport Identity in storage, creating...");
-				_identity = Identity();
-				_identity.to_file(transport_identity_path);
-			}
-			else {
-				VERBOSE("Loaded Transport Identity from storage");
+			catch (const std::exception& e) {
+				ERRORF("Failed to check for transport identity, the contained exception was: %s", e.what());
 			}
 		}
-		catch (const std::exception& e) {
-			ERRORF("Failed to check for transport identity, the contained exception was: %s", e.what());
-		}
-	}
 
 // TODO
 /*
-	// Load packet hashlist
-	packet_hashlist_path = Reticulum::storagepath + "/packet_hashlist";
-	if (!owner.is_connected_to_shared_instance()) {
-		if (os.path.isfile(packet_hashlist_path)) {
-			try {
-				//p file = open(packet_hashlist_path, "rb")
-				//p Transport.packet_hashlist = umsgpack.unpackb(file.read())
-				//p file.close()
-			}
-			catch (const std::exception& e) {
-				ERRORF("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
+		// Load packet hashlist
+		packet_hashlist_path = Reticulum::storagepath + "/packet_hashlist";
+		if (!owner.is_connected_to_shared_instance()) {
+			if (os.path.isfile(packet_hashlist_path)) {
+				try {
+					//p file = open(packet_hashlist_path, "rb")
+					//p Transport.packet_hashlist = umsgpack.unpackb(file.read())
+					//p file.close()
+				}
+				catch (const std::exception& e) {
+					ERRORF("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
+				}
 			}
 		}
-	}
 */
 
-	// Create transport-specific destination for path request
-	Destination path_request_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "path.request");
-	path_request_destination.set_packet_callback(path_request_handler);
-	// CBA ACCUMULATES
-	_control_destinations.insert(path_request_destination);
-	// CBA ACCUMULATES
-	_control_hashes.insert(path_request_destination.hash());
-	DEBUGF("Created transport-specific path request destination %s", path_request_destination.hash().toHex().c_str());
+		// Create transport-specific destination for path request
+		Destination path_request_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "path.request");
+		path_request_destination.set_packet_callback(path_request_handler);
+		// CBA ACCUMULATES
+		_control_destinations.insert(path_request_destination);
+		// CBA ACCUMULATES
+		_control_hashes.insert(path_request_destination.hash());
+		DEBUGF("Created transport-specific path request destination %s", path_request_destination.hash().toHex().c_str());
 
-	// Create transport-specific destination for tunnel synthesize
-	Destination tunnel_synthesize_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "tunnel.synthesize");
-	tunnel_synthesize_destination.set_packet_callback(tunnel_synthesize_handler);
-	// CBA BUG?
-    //p Transport.control_destinations.append(Transport.tunnel_synthesize_handler)
-	// CBA ACCUMULATES
-	_control_destinations.insert(tunnel_synthesize_destination);
-	// CBA ACCUMULATES
-	_control_hashes.insert(tunnel_synthesize_destination.hash());
-	DEBUGF("Created transport-specific tunnel synthesize destination %s", tunnel_synthesize_destination.hash().toHex().c_str());
+		// Create transport-specific destination for tunnel synthesize
+		Destination tunnel_synthesize_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "tunnel.synthesize");
+		tunnel_synthesize_destination.set_packet_callback(tunnel_synthesize_handler);
+		// CBA BUG?
+		//p Transport.control_destinations.append(Transport.tunnel_synthesize_handler)
+		// CBA ACCUMULATES
+		_control_destinations.insert(tunnel_synthesize_destination);
+		// CBA ACCUMULATES
+		_control_hashes.insert(tunnel_synthesize_destination.hash());
+		DEBUGF("Created transport-specific tunnel synthesize destination %s", tunnel_synthesize_destination.hash().toHex().c_str());
 
-	// Create remote management destinations
-	//if RNS.Reticulum.remote_management_enabled() and not Transport.owner.is_connected_to_shared_instance:
-		_remote_management_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "remote.management"};
-		//_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
-		_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_ALL);
-		//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
-		_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
-		_mgmt_destinations.insert(_remote_management_destination);
-		_mgmt_hashes.insert(_remote_management_destination.hash());
-		NOTICEF("Enabled remote management on %s", _remote_management_destination.toString().c_str());
+		// Create remote management destinations
+		if (Reticulum::remote_management_enabled() && !_owner.is_connected_to_shared_instance()) {
+			_remote_management_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "remote.management"};
+			//_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+			_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_ALL);
+			//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+			_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
+			_mgmt_destinations.insert(_remote_management_destination);
+			_mgmt_hashes.insert(_remote_management_destination.hash());
+			NOTICEF("Enabled remote management on %s", _remote_management_destination.toString().c_str());
+		}
 
 /*p
-	//if RNS.Reticulum.publish_blackhole_enabled() and not Transport.owner.is_connected_to_shared_instance:
-		_blackhole_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "info.blackhole"};
-		_blackhole_destination.register_request_handler({"/list"}, blackhole_list_handler, Type::Destination::ALLOW_ALL);
-		_mgmt_destinations.insert(_blackhole_destination);
-		_mgmt_hashes.insert(_blackhole_destination.hash());
-		NOTICEF("Enabled blackhole list publishing for transport identity %s", _identity.hash().toHex().c_str());
+		//if (Reticulum::publish_blackhole_enabled() && !_owner.is_connected_to_shared_instance()) {
+			_blackhole_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "info.blackhole"};
+			_blackhole_destination.register_request_handler({"/list"}, blackhole_list_handler, Type::Destination::ALLOW_ALL);
+			_mgmt_destinations.insert(_blackhole_destination);
+			_mgmt_hashes.insert(_blackhole_destination.hash());
+			NOTICEF("Enabled blackhole list publishing for transport identity %s", _identity.hash().toHex().c_str());
+		//}
 
-	//if Transport.network_identity and not Transport.owner.is_connected_to_shared_instance:
-		//p Transport.instance_destination = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network", "instance", RNS.hexrep(Transport.network_identity.hash, delimit=False))
-		std::string instance_aspect = "network.instance." + _network_identity.hash().toHex();
-		_instance_destination = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, instance_aspect.c_str()};
-		//p Transport.network_destination  = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network")
-		_network_destination  = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "network"};
-		_mgmt_destinations.insert(_instance_destination);
-		_mgmt_destinations.insert(_network_destination);
-		_mgmt_hashes.insert(_instance_destination.hash());
-		_mgmt_hashes.insert(_network_destination.hash());
+		//if (network_identity() && !_owner.is_connected_to_shared_instance()) {
+			//p Transport.instance_destination = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network", "instance", RNS.hexrep(Transport.network_identity.hash, delimit=False))
+			std::string instance_aspect = "network.instance." + _network_identity.hash().toHex();
+			_instance_destination = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, instance_aspect.c_str()};
+			//p Transport.network_destination  = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network")
+			_network_destination  = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "network"};
+			_mgmt_destinations.insert(_instance_destination);
+			_mgmt_destinations.insert(_network_destination);
+			_mgmt_hashes.insert(_instance_destination.hash());
+			_mgmt_hashes.insert(_network_destination.hash());
+		//}
 */
+	}
+	catch (const std::exception& e) {
+		ERROR("An exception occurred while starting Transport.");
+		ERRORF("The contained exception was: %s", e.what());
+	}
+
+	_jobs_running = false;
 
 	// Start job loops
-	_jobs_running = false;
 	// CBA Threading
 	//p thread = threading.Thread(target=Transport.jobloop, daemon=True)
 	//p thread.start()
@@ -716,7 +727,7 @@ DestinationEntry empty_destination_entry;
 					for (const auto& [destination_hash, path_entry] : _discovery_path_requests) {
 						if (OS::time() > path_entry._timeout) {
 							stale_discovery_path_requests.push_back(destination_hash);
-							DEBUGF("Waiting path request for %s timed out and was removed", destination_hash.toString().c_str());
+							DEBUGF("Waiting path request for %s timed out and was removed", destination_hash.toHex().c_str());
 						}
 					}
 					remove_discovery_path_requests(stale_discovery_path_requests);
@@ -2441,7 +2452,7 @@ DestinationEntry empty_destination_entry;
 				TRACE("Transport::inbound: Packet is LINK PROOF");
 				// This is a link request proof, check if it
 				// needs to be transported
-				if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.find(packet.destination_hash()) != _link_table.end()) {
+				if ((Reticulum::transport_enabled() || for_local_client_link || from_local_client) && _link_table.count(packet.destination_hash()) > 0) {
 					TRACE("Handling link request proof...");
 					LinkEntry& link_entry = (*_link_table.find(packet.destination_hash())).second;
 					if (packet.receiving_interface() == link_entry._outbound_interface) {
@@ -3331,11 +3342,15 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 		p.packNil();
 	}
 
+	p.pack("rx");
+	p.serialize(static_cast<uint64_t>(iface.rx()));
 	p.pack("rxb");
-	p.serialize(static_cast<uint64_t>(iface.rxb()));
+	p.serialize(static_cast<uint64_t>(iface.rxbytes()));
 
+	p.pack("tx");
+	p.serialize(static_cast<uint64_t>(iface.tx()));
 	p.pack("txb");
-	p.serialize(static_cast<uint64_t>(iface.txb()));
+	p.serialize(static_cast<uint64_t>(iface.txbytes()));
 
 	p.pack("announce_queue");
 	p.serialize(static_cast<uint32_t>(iface.announce_queue().size()));
@@ -3356,16 +3371,24 @@ static Bytes remote_status_build_stats_payload() {
 		remote_status_pack_interface(p, kv.second);
 	}
 
+	uint64_t total_rx = 0;
 	uint64_t total_rxb = 0;
+	uint64_t total_tx = 0;
 	uint64_t total_txb = 0;
 	for (auto& kv : interfaces) {
-		total_rxb += kv.second.rxb();
-		total_txb += kv.second.txb();
+		total_rx += kv.second.rx();
+		total_rxb += kv.second.rxbytes();
+		total_txb += kv.second.tx();
+		total_txb += kv.second.txbytes();
 	}
 
+	p.pack("rx");
+	p.serialize(total_rx);
 	p.pack("rxb");
 	p.serialize(total_rxb);
 
+	p.pack("tx");
+	p.serialize(total_tx);
 	p.pack("txb");
 	p.serialize(total_txb);
 
@@ -3398,7 +3421,7 @@ static Bytes remote_status_build_stats_payload() {
 
 	if (include_link_count) {
 		MsgPack::Packer lc;
-		const size_t link_count = Transport::get_link_table().size();
+		const size_t link_count = _link_table.size();
 		lc.serialize(static_cast<uint32_t>(link_count));
 		Bytes lc_bytes(lc.data(), lc.size());
 		result.append(lc_bytes);
@@ -3606,14 +3629,13 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 	}
 	else {
 		// cmd_is_rates
-		auto& table = Transport::get_announce_rate_table();
 		size_t match_count = 0;
-		for (auto& kv : table) {
+		for (auto& kv : _announce_rate_table) {
 			if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
 			match_count++;
 		}
 		p.packArraySize(match_count);
-		for (auto& kv : table) {
+		for (auto& kv : _announce_rate_table) {
 			if (req.dest_hash.size() > 0 && kv.first != req.dest_hash) continue;
 			remote_path_pack_rate_entry(p, kv.first, kv.second);
 		}
@@ -4577,7 +4599,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		interface_announces += interface.announce_queue().size();
 	}
 	VERBOSEF("phl: %u rcp: %u lt: %u pl: %u al: %u tun: %u", _packet_hashlist.size(), _receipts.size(), _link_table.size(), _pending_links.size(), _active_links.size(), _tunnels.size());
-	VERBOSEF("pin: %u pout: %u padd: %u dpr: %u ikd: %u ia: %u\r\n", _packets_received, _packets_sent, _destinations_added, destination_path_responses, Identity::_known_destinations.size(), interface_announces);
+	VERBOSEF("pin: %u pout: %u padd: %u dpr: %u ikd: %u ia: %u\r\n", _packets_received, _packets_sent, _destinations_added, destination_path_responses, Identity::known_destinations().size(), interface_announces);
 #endif // RNS_DEBUG_METRICS
 
 #ifdef RNS_DEBUG_MEMORY

@@ -169,6 +169,10 @@ namespace RNS {
 		inline static uint16_t clean_interval() { return _clean_interval; }
 		inline static void clean_interval(uint16_t clean_interval) { _clean_interval = clean_interval; }
 
+	protected:
+		static bool readTimeOffset();
+		static bool writeTimeOffset();
+
 	private:
 		class Object {
 		public:

@@ -25,13 +25,15 @@ using namespace RNS::Type::Interface;
 void InterfaceImpl::handle_outgoing(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", data.toHex().c_str());
 	//TRACE("InterfaceImpl.handle_outgoing");
-	_txb += data.size();
+	_tx += 1;
+	_txbytes += data.size();
 }
 
 void InterfaceImpl::handle_incoming(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_incoming: data: %s", data.toHex().c_str());
 	//TRACE("InterfaceImpl.handle_incoming");
-	_rxb += data.size();
+	_rx += 1;
+	_rxbytes += data.size();
 	// Create temporary Interface encapsulating our own shared impl
 	std::shared_ptr<InterfaceImpl> self = shared_from_this();
 	Interface interface(self);
@@ -66,11 +68,6 @@ void Interface::handle_incoming(const Bytes& data) {
 	assert(_impl);
 	//TRACEF("Interface.handle_incoming: data: %s", data.toHex().c_str());
 	//TRACE("Interface.handle_incoming");
-/*
-	_impl->_rxb += data.size();
-	// Pass data on to transport for handling
-	Transport::inbound(data, *this);
-*/
 	// Catch exceptions from calls into Interface implementation
 	try {
 		_impl->handle_incoming(data);

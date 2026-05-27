@@ -58,6 +58,7 @@ void reticulum_setup() {
 		reticulum = RNS::Reticulum();
 		reticulum.transport_enabled(true);
 		reticulum.probe_destination_enabled(true);
+		reticulum.remote_management_enabled(true);
 		reticulum.start();
 
 		HEAD("RNS Transport Ready!", RNS::LOG_TRACE);

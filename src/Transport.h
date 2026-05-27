@@ -284,7 +284,7 @@ namespace RNS {
 		static void handle_tunnel(const Bytes& tunnel_id, const Interface& interface);
 		static void register_interface(Interface& interface);
 		static void deregister_interface(const Interface& interface);
-		inline static InterfaceTable& get_interfaces() { return _interfaces; }
+		inline static const InterfaceTable& get_interfaces() { return _interfaces; }
 		static void register_destination(Destination& destination);
 		static void deregister_destination(const Destination& destination);
 		static void register_link(Link& link);
@@ -373,9 +373,29 @@ namespace RNS {
 		// CBA TEST
 		static inline void identity(Identity& identity) { _identity = identity; }
 
-		inline static const PathTable& get_path_table() { return _path_table; }
-		inline static const RateTable& get_announce_rate_table() { return _announce_rate_table; }
-		inline static const LinkTable& get_link_table() { return _link_table; }
+		inline static const PathTable& path_table() { return _path_table; }
+		inline static const NewPathTable& new_path_table() { return _new_path_table; }
+		inline static const RateTable& announce_rate_table() { return _announce_rate_table; }
+		inline static const LinkTable& link_table() { return _link_table; }
+		inline static const std::set<Link>& pending_links() { return _pending_links; }
+		inline static const std::set<Link>& active_links() { return _active_links; }
+		inline static const DestinationTable& destinations() { return _destinations; }
+		inline static const AnnounceTable& announce_table() { return _announce_table; }
+		inline static const AnnounceTable& held_announces() { return _held_announces; }
+		inline static const ReverseTable& reverse_table() { return _reverse_table; }
+		inline static const std::map<Bytes, double>& path_requests() { return _path_requests; }
+		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
+		inline static const std::map<Bytes, const Interface>& pending_local_path_requests() { return _pending_local_path_requests; }
+		inline static const std::set<Bytes>& discovery_pr_tags() { return _discovery_pr_tags; }
+		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
+		inline static const std::set<Bytes>& control_hashes() { return _control_hashes; }
+		inline static const std::set<Bytes>& packet_hashlist() { return _packet_hashlist; }
+		inline static const std::list<PacketReceipt>& receipts() { return _receipts; }
+		inline static const TunnelTable& tunnels() { return _tunnels; }
+
+		inline static uint32_t packets_sent() { return _packets_sent; }
+		inline static uint32_t packets_received() { return _packets_received; }
+		inline static uint32_t destinations_added() { return _destinations_added; }
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work

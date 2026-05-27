@@ -86,6 +86,8 @@ LoRaInterface::LoRaInterface(const char* name /*= "LoRaInterface"*/) : RNS::Inte
 	//p self.bitrate = self.r_sf * ( (4.0/self.r_cr) / (math.pow(2,self.r_sf)/(self.r_bandwidth/1000)) ) * 1000
 	// bandwidth is in kHz here (RadioLib units), formula unchanged
 	_bitrate = (double)spreading * ( (4.0/coding) / (pow(2, spreading)/bandwidth) ) * 1000.0;
+	// CBA alternate bitrate calculation from RNode
+	//_bitrate = (uint32_t)(spreading * ( (4.0/(float)coding) / ((float)(pow(2, spreading))/((float)bandwidth/1000.0)) ) * 1000.0);
 	_HW_MTU = 508;
 
 }

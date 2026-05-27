@@ -190,24 +190,10 @@ void Reticulum::start() {
 	INFOF("Free flash: %lu bytes", OS::storage_available());
 
 #ifdef ARDUINO
-#if defined(RNS_USE_FS)
-	// load time offset from file if it exists
-	try {
-		char time_offset_path[FILEPATH_MAXSIZE];
-		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
-		if (OS::file_exists(time_offset_path)) {
-			Bytes buf;
-			if (OS::read_file(time_offset_path, buf) == 8) {
-				uint64_t offset = *(uint64_t*)buf.data();
-				DEBUGF("Read time offset of %llu from file", offset);
-				OS::setTimeOffset(offset);
-			}
-		}
-	}
-	catch (const std::exception& e) {
-		ERRORF("Failed to load time offset, the contained exception was: %s", e.what());
-	}
-#endif
+	readTimeOffset();
+	// Guarantee monotonically increasing clock on reboot by immediately advancing offset by one and writing back again
+	OS::setTimeOffset(OS::getTimeOffset() + 1);
+	writeTimeOffset();
 #endif
 
 	INFO("Starting Transport...");
@@ -233,7 +219,7 @@ void Reticulum::loop() {
 
 			// Perform Interface processing
 			for (auto& [hash, interface] : Transport::get_interfaces()) {
-				interface.loop();
+				const_cast<Interface&>(interface).loop();
 			}
 
 			// Perform Filesystem processing
@@ -293,23 +279,10 @@ void Reticulum::jobs() {
 	}
 
 #ifdef ARDUINO
-#if defined(RNS_USE_FS)
 	if (now > _object->_last_time_persist + 600) {
-		// write time offset to file
-		try {
-			char time_offset_path[FILEPATH_MAXSIZE];
-			snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
-			uint64_t offset = OS::ltime();
-			DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
-			Bytes buf((uint8_t*)&offset, sizeof(offset));
-			OS::write_file(time_offset_path, buf);
-		}
-		catch (const std::exception& e) {
-			ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
-		}
+		writeTimeOffset();
 		_object->_last_time_persist = Utilities::OS::time();
 	}
-#endif
 #endif
 
 	_object->_jobs_last_run = OS::time();
@@ -447,7 +420,7 @@ const PathTable& Reticulum::get_path_table() const {
 
 	return path_table
 */
-	return Transport::get_path_table();
+	return Transport::path_table();
 }
 
 const std::map<Bytes, Transport::RateEntry>& Reticulum::get_rate_table() const {
@@ -465,17 +438,18 @@ const std::map<Bytes, Transport::RateEntry>& Reticulum::get_rate_table() const {
 
 	return rate_table
 */
-	return Transport::get_announce_rate_table();
+	return Transport::announce_rate_table();
 }
 
 bool Reticulum::drop_path(const Bytes& destination) {
 	return Transport::expire_path(destination);
 }
 
+// CBA TODO: Integrate with new microStore path table
 uint16_t Reticulum::drop_all_via(const Bytes& transport_hash) {
 	uint16_t dropped_count = 0;
-	//for (auto& destination_hash : Transport::get_path_table()) {
-	for (const auto& [destination_hash, destination_entry] : Transport::get_path_table()) {
+	//for (auto& destination_hash : Transport::path_table()) {
+	for (const auto& [destination_hash, destination_entry] : Transport::path_table()) {
 		if (destination_entry._received_from == transport_hash) {
 			Transport::expire_path(destination_hash);
 			++dropped_count;
@@ -501,7 +475,7 @@ const Bytes Reticulum::get_next_hop(const Bytes& destination) const {
 }
 
 size_t Reticulum::get_link_count() const {
-	return Transport::get_link_table().size();
+	return Transport::link_table().size();
 }
 
 /*p
@@ -526,3 +500,45 @@ void Reticulum::get_packet_q(const Bytes& packet_hash) const {
 
 	return None
 */
+
+/*static*/ bool Reticulum::readTimeOffset() {
+#if defined(RNS_USE_FS)
+	// read time offset from file if it exists
+	try {
+		char time_offset_path[FILEPATH_MAXSIZE];
+		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+		if (OS::file_exists(time_offset_path)) {
+			Bytes buf;
+			if (OS::read_file(time_offset_path, buf) == 8) {
+				uint64_t offset = *(uint64_t*)buf.data();
+				DEBUGF("Read time offset of %llu from file", offset);
+				OS::setTimeOffset(offset);
+				return true;
+			}
+		}
+	}
+	catch (const std::exception& e) {
+		ERRORF("Failed to read time offset, the contained exception was: %s", e.what());
+	}
+#endif
+	return false;
+}
+
+/*static*/ bool Reticulum::writeTimeOffset() {
+#if defined(RNS_USE_FS)
+	// write time offset to file
+	try {
+		char time_offset_path[FILEPATH_MAXSIZE];
+		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
+		uint64_t offset = OS::ltime();
+		DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
+		Bytes buf((uint8_t*)&offset, sizeof(offset));
+		OS::write_file(time_offset_path, buf);
+		return true;
+	}
+	catch (const std::exception& e) {
+		ERRORF("Failed to write time offset, the contained exception was: %s", e.what());
+	}
+#endif
+	return false;
+}

@@ -103,7 +103,7 @@ static const char* INDEX_PAGE =
 //
 // The Link::request contract is that the return value must already be
 // msgpack-encoded bytes — Link::handle_request splices it verbatim into
-// the response envelope (Link.cpp:994). Python's RNS auto-encodes
+// the response envelope (Link.cpp:994). Python RNS auto-encodes
 // arbitrary return values; in C++ we encode manually here.
 RNS::Bytes serve_index(
 	const RNS::Bytes& path,
@@ -348,7 +348,7 @@ void on_link_closed(RNS::Link& link) {
 		RNS::log("Link closed");
 	}
 	// If the link closed before any request callback fired (e.g. the
-	// LINK_REQUEST timed out before the server's LINK_PROOF arrived),
+	// LINKREQUEST timed out before the server's LINK_PROOF arrived),
 	// release the main loop so the client exits instead of hanging.
 	request_done = true;
 }

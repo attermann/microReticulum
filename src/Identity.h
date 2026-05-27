@@ -184,6 +184,8 @@ namespace RNS {
 		inline static uint16_t known_destinations_maxsize() { return _known_destinations_maxsize; }
 		inline static void known_destinations_maxsize(uint16_t known_destinations_maxsize) { _known_destinations_maxsize = known_destinations_maxsize; }
 
+		inline static const IdentityTable& known_destinations() { return _known_destinations; }
+
 		inline std::string toString() const { if (!_object) return ""; return "{Identity:" + _object->_hash.toHex() + "}"; }
 
 	private:

@@ -82,8 +82,6 @@ namespace RNS {
 		bool _FWD = false;
 		bool _RPT = false;
 		std::string _name;
-		size_t _rxb = 0;
-		size_t _txb = 0;
 		bool _online = false;
 		Bytes _ifac_identity;
 		Type::Interface::modes _mode = Type::Interface::MODE_NONE;
@@ -99,6 +97,12 @@ namespace RNS {
 		//Bytes _hash;
 		HInterface _parent_interface;
 		//Transport& _owner;
+
+	private:
+		size_t _rx = 0;
+		size_t _tx = 0;
+		size_t _rxbytes = 0;
+		size_t _txbytes = 0;
 
 	friend class Interface;
 	};
@@ -208,8 +212,10 @@ namespace RNS {
 		inline bool FIXED_MTU() const { assert(_impl); return _impl->_FIXED_MTU; }
 		inline double announce_allowed_at() const { assert(_impl); return _impl->_announce_allowed_at; }
 		inline float announce_cap() const { assert(_impl); return _impl->_announce_cap; }
-		inline size_t rxb() const { assert(_impl); return _impl->_rxb; }
-		inline size_t txb() const { assert(_impl); return _impl->_txb; }
+		inline size_t rx() const { assert(_impl); return _impl->_rx; }
+		inline size_t tx() const { assert(_impl); return _impl->_tx; }
+		inline size_t rxbytes() const { assert(_impl); return _impl->_rxbytes; }
+		inline size_t txbytes() const { assert(_impl); return _impl->_txbytes; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
 		inline bool is_connected_to_shared_instance() const { assert(_impl); return _impl->_is_connected_to_shared_instance; }
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }
