@@ -1,0 +1,176 @@
+/*
+ * Copyright (c) 2026 Chad Attermann
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
+#include "Codec.h"
+
+#include "../Log.h"
+
+namespace RNS { namespace Provisioning { namespace Codec {
+
+	bool pack_value(MsgPack::Packer& packer, const Value& v) {
+		switch (v.type()) {
+			case Type::None:
+				return false;
+			case Type::Bool:
+				packer.serialize((bool)v.as_bool());
+				return true;
+			case Type::Int:
+			case Type::Enum:
+				packer.serialize((int64_t)v.as_int());
+				return true;
+			case Type::Float:
+				packer.serialize((double)v.as_float());
+				return true;
+			case Type::String:
+				packer.serialize(v.as_string().c_str());
+				return true;
+			case Type::Bytes: {
+				const Bytes& b = v.as_bytes();
+				MsgPack::bin_t<uint8_t> bin;
+				if (b.size() > 0) {
+					bin.resize(b.size());
+					memcpy(bin.data(), b.data(), b.size());
+				}
+				packer.serialize(bin);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool unpack_value(MsgPack::Unpacker& unpacker, Type declared, Value& out) {
+		switch (declared) {
+			case Type::None:
+				return false;
+			case Type::Bool: {
+				if (!unpacker.isBool()) return false;
+				bool b = false;
+				unpacker.deserialize(b);
+				out = Value(b);
+				return true;
+			}
+			case Type::Int:
+			case Type::Enum: {
+				if (!unpacker.isInt() && !unpacker.isUInt()) return false;
+				int64_t iv = 0;
+				unpacker.deserialize(iv);
+				out = Value::from_int_as(declared, iv);
+				return true;
+			}
+			case Type::Float: {
+				// Floats may arrive as int on wire; accept either.
+				if (unpacker.isFloat32() || unpacker.isFloat64()
+					|| unpacker.isInt() || unpacker.isUInt()) {
+					double d = 0.0;
+					unpacker.deserialize(d);
+					out = Value(d);
+					return true;
+				}
+				return false;
+			}
+			case Type::String: {
+				if (!unpacker.isStr()) return false;
+				MsgPack::str_t s;
+				unpacker.deserialize(s);
+				out = Value(to_std_string(s));
+				return true;
+			}
+			case Type::Bytes: {
+				if (!unpacker.isBin()) return false;
+				MsgPack::bin_t<uint8_t> bin;
+				unpacker.deserialize(bin);
+				Bytes b(bin.data(), bin.size());
+				out = Value(b);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool pack_namespace_working(MsgPack::Packer& packer, const Namespace& ns) {
+		// Count first so we can emit the correct map header size.
+		size_t n = 0;
+		for (const Field& f : ns.fields()) {
+			if (f.has_flag(FF_READ_ONLY)) continue;
+			Value v = ns.working(f.id);
+			if (v.is_none()) continue;
+			++n;
+		}
+		packer.serialize(MsgPack::map_size_t(n));
+		for (const Field& f : ns.fields()) {
+			if (f.has_flag(FF_READ_ONLY)) continue;
+			Value v = ns.working(f.id);
+			if (v.is_none()) continue;
+			packer.serialize((uint16_t)f.id);
+			pack_value(packer, v);
+		}
+		return true;
+	}
+
+	// Skip whatever value the cursor points at. Hideakitai MsgPack doesn't
+	// expose a generic skip(); we deserialize into a throwaway typed local.
+	static void skip_value(MsgPack::Unpacker& u) {
+		if (u.isNil())                            { MsgPack::object::nil_t n; u.deserialize(n); }
+		else if (u.isBool())                      { bool b; u.deserialize(b); }
+		else if (u.isUInt() || u.isInt())         { int64_t i; u.deserialize(i); }
+		else if (u.isFloat32() || u.isFloat64())  { double d; u.deserialize(d); }
+		else if (u.isStr())                       { MsgPack::str_t s; u.deserialize(s); }
+		else if (u.isBin())                       { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
+		else if (u.isArray()) {
+			const size_t n = u.unpackArraySize();
+			for (size_t i = 0; i < n; ++i) skip_value(u);
+		}
+		else if (u.isMap()) {
+			const size_t n = u.unpackMapSize();
+			for (size_t i = 0; i < n; ++i) { skip_value(u); skip_value(u); }
+		}
+		else {
+			WARNING("Codec::skip_value: unknown MsgPack type encountered");
+		}
+	}
+
+	bool unpack_namespace_working(MsgPack::Unpacker& unpacker, Namespace& ns) {
+		if (!unpacker.isMap()) return false;
+		const size_t n = unpacker.unpackMapSize();
+		for (size_t i = 0; i < n; ++i) {
+			if (!(unpacker.isUInt() || unpacker.isInt())) {
+				// Map key must be an integer field id; skip both halves and
+				// keep going (forward-compat with future key types).
+				skip_value(unpacker);
+				skip_value(unpacker);
+				continue;
+			}
+			int64_t key = 0;
+			unpacker.deserialize(key);
+			uint16_t field_id = (uint16_t)key;
+			const Field* f = ns.find_field(field_id);
+			if (!f) {
+				skip_value(unpacker);
+				continue;
+			}
+			Value v;
+			if (!unpack_value(unpacker, f->type, v)) {
+				// Type mismatch — skip but don't fail the whole file.
+				continue;
+			}
+			if (!f->validate(v)) {
+				// Out-of-range or otherwise invalid — leave default in place.
+				continue;
+			}
+			ns.put_working(field_id, v);
+		}
+		return true;
+	}
+
+} } }
