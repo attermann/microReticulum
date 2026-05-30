@@ -18,6 +18,7 @@ This API is dependent on the following external libraries:
 - `-DRNS_MEM_LOG` Used to enable logging of low-level memory operations for debug purposes
 - `-DRNS_USE_FS` Used to enable use of file system by RNS for persistence
 - `-DRNS_PERSIST_PATHS` Used to enable persistence of RNS paths in file system (also requires `-DRNS_USE_FS`)
+- `-DRNS_USE_PROVISIONING` Used to enable the Provisioning subsystem (auto-started from `Reticulum::start()`). Disk persistence within the subsystem is additionally gated on `-DRNS_USE_FS`. Without this flag, none of the provisioning code is linked into the final binary &mdash; see the [Provisioning](#provisioning) section below.
 
 ## Memory Management Build Options
 
@@ -64,6 +65,83 @@ Also note the following preprocessor directives used to tune `microStore::FileSt
   `-DRNS_PATH_TABLE_SEGMENT_SIZE`: Size in bytes of each segment file
   `-DRNS_PATH_TABLE_SEGMENT_COUNT`: Maximum number of segment files to rotate (minimum of 3)
 Appropriate settings should be selected to match the storage and memory resources available on the target platform.
+
+## Provisioning
+
+microReticulum ships an optional schema-driven configuration subsystem under `src/Provisioning/`. It maintains a registry of namespaces and fields, holds a "working" config in RAM plus a "draft" overlay for pending edits, and (when filesystem support is enabled) persists committed values atomically to flash. Apps frame and transport MsgPack request/response payloads using their preferred link (KISS, BLE GATT, Web Serial, etc.); the library handles everything from the engine inward.
+
+Two build flags gate the subsystem:
+- `-DRNS_USE_PROVISIONING` &mdash; `Reticulum::start()` auto-calls `Manager::begin()`. Without the flag, nothing in `src/Provisioning/` is linked into the final binary; apps configure microReticulum entirely through the existing fluent setters as before.
+- `-DRNS_USE_FS` &mdash; independently controls disk persistence inside the subsystem. Without it the working/draft model still works in RAM, but commits are lost on reboot.
+
+### Registering a namespace
+
+Apps register their own namespaces (typically in firmware bootstrap, *before* `Reticulum::start()` runs). Pick a namespace id &ge; 100 (1&ndash;99 are reserved for the library):
+
+```cpp
+#include <Provisioning/Provisioning.h>
+
+constexpr uint16_t NS_RADIO = 100;
+constexpr uint16_t FLD_FREQ = 1;
+constexpr uint16_t FLD_SF   = 2;
+
+void register_my_namespaces() {
+    using namespace RNS::Provisioning;
+    Manager::instance()
+        .namespace_("radio", NS_RADIO)
+        .field_float("frequency", FLD_FREQ, FF_REBOOT_REQUIRED, 915.0e6, 100e6, 1e9,
+            [](const Value& v) { my_radio.frequency(v.as_float()); return true; })
+        .field_int("sf", FLD_SF, FF_LIVE_APPLY, 8, 7, 12,
+            [](const Value& v) { my_radio.spreading_factor((uint8_t)v.as_int()); return true; })
+        .end();
+}
+```
+
+Each field declares its type, an id, flags (`FF_LIVE_APPLY` for fields that take effect immediately on commit; `FF_REBOOT_REQUIRED` for fields applied on next boot), a default, range constraints, and a setter callback that pushes the value into the app's runtime.
+
+### Wire (MsgPack) operations
+
+The app receives a MsgPack-encoded request payload (already stripped of whatever transport framing it uses) and feeds it to `handle_message()`:
+
+```cpp
+RNS::Bytes request  = receive_from_transport();
+RNS::Bytes response = RNS::Provisioning::Manager::instance().handle_message(request);
+send_to_transport(response);
+```
+
+Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, and `FACTORY_RESET`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/Provisioning/Ops.h` for op-id and key constants.
+
+### Manual operations (no wire)
+
+In-process code can edit and commit without going through MsgPack. Edits land in the draft layer; only `commit()` promotes them to the working layer and (if `RNS_USE_FS` is defined) persists them:
+
+```cpp
+auto& mgr = RNS::Provisioning::Manager::instance();
+namespace R = RNS::Provisioning::Ns::Reticulum;
+
+// Edit draft (multiple calls accumulate)
+mgr.field(R::Id, R::Field::PersistInterval, RNS::Provisioning::Value{600});
+mgr.field("reticulum", "remote_management_enabled", RNS::Provisioning::Value{true});  // by-name also works
+
+// Promote draft -> working, fire LIVE_APPLY setters, persist to flash
+mgr.commit();
+
+// Or throw the draft away
+mgr.discard();
+```
+
+### Handling reboot
+
+Commits to `FF_REBOOT_REQUIRED` fields are persisted to flash but not applied to the runtime until the next boot. The app can poll `needs_reboot()` or register a callback that fires the moment a reboot becomes necessary:
+
+```cpp
+RNS::Provisioning::Manager::instance().on_reboot_requested([]{
+    INFO("Provisioning committed a reboot-required change; restarting...");
+    ESP.restart();   // or NVIC_SystemReset(), or schedule via your app's idle loop
+});
+```
+
+The `needs_reboot()` flag stays sticky from the commit until an actual reboot. On the next boot, `Manager::begin()` reloads the persisted values and fires the setter callbacks for any field whose committed value differs from its declared default &mdash; so `FF_REBOOT_REQUIRED` values take effect exactly once at startup without further intervention.
 
 ## Building
 

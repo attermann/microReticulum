@@ -84,6 +84,11 @@ namespace RNS { namespace Provisioning {
 		_registry.clear();
 		_needs_reboot = false;
 		_started = false;
+		// Drop the reboot-requested callback. If the caller captured stack
+		// state by reference (very common in tests), keeping the std::function
+		// alive past end() turns the next set_reboot_flag(true) into a
+		// write-through-dangling-reference.
+		_on_reboot = nullptr;
 	}
 
 	NamespaceBuilder Manager::namespace_(const char* name, uint16_t id) {
