@@ -18,6 +18,10 @@
 #include "Log.h"
 #include "Utilities/Memory.h"
 
+#ifdef RNS_USE_PROVISIONING
+#include "Provisioning/Provisioning.h"
+#endif
+
 //#include <TransistorNoiseSource.h>
 #include <RNG.h>
 
@@ -194,6 +198,11 @@ void Reticulum::start() {
 	// Guarantee monotonically increasing clock on reboot by immediately advancing offset by one and writing back again
 	OS::setTimeOffset(OS::getTimeOffset() + 1);
 	writeTimeOffset();
+#endif
+
+#ifdef RNS_USE_PROVISIONING
+	INFO("Starting Provisioning...");
+	Provisioning::Manager::instance().begin();
 #endif
 
 	INFO("Starting Transport...");
