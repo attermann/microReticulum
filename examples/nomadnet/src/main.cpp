@@ -199,6 +199,13 @@ void server() {
 // which can't capture local state (it's a C-style function pointer).
 static std::string requested_path;
 
+// Client-side identity used to identify ourselves to the server over the
+// established (encrypted) link. Required when the server's request
+// handler is registered with an ALLOW_LIST policy — without an identify
+// step the server will reject the request as unauthorized. Initialized
+// in client() once Reticulum is up; consumed in on_link_established().
+static RNS::Identity client_identity({RNS::Type::NONE});
+
 // Set by the response/failure callbacks so the client main loop can
 // observe completion and tear the Link down cleanly.
 static volatile bool request_done = false;
@@ -316,6 +323,14 @@ void on_request_failed(const RNS::RequestReceipt& receipt) {
 
 void on_link_established(RNS::Link& link) {
 	RNS::logf(RNS::LOG_NOTICE, "Link established, requesting %s", requested_path.c_str());
+
+	// Identify ourselves to the remote peer over the encrypted link.
+	// This sends our public key + a signature of (link_id || public_key)
+	// in a LINKIDENTIFY packet, so the server can recognize us by
+	// identity hash — required to pass an ALLOW_LIST request policy.
+	RNS::log("Identifying ourselves to remote peer...", RNS::LOG_DEBUG);
+	link.identify(client_identity);
+
 	// NomadNet page fetches don't carry a payload, but the
 	// request envelope on the wire is a msgpack 3-array
 	// [timestamp, path_hash, data] (see Link.cpp pack_request_envelope
@@ -327,6 +342,7 @@ void on_link_established(RNS::Link& link) {
 	// silently throws "insufficient data" with an empty str(e).
 	static const uint8_t MSGPACK_NIL = 0xC0;
 	const RNS::Bytes nil_payload(&MSGPACK_NIL, 1);
+	RNS::log("Sending request to remote peer...", RNS::LOG_DEBUG);
 	link.request(
 		RNS::Bytes(requested_path),
 		nil_payload,
@@ -355,6 +371,11 @@ void on_link_closed(RNS::Link& link) {
 
 void client(const char* destination_hexhash, const char* path) {
 	requested_path = path;
+
+	// Generate a fresh client identity for this run. Used inside
+	// on_link_established() to call link.identify() so the server can
+	// authenticate us against an allow-list policy.
+	client_identity = RNS::Identity();
 
 	// Decode the hex destination hash from argv.
 	RNS::Bytes destination_hash;
