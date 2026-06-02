@@ -33,7 +33,9 @@ namespace RNS { namespace Provisioning { namespace Ns {
 			constexpr uint16_t UseImplicitProof        = 5;
 			constexpr uint16_t PersistInterval         = 6;
 			constexpr uint16_t CleanInterval           = 7;
-			// next-id: 8
+			constexpr uint16_t RemoteManagementAllowed = 8;	// BytesList of 16-byte dest hashes
+			constexpr uint16_t TransportIdentity       = 9;	// Bytes (64) — private key; SECRET
+			// next-id: 10
 		}
 	}
 
@@ -50,12 +52,5 @@ namespace RNS { namespace Provisioning { namespace Ns {
 			// next-id: 6
 		}
 	}
-
-	// Namespace id 3 was used for an "identity" prototype with a single
-	// read-only IdentityHash field. Dropped because the library has no
-	// canonical identity to expose. Per the id-stability rules above,
-	// id 3 is permanently reserved and must not be re-used. Apps that
-	// want their own identity-style namespace should pick an id in the
-	// 100-199 (official-app) or 200+ (vendor) range.
 
 } } }

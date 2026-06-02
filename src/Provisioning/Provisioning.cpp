@@ -57,6 +57,10 @@ namespace RNS { namespace Provisioning {
 		for (const auto& ns_ptr : _registry.namespaces()) {
 			for (const Field& f : ns_ptr->fields()) {
 				if (f.has_flag(FF_READ_ONLY)) continue;
+				// Write-only fields are one-shot commands — replaying them
+				// on every boot would be incorrect, and they're never
+				// persisted anyway so working has no useful value to push.
+				if (f.has_flag(FF_WRITE_ONLY)) continue;
 				if (!f.setter) continue;
 				Value v = ns_ptr->working(f.id);
 				if (v.is_none()) continue;
@@ -113,7 +117,11 @@ namespace RNS { namespace Provisioning {
 		if (!ns) return {};
 		switch (src) {
 			case Source::Working:
-				return ns->working(field_id);
+				// Returns the field's getter value when present (live
+				// runtime), else the cached working-map value. This is
+				// what eliminates drift when direct setters mutate the
+				// runtime outside of Provisioning's commit path.
+				return ns->effective(field_id);
 			case Source::Draft: {
 				Value v;
 				if (ns->draft(field_id, v)) return v;
@@ -122,7 +130,7 @@ namespace RNS { namespace Provisioning {
 			case Source::Effective: {
 				Value v;
 				if (ns->draft(field_id, v)) return v;
-				return ns->working(field_id);
+				return ns->effective(field_id);
 			}
 		}
 		return {};
@@ -201,11 +209,27 @@ namespace RNS { namespace Provisioning {
 	}
 
 	bool Manager::factory_reset() {
-		// Drop drafts and reset working to defaults.
+		// Drop drafts, reset working to defaults, AND push defaults into
+		// the runtime via each field's setter — otherwise the live state
+		// (and any field that's read via a getter) would keep whatever was
+		// last committed, defeating the purpose of factory-reset.
 		for (const auto& ns_ptr : _registry.namespaces()) {
 			ns_ptr->clear_draft();
 			for (const Field& f : ns_ptr->fields()) {
 				ns_ptr->put_working(f.id, f.default_value);
+				// Don't fire setters for read-only (no setter) or write-only
+				// (firing on factory_reset would trigger the command with
+				// the default argument every time — wrong).
+				if (!f.has_flag(FF_READ_ONLY)
+					&& !f.has_flag(FF_WRITE_ONLY)
+					&& f.setter
+					&& !f.default_value.is_none()) {
+					try { f.setter(f.default_value); }
+					catch (const std::exception& e) {
+						ERRORF("Manager::factory_reset: setter for ns %u field %u threw: %s",
+							ns_ptr->id(), f.id, e.what());
+					}
+				}
 			}
 			ns_ptr->mark_clean();
 		}
@@ -329,6 +353,16 @@ namespace RNS { namespace Provisioning {
 				p.serialize(bin);
 				return;
 			}
+			case Type::BytesList: {
+				const auto& list = f.default_value.as_bytes_list();
+				p.serialize(MsgPack::arr_size_t(list.size()));
+				for (const Bytes& e : list) {
+					MsgPack::bin_t<uint8_t> bin;
+					if (e.size() > 0) { bin.resize(e.size()); memcpy(bin.data(), e.data(), e.size()); }
+					p.serialize(bin);
+				}
+				return;
+			}
 		}
 	}
 
@@ -341,6 +375,10 @@ namespace RNS { namespace Provisioning {
 		if (f.type == Type::Enum) {
 			if (!f.constraint.enum_values.empty()) n += 1;
 			if (!f.constraint.enum_labels.empty()) n += 1;
+		}
+		if (f.type == Type::BytesList) {
+			if (f.constraint.element_size > 0) n += 1;
+			if (f.constraint.max_count    > 0) n += 1;
 		}
 		return n;
 	}
@@ -385,6 +423,16 @@ namespace RNS { namespace Provisioning {
 							p.serialize((uint16_t)Key::FieldEnumLabels);
 							p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
 							for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
+						}
+					}
+					if (f.type == Type::BytesList) {
+						if (f.constraint.element_size > 0) {
+							p.serialize((uint16_t)Key::FieldElementSize);
+							p.serialize((uint64_t)f.constraint.element_size);
+						}
+						if (f.constraint.max_count > 0) {
+							p.serialize((uint16_t)Key::FieldMaxCount);
+							p.serialize((uint64_t)f.constraint.max_count);
 						}
 					}
 				}
@@ -444,7 +492,8 @@ namespace RNS { namespace Provisioning {
 				size_t entries = 0;
 				for (const Field& f : ns->fields()) {
 					if (f.has_flag(FF_SECRET)) continue;
-					Value v = ns->working(f.id);
+					if (f.has_flag(FF_WRITE_ONLY)) continue;
+					Value v = ns->effective(f.id);
 					if (pending) {
 						Value d;
 						if (ns->draft(f.id, d)) v = d;
@@ -454,7 +503,7 @@ namespace RNS { namespace Provisioning {
 				p.serialize(MsgPack::map_size_t(entries));
 				for (const Field& f : ns->fields()) {
 					if (f.has_flag(FF_SECRET)) continue;
-					Value v = ns->working(f.id);
+					Value v = ns->effective(f.id);
 					if (pending) {
 						Value d;
 						if (ns->draft(f.id, d)) v = d;

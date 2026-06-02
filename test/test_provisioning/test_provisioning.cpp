@@ -6,9 +6,15 @@
 #include "Provisioning/Codec.h"
 #include "Provisioning/Ids.h"
 
+#include "Reticulum.h"
+#include "Transport.h"
+#include "Identity.h"
 #include "Utilities/OS.h"
 #include "Bytes.h"
 #include "Log.h"
+
+#include <set>
+#include <vector>
 
 #define MSGPACK_DEBUGLOG_ENABLE 0
 #include <MsgPack.h>
@@ -53,6 +59,8 @@ static constexpr uint16_t CUSTOM_FLOAT = 3;
 static constexpr uint16_t CUSTOM_STR   = 4;
 static constexpr uint16_t CUSTOM_BYTES = 5;
 static constexpr uint16_t CUSTOM_REBOOT_INT = 6;	// FF_REBOOT_REQUIRED
+static constexpr uint16_t CUSTOM_METRIC     = 7;	// FF_READ_ONLY + getter (metric)
+static constexpr uint16_t CUSTOM_COMMAND    = 8;	// FF_WRITE_ONLY + setter (command)
 
 // Tracks whether the live setter for CUSTOM_INT was invoked, and what
 // value it last saw — for live_vs_reboot_apply.
@@ -60,10 +68,35 @@ static int    g_live_int_setter_count = 0;
 static int64_t g_live_int_setter_value = 0;
 static int    g_reboot_int_setter_count = 0;
 
+// Simulated runtime statics for the custom namespace, so the registered
+// getters return live state (mirrors how built-in fields wire to
+// Reticulum::transport_enabled() etc.).
+static int64_t g_custom_int_runtime    = 5;
+static int64_t g_custom_reboot_runtime = 915000000;
+// Live runtime value behind the read-only metric field.
+static int64_t g_custom_metric_runtime = 0;
+// Trace of command invocations: count + last argument seen.
+static int     g_command_invocations   = 0;
+static int64_t g_last_command_arg      = 0;
+
 static void reset_setter_counters() {
 	g_live_int_setter_count = 0;
 	g_live_int_setter_value = 0;
 	g_reboot_int_setter_count = 0;
+	g_command_invocations = 0;
+	g_last_command_arg = 0;
+}
+
+static void reset_runtime_state() {
+	g_custom_int_runtime    = 5;
+	g_custom_reboot_runtime = 915000000;
+	g_custom_metric_runtime = 0;
+	// Clear the Transport-side statics that field setters write into.
+	// Without these resets, state leaks between tests because the
+	// singleton's Transport statics are process-global.
+	RNS::Transport::remote_management_allowed(std::set<Bytes>{});
+	RNS::Identity none_id(RNS::Type::NONE);
+	RNS::Transport::identity(none_id);
 }
 
 static void register_custom_namespace() {
@@ -71,12 +104,33 @@ static void register_custom_namespace() {
 		.namespace_("custom", CUSTOM_NS_ID)
 		.field_bool ("enabled",      CUSTOM_BOOL,  FF_LIVE_APPLY,      false)
 		.field_int  ("level",        CUSTOM_INT,   FF_LIVE_APPLY,      5, 0, 100,
-			[](const Value& v) { ++g_live_int_setter_count; g_live_int_setter_value = v.as_int(); return true; })
+			[](const Value& v) {
+				++g_live_int_setter_count;
+				g_live_int_setter_value = v.as_int();
+				g_custom_int_runtime = v.as_int();
+				return true;
+			},
+			[]() { return g_custom_int_runtime; })
 		.field_float("ratio",        CUSTOM_FLOAT, FF_LIVE_APPLY,      0.5, 0.0, 1.0)
 		.field_string("label",       CUSTOM_STR,   FF_LIVE_APPLY,      "default", 32)
 		.field_bytes ("blob",        CUSTOM_BYTES, FF_LIVE_APPLY,      Bytes(), 64)
 		.field_int  ("frequency_hz", CUSTOM_REBOOT_INT, FF_REBOOT_REQUIRED, 915000000, 100000000, 1000000000,
-			[](const Value& v) { ++g_reboot_int_setter_count; (void)v; return true; })
+			[](const Value& v) {
+				++g_reboot_int_setter_count;
+				g_custom_reboot_runtime = v.as_int();
+				return true;
+			},
+			[]() { return g_custom_reboot_runtime; })
+		// Read-only metric: app reports live runtime via the getter.
+		.metric_int("packet_count", CUSTOM_METRIC,
+			[]() { return g_custom_metric_runtime; })
+		// Write-only command: SET_STATE+COMMIT triggers the action once.
+		.command_int("reboot_in_seconds", CUSTOM_COMMAND, 0, 3600,
+			[](const Value& v) {
+				++g_command_invocations;
+				g_last_command_arg = v.as_int();
+				return true;
+			})
 		.end();
 }
 
@@ -89,11 +143,26 @@ static void fresh_provisioning(const std::string& root) {
 void setUp(void) {
 	g_test_root = make_test_root();
 	reset_setter_counters();
+	reset_runtime_state();
 }
 
 void tearDown(void) {
 	Manager::instance().end();
 	rm_rf(g_test_root);
+}
+
+// Build a wire envelope [op, seq, payload] where payload-packing is
+// delegated to a lambda. Returns the encoded bytes. Declared up here so
+// non-wire tests can also build framed requests (e.g. for SECRET-field
+// exclusion checks via GET_STATE).
+template <typename F>
+static Bytes make_request(uint8_t op, uint64_t seq, F&& pack_payload) {
+	MsgPack::Packer p;
+	p.serialize(MsgPack::arr_size_t(3));
+	p.serialize(op);
+	p.serialize(seq);
+	pack_payload(p);
+	return Bytes(p.data(), p.size());
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +175,7 @@ void test_register_and_lookup(void) {
 
 	// Built-ins registered automatically.
 	TEST_ASSERT_NOT_NULL(reg.find(Ns::Reticulum::Id));
-	TEST_ASSERT_NOT_NULL(reg.find("reticulum"));
+	TEST_ASSERT_NOT_NULL(reg.find("Reticulum"));
 	TEST_ASSERT_NOT_NULL(reg.find(Ns::Transport::Id));
 
 	// Custom namespace registered explicitly.
@@ -123,7 +192,7 @@ void test_default_values(void) {
 	auto& p = Manager::instance();
 
 	Value v_bool = p.field(CUSTOM_NS_ID, CUSTOM_BOOL);
-	TEST_ASSERT_EQUAL(Type::Bool, (int)v_bool.type());
+	TEST_ASSERT_EQUAL(Provisioning::Type::Bool, (int)v_bool.type());
 	TEST_ASSERT_FALSE(v_bool.as_bool());
 
 	Value v_int = p.field(CUSTOM_NS_ID, CUSTOM_INT);
@@ -156,7 +225,7 @@ void test_commit_promotes_and_invokes_live_setter(void) {
 	TEST_ASSERT_EQUAL(1, g_live_int_setter_count);
 	TEST_ASSERT_EQUAL_INT64(42, g_live_int_setter_value);
 	// Draft was cleared.
-	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type() != Type::None);
+	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type() != Provisioning::Type::None);
 }
 
 void test_discard_clears_draft(void) {
@@ -167,7 +236,7 @@ void test_discard_clears_draft(void) {
 	TEST_ASSERT_TRUE(p.discard(CUSTOM_NS_ID));
 
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
-	TEST_ASSERT_EQUAL(Type::None,
+	TEST_ASSERT_EQUAL(Provisioning::Type::None,
 		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type());
 	TEST_ASSERT_EQUAL(0, g_live_int_setter_count);
 }
@@ -211,7 +280,7 @@ void test_constraint_violation_rejected(void) {
 	// Working unchanged.
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 	// No draft entry created.
-	TEST_ASSERT_EQUAL(Type::None,
+	TEST_ASSERT_EQUAL(Provisioning::Type::None,
 		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type());
 
 	// Wrong type also rejected.
@@ -261,6 +330,33 @@ void test_reboot_callback_fires_once(void) {
 	TEST_ASSERT_EQUAL(1, callback_count);
 }
 
+void test_getter_reflects_direct_setter(void) {
+	// Simulates the scenario where app code mutates a runtime static
+	// (e.g. Reticulum::transport_enabled(true)) outside of Provisioning's
+	// commit path. The field's registered getter reads the live static,
+	// so Provisioning::field() must reflect the new value immediately —
+	// no drift between direct setters and Provisioning reads.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Default visible at startup.
+	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+
+	// Direct mutation of the simulated runtime static.
+	g_custom_int_runtime = 42;
+	TEST_ASSERT_EQUAL_INT64(42, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+
+	// Another direct mutation; getter keeps tracking.
+	g_custom_int_runtime = 17;
+	TEST_ASSERT_EQUAL_INT64(17, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+
+	// Effective source overlays draft on top of the live value.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)99)));
+	TEST_ASSERT_EQUAL_INT64(17, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Working).as_int());
+	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
+	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Effective).as_int());
+}
+
 void test_boot_apply_fires_reboot_required_setter(void) {
 	// Commit a REBOOT_REQUIRED field. The setter must NOT fire on commit
 	// (existing post-boot semantic) but MUST fire once on the next boot
@@ -286,6 +382,368 @@ void test_boot_apply_fires_reboot_required_setter(void) {
 	TEST_ASSERT_FALSE(p2.needs_reboot());
 	// Working value still reflects what was on disk.
 	TEST_ASSERT_EQUAL_INT64(868000000, p2.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT).as_int());
+}
+
+// ---------------------------------------------------------------------------
+// BytesList field type + remote_management_allowed integration
+// ---------------------------------------------------------------------------
+
+// Helper: build a 16-byte hash filled with the given byte value.
+static Bytes make_hash(uint8_t fill) {
+	std::vector<uint8_t> v(16, fill);
+	return Bytes(v.data(), v.size());
+}
+
+void test_bytes_list_default_is_empty(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// remote_management_allowed default is an empty list.
+	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::RemoteManagementAllowed);
+	TEST_ASSERT_EQUAL(Provisioning::Type::BytesList, (int)v.type());
+	TEST_ASSERT_EQUAL_size_t(0, v.as_bytes_list().size());
+}
+
+void test_bytes_list_set_commit_persists(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	std::vector<Bytes> entries = { make_hash(0x01), make_hash(0x02) };
+	TEST_ASSERT_TRUE(p.field(Ns::Reticulum::Id,
+		Ns::Reticulum::Field::RemoteManagementAllowed, Value(entries)));
+	TEST_ASSERT_TRUE(p.commit(Ns::Reticulum::Id));
+
+	// Setter pushed values into Transport's runtime set.
+	const std::set<Bytes>& live = RNS::Transport::remote_management_allowed();
+	TEST_ASSERT_EQUAL_size_t(2, live.size());
+	TEST_ASSERT_TRUE(live.count(make_hash(0x01)) == 1);
+	TEST_ASSERT_TRUE(live.count(make_hash(0x02)) == 1);
+
+	// Simulated reboot: Transport state cleared, then begin() reloads.
+	RNS::Transport::remote_management_allowed(std::set<Bytes>{});
+	fresh_provisioning(g_test_root);
+	const std::set<Bytes>& live2 = RNS::Transport::remote_management_allowed();
+	TEST_ASSERT_EQUAL_size_t(2, live2.size());
+	TEST_ASSERT_TRUE(live2.count(make_hash(0x01)) == 1);
+	TEST_ASSERT_TRUE(live2.count(make_hash(0x02)) == 1);
+}
+
+void test_bytes_list_constraint_rejects_wrong_element_size(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// 8-byte hash violates the declared 16-byte element_size constraint.
+	std::vector<uint8_t> short_bytes(8, 0xAB);
+	std::vector<Bytes> bad = { Bytes(short_bytes.data(), short_bytes.size()) };
+	TEST_ASSERT_FALSE(p.field(Ns::Reticulum::Id,
+		Ns::Reticulum::Field::RemoteManagementAllowed, Value(bad)));
+
+	// Draft not populated, runtime untouched.
+	TEST_ASSERT_EQUAL_size_t(0, RNS::Transport::remote_management_allowed().size());
+}
+
+void test_bytes_list_getter_reflects_direct_setter(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Mutate via the Transport direct setter, then read via Provisioning.
+	std::set<Bytes> s = { make_hash(0x42) };
+	RNS::Transport::remote_management_allowed(s);
+
+	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::RemoteManagementAllowed);
+	TEST_ASSERT_EQUAL(Provisioning::Type::BytesList, (int)v.type());
+	TEST_ASSERT_EQUAL_size_t(1, v.as_bytes_list().size());
+	TEST_ASSERT_TRUE(v.as_bytes_list()[0] == make_hash(0x42));
+
+	// Reset runtime so subsequent tests start clean.
+	RNS::Transport::remote_management_allowed(std::set<Bytes>{});
+}
+
+// ---------------------------------------------------------------------------
+// transport_identity (FF_REBOOT_REQUIRED | FF_SECRET) integration
+// ---------------------------------------------------------------------------
+
+void test_transport_identity_getter_unset_returns_empty(void) {
+	// setUp clears Transport::_identity to NONE. The getter must guard
+	// against dereferencing a NONE Identity and return an empty Bytes.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::TransportIdentity);
+	TEST_ASSERT_EQUAL(Provisioning::Type::Bytes, (int)v.type());
+	TEST_ASSERT_EQUAL_size_t(0, v.as_bytes().size());
+}
+
+void test_transport_identity_commit_reloads_on_reboot(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Generate a fresh identity to obtain a known-good 64-byte private key
+	// and the hash it should produce when reloaded.
+	RNS::Identity src;
+	Bytes prv = src.get_private_key();
+	Bytes expected_hash = src.hash();
+	TEST_ASSERT_EQUAL_size_t(64, prv.size());
+
+	// Set via Provisioning and commit. Field is REBOOT_REQUIRED + SECRET,
+	// so the setter must NOT fire on commit — Transport::_identity stays
+	// at the NONE state set during reset_runtime_state.
+	TEST_ASSERT_TRUE(p.field(Ns::Reticulum::Id,
+		Ns::Reticulum::Field::TransportIdentity, Value(prv)));
+	TEST_ASSERT_TRUE(p.commit(Ns::Reticulum::Id));
+	TEST_ASSERT_FALSE((bool)RNS::Transport::identity());
+	TEST_ASSERT_TRUE(p.needs_reboot());
+
+	// Simulate reboot: fresh_provisioning will re-register builtins,
+	// reload the file from disk, and apply_loaded_to_runtime will fire
+	// the identity setter because working != default(empty).
+	fresh_provisioning(g_test_root);
+
+	TEST_ASSERT_TRUE((bool)RNS::Transport::identity());
+	TEST_ASSERT_TRUE(RNS::Transport::identity().hash() == expected_hash);
+}
+
+void test_transport_identity_excluded_from_get_state(void) {
+	// FF_SECRET fields must be omitted from GET_STATE responses.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Plant a real key so the field has a non-empty value via the getter.
+	RNS::Identity src;
+	RNS::Transport::set_identity_prv(src.get_private_key());
+
+	// Wire request: GET_STATE for the Reticulum namespace.
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)Ns::Reticulum::Id);
+	});
+	Bytes resp = p.handle_message(req);
+
+	// Parse: response is [op, seq, payload-map { ns_id -> { field_id -> value } }]
+	MsgPack::Unpacker u;
+	u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::GetState, op);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n_ns = u.unpackMapSize();
+	TEST_ASSERT_EQUAL_size_t(1, n_ns);
+
+	int64_t ns_id_raw = 0; u.deserialize(ns_id_raw);
+	TEST_ASSERT_EQUAL((int64_t)Ns::Reticulum::Id, ns_id_raw);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n_fields = u.unpackMapSize();
+
+	// Walk the field map; TransportIdentity must NOT be present.
+	bool found_secret = false;
+	for (size_t i = 0; i < n_fields; ++i) {
+		int64_t fid = 0;
+		u.deserialize(fid);
+		if (fid == Ns::Reticulum::Field::TransportIdentity) found_secret = true;
+		// Skip the value — type varies per field.
+		if (u.isBool())                              { bool b; u.deserialize(b); }
+		else if (u.isUInt() || u.isInt())            { int64_t iv; u.deserialize(iv); }
+		else if (u.isFloat32() || u.isFloat64())     { double d; u.deserialize(d); }
+		else if (u.isStr())                          { MsgPack::str_t s; u.deserialize(s); }
+		else if (u.isBin())                          { MsgPack::bin_t<uint8_t> bin; u.deserialize(bin); }
+		else if (u.isArray()) {
+			size_t m = u.unpackArraySize();
+			for (size_t j = 0; j < m; ++j) {
+				if (u.isBin())                       { MsgPack::bin_t<uint8_t> bin; u.deserialize(bin); }
+				else if (u.isUInt() || u.isInt())    { int64_t iv; u.deserialize(iv); }
+			}
+		}
+	}
+	TEST_ASSERT_FALSE(found_secret);
+}
+
+// ---------------------------------------------------------------------------
+// Metric (read-only + getter) and command (write-only + setter) patterns
+// ---------------------------------------------------------------------------
+
+void test_metric_getter_reflects_runtime(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Mutate the simulated runtime; getter must surface live value.
+	g_custom_metric_runtime = 0;
+	TEST_ASSERT_EQUAL_INT64(0, p.field(CUSTOM_NS_ID, CUSTOM_METRIC).as_int());
+	g_custom_metric_runtime = 12345;
+	TEST_ASSERT_EQUAL_INT64(12345, p.field(CUSTOM_NS_ID, CUSTOM_METRIC).as_int());
+	g_custom_metric_runtime = 99;
+	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_METRIC).as_int());
+}
+
+void test_metric_rejects_set_state(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Direct accessor: SET on read-only field returns false.
+	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_METRIC, Value((int64_t)42)));
+	// Live value still reflects runtime, not the rejected attempt.
+	TEST_ASSERT_EQUAL_INT64(g_custom_metric_runtime,
+		p.field(CUSTOM_NS_ID, CUSTOM_METRIC).as_int());
+}
+
+void test_metric_not_persisted(void) {
+	// Set a non-default runtime value, then look at the on-disk file
+	// after a commit of an unrelated field. The metric must not appear.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	g_custom_metric_runtime = 7777;
+
+	// Force a save by committing an unrelated stateful field.
+	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)10));
+	TEST_ASSERT_TRUE(p.commit());
+
+	// Read the file directly and confirm the metric id is absent.
+	Bytes raw;
+	size_t n = Utilities::OS::read_file((g_test_root + "/custom.msgpack").c_str(), raw);
+	TEST_ASSERT_GREATER_THAN(0, n);
+	MsgPack::Unpacker u; u.feed(raw.data(), raw.size());
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t entries = u.unpackMapSize();
+	bool saw_metric = false;
+	for (size_t i = 0; i < entries; ++i) {
+		int64_t fid = 0; u.deserialize(fid);
+		if (fid == CUSTOM_METRIC) saw_metric = true;
+		// skip value
+		if (u.isBool())                              { bool b; u.deserialize(b); }
+		else if (u.isUInt() || u.isInt())            { int64_t v; u.deserialize(v); }
+		else if (u.isFloat32() || u.isFloat64())     { double d; u.deserialize(d); }
+		else if (u.isStr())                          { MsgPack::str_t s; u.deserialize(s); }
+		else if (u.isBin())                          { MsgPack::bin_t<uint8_t> bin; u.deserialize(bin); }
+		else if (u.isArray()) {
+			size_t m = u.unpackArraySize();
+			for (size_t j = 0; j < m; ++j) {
+				if (u.isBin())   { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
+				else             { int64_t iv; u.deserialize(iv); }
+			}
+		}
+	}
+	TEST_ASSERT_FALSE(saw_metric);
+}
+
+void test_command_fires_setter_on_commit(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	TEST_ASSERT_EQUAL(0, g_command_invocations);
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)42)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+
+	TEST_ASSERT_EQUAL(1, g_command_invocations);
+	TEST_ASSERT_EQUAL_INT64(42, g_last_command_arg);
+}
+
+void test_command_can_be_invoked_repeatedly_with_same_arg(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// First invocation.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)7)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(1, g_command_invocations);
+
+	// Second invocation with the *same* value still triggers — the
+	// set-equal-working dedup must be bypassed for write-only fields.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)7)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(2, g_command_invocations);
+}
+
+void test_command_read_returns_none(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Before any invocation: read returns None (no readable state).
+	Value v = p.field(CUSTOM_NS_ID, CUSTOM_COMMAND);
+	TEST_ASSERT_EQUAL(Provisioning::Type::None, (int)v.type());
+
+	// After commit: still None — the setter consumed the value; nothing
+	// is retained.
+	p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)99));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	v = p.field(CUSTOM_NS_ID, CUSTOM_COMMAND);
+	TEST_ASSERT_EQUAL(Provisioning::Type::None, (int)v.type());
+}
+
+void test_command_not_persisted_or_replayed(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Invoke the command, then simulate a reboot. The setter must NOT
+	// fire again on apply_loaded_to_runtime — commands are one-shot.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)60)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(1, g_command_invocations);
+
+	// Simulate reboot: end + re-register + begin reloads from disk.
+	// Reset the invocation counter so a stray boot-apply call would
+	// be observable.
+	reset_setter_counters();
+	fresh_provisioning(g_test_root);
+
+	TEST_ASSERT_EQUAL(0, g_command_invocations);
+}
+
+void test_command_excluded_from_get_state(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Wire GET_STATE for the custom namespace; CUSTOM_COMMAND must not
+	// appear in the field map.
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n_ns = u.unpackMapSize();
+	TEST_ASSERT_EQUAL_size_t(1, n_ns);
+	int64_t ns_id_raw = 0; u.deserialize(ns_id_raw);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n_fields = u.unpackMapSize();
+
+	bool found_command = false;
+	for (size_t i = 0; i < n_fields; ++i) {
+		int64_t fid = 0; u.deserialize(fid);
+		if (fid == CUSTOM_COMMAND) found_command = true;
+		// skip value
+		if (u.isBool())                              { bool b; u.deserialize(b); }
+		else if (u.isUInt() || u.isInt())            { int64_t v; u.deserialize(v); }
+		else if (u.isFloat32() || u.isFloat64())     { double d; u.deserialize(d); }
+		else if (u.isStr())                          { MsgPack::str_t s; u.deserialize(s); }
+		else if (u.isBin())                          { MsgPack::bin_t<uint8_t> bin; u.deserialize(bin); }
+		else if (u.isArray()) {
+			size_t m = u.unpackArraySize();
+			for (size_t j = 0; j < m; ++j) {
+				if (u.isBin())   { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
+				else             { int64_t iv; u.deserialize(iv); }
+			}
+		}
+	}
+	TEST_ASSERT_FALSE(found_command);
+}
+
+void test_command_constraint_violation_rejected(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Constraint declared as 0..3600; 9999 violates.
+	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)9999)));
+	TEST_ASSERT_EQUAL(0, g_command_invocations);
 }
 
 void test_unknown_field_ignored_on_load(void) {
@@ -366,7 +824,7 @@ void test_by_name_accessors(void) {
 
 	// Unknown ns/field returns a None value rather than throwing.
 	Value missing = p.field("nope", "nada");
-	TEST_ASSERT_EQUAL(Type::None, (int)missing.type());
+	TEST_ASSERT_EQUAL(Provisioning::Type::None, (int)missing.type());
 }
 
 void test_duplicate_field_id_rejected(void) {
@@ -387,18 +845,6 @@ void test_duplicate_field_id_rejected(void) {
 // ---------------------------------------------------------------------------
 // Wire round-trip tests — exercise handle_message()
 // ---------------------------------------------------------------------------
-
-// Build a wire envelope [op, seq, payload] where payload-packing is
-// delegated to a lambda. Returns the encoded bytes.
-template <typename F>
-static Bytes make_request(uint8_t op, uint64_t seq, F&& pack_payload) {
-	MsgPack::Packer p;
-	p.serialize(MsgPack::arr_size_t(3));
-	p.serialize(op);
-	p.serialize(seq);
-	pack_payload(p);
-	return Bytes(p.data(), p.size());
-}
 
 void test_wire_get_info(void) {
 	fresh_provisioning(g_test_root);
@@ -579,7 +1025,24 @@ int runUnityTests(void) {
 	RUN_TEST(test_constraint_violation_rejected);
 	RUN_TEST(test_live_vs_reboot_apply);
 	RUN_TEST(test_reboot_callback_fires_once);
+	RUN_TEST(test_getter_reflects_direct_setter);
 	RUN_TEST(test_boot_apply_fires_reboot_required_setter);
+	RUN_TEST(test_bytes_list_default_is_empty);
+	RUN_TEST(test_bytes_list_set_commit_persists);
+	RUN_TEST(test_bytes_list_constraint_rejects_wrong_element_size);
+	RUN_TEST(test_bytes_list_getter_reflects_direct_setter);
+	RUN_TEST(test_transport_identity_getter_unset_returns_empty);
+	RUN_TEST(test_transport_identity_commit_reloads_on_reboot);
+	RUN_TEST(test_transport_identity_excluded_from_get_state);
+	RUN_TEST(test_metric_getter_reflects_runtime);
+	RUN_TEST(test_metric_rejects_set_state);
+	RUN_TEST(test_metric_not_persisted);
+	RUN_TEST(test_command_fires_setter_on_commit);
+	RUN_TEST(test_command_can_be_invoked_repeatedly_with_same_arg);
+	RUN_TEST(test_command_read_returns_none);
+	RUN_TEST(test_command_not_persisted_or_replayed);
+	RUN_TEST(test_command_excluded_from_get_state);
+	RUN_TEST(test_command_constraint_violation_rejected);
 	RUN_TEST(test_unknown_field_ignored_on_load);
 	RUN_TEST(test_atomic_write_resilience);
 	RUN_TEST(test_factory_reset);

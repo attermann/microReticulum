@@ -44,32 +44,94 @@ namespace RNS { namespace Provisioning {
 	public:
 		NamespaceBuilder(Namespace* ns) : _ns(ns) {}
 
+		// Each field_* overload optionally accepts a typed getter that
+		// returns the field's native C++ type. When provided, Manager::field()
+		// queries it for the live runtime value instead of returning a
+		// cached working-map entry. Internally wrapped to produce a Value.
 		NamespaceBuilder& field_bool(const char* name, uint16_t id, uint8_t flags,
-			bool default_value, SetterFn setter = nullptr);
+			bool default_value,
+			SetterFn setter = nullptr,
+			std::function<bool()> getter = nullptr);
 
 		NamespaceBuilder& field_int(const char* name, uint16_t id, uint8_t flags,
-			int64_t default_value, int64_t imin, int64_t imax, SetterFn setter = nullptr);
+			int64_t default_value, int64_t imin, int64_t imax,
+			SetterFn setter = nullptr,
+			std::function<int64_t()> getter = nullptr);
 
 		NamespaceBuilder& field_int(const char* name, uint16_t id, uint8_t flags,
-			int64_t default_value, SetterFn setter = nullptr);
+			int64_t default_value,
+			SetterFn setter = nullptr,
+			std::function<int64_t()> getter = nullptr);
 
 		NamespaceBuilder& field_float(const char* name, uint16_t id, uint8_t flags,
-			double default_value, double fmin, double fmax, SetterFn setter = nullptr);
+			double default_value, double fmin, double fmax,
+			SetterFn setter = nullptr,
+			std::function<double()> getter = nullptr);
 
 		NamespaceBuilder& field_float(const char* name, uint16_t id, uint8_t flags,
-			double default_value, SetterFn setter = nullptr);
+			double default_value,
+			SetterFn setter = nullptr,
+			std::function<double()> getter = nullptr);
 
 		NamespaceBuilder& field_string(const char* name, uint16_t id, uint8_t flags,
-			const char* default_value, size_t max_len = 0, SetterFn setter = nullptr);
+			const char* default_value, size_t max_len = 0,
+			SetterFn setter = nullptr,
+			std::function<std::string()> getter = nullptr);
 
 		NamespaceBuilder& field_bytes(const char* name, uint16_t id, uint8_t flags,
-			const Bytes& default_value, size_t max_len = 0, SetterFn setter = nullptr);
+			const Bytes& default_value, size_t max_len = 0,
+			SetterFn setter = nullptr,
+			std::function<Bytes()> getter = nullptr);
+
+		// List of byte arrays — e.g. a set of allowed destination hashes.
+		// element_size = required size per entry (0 = variable),
+		// max_count    = maximum number of entries (0 = unlimited).
+		NamespaceBuilder& field_bytes_list(const char* name, uint16_t id, uint8_t flags,
+			std::vector<Bytes> default_value,
+			size_t element_size = 0, size_t max_count = 0,
+			SetterFn setter = nullptr,
+			std::function<std::vector<Bytes>()> getter = nullptr);
 
 		NamespaceBuilder& field_enum(const char* name, uint16_t id, uint8_t flags,
 			int64_t default_value,
 			std::vector<int64_t> values,
 			std::vector<std::string> labels,
-			SetterFn setter = nullptr);
+			SetterFn setter = nullptr,
+			std::function<int64_t()> getter = nullptr);
+
+		// -- Sugar for the two read-only / write-only patterns --
+		//
+		// metric_*: read-only field surfaced through a live getter. Useful
+		// for counters, status, packet rates, sensor readings — anything
+		// the app reports as instrumentation. Not persisted; SET_STATE
+		// rejected at validation; getter polled on every read.
+		//
+		// command_*: write-only one-shot action. SET_STATE+COMMIT fires
+		// the setter exactly once with the supplied argument. Not persisted,
+		// not exposed in GET_STATE, not replayed on reboot. Reads return
+		// None. Use these for "reboot now", "rotate identity", "ping",
+		// "factory reset", and similar imperative gestures.
+
+		NamespaceBuilder& metric_bool(const char* name, uint16_t id,
+			std::function<bool()> getter);
+		NamespaceBuilder& metric_int(const char* name, uint16_t id,
+			std::function<int64_t()> getter);
+		NamespaceBuilder& metric_float(const char* name, uint16_t id,
+			std::function<double()> getter);
+		NamespaceBuilder& metric_string(const char* name, uint16_t id,
+			std::function<std::string()> getter);
+		NamespaceBuilder& metric_bytes(const char* name, uint16_t id,
+			std::function<Bytes()> getter);
+
+		NamespaceBuilder& command_bool(const char* name, uint16_t id, SetterFn setter);
+		NamespaceBuilder& command_int(const char* name, uint16_t id,
+			int64_t imin, int64_t imax, SetterFn setter);
+		NamespaceBuilder& command_float(const char* name, uint16_t id,
+			double fmin, double fmax, SetterFn setter);
+		NamespaceBuilder& command_string(const char* name, uint16_t id,
+			size_t max_len, SetterFn setter);
+		NamespaceBuilder& command_bytes(const char* name, uint16_t id,
+			size_t max_len, SetterFn setter);
 
 		// Optional terminator for readability; the chain is also fine
 		// without it (NamespaceBuilder is a value, not a guard).

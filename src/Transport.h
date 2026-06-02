@@ -350,12 +350,17 @@ namespace RNS {
 		static void cull_path_table();
 		static void cull_announce_table();
 
+		// CBA Test identity prv access
+		static void set_identity_prv(const Bytes& prv_bytes);
+		static Bytes get_identity_prv();
+
 		// getters/setters
 		static inline void set_receive_packet_callback(Callbacks::receive_packet callback) { _callbacks._receive_packet = callback; }
 		static inline void set_transmit_packet_callback(Callbacks::transmit_packet callback) { _callbacks._transmit_packet = callback; }
 		static inline void set_filter_packet_callback(Callbacks::filter_packet callback) { _callbacks._filter_packet = callback; }
 		static inline const Reticulum& reticulum() { return _owner; }
 		static inline const Identity& identity() { return _identity; }
+		static inline void identity(Identity& identity) { _identity = identity; }
 		inline static uint16_t path_table_maxsize() { return _path_table_maxsize; }
 		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; _path_store.set_max_recs(_path_table_maxsize); }
 		inline static uint16_t announce_table_maxsize() { return _announce_table_maxsize; }
@@ -370,8 +375,8 @@ namespace RNS {
 		inline static void path_store_segment_size(uint32_t value) { _path_store_segment_size = value; }
 		inline static uint8_t path_store_segment_count() { return _path_store_segment_count; }
 		inline static void path_store_segment_count(uint8_t value) { _path_store_segment_count = value; }
-		// CBA TEST
-		static inline void identity(Identity& identity) { _identity = identity; }
+		inline static const std::set<Bytes>& remote_management_allowed() { return _remote_management_allowed; }
+		inline static void remote_management_allowed(const std::set<Bytes>& value) { _remote_management_allowed = value; }
 
 		inline static const PathTable& path_table() { return _path_table; }
 		inline static const NewPathTable& new_path_table() { return _new_path_table; }

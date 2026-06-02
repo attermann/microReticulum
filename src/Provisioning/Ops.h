@@ -97,6 +97,8 @@ namespace RNS { namespace Provisioning {
 		constexpr uint16_t FieldEnumValues  = 10;
 		constexpr uint16_t FieldEnumLabels  = 11;
 		constexpr uint16_t FieldDefault     = 12;
+		constexpr uint16_t FieldElementSize = 13;	// BytesList: required size per entry
+		constexpr uint16_t FieldMaxCount    = 14;	// BytesList: max number of entries
 	}
 
 } }

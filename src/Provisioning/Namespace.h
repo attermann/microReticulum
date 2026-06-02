@@ -43,6 +43,13 @@ namespace RNS { namespace Provisioning {
 		// Returns a none-typed Value if the field id is unknown.
 		Value working(uint16_t field_id) const;
 
+		// "Effective" value for a field — queries the field's getter callback
+		// if it has one (so the value reflects the live runtime), falling
+		// back to the cached working map otherwise. Read- and save-side
+		// callers should prefer this over working() to avoid drift when
+		// direct setters mutate the runtime out-of-band.
+		Value effective(uint16_t field_id) const;
+
 		// Returns true and writes into 'out' if a draft entry exists for this field.
 		bool draft(uint16_t field_id, Value& out) const;
 		bool has_draft(uint16_t field_id) const;

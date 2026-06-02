@@ -45,6 +45,19 @@ namespace RNS { namespace Provisioning { namespace Codec {
 				packer.serialize(bin);
 				return true;
 			}
+			case Type::BytesList: {
+				const auto& list = v.as_bytes_list();
+				packer.serialize(MsgPack::arr_size_t(list.size()));
+				for (const Bytes& e : list) {
+					MsgPack::bin_t<uint8_t> bin;
+					if (e.size() > 0) {
+						bin.resize(e.size());
+						memcpy(bin.data(), e.data(), e.size());
+					}
+					packer.serialize(bin);
+				}
+				return true;
+			}
 		}
 		return false;
 	}
@@ -94,23 +107,63 @@ namespace RNS { namespace Provisioning { namespace Codec {
 				out = Value(b);
 				return true;
 			}
+			case Type::BytesList: {
+				if (!unpacker.isArray()) return false;
+				const size_t n = unpacker.unpackArraySize();
+				std::vector<Bytes> list;
+				list.reserve(n);
+				for (size_t i = 0; i < n; ++i) {
+					if (!unpacker.isBin()) {
+						// Bad element type — skip and abort the read.
+						return false;
+					}
+					MsgPack::bin_t<uint8_t> bin;
+					unpacker.deserialize(bin);
+					list.emplace_back(bin.data(), bin.size());
+				}
+				out = Value(std::move(list));
+				return true;
+			}
 		}
 		return false;
 	}
 
+	// Pick the value to persist for a field. The choice depends on the
+	// field's apply semantics:
+	//
+	//  - FF_LIVE_APPLY: prefer effective() (live runtime via getter, else
+	//    working). Captures direct-setter mutations on commit and keeps
+	//    persistence in lockstep with what's actually running.
+	//
+	//  - FF_REBOOT_REQUIRED: must use working(). After commit_one(), the
+	//    new value lives in the working map but the runtime still holds
+	//    the *old* value (setter intentionally not fired). Saving via
+	//    effective() would persist the stale runtime — the opposite of
+	//    what the user just asked for.
+	//
+	//  - Neither flag set: behave like LIVE_APPLY (use effective).
+	static Value persist_value(const Namespace& ns, const Field& f) {
+		if (f.has_flag(FF_REBOOT_REQUIRED)) return ns.working(f.id);
+		return ns.effective(f.id);
+	}
+
 	bool pack_namespace_working(MsgPack::Packer& packer, const Namespace& ns) {
-		// Count first so we can emit the correct map header size.
+		// Skip read-only (no state to persist beyond defaults) and write-only
+		// (commands are one-shot; replaying on reboot would be wrong).
+		auto skip = [](const Field& f) {
+			return f.has_flag(FF_READ_ONLY) || f.has_flag(FF_WRITE_ONLY);
+		};
 		size_t n = 0;
 		for (const Field& f : ns.fields()) {
-			if (f.has_flag(FF_READ_ONLY)) continue;
-			Value v = ns.working(f.id);
+			if (skip(f)) continue;
+			Value v = persist_value(ns, f);
 			if (v.is_none()) continue;
 			++n;
 		}
 		packer.serialize(MsgPack::map_size_t(n));
 		for (const Field& f : ns.fields()) {
-			if (f.has_flag(FF_READ_ONLY)) continue;
-			Value v = ns.working(f.id);
+			if (skip(f)) continue;
+			Value v = persist_value(ns, f);
 			if (v.is_none()) continue;
 			packer.serialize((uint16_t)f.id);
 			pack_value(packer, v);

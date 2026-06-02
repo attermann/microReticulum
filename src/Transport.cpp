@@ -193,10 +193,12 @@ DestinationEntry empty_destination_entry;
 			snprintf(transport_identity_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/transport_identity", Reticulum::_storagepath);
 			DEBUG("Checking for transport identity...");
 			try {
+				// Attempt to load identity from file
 				if (OS::file_exists(transport_identity_path)) {
 					_identity = Identity::from_file(transport_identity_path);
 				}
 
+				// If identity could not be loaded then generate a new identity and save it
 				if (!_identity) {
 					VERBOSE("No valid Transport Identity in storage, creating...");
 					_identity = Identity();
@@ -252,10 +254,10 @@ DestinationEntry empty_destination_entry;
 		// Create remote management destinations
 		if (Reticulum::remote_management_enabled() && !_owner.is_connected_to_shared_instance()) {
 			_remote_management_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "remote.management"};
-			//_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
-			_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_ALL);
-			//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
-			_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
+			_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+			//_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_ALL);
+			_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+			//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
 			_mgmt_destinations.insert(_remote_management_destination);
 			_mgmt_hashes.insert(_remote_management_destination.hash());
 			NOTICEF("Enabled remote management on %s", _remote_management_destination.toString().c_str());
@@ -4936,4 +4938,14 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		TRACEF("Released %u tunnels", count);
 	}
 	return count;
+}
+
+/*static*/ void Transport::set_identity_prv(const Bytes& prv_bytes) {
+	_identity = RNS::Identity(false);
+	_identity.load_private_key(prv_bytes);
+}
+
+/*static*/ Bytes Transport::get_identity_prv() {
+	RNS::Bytes prv_bytes;
+	return _identity.get_private_key();
 }

@@ -27,8 +27,13 @@ namespace RNS { namespace Provisioning {
 		FF_NONE            = 0,
 		FF_LIVE_APPLY      = 1 << 0,	// setter called immediately on commit
 		FF_REBOOT_REQUIRED = 1 << 1,	// committed value takes effect after reboot
-		FF_READ_ONLY       = 1 << 2,	// no setter; not modifiable from wire
+		FF_READ_ONLY       = 1 << 2,	// no setter; not modifiable from wire; not persisted
 		FF_SECRET          = 1 << 3,	// excluded from GET_STATE responses
+		// Write-only command field. SET_STATE+COMMIT fires the setter as
+		// a one-shot action — the value is consumed, not stored or persisted.
+		// Excluded from GET_STATE (no state to report) and from apply-on-boot
+		// (the action shouldn't replay on every reboot). Reads return None.
+		FF_WRITE_ONLY      = 1 << 4,
 	};
 
 	struct Constraint {
@@ -38,11 +43,21 @@ namespace RNS { namespace Provisioning {
 		double  fmin    = 0.0;
 		double  fmax    = 0.0;
 		size_t  max_len = 0;
+		// BytesList-only: required exact byte size per element (0 = variable),
+		// and maximum number of elements (0 = unlimited).
+		size_t  element_size = 0;
+		size_t  max_count    = 0;
 		std::vector<int64_t>     enum_values;
 		std::vector<std::string> enum_labels;
 	};
 
 	using SetterFn = std::function<bool(const Value&)>;
+
+	// Returns the live runtime value of the field. When set, this is the
+	// authoritative source for reads — Provisioning becomes a thin view over
+	// the runtime static rather than a separate cached value. Optional; if
+	// null, reads fall back to the per-namespace working map.
+	using GetterFn = std::function<Value()>;
 
 	struct Field {
 		uint16_t      id      = 0;
@@ -52,6 +67,7 @@ namespace RNS { namespace Provisioning {
 		Constraint    constraint;
 		Value         default_value;
 		SetterFn      setter; // optional; invoked on commit for FF_LIVE_APPLY
+		GetterFn      getter; // optional; queried on read/save when present
 
 		bool has_flag(FieldFlags f) const { return (flags & f) != 0; }
 

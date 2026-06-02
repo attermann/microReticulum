@@ -47,6 +47,16 @@ namespace RNS { namespace Provisioning {
 		return it->second;
 	}
 
+	Value Namespace::effective(uint16_t field_id) const {
+		const Field* f = find_field(field_id);
+		if (!f) return {};
+		// Write-only command fields have no readable state — the value is
+		// consumed by the setter at commit and not retained anywhere.
+		if (f->has_flag(FF_WRITE_ONLY)) return {};
+		if (f->getter) return f->getter();
+		return working(field_id);
+	}
+
 	bool Namespace::draft(uint16_t field_id, Value& out) const {
 		auto it = _draft.find(field_id);
 		if (it == _draft.end()) return false;
@@ -63,13 +73,19 @@ namespace RNS { namespace Provisioning {
 		if (!f) return false;
 		if (f->has_flag(FF_READ_ONLY)) return false;
 		if (!f->validate(v)) return false;
-		// If the new draft value equals the current working value, drop the
-		// draft entry — keeps draft_has_reboot() honest about whether anything
-		// is actually pending.
-		Value cur = working(field_id);
-		if (cur == v) {
-			_draft.erase(field_id);
-			return true;
+		// For stateful fields, if the new draft value equals the current
+		// working value, drop the draft entry — keeps draft_has_reboot()
+		// honest about whether anything is actually pending.
+		//
+		// WRITE_ONLY fields skip this dedup: every set is a new command
+		// invocation, even if the argument value happens to match a prior
+		// invocation.
+		if (!f->has_flag(FF_WRITE_ONLY)) {
+			Value cur = working(field_id);
+			if (cur == v) {
+				_draft.erase(field_id);
+				return true;
+			}
 		}
 		_draft[field_id] = v;
 		return true;
@@ -109,11 +125,22 @@ namespace RNS { namespace Provisioning {
 		if (!f->validate(v)) {
 			return CommitOutcome::InvalidValue;
 		}
-		// Promote into working and persist-dirty regardless of live/reboot
-		// flag — the file on disk is the source of truth for next boot.
+		_draft.erase(it);
+
+		// Write-only command field: fire the setter as a one-shot action.
+		// Do not promote to working, do not mark dirty, do not persist.
+		// Subsequent reads return None and the action does not replay on
+		// reboot (working map stays at the seeded default).
+		if (f->has_flag(FF_WRITE_ONLY)) {
+			if (f->setter && !f->setter(v)) return CommitOutcome::SetterFailed;
+			return CommitOutcome::AppliedLive;
+		}
+
+		// Stateful field: promote into working and persist-dirty regardless
+		// of live/reboot flag — the file on disk is the source of truth
+		// for next boot.
 		_working[field_id] = v;
 		_dirty_for_persist = true;
-		_draft.erase(it);
 
 		if (f->has_flag(FF_LIVE_APPLY) && f->setter) {
 			if (!f->setter(v)) return CommitOutcome::SetterFailed;

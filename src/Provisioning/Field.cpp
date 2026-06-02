@@ -53,6 +53,16 @@ namespace RNS { namespace Provisioning {
 				}
 				return true;
 			}
+			case Type::BytesList: {
+				const auto& list = v.as_bytes_list();
+				if (constraint.max_count > 0 && list.size() > constraint.max_count) return false;
+				if (constraint.element_size > 0) {
+					for (const Bytes& e : list) {
+						if (e.size() != constraint.element_size) return false;
+					}
+				}
+				return true;
+			}
 		}
 		return false;
 	}
