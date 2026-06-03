@@ -1,9 +1,9 @@
 #include <unity.h>
 
-#include "Bytes.h"
-#include "Utilities/Crc.h"
-#include "Cryptography/HMAC.h"
-#include "Cryptography/PKCS7.h"
+#include "microReticulum/Bytes.h"
+#include "microReticulum/Utilities/Crc.h"
+#include "microReticulum/Cryptography/HMAC.h"
+#include "microReticulum/Cryptography/PKCS7.h"
 
 #include <string.h>
 #include <unistd.h>

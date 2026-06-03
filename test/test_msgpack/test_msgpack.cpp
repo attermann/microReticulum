@@ -6,7 +6,7 @@
 
 #include <ArduinoJson.h>
 
-#include "Bytes.h"
+#include "microReticulum/Bytes.h"
 
 #include <string.h>
 #include <stdint.h>

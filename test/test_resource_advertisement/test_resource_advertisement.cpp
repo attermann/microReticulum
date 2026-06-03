@@ -1,8 +1,8 @@
 #include <unity.h>
 
-#include "Resource.h"
-#include "Bytes.h"
-#include "Type.h"
+#include "microReticulum/Resource.h"
+#include "microReticulum/Bytes.h"
+#include "microReticulum/Type.h"
 
 #include <stdio.h>
 #include <string.h>

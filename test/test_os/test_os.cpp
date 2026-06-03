@@ -1,7 +1,7 @@
 #include <unity.h>
 
-#include "Log.h"
-#include "Utilities/OS.h"
+#include "microReticulum/Log.h"
+#include "microReticulum/Utilities/OS.h"
 
 using namespace RNS::Utilities;
 

@@ -2,16 +2,16 @@
 
 #include <microStore/Adapters/UniversalFileSystem.h>
 
-#include "Provisioning/Provisioning.h"
-#include "Provisioning/Codec.h"
-#include "Provisioning/Ids.h"
+#include "microReticulum/Provisioning/Provisioning.h"
+#include "microReticulum/Provisioning/Codec.h"
+#include "microReticulum/Provisioning/Ids.h"
 
-#include "Reticulum.h"
-#include "Transport.h"
-#include "Identity.h"
-#include "Utilities/OS.h"
-#include "Bytes.h"
-#include "Log.h"
+#include "microReticulum/Reticulum.h"
+#include "microReticulum/Transport.h"
+#include "microReticulum/Identity.h"
+#include "microReticulum/Utilities/OS.h"
+#include "microReticulum/Bytes.h"
+#include "microReticulum/Log.h"
 
 #include <set>
 #include <vector>

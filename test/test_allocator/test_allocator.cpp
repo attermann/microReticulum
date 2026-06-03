@@ -1,8 +1,8 @@
 #include <unity.h>
 
-#include <Bytes.h>
-#include <Utilities/OS.h>
-#include <Utilities/Memory.h>
+#include "microReticulum/Bytes.h"
+#include "microReticulum/Utilities/OS.h"
+#include "microReticulum/Utilities/Memory.h"
 
 #include <map>
 #include <string>

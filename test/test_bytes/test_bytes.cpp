@@ -1,8 +1,8 @@
 #include <unity.h>
 
-#include <Utilities/OS.h>
-#include "Bytes.h"
-#include "Log.h"
+#include "microReticulum/Utilities/OS.h"
+#include "microReticulum/Bytes.h"
+#include "microReticulum/Log.h"
 
 void testBytesDefault(const RNS::Bytes& bytes = {}) {
 	TEST_ASSERT_FALSE(bytes);

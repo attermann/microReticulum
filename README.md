@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> ⚠️  **The directory structure in this library has changed!**
+> **The directory structure in this library has changed!**
 > Please note that as of version 0.4.0 the directory structure in this library has changed.
 > A master header file **microReticulum.h** has been added and all other files moved to the "microReticulum" subdirectory to avoid name collision with other libraries.
 > Most projects should only require including the master header file like `<microReticulum.h>`, but if individual header access is required for any reason then include like `<microReticulum/Bytes.h>`.

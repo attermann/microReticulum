@@ -1,7 +1,7 @@
 #include <unity.h>
 
-#include "Reticulum.h"
-#include "Bytes.h"
+#include "microReticulum/Reticulum.h"
+#include "microReticulum/Bytes.h"
 
 void test_reticulum_reference() {
 	HEAD("Running testReference...", RNS::LOG_TRACE);

@@ -2,12 +2,12 @@
 
 #include <microStore/Adapters/UniversalFileSystem.h>
 
-#include <Interface.h>
-#include <Transport.h>
-#include <Log.h>
-#include <Bytes.h>
-#include <Utilities/OS.h>
-#include <Utilities/Persistence.h>
+#include "microReticulum/Interface.h"
+#include "microReticulum/Transport.h"
+#include "microReticulum/Log.h"
+#include "microReticulum/Bytes.h"
+#include "microReticulum/Utilities/OS.h"
+#include "microReticulum/Utilities/Persistence.h"
 
 #include <map>
 #include <vector>

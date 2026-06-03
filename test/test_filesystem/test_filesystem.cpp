@@ -2,9 +2,10 @@
 
 #include <microStore/Adapters/UniversalFileSystem.h>
 
-#include <Utilities/OS.h>
-#include <Utilities/Crc.h>
-#include <Log.h>
+#include "microReticulum/Utilities/OS.h"
+#include "microReticulum/Utilities/Crc.h"
+#include "microReticulum/Log.h"
+
 #include <fstream>
 #include <ostream>
 #include <iostream>
