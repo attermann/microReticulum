@@ -14,8 +14,8 @@
 
 #include "DestinationEntry.h"
 
-#include "Transport.h"
-#include "Type.h"
+#include "../Transport.h"
+#include "../Type.h"
 
 using namespace RNS;
 using namespace RNS::Persistence;

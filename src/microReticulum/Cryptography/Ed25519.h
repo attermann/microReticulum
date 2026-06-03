@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "Bytes.h"
+#include "../Bytes.h"
 
 #include <Ed25519.h>
 

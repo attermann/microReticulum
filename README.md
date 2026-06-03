@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> ⚠️  **The directory structure in this library has changed!**
+> Please note that as of version 0.4.0 the directory structure in this library has changed.
+> A master header file **microReticulum.h** has been added and all other files moved to the "microReticulum" subdirectory to avoid name collision with other libraries.
+> Most projects should only require including the master header file like `<microReticulum.h>`, but if individual header access is required for any reason then include like `<microReticulum/Bytes.h>`.
+
 # microReticulum
 
 Port of Reticulum Network Stack to C++ specifically but not exclusively targeting 32-bit and better MCUs.
@@ -68,10 +74,10 @@ Appropriate settings should be selected to match the storage and memory resource
 
 ## Provisioning
 
-microReticulum ships an optional schema-driven configuration subsystem under `src/Provisioning/`. It maintains a registry of namespaces and fields, holds a "working" config in RAM plus a "draft" overlay for pending edits, and (when filesystem support is enabled) persists committed values atomically to flash. Apps frame and transport MsgPack request/response payloads using their preferred link (KISS, BLE GATT, Web Serial, etc.); the library handles everything from the engine inward.
+microReticulum ships an optional schema-driven configuration subsystem under `src/microReticulum/Provisioning/`. It maintains a registry of namespaces and fields, holds a "working" config in RAM plus a "draft" overlay for pending edits, and (when filesystem support is enabled) persists committed values atomically to flash. Apps frame and transport MsgPack request/response payloads using their preferred link (KISS, BLE GATT, Web Serial, etc.); the library handles everything from the engine inward.
 
 Two build flags gate the subsystem:
-- `-DRNS_USE_PROVISIONING` &mdash; `Reticulum::start()` auto-calls `Manager::begin()`. Without the flag, nothing in `src/Provisioning/` is linked into the final binary; apps configure microReticulum entirely through the existing fluent setters as before.
+- `-DRNS_USE_PROVISIONING` &mdash; `Reticulum::start()` auto-calls `Manager::begin()`. Without the flag, nothing in `src/microReticulum/Provisioning/` is linked into the final binary; apps configure microReticulum entirely through the existing fluent setters as before.
 - `-DRNS_USE_FS` &mdash; independently controls disk persistence inside the subsystem. Without it the working/draft model still works in RAM, but commits are lost on reboot.
 
 ### Registering a namespace
@@ -109,7 +115,7 @@ RNS::Bytes response = RNS::Provisioning::Manager::instance().handle_message(requ
 send_to_transport(response);
 ```
 
-Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, and `FACTORY_RESET`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/Provisioning/Ops.h` for op-id and key constants.
+Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, and `FACTORY_RESET`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/microReticulum/Provisioning/Ops.h` for op-id and key constants.
 
 ### Manual operations (no wire)
 

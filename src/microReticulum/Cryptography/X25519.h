@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "Bytes.h"
-#include "Log.h"
+#include "../Bytes.h"
+#include "../Log.h"
 
 #include <Curve25519.h>
 

@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "Interface.h"
-#include "Packet.h"
-#include "Bytes.h"
+#include "../Interface.h"
+#include "../Packet.h"
+#include "../Bytes.h"
 
 // CBA microStore
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)

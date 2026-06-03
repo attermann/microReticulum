@@ -16,10 +16,10 @@
 
 // CBA NOTE If headers for classes referenced in this file are not included here,
 //  then they MUST be included BEFORE this header is included.
-#include "Transport.h"
-#include "Type.h"
-#include "Utilities/Crc.h"
-#include "Persistence/DestinationEntry.h"
+#include "../Transport.h"
+#include "../Type.h"
+#include "Crc.h"
+#include "../Persistence/DestinationEntry.h"
 
 #include <microStore/File.h>
 #include <ArduinoJson.h>
