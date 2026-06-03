@@ -37,17 +37,7 @@
 #include <UDPInterface.h>
 #include <MsgPack.h>
 
-#include <Reticulum.h>
-#include <Interface.h>
-#include <Link.h>
-#include <Identity.h>
-#include <Destination.h>
-#include <Packet.h>
-#include <Transport.h>
-#include <Log.h>
-#include <Bytes.h>
-#include <Type.h>
-#include <Utilities/OS.h>
+#include <microReticulum.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>

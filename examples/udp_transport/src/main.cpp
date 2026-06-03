@@ -4,15 +4,7 @@
 #include <microStore/Adapters/UniversalFileSystem.h>
 #include <UDPInterface.h>
 
-#include <Reticulum.h>
-#include <Identity.h>
-#include <Packet.h>
-#include <Transport.h>
-#include <Interface.h>
-#include <Log.h>
-#include <Bytes.h>
-#include <Type.h>
-#include <Utilities/OS.h>
+#include <microReticulum.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>

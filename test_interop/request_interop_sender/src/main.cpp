@@ -14,16 +14,7 @@
 #include <UDPInterface.h>
 #include <MsgPack.h>
 
-#include <Reticulum.h>
-#include <Identity.h>
-#include <Destination.h>
-#include <Link.h>
-#include <Transport.h>
-#include <Interface.h>
-#include <Log.h>
-#include <Bytes.h>
-#include <Type.h>
-#include <Utilities/OS.h>
+#include <microReticulum.h>
 
 #include <stdio.h>
 

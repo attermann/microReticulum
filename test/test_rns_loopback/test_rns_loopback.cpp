@@ -2,9 +2,7 @@
 
 #include <microStore/Adapters/UniversalFileSystem.h>
 
-#include <Reticulum.h>
-#include <Transport.h>
-#include <Log.h>
+#include <microReticulum.h>
 
 const char destination_table_path[] = "./destination_table";
 

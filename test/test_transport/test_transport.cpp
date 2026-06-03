@@ -2,14 +2,7 @@
 
 #include <microStore/Adapters/UniversalFileSystem.h>
 
-#include <Reticulum.h>
-#include <Transport.h>
-#include <Identity.h>
-#include <Destination.h>
-#include <Packet.h>
-#include <Log.h>
-#include <Bytes.h>
-#include <Utilities/OS.h>
+#include <microReticulum.h>
 
 // ============================================================================
 // Test infrastructure - loopback interfaces
