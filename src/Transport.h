@@ -335,6 +335,7 @@ namespace RNS {
 		static void write_tunnel_table();
 		static void persist_data();
 		static void clean_caches();
+		static void clear_storage();
 		static void dump_stats();
 		static void exit_handler();
 

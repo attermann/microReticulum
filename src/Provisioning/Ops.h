@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "Types.h"
+
 #include <stdint.h>
 
 namespace RNS { namespace Provisioning {
@@ -21,7 +23,7 @@ namespace RNS { namespace Provisioning {
 	// Operation IDs. Identical ids are used in both requests and responses
 	// (response of op X always echoes X unless an error occurred, in which
 	// case the response op is Error).
-	enum class Op : uint8_t {
+	enum class Op : opid_t {
 		GetSchema       = 1,
 		GetInfo         = 2,
 		GetCapabilities = 3,
@@ -35,7 +37,7 @@ namespace RNS { namespace Provisioning {
 	};
 
 	// Error codes returned in Error responses.
-	enum class ErrorCode : uint16_t {
+	enum class ErrorCode : ferror_t {
 		Ok                  = 0,
 		MalformedRequest    = 1,
 		UnknownOp           = 2,
@@ -85,6 +87,7 @@ namespace RNS { namespace Provisioning {
 		constexpr uint16_t NsId             = 1;
 		constexpr uint16_t NsName           = 2;
 		constexpr uint16_t NsFields         = 3;
+		constexpr uint16_t NsParent         = 4;	// optional parent ns id (0 = root)
 		constexpr uint16_t FieldId          = 1;
 		constexpr uint16_t FieldName        = 2;
 		constexpr uint16_t FieldType        = 3;

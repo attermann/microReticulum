@@ -27,14 +27,14 @@ namespace RNS { namespace Provisioning {
 				return true;
 			case Type::Int: {
 				if (constraint.has_range) {
-					int64_t iv = v.as_int();
+					fint_t iv = v.as_int();
 					if (iv < constraint.imin || iv > constraint.imax) return false;
 				}
 				return true;
 			}
 			case Type::Float: {
 				if (constraint.has_range) {
-					double fv = v.as_float();
+					ffloat_t fv = v.as_float();
 					if (fv < constraint.fmin || fv > constraint.fmax) return false;
 				}
 				return true;
@@ -46,7 +46,7 @@ namespace RNS { namespace Provisioning {
 				if (constraint.max_len > 0 && v.as_bytes().size() > constraint.max_len) return false;
 				return true;
 			case Type::Enum: {
-				int64_t iv = v.as_int();
+				fenum_t iv = v.as_int();
 				if (!constraint.enum_values.empty()) {
 					return std::find(constraint.enum_values.begin(), constraint.enum_values.end(), iv)
 						!= constraint.enum_values.end();
@@ -57,12 +57,15 @@ namespace RNS { namespace Provisioning {
 				const auto& list = v.as_bytes_list();
 				if (constraint.max_count > 0 && list.size() > constraint.max_count) return false;
 				if (constraint.element_size > 0) {
-					for (const Bytes& e : list) {
+					for (const fbytes_t& e : list) {
 						if (e.size() != constraint.element_size) return false;
 					}
 				}
 				return true;
 			}
+			case Type::Void:
+				// Argument-less command marker — nothing to validate.
+				return v.type() == Type::Void;
 		}
 		return false;
 	}

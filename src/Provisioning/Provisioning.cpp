@@ -38,8 +38,18 @@ namespace RNS { namespace Provisioning {
 		// Register library-side namespaces before mounting storage so that
 		// load_all() has a Registry to overlay onto.
 		register_builtin_namespaces(*this);
+		// If app code or a builtin forgot to call .end() somewhere, the
+		// scope stack is left non-empty. That would silently nest the next
+		// registration under the wrong parent. Warn and clear so subsequent
+		// builds aren't poisoned.
+		if (!build_scope_empty()) {
+			WARNINGF("Provisioning::begin: namespace scope stack non-empty (%zu) "
+				"after registration — missing .end() call. Clearing.",
+				_build_scope.size());
+			_build_scope.clear();
+		}
 #ifdef RNS_USE_FS
-		_storage.reset(new Storage(storage_root ? storage_root : "/config"));
+		_storage.reset(new Storage(storage_root ? storage_root : "/config", &_registry));
 		_storage->load_all(_registry);
 		// Push the just-loaded working values into the runtime statics via
 		// each field's setter. Without this step, persistence is decorative —
@@ -64,13 +74,20 @@ namespace RNS { namespace Provisioning {
 				if (!f.setter) continue;
 				Value v = ns_ptr->working(f.id);
 				if (v.is_none()) continue;
-				// Skip values that match the field's declared default —
-				// those came from register_builtin_namespaces seeding, not
-				// from disk. The runtime static is already at that default,
-				// so firing the setter would be a redundant no-op (and
-				// would also confuse tests / metrics that count setter
-				// invocations). Only true disk overrides should propagate.
-				if (v == f.default_value) continue;
+				// Skip if the runtime already has this value — avoids
+				// redundant setter invocations at boot. For fields with a
+				// getter we can ask the live runtime directly, which is
+				// accurate even when the loaded value happens to equal the
+				// declared default (the previous "v == default_value"
+				// heuristic silently dropped legitimate disk overrides in
+				// that case — see the lora_interface_mode bug where saving
+				// MODE_GATEWAY, the declared default, never re-applied at
+				// boot because the runtime started at MODE_NONE). For
+				// fields without a getter we fall back to the declared
+				// default, which is the safe assumption for built-ins whose
+				// statics are initialised to the schema's declared default.
+				const Value runtime_v = f.getter ? f.getter() : f.default_value;
+				if (v == runtime_v) continue;
 				try {
 					f.setter(v);
 				}
@@ -86,6 +103,7 @@ namespace RNS { namespace Provisioning {
 	void Manager::end() {
 		_storage.reset();
 		_registry.clear();
+		_build_scope.clear();
 		_needs_reboot = false;
 		_started = false;
 		// Drop the reboot-requested callback. If the caller captured stack
@@ -95,24 +113,29 @@ namespace RNS { namespace Provisioning {
 		_on_reboot = nullptr;
 	}
 
-	NamespaceBuilder Manager::namespace_(const char* name, uint16_t id) {
-		Namespace* ns = _registry.add_namespace(id, name);
+	NamespaceBuilder Manager::namespace_(const char* name, nid_t id) {
+		// Parent comes from the current top of the registration scope stack
+		// (set up by previous .namespace_(...) calls in the same chain).
+		// If the scope is empty, this is a root namespace.
+		nid_t parent_id = build_scope_empty() ? 0 : current_build_scope()->id();
+		Namespace* ns = _registry.add_namespace(id, name, parent_id);
 		if (!ns) {
-			// Returning a builder over an existing namespace lets callers
-			// recover after a duplicate registration attempt; we still warn.
+			// Recovery: existing namespace by id, or by name at root level.
+			// We still push it onto the scope so nested chaining works.
 			ns = _registry.find(id);
 			if (!ns && name) ns = _registry.find(name);
-			WARNINGF("Provisioning::namespace_: namespace id=%u name=\"%s\" already exists; appending to it",
+			WARNINGF("Provisioning::namespace_: namespace id=%u name=\"%s\" already exists or invalid; appending to it",
 				id, name ? name : "");
 		}
-		return NamespaceBuilder(ns);
+		if (ns) push_build_scope(ns);
+		return NamespaceBuilder(this);
 	}
 
 	// ---------------------------------------------------------------------
 	// Direct accessors
 	// ---------------------------------------------------------------------
 
-	Value Manager::field(uint16_t ns_id, uint16_t field_id, Source src) const {
+	Value Manager::field(nid_t ns_id, fid_t field_id, Source src) const {
 		const Namespace* ns = _registry.find(ns_id);
 		if (!ns) return {};
 		switch (src) {
@@ -136,7 +159,7 @@ namespace RNS { namespace Provisioning {
 		return {};
 	}
 
-	bool Manager::field(uint16_t ns_id, uint16_t field_id, const Value& v) {
+	bool Manager::field(nid_t ns_id, fid_t field_id, const Value& v) {
 		Namespace* ns = _registry.find(ns_id);
 		if (!ns) return false;
 		return ns->set_draft(field_id, v);
@@ -158,15 +181,15 @@ namespace RNS { namespace Provisioning {
 		return ns->set_draft(f->id, v);
 	}
 
-	bool Manager::commit(uint16_t ns_id) {
+	bool Manager::commit(nid_t ns_id) {
 		auto do_one = [&](Namespace& ns) -> bool {
 			bool any_reboot = false;
 			// Collect ids first; commit_one() mutates _draft.
-			std::vector<uint16_t> ids;
+			std::vector<fid_t> ids;
 			for (const Field& f : ns.fields()) {
 				if (ns.has_draft(f.id)) ids.push_back(f.id);
 			}
-			for (uint16_t id : ids) {
+			for (fid_t id : ids) {
 				auto outcome = ns.commit_one(id);
 				if (outcome == Namespace::CommitOutcome::AppliedReboot) any_reboot = true;
 			}
@@ -185,7 +208,7 @@ namespace RNS { namespace Provisioning {
 		return do_one(*ns);
 	}
 
-	bool Manager::discard(uint16_t ns_id) {
+	bool Manager::discard(nid_t ns_id) {
 		if (ns_id == 0) {
 			for (const auto& ns_ptr : _registry.namespaces()) ns_ptr->clear_draft();
 			return true;
@@ -239,6 +262,12 @@ namespace RNS { namespace Provisioning {
 		return ok;
 	}
 
+	bool Manager::clear_storage() {
+		TRACE("Provisioning::clear_storage()");
+		if (!_storage) return true;
+		return _storage->factory_reset(_registry);
+	}
+
 	bool Manager::draft_has_reboot() const {
 		for (const auto& ns_ptr : _registry.namespaces()) {
 			if (ns_ptr->draft_has_reboot()) return true;
@@ -265,21 +294,21 @@ namespace RNS { namespace Provisioning {
 	//   [ op_id (uint), seq (uint), payload ]
 	// where payload is op-specific (often a map; nil if not used).
 
-	static Bytes pack_response(uint8_t op_id, uint64_t seq, const std::function<void(MsgPack::Packer&)>& pack_payload) {
+	static Bytes pack_response(opid_t op_id, seq_t seq, const std::function<void(MsgPack::Packer&)>& pack_payload) {
 		MsgPack::Packer packer;
 		packer.serialize(MsgPack::arr_size_t(3));
-		packer.serialize((uint8_t)op_id);
-		packer.serialize((uint64_t)seq);
+		packer.serialize((opid_t)op_id);
+		packer.serialize((seq_t)seq);
 		if (pack_payload) pack_payload(packer);
 		else { MsgPack::object::nil_t n; packer.serialize(n); }
 		return Bytes(packer.data(), packer.size());
 	}
 
-	Bytes Manager::encode_error(uint8_t op_id, uint64_t seq, ErrorCode code, const char* msg) {
-		return pack_response((uint8_t)Op::Error, seq, [&](MsgPack::Packer& p) {
+	Bytes Manager::encode_error(opid_t op_id, seq_t seq, ErrorCode code, const char* msg) {
+		return pack_response((opid_t)Op::Error, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(msg ? 2 : 1));
 			p.serialize((uint16_t)Key::ErrorCodeKey);
-			p.serialize((uint16_t)code);
+			p.serialize((ferror_t)code);
 			if (msg) {
 				p.serialize((uint16_t)Key::ErrorMessage);
 				p.serialize(msg);
@@ -287,16 +316,16 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::encode_ack(uint8_t op_id, uint64_t seq) {
+	Bytes Manager::encode_ack(opid_t op_id, seq_t seq) {
 		return pack_response(op_id, seq, nullptr);
 	}
 
 	// Read a uint key into 'key'. Returns false if cursor isn't on a uint.
-	static bool read_uint_key(MsgPack::Unpacker& u, uint16_t& key) {
+	static bool read_uint_key(MsgPack::Unpacker& u, nid_t& key) {
 		if (!(u.isUInt() || u.isInt())) return false;
-		int64_t v = 0;
+		fint_t v = 0;
 		u.deserialize(v);
-		key = (uint16_t)v;
+		key = (nid_t)v;
 		return true;
 	}
 
@@ -305,7 +334,7 @@ namespace RNS { namespace Provisioning {
 	static void skip_value(MsgPack::Unpacker& u) {
 		if (u.isNil())                            { MsgPack::object::nil_t n; u.deserialize(n); }
 		else if (u.isBool())                      { bool b; u.deserialize(b); }
-		else if (u.isUInt() || u.isInt())         { int64_t i; u.deserialize(i); }
+		else if (u.isUInt() || u.isInt())         { fint_t i; u.deserialize(i); }
 		else if (u.isFloat32() || u.isFloat64())  { double d; u.deserialize(d); }
 		else if (u.isStr())                       { MsgPack::str_t s; u.deserialize(s); }
 		else if (u.isBin())                       { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
@@ -319,21 +348,21 @@ namespace RNS { namespace Provisioning {
 		}
 	}
 
-	Bytes Manager::op_get_info(uint64_t seq) {
-		return pack_response((uint8_t)Op::GetInfo, seq, [&](MsgPack::Packer& p) {
+	Bytes Manager::op_get_info(seq_t seq) {
+		return pack_response((opid_t)Op::GetInfo, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(3));
 			p.serialize((uint16_t)Key::FirmwareVersion); p.serialize("microReticulum");
-			p.serialize((uint16_t)Key::SchemaVersion);   p.serialize((uint16_t)Manager::SCHEMA_VERSION);
+			p.serialize((uint16_t)Key::SchemaVersion);   p.serialize((nid_t)Manager::SCHEMA_VERSION);
 			p.serialize((uint16_t)Key::NeedsRebootInfo); p.serialize((bool)_needs_reboot);
 		});
 	}
 
-	Bytes Manager::op_get_capabilities(uint64_t seq) {
-		return pack_response((uint8_t)Op::GetCapabilities, seq, [&](MsgPack::Packer& p) {
+	Bytes Manager::op_get_capabilities(seq_t seq) {
+		return pack_response((opid_t)Op::GetCapabilities, seq, [&](MsgPack::Packer& p) {
 			const auto& nss = _registry.namespaces();
 			p.serialize(MsgPack::arr_size_t(nss.size()));
 			for (const auto& ns_ptr : nss) {
-				p.serialize((uint16_t)ns_ptr->id());
+				p.serialize((nid_t)ns_ptr->id());
 			}
 		});
 	}
@@ -343,7 +372,7 @@ namespace RNS { namespace Provisioning {
 			case Type::None:   { MsgPack::object::nil_t n; p.serialize(n); return; }
 			case Type::Bool:    p.serialize((bool)f.default_value.as_bool()); return;
 			case Type::Int:
-			case Type::Enum:    p.serialize((int64_t)f.default_value.as_int()); return;
+			case Type::Enum:    p.serialize((fint_t)f.default_value.as_int()); return;
 			case Type::Float:   p.serialize((double)f.default_value.as_float()); return;
 			case Type::String:  p.serialize(f.default_value.as_string().c_str()); return;
 			case Type::Bytes: {
@@ -363,6 +392,7 @@ namespace RNS { namespace Provisioning {
 				}
 				return;
 			}
+			case Type::Void: { MsgPack::object::nil_t n; p.serialize(n); return; }
 		}
 	}
 
@@ -383,28 +413,32 @@ namespace RNS { namespace Provisioning {
 		return n;
 	}
 
-	Bytes Manager::op_get_schema(uint64_t seq) {
-		return pack_response((uint8_t)Op::GetSchema, seq, [&](MsgPack::Packer& p) {
+	Bytes Manager::op_get_schema(seq_t seq) {
+		return pack_response((opid_t)Op::GetSchema, seq, [&](MsgPack::Packer& p) {
 			const auto& nss = _registry.namespaces();
 			p.serialize(MsgPack::arr_size_t(nss.size()));
 			for (const auto& ns_ptr : nss) {
 				const Namespace& ns = *ns_ptr;
-				// Each namespace is [id, name, [field-maps]].
-				p.serialize(MsgPack::arr_size_t(3));
-				p.serialize((uint16_t)ns.id());
+				// Each namespace is [id, name, parent_id_or_zero, [field-maps]].
+				// parent_id of 0 means root (no parent). Schema v2 layout —
+				// v1 clients reading the first three elements still parse
+				// the rest of the response correctly.
+				p.serialize(MsgPack::arr_size_t(4));
+				p.serialize((nid_t)ns.id());
 				p.serialize(ns.name().c_str());
+				p.serialize((nid_t)ns.parent_id());
 				const auto& fields = ns.fields();
 				p.serialize(MsgPack::arr_size_t(fields.size()));
 				for (const Field& f : fields) {
 					p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
-					p.serialize((uint16_t)Key::FieldId);    p.serialize((uint16_t)f.id);
+					p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
 					p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
 					p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
-					p.serialize((uint16_t)Key::FieldFlags); p.serialize((uint8_t)f.flags);
+					p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
 					p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
 					if (f.type == Type::Int && f.constraint.has_range) {
-						p.serialize((uint16_t)Key::FieldMinI); p.serialize((int64_t)f.constraint.imin);
-						p.serialize((uint16_t)Key::FieldMaxI); p.serialize((int64_t)f.constraint.imax);
+						p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
+						p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
 					}
 					if (f.type == Type::Float && f.constraint.has_range) {
 						p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
@@ -417,7 +451,7 @@ namespace RNS { namespace Provisioning {
 						if (!f.constraint.enum_values.empty()) {
 							p.serialize((uint16_t)Key::FieldEnumValues);
 							p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
-							for (int64_t v : f.constraint.enum_values) p.serialize(v);
+							for (fenum_t v : f.constraint.enum_values) p.serialize(v);
 						}
 						if (!f.constraint.enum_labels.empty()) {
 							p.serialize((uint16_t)Key::FieldEnumLabels);
@@ -445,24 +479,24 @@ namespace RNS { namespace Provisioning {
 		Codec::pack_value(p, v);
 	}
 
-	Bytes Manager::op_get_state(uint64_t seq, void* unpacker_v) {
+	Bytes Manager::op_get_state(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
-		std::unordered_set<uint16_t> ns_filter;
+		std::unordered_set<nid_t> ns_filter;
 		bool has_filter = false;
 		bool pending = false;
 		// Optional payload map: {1: [ns_filter], 2: pending}
 		if (up && up->isMap()) {
 			const size_t n = up->unpackMapSize();
 			for (size_t i = 0; i < n; ++i) {
-				uint16_t key;
+				nid_t key;
 				if (!read_uint_key(*up, key)) { skip_value(*up); continue; }
 				if (key == Key::NamespaceFilter) {
 					if (up->isArray()) {
 						const size_t m = up->unpackArraySize();
 						for (size_t j = 0; j < m; ++j) {
 							if (up->isUInt() || up->isInt()) {
-								int64_t v; up->deserialize(v);
-								ns_filter.insert((uint16_t)v);
+								fint_t v; up->deserialize(v);
+								ns_filter.insert((nid_t)v);
 							}
 							else skip_value(*up);
 						}
@@ -479,7 +513,7 @@ namespace RNS { namespace Provisioning {
 		}
 		else if (up) skip_value(*up);
 
-		return pack_response((uint8_t)Op::GetState, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::GetState, seq, [&](MsgPack::Packer& p) {
 			std::vector<const Namespace*> ns_list;
 			for (const auto& ns_ptr : _registry.namespaces()) {
 				if (has_filter && ns_filter.count(ns_ptr->id()) == 0) continue;
@@ -487,7 +521,7 @@ namespace RNS { namespace Provisioning {
 			}
 			p.serialize(MsgPack::map_size_t(ns_list.size()));
 			for (const Namespace* ns : ns_list) {
-				p.serialize((uint16_t)ns->id());
+				p.serialize((nid_t)ns->id());
 				// Count entries first (skip SECRET fields).
 				size_t entries = 0;
 				for (const Field& f : ns->fields()) {
@@ -509,67 +543,67 @@ namespace RNS { namespace Provisioning {
 						if (ns->draft(f.id, d)) v = d;
 					}
 					if (v.is_none()) continue;
-					p.serialize((uint16_t)f.id);
+					p.serialize((fid_t)f.id);
 					pack_state_value(p, f.type, v);
 				}
 			}
 		});
 	}
 
-	Bytes Manager::op_set_state(uint64_t seq, void* unpacker_v) {
+	Bytes Manager::op_set_state(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		if (!up || !up->isMap()) {
-			return encode_error((uint8_t)Op::SetState, seq, ErrorCode::MalformedRequest, "expected map payload");
+			return encode_error((opid_t)Op::SetState, seq, ErrorCode::MalformedRequest, "expected map payload");
 		}
 		const size_t n_ns = up->unpackMapSize();
 		size_t applied = 0;
-		struct Err { uint16_t ns_id; uint16_t field_id; uint16_t code; };
+		struct Err { nid_t ns_id; fid_t field_id; ferror_t code; };
 		std::vector<Err> errors;
 		for (size_t i = 0; i < n_ns; ++i) {
 			if (!(up->isUInt() || up->isInt())) { skip_value(*up); skip_value(*up); continue; }
-			int64_t k1 = 0; up->deserialize(k1);
-			const uint16_t ns_id = (uint16_t)k1;
+			fint_t k1 = 0; up->deserialize(k1);
+			const nid_t ns_id = (nid_t)k1;
 			Namespace* ns = _registry.find(ns_id);
 			if (!up->isMap()) {
 				// Inner must be a map of {field_id: value}
 				skip_value(*up);
-				if (!ns) errors.push_back({ns_id, 0, (uint16_t)ErrorCode::UnknownNamespace});
-				else errors.push_back({ns_id, 0, (uint16_t)ErrorCode::MalformedRequest});
+				if (!ns) errors.push_back({ns_id, 0, (ferror_t)ErrorCode::UnknownNamespace});
+				else errors.push_back({ns_id, 0, (ferror_t)ErrorCode::MalformedRequest});
 				continue;
 			}
 			const size_t n_fields = up->unpackMapSize();
 			for (size_t j = 0; j < n_fields; ++j) {
 				if (!(up->isUInt() || up->isInt())) { skip_value(*up); skip_value(*up); continue; }
-				int64_t k2 = 0; up->deserialize(k2);
-				const uint16_t fid = (uint16_t)k2;
+				fint_t k2 = 0; up->deserialize(k2);
+				const fid_t fid = (fid_t)k2;
 				if (!ns) {
 					skip_value(*up);
-					errors.push_back({ns_id, fid, (uint16_t)ErrorCode::UnknownNamespace});
+					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::UnknownNamespace});
 					continue;
 				}
 				const Field* f = ns->find_field(fid);
 				if (!f) {
 					skip_value(*up);
-					errors.push_back({ns_id, fid, (uint16_t)ErrorCode::UnknownField});
+					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::UnknownField});
 					continue;
 				}
 				Value v;
 				if (!Codec::unpack_value(*up, f->type, v)) {
-					errors.push_back({ns_id, fid, (uint16_t)ErrorCode::InvalidValue});
+					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::InvalidValue});
 					continue;
 				}
 				if (f->has_flag(FF_READ_ONLY)) {
-					errors.push_back({ns_id, fid, (uint16_t)ErrorCode::ReadOnly});
+					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::ReadOnly});
 					continue;
 				}
 				if (!ns->set_draft(fid, v)) {
-					errors.push_back({ns_id, fid, (uint16_t)ErrorCode::ConstraintViolation});
+					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::ConstraintViolation});
 					continue;
 				}
 				++applied;
 			}
 		}
-		return pack_response((uint8_t)Op::SetState, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::SetState, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(errors.empty() ? 2 : 3));
 			p.serialize((uint16_t)Key::Applied);        p.serialize((uint64_t)applied);
 			p.serialize((uint16_t)Key::DraftHasReboot); p.serialize((bool)draft_has_reboot());
@@ -578,25 +612,25 @@ namespace RNS { namespace Provisioning {
 				p.serialize(MsgPack::arr_size_t(errors.size()));
 				for (const Err& e : errors) {
 					p.serialize(MsgPack::arr_size_t(3));
-					p.serialize((uint16_t)e.ns_id);
-					p.serialize((uint16_t)e.field_id);
-					p.serialize((uint16_t)e.code);
+					p.serialize((nid_t)e.ns_id);
+					p.serialize((fid_t)e.field_id);
+					p.serialize((ferror_t)e.code);
 				}
 			}
 		});
 	}
 
-	Bytes Manager::op_commit(uint64_t seq, void* unpacker_v) {
+	Bytes Manager::op_commit(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
-		std::vector<uint16_t> filter;
+		std::vector<nid_t> filter;
 		bool has_filter = false;
 		if (up && up->isArray()) {
 			const size_t n = up->unpackArraySize();
 			has_filter = true;
 			for (size_t i = 0; i < n; ++i) {
 				if (up->isUInt() || up->isInt()) {
-					int64_t v; up->deserialize(v);
-					filter.push_back((uint16_t)v);
+					fint_t v; up->deserialize(v);
+					filter.push_back((nid_t)v);
 				}
 				else skip_value(*up);
 			}
@@ -607,9 +641,9 @@ namespace RNS { namespace Provisioning {
 		bool any_reboot = false;
 
 		auto do_one = [&](Namespace& ns) {
-			std::vector<uint16_t> ids;
+			std::vector<fid_t> ids;
 			for (const Field& f : ns.fields()) if (ns.has_draft(f.id)) ids.push_back(f.id);
-			for (uint16_t id : ids) {
+			for (fid_t id : ids) {
 				auto outcome = ns.commit_one(id);
 				switch (outcome) {
 					case Namespace::CommitOutcome::AppliedLive:
@@ -623,7 +657,7 @@ namespace RNS { namespace Provisioning {
 		};
 
 		if (has_filter) {
-			for (uint16_t id : filter) {
+			for (nid_t id : filter) {
 				Namespace* ns = _registry.find(id);
 				if (ns) do_one(*ns);
 			}
@@ -633,24 +667,24 @@ namespace RNS { namespace Provisioning {
 		}
 		set_reboot_flag(any_reboot);
 
-		return pack_response((uint8_t)Op::Commit, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::Commit, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(2));
 			p.serialize((uint16_t)Key::Applied);     p.serialize((uint64_t)applied_total);
 			p.serialize((uint16_t)Key::NeedsReboot); p.serialize((bool)_needs_reboot);
 		});
 	}
 
-	Bytes Manager::op_discard(uint64_t seq, void* unpacker_v) {
+	Bytes Manager::op_discard(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
-		std::vector<uint16_t> filter;
+		std::vector<nid_t> filter;
 		bool has_filter = false;
 		if (up && up->isArray()) {
 			const size_t n = up->unpackArraySize();
 			has_filter = true;
 			for (size_t i = 0; i < n; ++i) {
 				if (up->isUInt() || up->isInt()) {
-					int64_t v; up->deserialize(v);
-					filter.push_back((uint16_t)v);
+					fint_t v; up->deserialize(v);
+					filter.push_back((nid_t)v);
 				}
 				else skip_value(*up);
 			}
@@ -663,7 +697,7 @@ namespace RNS { namespace Provisioning {
 			ns.clear_draft();
 		};
 		if (has_filter) {
-			for (uint16_t id : filter) {
+			for (nid_t id : filter) {
 				Namespace* ns = _registry.find(id);
 				if (ns) count_and_clear(*ns);
 			}
@@ -672,15 +706,15 @@ namespace RNS { namespace Provisioning {
 			for (const auto& ns_ptr : _registry.namespaces()) count_and_clear(*ns_ptr);
 		}
 
-		return pack_response((uint8_t)Op::Discard, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::Discard, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(1));
 			p.serialize((uint16_t)Key::Applied); p.serialize((uint64_t)cleared);
 		});
 	}
 
-	Bytes Manager::op_factory_reset(uint64_t seq) {
+	Bytes Manager::op_factory_reset(seq_t seq) {
 		factory_reset();
-		return pack_response((uint8_t)Op::FactoryReset, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::FactoryReset, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(1));
 			p.serialize((uint16_t)Key::NeedsReboot); p.serialize((bool)_needs_reboot);
 		});
@@ -705,16 +739,16 @@ namespace RNS { namespace Provisioning {
 		if (!(up.isUInt() || up.isInt())) {
 			return encode_error(0, 0, ErrorCode::MalformedRequest, "op id must be uint");
 		}
-		int64_t op_raw = 0;
+		fint_t op_raw = 0;
 		up.deserialize(op_raw);
-		const uint8_t op_id = (uint8_t)op_raw;
+		const opid_t op_id = (opid_t)op_raw;
 
 		// Element 2: seq (optional)
-		uint64_t seq = 0;
+		seq_t seq = 0;
 		if (arr_size >= 2) {
 			if (up.isUInt() || up.isInt()) {
-				int64_t s = 0; up.deserialize(s);
-				seq = (uint64_t)s;
+				fint_t s = 0; up.deserialize(s);
+				seq = (seq_t)s;
 			}
 			else skip_value(up);
 		}

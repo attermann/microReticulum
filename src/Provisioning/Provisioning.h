@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "Types.h"
 #include "Registry.h"
 #include "Storage.h"
 #include "Value.h"
@@ -42,62 +43,75 @@ namespace RNS { namespace Provisioning {
 	class NamespaceBuilder {
 
 	public:
-		NamespaceBuilder(Namespace* ns) : _ns(ns) {}
+		// Thin handle into the Manager's registration scope. Every fluent
+		// call operates on Manager::current_build_scope() — which is the
+		// most-recently-opened namespace, including nested ones.
+		explicit NamespaceBuilder(Manager* mgr) : _mgr(mgr) {}
+
+		// Open a child namespace under the current scope. Subsequent
+		// field_*() / metric_*() / command_*() calls on this builder
+		// will target the child until .end() is called.
+		NamespaceBuilder& namespace_(const char* name, nid_t id);
+
+		// Close the current scope, returning the builder so chaining can
+		// continue at the parent level (or beyond, if .end() pops the
+		// root scope).
+		NamespaceBuilder& end();
 
 		// Each field_* overload optionally accepts a typed getter that
 		// returns the field's native C++ type. When provided, Manager::field()
 		// queries it for the live runtime value instead of returning a
 		// cached working-map entry. Internally wrapped to produce a Value.
-		NamespaceBuilder& field_bool(const char* name, uint16_t id, uint8_t flags,
-			bool default_value,
+		NamespaceBuilder& field_bool(const char* name, fid_t id, fflags_t flags,
+			fbool_t default_value,
 			SetterFn setter = nullptr,
-			std::function<bool()> getter = nullptr);
+			std::function<fbool_t()> getter = nullptr);
 
-		NamespaceBuilder& field_int(const char* name, uint16_t id, uint8_t flags,
-			int64_t default_value, int64_t imin, int64_t imax,
+		NamespaceBuilder& field_int(const char* name, fid_t id, fflags_t flags,
+			fint_t default_value, fint_t imin, fint_t imax,
 			SetterFn setter = nullptr,
-			std::function<int64_t()> getter = nullptr);
+			std::function<fint_t()> getter = nullptr);
 
-		NamespaceBuilder& field_int(const char* name, uint16_t id, uint8_t flags,
-			int64_t default_value,
+		NamespaceBuilder& field_int(const char* name, fid_t id, fflags_t flags,
+			fint_t default_value,
 			SetterFn setter = nullptr,
-			std::function<int64_t()> getter = nullptr);
+			std::function<fint_t()> getter = nullptr);
 
-		NamespaceBuilder& field_float(const char* name, uint16_t id, uint8_t flags,
-			double default_value, double fmin, double fmax,
+		NamespaceBuilder& field_float(const char* name, fid_t id, fflags_t flags,
+			ffloat_t default_value, ffloat_t fmin, ffloat_t fmax,
 			SetterFn setter = nullptr,
-			std::function<double()> getter = nullptr);
+			std::function<ffloat_t()> getter = nullptr);
 
-		NamespaceBuilder& field_float(const char* name, uint16_t id, uint8_t flags,
-			double default_value,
+		NamespaceBuilder& field_float(const char* name, fid_t id, fflags_t flags,
+			ffloat_t default_value,
 			SetterFn setter = nullptr,
-			std::function<double()> getter = nullptr);
+			std::function<ffloat_t()> getter = nullptr);
 
-		NamespaceBuilder& field_string(const char* name, uint16_t id, uint8_t flags,
-			const char* default_value, size_t max_len = 0,
+		NamespaceBuilder& field_string(const char* name, fid_t id, fflags_t flags,
+			const char* default_value, flen_t max_len = 0,
 			SetterFn setter = nullptr,
-			std::function<std::string()> getter = nullptr);
+			std::function<fstring_t()> getter = nullptr);
 
-		NamespaceBuilder& field_bytes(const char* name, uint16_t id, uint8_t flags,
-			const Bytes& default_value, size_t max_len = 0,
+		NamespaceBuilder& field_bytes(const char* name, fid_t id, fflags_t flags,
+			const fbytes_t& default_value, flen_t max_len = 0,
 			SetterFn setter = nullptr,
-			std::function<Bytes()> getter = nullptr);
+			std::function<fbytes_t()> getter = nullptr);
 
 		// List of byte arrays — e.g. a set of allowed destination hashes.
 		// element_size = required size per entry (0 = variable),
 		// max_count    = maximum number of entries (0 = unlimited).
-		NamespaceBuilder& field_bytes_list(const char* name, uint16_t id, uint8_t flags,
-			std::vector<Bytes> default_value,
-			size_t element_size = 0, size_t max_count = 0,
+		NamespaceBuilder& field_bytes_list(const char* name, fid_t id, fflags_t flags,
+			fbytes_list_t default_value,
+			flen_t element_size = 0, flen_t max_count = 0,
 			SetterFn setter = nullptr,
-			std::function<std::vector<Bytes>()> getter = nullptr);
+			std::function<fbytes_list_t()> getter = nullptr);
 
-		NamespaceBuilder& field_enum(const char* name, uint16_t id, uint8_t flags,
-			int64_t default_value,
-			std::vector<int64_t> values,
-			std::vector<std::string> labels,
+		NamespaceBuilder& field_enum(const char* name, fid_t id, fflags_t flags,
+			fenum_t default_value,
+			std::vector<fenum_t> values,
+			std::vector<fstring_t> labels,
 			SetterFn setter = nullptr,
-			std::function<int64_t()> getter = nullptr);
+			std::function<fenum_t()> getter = nullptr);
 
 		// -- Sugar for the two read-only / write-only patterns --
 		//
@@ -112,33 +126,36 @@ namespace RNS { namespace Provisioning {
 		// None. Use these for "reboot now", "rotate identity", "ping",
 		// "factory reset", and similar imperative gestures.
 
-		NamespaceBuilder& metric_bool(const char* name, uint16_t id,
-			std::function<bool()> getter);
-		NamespaceBuilder& metric_int(const char* name, uint16_t id,
-			std::function<int64_t()> getter);
-		NamespaceBuilder& metric_float(const char* name, uint16_t id,
-			std::function<double()> getter);
-		NamespaceBuilder& metric_string(const char* name, uint16_t id,
-			std::function<std::string()> getter);
-		NamespaceBuilder& metric_bytes(const char* name, uint16_t id,
-			std::function<Bytes()> getter);
+		NamespaceBuilder& metric_bool(const char* name, fid_t id,
+			std::function<fbool_t()> getter);
+		NamespaceBuilder& metric_int(const char* name, fid_t id,
+			std::function<fint_t()> getter);
+		NamespaceBuilder& metric_float(const char* name, fid_t id,
+			std::function<ffloat_t()> getter);
+		NamespaceBuilder& metric_string(const char* name, fid_t id,
+			std::function<fstring_t()> getter);
+		NamespaceBuilder& metric_bytes(const char* name, fid_t id,
+			std::function<fbytes_t()> getter);
 
-		NamespaceBuilder& command_bool(const char* name, uint16_t id, SetterFn setter);
-		NamespaceBuilder& command_int(const char* name, uint16_t id,
-			int64_t imin, int64_t imax, SetterFn setter);
-		NamespaceBuilder& command_float(const char* name, uint16_t id,
-			double fmin, double fmax, SetterFn setter);
-		NamespaceBuilder& command_string(const char* name, uint16_t id,
-			size_t max_len, SetterFn setter);
-		NamespaceBuilder& command_bytes(const char* name, uint16_t id,
-			size_t max_len, SetterFn setter);
+		NamespaceBuilder& command_bool(const char* name, fid_t id, SetterFn setter);
+		NamespaceBuilder& command_int(const char* name, fid_t id,
+			fint_t imin, fint_t imax, SetterFn setter);
+		NamespaceBuilder& command_float(const char* name, fid_t id,
+			ffloat_t fmin, ffloat_t fmax, SetterFn setter);
+		NamespaceBuilder& command_string(const char* name, fid_t id,
+			flen_t max_len, SetterFn setter);
+		NamespaceBuilder& command_bytes(const char* name, fid_t id,
+			flen_t max_len, SetterFn setter);
 
-		// Optional terminator for readability; the chain is also fine
-		// without it (NamespaceBuilder is a value, not a guard).
-		void end() {}
+		// Argument-less command. SET_STATE fires the supplied no-arg setter
+		// on commit; the wire entry is a nil placeholder and any value is
+		// discarded. Useful for imperative gestures that take no parameter:
+		// "reboot now", "factory reset", "rotate identity", "ping".
+		NamespaceBuilder& command_void(const char* name, fid_t id,
+			std::function<bool()> setter);
 
 	private:
-		Namespace* _ns;
+		Manager* _mgr;
 	};
 
 	// Singleton orchestrating schema, storage, working/draft, wire codec.
@@ -162,11 +179,11 @@ namespace RNS { namespace Provisioning {
 		bool started() const { return _started; }
 
 		// Register an app-defined namespace.
-		NamespaceBuilder namespace_(const char* name, uint16_t id);
+		NamespaceBuilder namespace_(const char* name, nid_t id);
 
 		// Register a built-in namespace (same backing call as namespace_
 		// but named for symmetry with the RNS_PROVISION_NAMESPACE macros).
-		NamespaceBuilder register_namespace(const char* name, uint16_t id) {
+		NamespaceBuilder register_namespace(const char* name, nid_t id) {
 			return namespace_(name, id);
 		}
 
@@ -174,10 +191,10 @@ namespace RNS { namespace Provisioning {
 		Bytes handle_message(const Bytes& request);
 
 		// -- Direct accessors, by id -------------------------------------
-		Value field(uint16_t ns_id, uint16_t field_id, Source = Source::Working) const;
-		bool  field(uint16_t ns_id, uint16_t field_id, const Value& v);
-		bool  commit(uint16_t ns_id = 0);
-		bool  discard(uint16_t ns_id = 0);
+		Value field(nid_t ns_id, fid_t field_id, Source = Source::Working) const;
+		bool  field(nid_t ns_id, fid_t field_id, const Value& v);
+		bool  commit(nid_t ns_id = 0);
+		bool  discard(nid_t ns_id = 0);
 
 		// -- Direct accessors, by name -----------------------------------
 		Value field(const char* ns_name, const char* field_name, Source = Source::Working) const;
@@ -186,6 +203,13 @@ namespace RNS { namespace Provisioning {
 		bool  discard(const char* ns_name);
 
 		bool  factory_reset();
+
+		// Remove every persisted namespace file under the storage root,
+		// without touching in-memory state (working maps, drafts) or the
+		// runtime (no setter calls). Returns true if all files were removed
+		// (a missing file counts as success); false if any removal failed.
+		// No-op (returns true) when storage is disabled via RNS_USE_FS.
+		bool  clear_storage();
 
 		// -- State queries -----------------------------------------------
 		bool needs_reboot() const { return _needs_reboot; }
@@ -199,7 +223,10 @@ namespace RNS { namespace Provisioning {
 		Storage* storage() { return _storage.get(); }
 
 		// -- Schema/version constants ------------------------------------
-		static constexpr uint16_t SCHEMA_VERSION = 1;
+		// v2 adds the parent_id element to each namespace entry in the
+		// GET_SCHEMA response (4-tuple instead of 3-tuple). v1 clients that
+		// stop after reading the first three elements remain compatible.
+		static constexpr nid_t SCHEMA_VERSION = 2;
 
 	private:
 		Manager() = default;
@@ -212,22 +239,42 @@ namespace RNS { namespace Provisioning {
 		bool _needs_reboot = false;
 		RebootRequestedCallback _on_reboot;
 
+		// Active namespace registration scope. Pushed by namespace_() (incl.
+		// the nested-builder form) and popped by NamespaceBuilder::end().
+		// Must be empty by the time begin() is called; assert there.
+		std::vector<Namespace*> _build_scope;
+
+	public:
+		// Accessors used by NamespaceBuilder during fluent registration.
+		// Public so the builder doesn't need friend access; they're cheap
+		// and don't need to be hidden.
+		Namespace* current_build_scope() {
+			return _build_scope.empty() ? nullptr : _build_scope.back();
+		}
+		void pop_build_scope() {
+			if (!_build_scope.empty()) _build_scope.pop_back();
+		}
+		void push_build_scope(Namespace* ns) { _build_scope.push_back(ns); }
+		bool build_scope_empty() const { return _build_scope.empty(); }
+
+	private:
+
 		// Internal helpers for the wire dispatch path.
-		Bytes encode_error(uint8_t op_id, uint64_t seq, ErrorCode code, const char* msg = nullptr);
-		Bytes encode_ack(uint8_t op_id, uint64_t seq);
+		Bytes encode_error(opid_t op_id, seq_t seq, ErrorCode code, const char* msg = nullptr);
+		Bytes encode_ack(opid_t op_id, seq_t seq);
 
 		// Per-op response builders. The unpacker is positioned at the
 		// envelope's payload value (which may be nil / map / array depending
 		// on op). The returned Bytes is a fully framed response.
 		class Unpacker;	// forward; defined in .cpp
-		Bytes op_get_schema(uint64_t seq);
-		Bytes op_get_info(uint64_t seq);
-		Bytes op_get_capabilities(uint64_t seq);
-		Bytes op_get_state(uint64_t seq, void* unpacker);
-		Bytes op_set_state(uint64_t seq, void* unpacker);
-		Bytes op_commit(uint64_t seq, void* unpacker);
-		Bytes op_discard(uint64_t seq, void* unpacker);
-		Bytes op_factory_reset(uint64_t seq);
+		Bytes op_get_schema(seq_t seq);
+		Bytes op_get_info(seq_t seq);
+		Bytes op_get_capabilities(seq_t seq);
+		Bytes op_get_state(seq_t seq, void* unpacker);
+		Bytes op_set_state(seq_t seq, void* unpacker);
+		Bytes op_commit(seq_t seq, void* unpacker);
+		Bytes op_discard(seq_t seq, void* unpacker);
+		Bytes op_factory_reset(seq_t seq);
 
 		void  set_reboot_flag(bool any_reboot_applied);
 

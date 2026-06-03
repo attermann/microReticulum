@@ -26,40 +26,45 @@ namespace RNS { namespace Provisioning {
 	class Namespace {
 
 	public:
-		Namespace(uint16_t id, const char* name) : _id(id), _name(name ? name : "") {}
+		Namespace(nid_t id, const char* name, nid_t parent_id = 0)
+			: _id(id), _name(name ? name : ""), _parent_id(parent_id) {}
 
-		uint16_t id() const { return _id; }
-		const std::string& name() const { return _name; }
+		nid_t id() const { return _id; }
+		const fstring_t& name() const { return _name; }
+		// 0 = root (no parent). Non-zero values reference another namespace
+		// id in the same Registry, forming a tree used for UI grouping and
+		// disk filename construction.
+		nid_t parent_id() const { return _parent_id; }
 
 		// Append a field. Returns false if id or name is already taken.
 		bool add_field(Field f);
 
-		const Field* find_field(uint16_t id) const;
+		const Field* find_field(fid_t id) const;
 		const Field* find_field(const char* name) const;
 
 		const std::vector<Field>& fields() const { return _fields; }
 
 		// Effective working value for a field (returns default if not set).
 		// Returns a none-typed Value if the field id is unknown.
-		Value working(uint16_t field_id) const;
+		Value working(fid_t field_id) const;
 
 		// "Effective" value for a field — queries the field's getter callback
 		// if it has one (so the value reflects the live runtime), falling
 		// back to the cached working map otherwise. Read- and save-side
 		// callers should prefer this over working() to avoid drift when
 		// direct setters mutate the runtime out-of-band.
-		Value effective(uint16_t field_id) const;
+		Value effective(fid_t field_id) const;
 
 		// Returns true and writes into 'out' if a draft entry exists for this field.
-		bool draft(uint16_t field_id, Value& out) const;
-		bool has_draft(uint16_t field_id) const;
+		bool draft(fid_t field_id, Value& out) const;
+		bool has_draft(fid_t field_id) const;
 
 		// Write to draft after validating against the field's constraint.
 		// Returns false if the field is unknown, read-only, or invalid.
-		bool set_draft(uint16_t field_id, const Value& v);
+		bool set_draft(fid_t field_id, const Value& v);
 
 		// Drop a single draft entry, or all of them.
-		void clear_draft(uint16_t field_id);
+		void clear_draft(fid_t field_id);
 		void clear_draft();
 
 		// True iff the current draft touches any FF_REBOOT_REQUIRED field.
@@ -76,7 +81,7 @@ namespace RNS { namespace Provisioning {
 			ReadOnly,        // field is read-only
 			SetterFailed,    // FF_LIVE_APPLY setter returned false
 		};
-		CommitOutcome commit_one(uint16_t field_id);
+		CommitOutcome commit_one(fid_t field_id);
 
 		// True iff any working value differs from the initial default
 		// (used by storage to decide whether to write a file).
@@ -85,16 +90,17 @@ namespace RNS { namespace Provisioning {
 
 		// Directly set working value (used by Storage on load and by
 		// commit_one). No validation, no setter invocation.
-		void put_working(uint16_t field_id, const Value& v);
+		void put_working(fid_t field_id, const Value& v);
 
 	private:
-		uint16_t _id;
-		std::string _name;
+		nid_t _id;
+		fstring_t _name;
+		nid_t _parent_id = 0;
 		std::vector<Field> _fields;
-		std::unordered_map<uint16_t, size_t> _id_index;
-		std::unordered_map<std::string, size_t> _name_index;
-		std::unordered_map<uint16_t, Value> _working;
-		std::unordered_map<uint16_t, Value> _draft;
+		std::unordered_map<fid_t, size_t> _id_index;
+		std::unordered_map<fstring_t, size_t> _name_index;
+		std::unordered_map<fid_t, Value> _working;
+		std::unordered_map<fid_t, Value> _draft;
 		bool _dirty_for_persist = false;
 	};
 

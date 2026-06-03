@@ -4528,6 +4528,46 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	cleaning_caches = false;
 }
 
+/*static*/ void Transport::clear_storage() {
+	TRACE("Transport::clear_storage()");
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+	try {
+		char file_path[Type::Reticulum::FILEPATH_MAXSIZE];
+
+		snprintf(file_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
+		if (OS::file_exists(file_path)) {
+			OS::remove_file(file_path);
+		}
+
+		snprintf(file_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/packet_hashlist", Reticulum::_storagepath);
+		if (OS::file_exists(file_path)) {
+			OS::remove_file(file_path);
+		}
+
+		snprintf(file_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/tunnels", Reticulum::_storagepath);
+		if (OS::file_exists(file_path)) {
+			OS::remove_file(file_path);
+		}
+
+		// Clear the microStore-backed path store (removes its segment files on disk)
+		_path_store.clear();
+
+		// Remove cached announce packets
+		if (OS::directory_exists(Reticulum::_cachepath)) {
+			for (auto& file_name : OS::list_directory(Reticulum::_cachepath)) {
+				char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
+				snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, file_name.c_str());
+				OS::remove_file(packet_cache_path);
+				OS::run_loop();
+			}
+		}
+	}
+	catch (const std::exception& e) {
+		ERRORF("Transport::clear_storage: failed to clear storage, the contained exception was: %s", e.what());
+	}
+#endif
+}
+
 /*static*/ void Transport::dump_stats() {
 
 #ifdef RNS_DEBUG_HEAP

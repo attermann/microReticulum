@@ -21,12 +21,27 @@
 
 namespace RNS { namespace Provisioning {
 
-	std::string Storage::file_path(const Namespace& ns) const {
-		return _root + "/" + ns.name() + ".msgpack";
+	fstring_t Storage::dotted_name(const Namespace& ns) const {
+		fstring_t acc = ns.name();
+		if (!_registry) return acc;
+		nid_t hop = ns.parent_id();
+		// Bounded walk — registries are small. If the chain points at a
+		// missing namespace we stop and return whatever we have so far.
+		while (hop != 0) {
+			const Namespace* p = _registry->find(hop);
+			if (!p) break;
+			acc = p->name() + "." + acc;
+			hop = p->parent_id();
+		}
+		return acc;
 	}
 
-	std::string Storage::tmp_path(const Namespace& ns) const {
-		return _root + "/" + ns.name() + ".msgpack.tmp";
+	fstring_t Storage::file_path(const Namespace& ns) const {
+		return _root + "/" + dotted_name(ns) + ".msgpack";
+	}
+
+	fstring_t Storage::tmp_path(const Namespace& ns) const {
+		return _root + "/" + dotted_name(ns) + ".msgpack.tmp";
 	}
 
 	bool Storage::ensure_directory() {
@@ -41,8 +56,8 @@ namespace RNS { namespace Provisioning {
 	}
 
 	bool Storage::load_namespace(Namespace& ns) {
-		const std::string tmp = tmp_path(ns);
-		const std::string final = file_path(ns);
+		const fstring_t tmp = tmp_path(ns);
+		const fstring_t final = file_path(ns);
 
 		// Discard any stale .tmp from an interrupted save.
 		try {
@@ -101,8 +116,8 @@ namespace RNS { namespace Provisioning {
 		if (!Codec::pack_namespace_working(packer, ns)) return false;
 		Bytes encoded(packer.data(), packer.size());
 
-		const std::string tmp = tmp_path(ns);
-		const std::string final = file_path(ns);
+		const fstring_t tmp = tmp_path(ns);
+		const fstring_t final = file_path(ns);
 
 		try {
 			size_t wrote = Utilities::OS::write_file(tmp.c_str(), encoded);
@@ -135,8 +150,8 @@ namespace RNS { namespace Provisioning {
 	}
 
 	bool Storage::remove_namespace(const Namespace& ns) {
-		const std::string tmp = tmp_path(ns);
-		const std::string final = file_path(ns);
+		const fstring_t tmp = tmp_path(ns);
+		const fstring_t final = file_path(ns);
 		bool ok = true;
 		try {
 			if (Utilities::OS::file_exists(tmp.c_str())) {

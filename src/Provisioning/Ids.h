@@ -35,7 +35,8 @@ namespace RNS { namespace Provisioning { namespace Ns {
 			constexpr uint16_t CleanInterval           = 7;
 			constexpr uint16_t RemoteManagementAllowed = 8;	// BytesList of 16-byte dest hashes
 			constexpr uint16_t TransportIdentity       = 9;	// Bytes (64) — private key; SECRET
-			// next-id: 10
+			constexpr uint16_t ClearStorage            = 10;	// command (write-only): wipe persisted provisioning files
+			// next-id: 11
 		}
 	}
 
@@ -49,7 +50,8 @@ namespace RNS { namespace Provisioning { namespace Ns {
 			constexpr uint16_t HashlistMaxsize      = 3;
 			constexpr uint16_t MaxPrTags            = 4;
 			constexpr uint16_t PathTableMaxpersist  = 5;
-			// next-id: 6
+			constexpr uint16_t ClearStorage         = 6;	// command (write-only): Transport::clear_storage()
+			// next-id: 7
 		}
 	}
 

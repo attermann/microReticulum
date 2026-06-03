@@ -61,6 +61,7 @@ static constexpr uint16_t CUSTOM_BYTES = 5;
 static constexpr uint16_t CUSTOM_REBOOT_INT = 6;	// FF_REBOOT_REQUIRED
 static constexpr uint16_t CUSTOM_METRIC     = 7;	// FF_READ_ONLY + getter (metric)
 static constexpr uint16_t CUSTOM_COMMAND    = 8;	// FF_WRITE_ONLY + setter (command)
+static constexpr uint16_t CUSTOM_VOID_CMD   = 9;	// FF_WRITE_ONLY + no-arg setter (command_void)
 
 // Tracks whether the live setter for CUSTOM_INT was invoked, and what
 // value it last saw — for live_vs_reboot_apply.
@@ -78,6 +79,8 @@ static int64_t g_custom_metric_runtime = 0;
 // Trace of command invocations: count + last argument seen.
 static int     g_command_invocations   = 0;
 static int64_t g_last_command_arg      = 0;
+// Trace of command_void invocations (no arg, just a count).
+static int     g_void_command_invocations = 0;
 
 static void reset_setter_counters() {
 	g_live_int_setter_count = 0;
@@ -85,6 +88,7 @@ static void reset_setter_counters() {
 	g_reboot_int_setter_count = 0;
 	g_command_invocations = 0;
 	g_last_command_arg = 0;
+	g_void_command_invocations = 0;
 }
 
 static void reset_runtime_state() {
@@ -129,6 +133,12 @@ static void register_custom_namespace() {
 			[](const Value& v) {
 				++g_command_invocations;
 				g_last_command_arg = v.as_int();
+				return true;
+			})
+		// Argument-less command: SET_STATE+COMMIT fires the no-arg setter.
+		.command_void("reboot_now", CUSTOM_VOID_CMD,
+			[]() {
+				++g_void_command_invocations;
 				return true;
 			})
 		.end();
@@ -253,6 +263,13 @@ void test_reload_after_reboot(void) {
 	// Reset the counter so we can isolate the reload's behaviour from
 	// the commit that just ran.
 	reset_setter_counters();
+	// Also reset the simulated runtime static to its declaration default.
+	// A real power-cycle reboot reinitialises statics to their declared
+	// values; without this, the apply path's redundancy check (skip-if-
+	// runtime-already-matches via getter) would correctly observe that the
+	// in-process global still holds the post-commit value and skip the
+	// setter — defeating the test's intent.
+	g_custom_int_runtime = 5;
 
 	// Simulate reboot: tear down and re-init using the same storage root.
 	fresh_provisioning(g_test_root);
@@ -355,6 +372,76 @@ void test_getter_reflects_direct_setter(void) {
 	TEST_ASSERT_EQUAL_INT64(17, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Working).as_int());
 	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
 	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Effective).as_int());
+}
+
+void test_set_draft_dedups_against_live_runtime(void) {
+	// Regression: when a direct setter mutates the runtime after the
+	// add_field seed (e.g. RNode_Firmware.ino:798 calling
+	// reticulum.transport_enabled(true) after init_provisioning()),
+	// set_draft must dedup against the LIVE runtime via the getter, not
+	// the stale working-map snapshot. Otherwise a user submitting the
+	// runtime's actual current value (legitimate, because they want to
+	// commit-through-Provisioning so persistence catches up) gets the
+	// draft silently erased and the working map stays stale on disk.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Simulate the firmware mutating the runtime AFTER provisioning
+	// registration. Working map is now stale relative to the runtime.
+	g_custom_int_runtime = 73;
+
+	// User submits the runtime's current value (73). With dedup against
+	// effective() the comparison correctly observes runtime == 73, the
+	// new draft equals the live state, and the draft is dropped — no
+	// pending change is needed.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)73)));
+	TEST_ASSERT_EQUAL(Provisioning::Type::None,
+		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type());
+
+	// User submits a different value (50). Draft must be stored and
+	// committable so the runtime can be updated through the normal flow.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)50)));
+	TEST_ASSERT_EQUAL_INT64(50,
+		p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL_INT64(50, g_custom_int_runtime);
+}
+
+void test_reboot_required_dedups_against_working(void) {
+	// FF_REBOOT_REQUIRED fields intentionally let runtime lag working
+	// between commit and reboot — the setter doesn't fire on commit. The
+	// dedup must compare against working (the pending value), NOT the
+	// live runtime, so that submitting the *old* runtime value to revert
+	// a pending change correctly produces a new draft rather than being
+	// silently dropped as "matches runtime".
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	const int64_t initial = 915000000;
+	const int64_t pending = 868000000;
+
+	// Commit a REBOOT change. Setter does NOT fire — runtime still has
+	// the initial value while working/disk hold the pending one.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value(pending)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(0, g_reboot_int_setter_count);
+	TEST_ASSERT_EQUAL_INT64(initial, g_custom_reboot_runtime);
+
+	// User wants to revert the pending change by submitting the runtime's
+	// current value. Dedup against effective() would observe runtime ==
+	// initial and drop the draft — defeating the revert. Dedup against
+	// working() correctly sees working = pending != initial and stores
+	// the draft.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value(initial)));
+	TEST_ASSERT_EQUAL_INT64(initial,
+		p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Manager::Source::Draft).as_int());
+
+	// Commit promotes the revert into working; runtime still lags (no
+	// setter call for REBOOT), but the next boot's apply will pick up
+	// the reverted-to-initial value from disk.
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL_INT64(initial,
+		p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Manager::Source::Working).as_int());
 }
 
 void test_boot_apply_fires_reboot_required_setter(void) {
@@ -746,6 +833,278 @@ void test_command_constraint_violation_rejected(void) {
 	TEST_ASSERT_EQUAL(0, g_command_invocations);
 }
 
+// ---------------------------------------------------------------------------
+// command_void — argument-less commands
+// ---------------------------------------------------------------------------
+
+void test_command_void_fires_setter_on_commit(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	TEST_ASSERT_EQUAL(0, g_void_command_invocations);
+
+	// SET_STATE with a void marker, then commit — setter fires once.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_VOID_CMD, Value::make_void()));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(1, g_void_command_invocations);
+}
+
+void test_command_void_read_returns_none(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	// Write-only: reads return None regardless of prior invocations.
+	TEST_ASSERT_EQUAL(Provisioning::Type::None,
+		(int)p.field(CUSTOM_NS_ID, CUSTOM_VOID_CMD).type());
+
+	p.field(CUSTOM_NS_ID, CUSTOM_VOID_CMD, Value::make_void());
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(Provisioning::Type::None,
+		(int)p.field(CUSTOM_NS_ID, CUSTOM_VOID_CMD).type());
+}
+
+void test_command_void_wire_set_state_with_nil(void) {
+	// End-to-end wire trip: SET_STATE carrying nil as the void field's
+	// value, then COMMIT — the setter must fire.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	Bytes set_req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
+		// Payload is the bare {ns_id: {field_id: value}} map.
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_VOID_CMD);
+		MsgPack::object::nil_t nil;
+		pk.serialize(nil);
+	});
+	Bytes set_resp = p.handle_message(set_req);
+	TEST_ASSERT_GREATER_THAN(0, set_resp.size());
+
+	Bytes commit_req = make_request((uint8_t)Op::Commit, 2, [&](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t nil;
+		pk.serialize(nil);
+	});
+	(void)p.handle_message(commit_req);
+
+	TEST_ASSERT_EQUAL(1, g_void_command_invocations);
+}
+
+void test_command_void_not_persisted_or_replayed(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_VOID_CMD, Value::make_void()));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(1, g_void_command_invocations);
+
+	// Simulated reboot: counter must stay 0 — write-only commands don't
+	// replay on apply_loaded_to_runtime.
+	reset_setter_counters();
+	fresh_provisioning(g_test_root);
+	TEST_ASSERT_EQUAL(0, g_void_command_invocations);
+}
+
+// ---------------------------------------------------------------------------
+// Hierarchical namespaces (Follow-up #5)
+// ---------------------------------------------------------------------------
+
+static constexpr uint16_t HIER_INTERFACES = 9200;
+static constexpr uint16_t HIER_LORA       = 9201;
+static constexpr uint16_t HIER_UDP        = 9202;
+
+static void register_hierarchy() {
+	Manager::instance()
+		.namespace_("Interfaces", HIER_INTERFACES)
+			.field_bool("enabled", 1, FF_LIVE_APPLY, true)
+			.namespace_("LoRa", HIER_LORA)
+				.field_float("frequency", 1, FF_REBOOT_REQUIRED, 915e6, 100e6, 1e9)
+				.end()
+			.namespace_("UDP", HIER_UDP)
+				.field_string("host", 1, FF_LIVE_APPLY, "0.0.0.0", 64)
+				.end()
+			.end();
+}
+
+void test_hierarchy_nested_builder_registers_all(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	register_hierarchy();
+	Manager::instance().begin(g_test_root.c_str());
+
+	const Registry& reg = Manager::instance().registry();
+	const Namespace* interfaces = reg.find(HIER_INTERFACES);
+	const Namespace* lora       = reg.find(HIER_LORA);
+	const Namespace* udp        = reg.find(HIER_UDP);
+
+	TEST_ASSERT_NOT_NULL(interfaces);
+	TEST_ASSERT_NOT_NULL(lora);
+	TEST_ASSERT_NOT_NULL(udp);
+
+	TEST_ASSERT_EQUAL(0, interfaces->parent_id());        // root
+	TEST_ASSERT_EQUAL(HIER_INTERFACES, lora->parent_id());
+	TEST_ASSERT_EQUAL(HIER_INTERFACES, udp->parent_id());
+
+	// Children-of query returns both leaves.
+	auto kids = reg.children_of(HIER_INTERFACES);
+	TEST_ASSERT_EQUAL_size_t(2, kids.size());
+}
+
+void test_hierarchy_root_has_no_parent(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	register_hierarchy();
+	Manager::instance().begin(g_test_root.c_str());
+
+	const Namespace* reticulum = Manager::instance().registry().find(Ns::Reticulum::Id);
+	TEST_ASSERT_NOT_NULL(reticulum);
+	TEST_ASSERT_EQUAL(0, reticulum->parent_id());
+}
+
+void test_hierarchy_storage_filename_is_dotted_path(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	register_hierarchy();
+	Manager::instance().begin(g_test_root.c_str());
+
+	auto& p = Manager::instance();
+	TEST_ASSERT_TRUE(p.field(HIER_LORA, 1, Value((double)868e6)));
+	TEST_ASSERT_TRUE(p.commit(HIER_LORA));
+
+	// The file for the child namespace should land at the dotted path.
+	const std::string lora_path = g_test_root + "/Interfaces.LoRa.msgpack";
+	TEST_ASSERT_TRUE(Utilities::OS::file_exists(lora_path.c_str()));
+	// And the flat (non-dotted) name must NOT exist as a separate file.
+	const std::string flat_path = g_test_root + "/LoRa.msgpack";
+	TEST_ASSERT_FALSE(Utilities::OS::file_exists(flat_path.c_str()));
+}
+
+void test_hierarchy_schema_emits_parent_id(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	register_hierarchy();
+	Manager::instance().begin(g_test_root.c_str());
+
+	auto& p = Manager::instance();
+
+	Bytes req = make_request((uint8_t)Op::GetSchema, 1, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n; pk.serialize(n);
+	});
+	Bytes resp = p.handle_message(req);
+
+	// Parse envelope, then the schema array.
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();          // envelope [op, seq, payload]
+	uint8_t op; u.deserialize(op);
+	uint64_t seq; u.deserialize(seq);
+	TEST_ASSERT_TRUE(u.isArray());
+	const size_t n_ns = u.unpackArraySize();
+
+	bool found_lora = false;
+	for (size_t i = 0; i < n_ns; ++i) {
+		TEST_ASSERT_TRUE(u.isArray());
+		const size_t ns_arr_size = u.unpackArraySize();
+		TEST_ASSERT_EQUAL_size_t(4, ns_arr_size);   // [id, name, parent_id, [fields]]
+
+		int64_t ns_id = 0; u.deserialize(ns_id);
+		MsgPack::str_t name; u.deserialize(name);
+		int64_t parent = 0; u.deserialize(parent);
+
+		// Field-array shape: read its size then skip every entry.
+		const size_t n_fields = u.unpackArraySize();
+		for (size_t j = 0; j < n_fields; ++j) {
+			const size_t field_map_size = u.unpackMapSize();
+			for (size_t k = 0; k < field_map_size; ++k) {
+				int64_t key = 0; u.deserialize(key);
+				if (u.isBool())                              { bool b; u.deserialize(b); }
+				else if (u.isUInt() || u.isInt())            { int64_t v; u.deserialize(v); }
+				else if (u.isFloat32() || u.isFloat64())     { double d; u.deserialize(d); }
+				else if (u.isStr())                          { MsgPack::str_t s; u.deserialize(s); }
+				else if (u.isBin())                          { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
+				else if (u.isNil())                          { MsgPack::object::nil_t z; u.deserialize(z); }
+				else if (u.isArray()) {
+					size_t a = u.unpackArraySize();
+					for (size_t z = 0; z < a; ++z) {
+						if (u.isUInt() || u.isInt())   { int64_t v; u.deserialize(v); }
+						else if (u.isStr())            { MsgPack::str_t s; u.deserialize(s); }
+						else if (u.isBin())            { MsgPack::bin_t<uint8_t> bb; u.deserialize(bb); }
+					}
+				}
+			}
+		}
+
+		if (ns_id == HIER_LORA) {
+			TEST_ASSERT_EQUAL(HIER_INTERFACES, parent);
+			found_lora = true;
+		}
+	}
+	TEST_ASSERT_TRUE(found_lora);
+}
+
+void test_hierarchy_get_state_stays_flat(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	register_hierarchy();
+	Manager::instance().begin(g_test_root.c_str());
+
+	auto& p = Manager::instance();
+	// Touch the LoRa field via SET+COMMIT so it has a non-default value.
+	TEST_ASSERT_TRUE(p.field(HIER_LORA, 1, Value((double)868e6)));
+	TEST_ASSERT_TRUE(p.commit(HIER_LORA));
+
+	// GET_STATE for HIER_LORA must return its values keyed by HIER_LORA
+	// at the top level — not nested under HIER_INTERFACES.
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)HIER_LORA);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op; u.deserialize(op);
+	uint64_t seq; u.deserialize(seq);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n_ns = u.unpackMapSize();
+	TEST_ASSERT_EQUAL_size_t(1, n_ns);
+	int64_t top_key = 0; u.deserialize(top_key);
+	TEST_ASSERT_EQUAL(HIER_LORA, top_key);   // leaf id at top — NOT parent id
+}
+
+void test_hierarchy_unbalanced_scope_is_recovered(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	// Deliberately open a namespace without calling .end(). Manager::begin()
+	// should warn and clear the scope so the next round of registrations
+	// isn't poisoned.
+	Manager::instance().namespace_("Forgotten", 9300)
+		.field_int("x", 1, FF_LIVE_APPLY, 0);
+	// (no .end() here)
+
+	Manager::instance().begin(g_test_root.c_str());
+	TEST_ASSERT_TRUE(Manager::instance().registry().find((uint16_t)9300) != nullptr);
+	// Scope must be empty after begin() — subsequent registrations would
+	// otherwise nest under the orphan. Best-effort check via behavior:
+	Manager::instance().namespace_("AfterBegin", 9301).field_int("y", 1, FF_LIVE_APPLY, 0).end();
+	const Namespace* after = Manager::instance().registry().find((uint16_t)9301);
+	TEST_ASSERT_NOT_NULL(after);
+	TEST_ASSERT_EQUAL(0, after->parent_id());   // would be 9300 if scope had leaked
+}
+
+void test_hierarchy_cycle_rejected(void) {
+	Manager::instance().end();
+	register_custom_namespace();
+	Manager::instance().begin(g_test_root.c_str());
+
+	Registry& reg = Manager::instance().registry();
+	// Self-cycle: parent_id == own id.
+	TEST_ASSERT_NULL(reg.add_namespace(9400, "BadSelfCycle", 9400));
+	// Missing parent.
+	TEST_ASSERT_NULL(reg.add_namespace(9401, "OrphanChild", 9999));
+}
+
 void test_unknown_field_ignored_on_load(void) {
 	// Hand-craft a MsgPack file with an extra unknown field and verify it
 	// loads cleanly with the unknown id silently dropped.
@@ -1026,6 +1385,8 @@ int runUnityTests(void) {
 	RUN_TEST(test_live_vs_reboot_apply);
 	RUN_TEST(test_reboot_callback_fires_once);
 	RUN_TEST(test_getter_reflects_direct_setter);
+	RUN_TEST(test_set_draft_dedups_against_live_runtime);
+	RUN_TEST(test_reboot_required_dedups_against_working);
 	RUN_TEST(test_boot_apply_fires_reboot_required_setter);
 	RUN_TEST(test_bytes_list_default_is_empty);
 	RUN_TEST(test_bytes_list_set_commit_persists);
@@ -1043,6 +1404,17 @@ int runUnityTests(void) {
 	RUN_TEST(test_command_not_persisted_or_replayed);
 	RUN_TEST(test_command_excluded_from_get_state);
 	RUN_TEST(test_command_constraint_violation_rejected);
+	RUN_TEST(test_command_void_fires_setter_on_commit);
+	RUN_TEST(test_command_void_read_returns_none);
+	RUN_TEST(test_command_void_wire_set_state_with_nil);
+	RUN_TEST(test_command_void_not_persisted_or_replayed);
+	RUN_TEST(test_hierarchy_nested_builder_registers_all);
+	RUN_TEST(test_hierarchy_root_has_no_parent);
+	RUN_TEST(test_hierarchy_storage_filename_is_dotted_path);
+	RUN_TEST(test_hierarchy_schema_emits_parent_id);
+	RUN_TEST(test_hierarchy_get_state_stays_flat);
+	RUN_TEST(test_hierarchy_unbalanced_scope_is_recovered);
+	RUN_TEST(test_hierarchy_cycle_rejected);
 	RUN_TEST(test_unknown_field_ignored_on_load);
 	RUN_TEST(test_atomic_write_resilience);
 	RUN_TEST(test_factory_reset);

@@ -16,18 +16,43 @@
 
 namespace RNS { namespace Provisioning {
 
-	Namespace* Registry::add_namespace(uint16_t id, const char* name) {
+	Namespace* Registry::add_namespace(nid_t id, const char* name, nid_t parent_id) {
 		if (_id_index.count(id) != 0) return nullptr;
-		std::string sname = name ? name : "";
-		if (!sname.empty() && _name_index.count(sname) != 0) return nullptr;
+		// Names must be unique within their parent — siblings can't collide,
+		// but the same name under different parents is fine (e.g. "LoRa" under
+		// both "Interfaces" and "Radios"). For now, require name uniqueness
+		// globally only when caller passes parent_id=0 to keep filename
+		// collision risk down. Cheap and matches existing behavior.
+		fstring_t sname = name ? name : "";
+		if (!sname.empty() && parent_id == 0 && _name_index.count(sname) != 0) return nullptr;
+
+		// Cycle check: walk up parent chain — if we hit `id`, refuse.
+		if (parent_id != 0) {
+			nid_t hop = parent_id;
+			while (hop != 0) {
+				if (hop == id) return nullptr;	// would form a cycle
+				auto it = _id_index.find(hop);
+				if (it == _id_index.end()) return nullptr;	// parent doesn't exist
+				hop = _namespaces[it->second]->parent_id();
+			}
+		}
+
 		size_t idx = _namespaces.size();
-		_namespaces.push_back(std::unique_ptr<Namespace>(new Namespace(id, name)));
+		_namespaces.push_back(std::unique_ptr<Namespace>(new Namespace(id, name, parent_id)));
 		_id_index[id] = idx;
-		if (!sname.empty()) _name_index[sname] = idx;
+		if (!sname.empty() && parent_id == 0) _name_index[sname] = idx;
 		return _namespaces.back().get();
 	}
 
-	Namespace* Registry::find(uint16_t id) {
+	std::vector<const Namespace*> Registry::children_of(nid_t parent_id) const {
+		std::vector<const Namespace*> out;
+		for (const auto& up : _namespaces) {
+			if (up->parent_id() == parent_id) out.push_back(up.get());
+		}
+		return out;
+	}
+
+	Namespace* Registry::find(nid_t id) {
 		auto it = _id_index.find(id);
 		if (it == _id_index.end()) return nullptr;
 		return _namespaces[it->second].get();
@@ -40,7 +65,7 @@ namespace RNS { namespace Provisioning {
 		return _namespaces[it->second].get();
 	}
 
-	const Namespace* Registry::find(uint16_t id) const {
+	const Namespace* Registry::find(nid_t id) const {
 		auto it = _id_index.find(id);
 		if (it == _id_index.end()) return nullptr;
 		return _namespaces[it->second].get();

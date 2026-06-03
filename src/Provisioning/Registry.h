@@ -28,22 +28,28 @@ namespace RNS { namespace Provisioning {
 	public:
 		Registry() = default;
 
-		// Create a new namespace. Returns nullptr if id or name is taken.
-		Namespace* add_namespace(uint16_t id, const char* name);
+		// Create a new namespace. Returns nullptr if id or name is taken,
+		// or if parent_id is non-zero and would create a cycle. parent_id
+		// of 0 means root (no parent).
+		Namespace* add_namespace(nid_t id, const char* name, nid_t parent_id = 0);
 
-		Namespace* find(uint16_t id);
+		Namespace* find(nid_t id);
 		Namespace* find(const char* name);
-		const Namespace* find(uint16_t id) const;
+		const Namespace* find(nid_t id) const;
 		const Namespace* find(const char* name) const;
 
 		const std::vector<std::unique_ptr<Namespace>>& namespaces() const { return _namespaces; }
+
+		// Direct children of a parent_id. parent_id == 0 returns roots.
+		// O(N) over the Registry — the count is small in practice.
+		std::vector<const Namespace*> children_of(nid_t parent_id) const;
 
 		void clear();
 
 	private:
 		std::vector<std::unique_ptr<Namespace>> _namespaces;
-		std::unordered_map<uint16_t, size_t> _id_index;
-		std::unordered_map<std::string, size_t> _name_index;
+		std::unordered_map<nid_t, size_t> _id_index;
+		std::unordered_map<fstring_t, size_t> _name_index;
 	};
 
 } }

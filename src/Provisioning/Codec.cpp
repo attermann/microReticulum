@@ -23,20 +23,20 @@ namespace RNS { namespace Provisioning { namespace Codec {
 			case Type::None:
 				return false;
 			case Type::Bool:
-				packer.serialize((bool)v.as_bool());
+				packer.serialize((fbool_t)v.as_bool());
 				return true;
 			case Type::Int:
 			case Type::Enum:
-				packer.serialize((int64_t)v.as_int());
+				packer.serialize((fint_t)v.as_int());
 				return true;
 			case Type::Float:
-				packer.serialize((double)v.as_float());
+				packer.serialize((ffloat_t)v.as_float());
 				return true;
 			case Type::String:
 				packer.serialize(v.as_string().c_str());
 				return true;
 			case Type::Bytes: {
-				const Bytes& b = v.as_bytes();
+				const fbytes_t& b = v.as_bytes();
 				MsgPack::bin_t<uint8_t> bin;
 				if (b.size() > 0) {
 					bin.resize(b.size());
@@ -48,7 +48,7 @@ namespace RNS { namespace Provisioning { namespace Codec {
 			case Type::BytesList: {
 				const auto& list = v.as_bytes_list();
 				packer.serialize(MsgPack::arr_size_t(list.size()));
-				for (const Bytes& e : list) {
+				for (const fbytes_t& e : list) {
 					MsgPack::bin_t<uint8_t> bin;
 					if (e.size() > 0) {
 						bin.resize(e.size());
@@ -56,6 +56,15 @@ namespace RNS { namespace Provisioning { namespace Codec {
 					}
 					packer.serialize(bin);
 				}
+				return true;
+			}
+			case Type::Void: {
+				// Argument-less command marker — pack nil so the wire entry
+				// has a value slot (MsgPack maps require value pairs). Never
+				// hit in practice because Void is always FF_WRITE_ONLY and
+				// neither persisted nor surfaced in GET_STATE.
+				MsgPack::object::nil_t nil;
+				packer.serialize(nil);
 				return true;
 			}
 		}
@@ -68,7 +77,7 @@ namespace RNS { namespace Provisioning { namespace Codec {
 				return false;
 			case Type::Bool: {
 				if (!unpacker.isBool()) return false;
-				bool b = false;
+				fbool_t b = false;
 				unpacker.deserialize(b);
 				out = Value(b);
 				return true;
@@ -76,7 +85,7 @@ namespace RNS { namespace Provisioning { namespace Codec {
 			case Type::Int:
 			case Type::Enum: {
 				if (!unpacker.isInt() && !unpacker.isUInt()) return false;
-				int64_t iv = 0;
+				fint_t iv = 0;
 				unpacker.deserialize(iv);
 				out = Value::from_int_as(declared, iv);
 				return true;
@@ -85,7 +94,7 @@ namespace RNS { namespace Provisioning { namespace Codec {
 				// Floats may arrive as int on wire; accept either.
 				if (unpacker.isFloat32() || unpacker.isFloat64()
 					|| unpacker.isInt() || unpacker.isUInt()) {
-					double d = 0.0;
+					ffloat_t d = 0.0;
 					unpacker.deserialize(d);
 					out = Value(d);
 					return true;
@@ -103,14 +112,14 @@ namespace RNS { namespace Provisioning { namespace Codec {
 				if (!unpacker.isBin()) return false;
 				MsgPack::bin_t<uint8_t> bin;
 				unpacker.deserialize(bin);
-				Bytes b(bin.data(), bin.size());
+				fbytes_t b(bin.data(), bin.size());
 				out = Value(b);
 				return true;
 			}
 			case Type::BytesList: {
 				if (!unpacker.isArray()) return false;
 				const size_t n = unpacker.unpackArraySize();
-				std::vector<Bytes> list;
+				fbytes_list_t list;
 				list.reserve(n);
 				for (size_t i = 0; i < n; ++i) {
 					if (!unpacker.isBin()) {
@@ -122,6 +131,16 @@ namespace RNS { namespace Provisioning { namespace Codec {
 					list.emplace_back(bin.data(), bin.size());
 				}
 				out = Value(std::move(list));
+				return true;
+			}
+			case Type::Void: {
+				// Argument-less command — accept nil on the wire (canonical
+				// form) and discard the value. The presence of the field id
+				// in the SET_STATE map is itself the trigger.
+				if (!unpacker.isNil()) return false;
+				MsgPack::object::nil_t nil;
+				unpacker.deserialize(nil);
+				out = Value::make_void();
 				return true;
 			}
 		}
@@ -165,7 +184,7 @@ namespace RNS { namespace Provisioning { namespace Codec {
 			if (skip(f)) continue;
 			Value v = persist_value(ns, f);
 			if (v.is_none()) continue;
-			packer.serialize((uint16_t)f.id);
+			packer.serialize((fid_t)f.id);
 			pack_value(packer, v);
 		}
 		return true;
@@ -176,7 +195,7 @@ namespace RNS { namespace Provisioning { namespace Codec {
 	static void skip_value(MsgPack::Unpacker& u) {
 		if (u.isNil())                            { MsgPack::object::nil_t n; u.deserialize(n); }
 		else if (u.isBool())                      { bool b; u.deserialize(b); }
-		else if (u.isUInt() || u.isInt())         { int64_t i; u.deserialize(i); }
+		else if (u.isUInt() || u.isInt())         { fint_t i; u.deserialize(i); }
 		else if (u.isFloat32() || u.isFloat64())  { double d; u.deserialize(d); }
 		else if (u.isStr())                       { MsgPack::str_t s; u.deserialize(s); }
 		else if (u.isBin())                       { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
@@ -204,9 +223,9 @@ namespace RNS { namespace Provisioning { namespace Codec {
 				skip_value(unpacker);
 				continue;
 			}
-			int64_t key = 0;
+			fint_t key = 0;
 			unpacker.deserialize(key);
-			uint16_t field_id = (uint16_t)key;
+			fid_t field_id = (fid_t)key;
 			const Field* f = ns.find_field(field_id);
 			if (!f) {
 				skip_value(unpacker);

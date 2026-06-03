@@ -26,9 +26,13 @@ namespace RNS { namespace Provisioning {
 	class Storage {
 
 	public:
-		explicit Storage(const char* root) : _root(root ? root : "/config") {}
+		// registry pointer is used solely to walk parent chains when
+		// building dotted-path filenames for hierarchical namespaces.
+		// May be nullptr — in that case filenames are flat (just ns.name()).
+		Storage(const char* root, const Registry* registry = nullptr)
+			: _root(root ? root : "/config"), _registry(registry) {}
 
-		const std::string& root() const { return _root; }
+		const fstring_t& root() const { return _root; }
 
 		// Ensure the storage directory exists. Returns true on success
 		// (already-exists counts as success).
@@ -53,10 +57,16 @@ namespace RNS { namespace Provisioning {
 		bool factory_reset(const Registry& registry);
 
 	private:
-		std::string _root;
+		fstring_t _root;
+		const Registry* _registry;	// optional; used for dotted-path filenames
 
-		std::string file_path(const Namespace& ns) const;
-		std::string tmp_path(const Namespace& ns) const;
+		fstring_t file_path(const Namespace& ns) const;
+		fstring_t tmp_path(const Namespace& ns) const;
+
+		// Builds "Parent.Child.GrandChild" by walking ns.parent_id() up the
+		// Registry. Falls back to ns.name() alone if _registry is null or
+		// a parent link is broken.
+		fstring_t dotted_name(const Namespace& ns) const;
 
 		bool load_namespace(Namespace& ns);
 	};

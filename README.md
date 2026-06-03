@@ -357,6 +357,7 @@ Use of nrf52840 based boards as a transport node will necessitate the use of ext
 - [x] Transport Node example app
 - [x] Link example app
 - [x] NomadNet example app
+- [x] Add flexible provisioning subsystem
 
 Please open an Issue if you have trouble building ior using the API, and feel free to start a new Discussion for anything else.
 

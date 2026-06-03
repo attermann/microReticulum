@@ -23,7 +23,7 @@
 
 namespace RNS { namespace Provisioning {
 
-	enum FieldFlags : uint8_t {
+	enum FieldFlags : fflags_t {
 		FF_NONE            = 0,
 		FF_LIVE_APPLY      = 1 << 0,	// setter called immediately on commit
 		FF_REBOOT_REQUIRED = 1 << 1,	// committed value takes effect after reboot
@@ -37,18 +37,18 @@ namespace RNS { namespace Provisioning {
 	};
 
 	struct Constraint {
-		bool has_range  = false;
-		int64_t imin    = 0;
-		int64_t imax    = 0;
-		double  fmin    = 0.0;
-		double  fmax    = 0.0;
-		size_t  max_len = 0;
+		bool    has_range = false;
+		fint_t  imin      = 0;
+		fint_t  imax      = 0;
+		ffloat_t fmin     = 0.0;
+		ffloat_t fmax     = 0.0;
+		flen_t  max_len   = 0;
 		// BytesList-only: required exact byte size per element (0 = variable),
 		// and maximum number of elements (0 = unlimited).
-		size_t  element_size = 0;
-		size_t  max_count    = 0;
-		std::vector<int64_t>     enum_values;
-		std::vector<std::string> enum_labels;
+		flen_t  element_size = 0;
+		flen_t  max_count    = 0;
+		std::vector<fenum_t>   enum_values;
+		std::vector<fstring_t> enum_labels;
 	};
 
 	using SetterFn = std::function<bool(const Value&)>;
@@ -60,14 +60,14 @@ namespace RNS { namespace Provisioning {
 	using GetterFn = std::function<Value()>;
 
 	struct Field {
-		uint16_t      id      = 0;
-		std::string   name;
-		Type          type    = Type::None;
-		uint8_t       flags   = FF_NONE;
-		Constraint    constraint;
-		Value         default_value;
-		SetterFn      setter; // optional; invoked on commit for FF_LIVE_APPLY
-		GetterFn      getter; // optional; queried on read/save when present
+		fid_t       id      = 0;
+		fstring_t   name;
+		Type        type    = Type::None;
+		fflags_t    flags   = FF_NONE;
+		Constraint  constraint;
+		Value       default_value;
+		SetterFn    setter; // optional; invoked on commit for FF_LIVE_APPLY
+		GetterFn    getter; // optional; queried on read/save when present
 
 		bool has_flag(FieldFlags f) const { return (flags & f) != 0; }
 
