@@ -1,7 +1,7 @@
 #include "LoRaInterface.h"
 
-#include "../src/Log.h"
-#include "../src/Utilities/OS.h"
+#include <microReticulum/Log.h>
+#include <microReticulum/Utilities/OS.h>
 
 #include <memory>
 

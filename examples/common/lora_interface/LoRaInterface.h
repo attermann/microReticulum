@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../src/Interface.h"
-#include "../src/Bytes.h"
-#include "../src/Type.h"
+#include <microReticulum/Interface.h>
+#include <microReticulum/Bytes.h>
+#include <microReticulum/Type.h>
 
 #ifdef ARDUINO
 #include <SPI.h>
@@ -32,16 +32,17 @@ private:
 	virtual bool send_outgoing(const RNS::Bytes& data);
 	void on_incoming(const RNS::Bytes& data);
 
-private:
-	//uint8_t buffer[Type::Reticulum::MTU] = {0};
-	const uint8_t message_count = 0;
-	RNS::Bytes buffer;
-
+public:
 	// Split-packet protocol constants
 	static constexpr uint8_t HEADER_SPLIT     = 0x08;  // bit 3: split-packet flag
 	static constexpr uint8_t HEADER_SEQ_MASK  = 0x07;  // bits 2:0: sequence number
 	static constexpr uint8_t SEQ_UNSET        = 0xFF;  // sentinel: no split in progress
 	static constexpr int     LORA_MAX_PAYLOAD = 254;   // 255 - 1 header byte
+
+private:
+	//uint8_t buffer[Type::Reticulum::MTU] = {0};
+	const uint8_t message_count = 0;
+	RNS::Bytes buffer;
 
 	uint8_t _rx_seq     = SEQ_UNSET;  // sequence of split RX in progress
 	uint8_t _tx_seq_ctr = 0;          // rolling TX split sequence counter

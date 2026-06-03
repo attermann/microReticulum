@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../src/Interface.h"
-#include "../src/Bytes.h"
-#include "../src/Type.h"
+#include <microReticulum/Interface.h>
+#include <microReticulum/Bytes.h>
+#include <microReticulum/Type.h>
 
 #ifdef ARDUINO
 #include <WiFi.h>

@@ -1,7 +1,7 @@
 #include "UDPInterface.h"
 
-#include <Transport.h>
-#include "../src/Log.h"
+#include <microReticulum/Transport.h>
+#include <microReticulum/Log.h>
 
 #include <memory>
 
