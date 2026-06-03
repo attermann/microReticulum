@@ -1,11 +1,13 @@
 #include <unity.h>
 
 #include "microReticulum/Bytes.h"
+#include "microReticulum/Identity.h"
 #include "microReticulum/Utilities/Crc.h"
 #include "microReticulum/Cryptography/HMAC.h"
 #include "microReticulum/Cryptography/PKCS7.h"
 
 #include <string.h>
+#include <vector>
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>
@@ -192,6 +194,24 @@ void testByteCrc32() {
 }
 
 
+void testIdentityValidate() {
+	RNS::Identity identity(true);
+	RNS::Bytes message("the quick brown fox jumps over the lazy dog");
+
+	RNS::Bytes signature = identity.sign(message);
+	TEST_ASSERT_TRUE(identity.validate(signature, message));
+
+	// A signature with a flipped byte must not validate.
+	std::vector<uint8_t> tampered(signature.data(), signature.data() + signature.size());
+	tampered[0] ^= 0xFF;
+	RNS::Bytes bad_signature(tampered.data(), tampered.size());
+	TEST_ASSERT_FALSE(identity.validate(bad_signature, message));
+
+	// A valid signature against a different message must not validate.
+	RNS::Bytes other_message("the quick brown fox jumps over the lazy cat");
+	TEST_ASSERT_FALSE(identity.validate(signature, other_message));
+}
+
 void setUp(void) {
     // set stuff up here before each test
 }
@@ -208,6 +228,7 @@ int runUnityTests(void) {
 	RUN_TEST(testCrc32);
 	RUN_TEST(testIncrementalCrc32);
 	RUN_TEST(testByteCrc32);
+	RUN_TEST(testIdentityValidate);
     return UNITY_END();
 }
 
