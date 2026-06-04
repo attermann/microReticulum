@@ -663,8 +663,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	if (_object->_pub) {
 		try {
 			TRACEF("Identity::validate: Attempting to verify signature: %s and message: %s", signature.toHex().c_str(), message.toHex().c_str());
-			_object->_sig_pub->verify(signature, message);
-			return true;
+			return _object->_sig_pub->verify(signature, message);
 		}
 		catch (const std::exception& e) {
 			return false;
