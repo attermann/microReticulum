@@ -55,8 +55,8 @@ using namespace RNS::Utilities;
 //char _tlsf_msg[256] = "";
 
 /*static*/ Memory::pool_info Memory::heap_pool_info(RNS_HEAP_POOL_ALLOCATOR, RNS_HEAP_POOL_BUFFER_SIZE);
-/*static*/ Memory::pool_info Memory::psram_pool_info(RNS_PSRAM_POOL_ALLOCATOR, RNS_PSRAM_POOL_BUFFER_SIZE);;
-/*static*/ Memory::pool_info Memory::altheap_pool_info(RNS_ALTHEAP_POOL_ALLOCATOR, RNS_ALTHEAP_POOL_BUFFER_SIZE);;
+/*static*/ Memory::pool_info Memory::psram_pool_info(RNS_PSRAM_POOL_ALLOCATOR, RNS_PSRAM_POOL_BUFFER_SIZE);
+/*static*/ Memory::pool_info Memory::altheap_pool_info(RNS_ALTHEAP_POOL_ALLOCATOR, RNS_ALTHEAP_POOL_BUFFER_SIZE);
 /*static*/ Memory::allocator_info Memory::default_allocator_info;
 /*static*/ Memory::allocator_info Memory::container_allocator_info;
 
@@ -125,18 +125,33 @@ void tlsf_mem_walker(void* ptr, size_t size, int used, void* user)
 	heap_pool_info.contiguous_size = dbgHeapFree();
 	altheap_pool_info.contiguous_size = dbgHeapFree();
 	TRACEF("TLSF: contiguous_size: %u", pool_info.contiguous_size);
+	TRACEF("TLSF: buffer_size: %u", pool_info.buffer_size);
+	// If buffer size is unset the set based on fraction of contiguous size
 	if (pool_info.buffer_size == 0) {
 		pool_info.buffer_size = (size_t)(pool_info.contiguous_size * BUFFER_FRACTION);
 	}
+	// CBA TODO: Check request buffer size against available SRAM and adjust down if necessary (never up)
 	// For NRF52 round to kB
 	pool_info.buffer_size = (size_t)(pool_info.buffer_size / 1024) * 1024;
 	TRACEF("TLSF: buffer_size: %u", pool_info.buffer_size);
 	void* raw_buffer = malloc(pool_info.buffer_size);
+/*
+	// CBA Try reducing allocation size until it succeeds
+	void* raw_buffer = nullptr;
+	for (uint8_t count = 0; raw_buffer == nullptr && count < 10; ++count) {
+		// For NRF52 round to kB
+		pool_info.buffer_size = (size_t)(pool_info.buffer_size / 1024) * 1024;
+		TRACEF("TLSF: buffer_size: %u", pool_info.buffer_size);
+		raw_buffer = malloc(pool_info.buffer_size);
+		// If allocation fails then reduce size by 10%
+		if (raw_buffer == nullptr) pool_info.buffer_size -= (size_t)(pool_info.buffer_size * 0.1);
+	}
+*/
 #else
-	pool_info.buffer_size = (size_t)RNS_HEAP_POOL_BUFFER_SIZE;
-	altheap_pool_info.buffer_size = (size_t)RNS_ALTHEAP_POOL_BUFFER_SIZE;
+	// CBA Native (and unknown) platforms fall-through to here
 	TRACEF("TLSF: buffer_size: %u", pool_info.buffer_size);
 	if (pool_info.buffer_size == 0) {
+		// CBA Arbitrary pool size presumably for native platforms with plenty of RAM
 		pool_info.buffer_size = (size_t)(1024 * 1024);
 	}
 	void* raw_buffer = malloc(pool_info.buffer_size);

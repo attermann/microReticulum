@@ -262,7 +262,7 @@ void Reticulum::jobs() {
 
 	double now = OS::time();
 
-#if 1
+#ifdef RNS_LOW_MEMORY_REBOOT
 	// CBA Detect low-memory condition and reset
 	if (Memory::heap_size() > 0) {
 		uint8_t remaining = (uint8_t)((double)Memory::heap_available() / (double)Memory::heap_size() * 100.0);

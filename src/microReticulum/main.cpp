@@ -21,6 +21,17 @@
 
 void setup() {
 	Serial.begin(115200);
+
+	// CBA Safely wait for serial initialization
+	while (!Serial) {
+	if (millis() > 2000) {
+		break;
+	}
+	delay(10);
+	}
+	// CBA Test
+	delay(2000);
+
 	Serial.print("\nSilly rabbit, microReticulum is a library!\n\nSee the examples directory for example programs that make use of this library.\n\n");
 }
 void loop() {
