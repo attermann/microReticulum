@@ -2,6 +2,7 @@
 
 #include "microReticulum/Bytes.h"
 #include "microReticulum/Identity.h"
+#include "microReticulum/Packet.h"
 #include "microReticulum/Utilities/Crc.h"
 #include "microReticulum/Cryptography/HMAC.h"
 #include "microReticulum/Cryptography/PKCS7.h"
@@ -193,7 +194,6 @@ void testByteCrc32() {
 	TEST_ASSERT_EQUAL_UINT32(0xEE2F4613, crc);
 }
 
-
 void testIdentityValidate() {
 	RNS::Identity identity(true);
 	RNS::Bytes message("the quick brown fox jumps over the lazy dog");
@@ -210,6 +210,38 @@ void testIdentityValidate() {
 	// A valid signature against a different message must not validate.
 	RNS::Bytes other_message("the quick brown fox jumps over the lazy cat");
 	TEST_ASSERT_FALSE(identity.validate(signature, other_message));
+}
+
+void testDirectAnnounceValidate() {
+	RNS::Bytes raw;
+	raw.assignHex("0100f083a7f4b00d799808c44a4634bba7d7006afd960bf3b01801a2e88b2ce1f7040817dc1b6bffa366b103468f3988e0db7f00dc1fdc15fa7fd31a34a02207cfb4d26e11e57504e43686ec7fad84774bec88fd68805f2ea383c8d6f6c39824652e00698fd5fd1088b38832f247a9daebf017d8bfe641882d9fe9b37cf49a97402b7e3d8bec61b4950d39c0996588dd0288bf6a7a0a4390bb331bd82704b618f107cf8bf2230f");
+	RNS::Packet packet(raw);
+	packet.unpack();
+	TEST_ASSERT_TRUE(RNS::Identity::validate_announce(packet));
+}
+
+void testRebroadcastAnnounceValidate() {
+	RNS::Bytes raw;
+	raw.assignHex("510139745d39d5108615635d433d6cb14803f083a7f4b00d799808c44a4634bba7d7006afd960bf3b01801a2e88b2ce1f7040817dc1b6bffa366b103468f3988e0db7f00dc1fdc15fa7fd31a34a02207cfb4d26e11e57504e43686ec7fad84774bec88fd68805f2ea383c8d6f6c39824652e00698fd5fd1088b38832f247a9daebf017d8bfe641882d9fe9b37cf49a97402b7e3d8bec61b4950d39c0996588dd0288bf6a7a0a4390bb331bd82704b618f107cf8bf2230f");
+	RNS::Packet packet(raw);
+	packet.unpack();
+	TEST_ASSERT_TRUE(RNS::Identity::validate_announce(packet));
+}
+
+void testDirectRatchetAnnounceValidate() {
+	RNS::Bytes raw;
+	raw.assignHex("21003dc438c85235151be9a59020807930d200a3dc290f674385c482eeac8da9108c20d5d30b9d20680d2a39bf3d95d6fcb04f1e2bd080869ca0b7f3ca0271205899635b94e19f2463b77e5c4f60e82287ab5e6ec60bc318e2c0f0d9087a321643c100698fd5f11045f113f98185b9f5b01de11f59f21848f7244bcbc54bfe5bad99f3a6e0d2264b78687aa12e62b9ad581161acc9202bcce4978bdc68a73595e908b2396c8152c689d6c3abf99081dd00727f4744caaf76aaf7978c3866e31577c6e6c066830092c40e416e6f6e796d6f75732050656572c0");
+	RNS::Packet packet(raw);
+	packet.unpack();
+	TEST_ASSERT_TRUE(RNS::Identity::validate_announce(packet));
+}
+
+void testRebroadcastRatchetAnnounceValidate() {
+	RNS::Bytes raw;
+	raw.assignHex("710139745d39d5108615635d433d6cb148033dc438c85235151be9a59020807930d200a3dc290f674385c482eeac8da9108c20d5d30b9d20680d2a39bf3d95d6fcb04f1e2bd080869ca0b7f3ca0271205899635b94e19f2463b77e5c4f60e82287ab5e6ec60bc318e2c0f0d9087a321643c100698fd5f11045f113f98185b9f5b01de11f59f21848f7244bcbc54bfe5bad99f3a6e0d2264b78687aa12e62b9ad581161acc9202bcce4978bdc68a73595e908b2396c8152c689d6c3abf99081dd00727f4744caaf76aaf7978c3866e31577c6e6c066830092c40e416e6f6e796d6f75732050656572c0");
+	RNS::Packet packet(raw);
+	packet.unpack();
+	TEST_ASSERT_TRUE(RNS::Identity::validate_announce(packet));
 }
 
 void setUp(void) {
@@ -229,6 +261,10 @@ int runUnityTests(void) {
 	RUN_TEST(testIncrementalCrc32);
 	RUN_TEST(testByteCrc32);
 	RUN_TEST(testIdentityValidate);
+	RUN_TEST(testDirectAnnounceValidate);
+	RUN_TEST(testRebroadcastAnnounceValidate);
+	RUN_TEST(testDirectRatchetAnnounceValidate);
+	RUN_TEST(testRebroadcastRatchetAnnounceValidate);
     return UNITY_END();
 }
 

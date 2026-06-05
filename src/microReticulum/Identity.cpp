@@ -425,28 +425,55 @@ Recall last heard app_data for a destination hash.
 	}
 }
 
-/*static*/ bool Identity::validate_announce(const Packet& packet) {
+/*static*/ bool Identity::validate_announce(const Packet& packet, bool only_validate_signature /*= false*/) {
 	try {
 		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
 			Bytes destination_hash = packet.destination_hash();
-			//TRACEF("Identity::validate_announce: destination_hash: %s", packet.destination_hash().toHex().c_str());
+
+            // Get public key bytes from announce
 			Bytes public_key = packet.data().left(KEYSIZE/8);
-			//TRACEF("Identity::validate_announce: public_key:       %s", public_key.toHex().c_str());
-			Bytes name_hash = packet.data().mid(KEYSIZE/8, NAME_HASH_LENGTH/8);
-			//TRACEF("Identity::validate_announce: name_hash:        %s", name_hash.toHex().c_str());
-			Bytes random_hash = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8, RANDOM_HASH_LENGTH/8);
-			//TRACEF("Identity::validate_announce: random_hash:      %s", random_hash.toHex().c_str());
-			Bytes signature = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8, SIGLENGTH/8);
-			//TRACEF("Identity::validate_announce: signature:        %s", signature.toHex().c_str());
+
+			Bytes name_hash;
+			Bytes random_hash;
+			Bytes ratchet;
+			Bytes signature;
 			Bytes app_data;
-			if (packet.data().size() > (KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8)) {
-				app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8);
+
+			// If the packet context flag is set,
+			// this announce contains a new ratchet
+			if (packet.context_flag() == Type::Packet::FLAG_SET) {
+				name_hash = packet.data().mid(KEYSIZE/8, NAME_HASH_LENGTH/8);
+				random_hash = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8, RANDOM_HASH_LENGTH/8);
+				ratchet = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8, RATCHETSIZE/8);
+				signature = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + RATCHETSIZE/8, SIGLENGTH/8);
+				if (packet.data().size() > (KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + RATCHETSIZE/8 + SIGLENGTH/8)) {
+					app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + RATCHETSIZE/8 + SIGLENGTH/8);
+				}
 			}
-			//TRACEF("Identity::validate_announce: app_data:         %s", app_data.toHex().c_str());
-			//TRACEF("Identity::validate_announce: app_data text:    %s", app_data.toString().c_str());
+			// If the packet context flag is not set,
+			// this announce does not contain a ratchet
+			else {
+				name_hash = packet.data().mid(KEYSIZE/8, NAME_HASH_LENGTH/8);
+				random_hash = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8, RANDOM_HASH_LENGTH/8);
+				signature = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8, SIGLENGTH/8);
+				if (packet.data().size() > (KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8)) {
+					app_data = packet.data().mid(KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8);
+				}
+			}
+
+/*
+			TRACEF("Identity::validate_announce: destination_hash: %s", destination_hash.toHex().c_str());
+			TRACEF("Identity::validate_announce: public_key:       %s", public_key.toHex().c_str());
+			TRACEF("Identity::validate_announce: name_hash:        %s", name_hash.toHex().c_str());
+			TRACEF("Identity::validate_announce: random_hash:      %s", random_hash.toHex().c_str());
+			TRACEF("Identity::validate_announce: ratchet:          %s", ratchet.toHex().c_str());
+			TRACEF("Identity::validate_announce: signature:        %s", signature.toHex().c_str());
+			TRACEF("Identity::validate_announce: app_data:         %s", app_data.toHex().c_str());
+			TRACEF("Identity::validate_announce: app_data text:    %s", app_data.toString().c_str());
+*/
 
 			Bytes signed_data;
-			signed_data << packet.destination_hash() << public_key << name_hash << random_hash+app_data;
+			signed_data << destination_hash << public_key << name_hash << random_hash << ratchet << app_data;
 			//TRACEF("Identity::validate_announce: signed_data:      %s", signed_data.toHex().c_str());
 
 			if (packet.data().size() <= KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8) {
@@ -457,15 +484,20 @@ Recall last heard app_data for a destination hash.
 			announced_identity.load_public_key(public_key);
 
 			if (announced_identity.pub() && announced_identity.validate(signature, signed_data)) {
+				if (only_validate_signature) {
+					//p del announced_identity
+					return true;
+				}
+
 				Bytes hash_material = name_hash << announced_identity.hash();
 				Bytes expected_hash = full_hash(hash_material).left(Type::Reticulum::TRUNCATED_HASHLENGTH/8);
-				//TRACEF("Identity::validate_announce: destination_hash: %s", packet.destination_hash().toHex().c_str());
+				//TRACEF("Identity::validate_announce: destination_hash: %s", destination_hash.toHex().c_str());
 				//TRACEF("Identity::validate_announce: expected_hash:    %s", expected_hash.toHex().c_str());
 
-				if (packet.destination_hash() == expected_hash) {
+				if (destination_hash == expected_hash) {
 					// Check if we already have a public key for this destination
 					// and make sure the public key is not different.
-					auto iter = _known_destinations.find(packet.destination_hash());
+					auto iter = _known_destinations.find(destination_hash);
 					if (iter != _known_destinations.end()) {
 						IdentityEntry& identity_entry = (*iter).second;
 						if (public_key != identity_entry._public_key) {
@@ -477,7 +509,7 @@ Recall last heard app_data for a destination hash.
 						}
 					}
 
-					remember(packet.get_hash(), packet.destination_hash(), public_key, app_data);
+					remember(packet.get_hash(), destination_hash, public_key, app_data);
 					//p del announced_identity
 
 					std::string signal_str;
@@ -497,21 +529,21 @@ Recall last heard app_data for a destination hash.
 */
 
 					if (packet.transport_id()) {
-						TRACEF("Valid announce for %s %d hops away, received via %s on %s%s", packet.destination_hash().toHex().c_str(), packet.hops(), packet.transport_id().toHex().c_str(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
+						TRACEF("Valid announce for %s %d hops away, received via %s on %s%s", destination_hash.toHex().c_str(), packet.hops(), packet.transport_id().toHex().c_str(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
 					}
 					else {
-						TRACEF("Valid announce for %s %d hops away, received on %s%s", packet.destination_hash().toHex().c_str(), packet.hops(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
+						TRACEF("Valid announce for %s %d hops away, received on %s%s", destination_hash.toHex().c_str(), packet.hops(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
 					}
 
 					return true;
 				}
 				else {
-					DEBUGF("Received invalid announce for %s: Destination mismatch.", packet.destination_hash().toHex().c_str());
+					DEBUGF("Received invalid announce for %s: Destination mismatch.", destination_hash.toHex().c_str());
 					return false;
 				}
 			}
 			else {
-				DEBUGF("Received invalid announce for %s: Invalid signature.", packet.destination_hash().toHex().c_str());
+				DEBUGF("Received invalid announce for %s: Invalid signature.", destination_hash.toHex().c_str());
 				//p del announced_identity
 				return false;
 			}
@@ -662,7 +694,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	if (_object->_pub) {
 		try {
-			TRACEF("Identity::validate: Attempting to verify signature: %s and message: %s", signature.toHex().c_str(), message.toHex().c_str());
+			TRACEF("Identity::validate: Verifying signature: %s against message: %s", signature.toHex().c_str(), message.toHex().c_str());
 			return _object->_sig_pub->verify(signature, message);
 		}
 		catch (const std::exception& e) {

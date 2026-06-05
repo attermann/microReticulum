@@ -1574,8 +1574,7 @@ bool Link::validate(const Bytes& signature, const Bytes& message) {
 	assert(_object);
 	try {
 		assert(_object->_peer_sig_pub);
-		_object->_peer_sig_pub->verify(signature, message);
-		return true;
+		return _object->_peer_sig_pub->verify(signature, message);
 	}
 	catch (const std::exception& e) {
 		return false;

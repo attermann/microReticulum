@@ -164,7 +164,7 @@ namespace RNS {
 			return truncated_hash(Cryptography::random(Type::Identity::TRUNCATED_HASHLENGTH/8));
 		}
 
-		static bool validate_announce(const Packet& packet);
+		static bool validate_announce(const Packet& packet, bool only_validate_signature = false);
 		static void persist_data();
 		static void exit_handler();
 
