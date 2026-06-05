@@ -106,10 +106,14 @@ namespace RNS { namespace Provisioning {
 			SetterFn setter = nullptr,
 			std::function<fbytes_list_t()> getter = nullptr);
 
+		// Enum values/labels are caller-owned arrays with static-storage
+		// lifetime (the app keeps them alive — usually `static constexpr`).
+		// Pass nullptr for labels if no UI labels are needed; count covers
+		// both. Apps that need ergonomic registration can wrap their own
+		// pair-of-vectors API on top.
 		NamespaceBuilder& field_enum(const char* name, fid_t id, fflags_t flags,
 			fenum_t default_value,
-			std::vector<fenum_t> values,
-			std::vector<fstring_t> labels,
+			const fenum_t* values, const char* const* labels, flen_t count,
 			SetterFn setter = nullptr,
 			std::function<fenum_t()> getter = nullptr);
 
@@ -126,26 +130,57 @@ namespace RNS { namespace Provisioning {
 		// None. Use these for "reboot now", "rotate identity", "ping",
 		// "factory reset", and similar imperative gestures.
 
-		NamespaceBuilder& metric_bool(const char* name, fid_t id,
-			std::function<fbool_t()> getter);
-		NamespaceBuilder& metric_int(const char* name, fid_t id,
-			std::function<fint_t()> getter);
-		NamespaceBuilder& metric_float(const char* name, fid_t id,
-			std::function<ffloat_t()> getter);
-		NamespaceBuilder& metric_string(const char* name, fid_t id,
-			std::function<fstring_t()> getter);
-		NamespaceBuilder& metric_bytes(const char* name, fid_t id,
-			std::function<fbytes_t()> getter);
+#ifndef RNS_PROVISIONING_NO_SUGAR
+		// Sugar wrappers: defined inline so LTO can drop unused variants
+		// (most builds reference only one or two of these). Keep these as
+		// thin pass-throughs to field_* — no logic, just flag presets.
+		//
+		// Opt-out via -DRNS_PROVISIONING_NO_SUGAR. Apps then call field_*
+		// directly with FF_READ_ONLY or FF_WRITE_ONLY (and the matching
+		// default value). command_void stays available regardless — it
+		// has real logic, not a one-liner delegate.
 
-		NamespaceBuilder& command_bool(const char* name, fid_t id, SetterFn setter);
+		NamespaceBuilder& metric_bool(const char* name, fid_t id,
+			std::function<fbool_t()> getter) {
+			return field_bool(name, id, FF_READ_ONLY, false, nullptr, std::move(getter));
+		}
+		NamespaceBuilder& metric_int(const char* name, fid_t id,
+			std::function<fint_t()> getter) {
+			return field_int(name, id, FF_READ_ONLY, 0, nullptr, std::move(getter));
+		}
+		NamespaceBuilder& metric_float(const char* name, fid_t id,
+			std::function<ffloat_t()> getter) {
+			return field_float(name, id, FF_READ_ONLY, 0.0, nullptr, std::move(getter));
+		}
+		NamespaceBuilder& metric_string(const char* name, fid_t id,
+			std::function<fstring_t()> getter) {
+			return field_string(name, id, FF_READ_ONLY, "", 0, nullptr, std::move(getter));
+		}
+		NamespaceBuilder& metric_bytes(const char* name, fid_t id,
+			std::function<fbytes_t()> getter) {
+			return field_bytes(name, id, FF_READ_ONLY, fbytes_t(), 0, nullptr, std::move(getter));
+		}
+
+		NamespaceBuilder& command_bool(const char* name, fid_t id, SetterFn setter) {
+			return field_bool(name, id, FF_WRITE_ONLY, false, std::move(setter));
+		}
 		NamespaceBuilder& command_int(const char* name, fid_t id,
-			fint_t imin, fint_t imax, SetterFn setter);
+			fint_t imin, fint_t imax, SetterFn setter) {
+			return field_int(name, id, FF_WRITE_ONLY, 0, imin, imax, std::move(setter));
+		}
 		NamespaceBuilder& command_float(const char* name, fid_t id,
-			ffloat_t fmin, ffloat_t fmax, SetterFn setter);
+			ffloat_t fmin, ffloat_t fmax, SetterFn setter) {
+			return field_float(name, id, FF_WRITE_ONLY, 0.0, fmin, fmax, std::move(setter));
+		}
 		NamespaceBuilder& command_string(const char* name, fid_t id,
-			flen_t max_len, SetterFn setter);
+			flen_t max_len, SetterFn setter) {
+			return field_string(name, id, FF_WRITE_ONLY, "", max_len, std::move(setter));
+		}
 		NamespaceBuilder& command_bytes(const char* name, fid_t id,
-			flen_t max_len, SetterFn setter);
+			flen_t max_len, SetterFn setter) {
+			return field_bytes(name, id, FF_WRITE_ONLY, fbytes_t(), max_len, std::move(setter));
+		}
+#endif // RNS_PROVISIONING_NO_SUGAR
 
 		// Argument-less command. SET_STATE fires the supplied no-arg setter
 		// on commit; the wire entry is a nil placeholder and any value is
@@ -168,7 +203,10 @@ namespace RNS { namespace Provisioning {
 			Effective = 2,	// working overlaid with draft
 		};
 
-		using RebootRequestedCallback = std::function<void()>;
+		// Raw function pointer (not std::function) — set at most once per
+		// process and never captures. Saves a full std::function
+		// instantiation worth of code size.
+		using RebootRequestedCallback = void (*)();
 
 		static Manager& instance();
 
@@ -196,11 +234,17 @@ namespace RNS { namespace Provisioning {
 		bool  commit(nid_t ns_id = 0);
 		bool  discard(nid_t ns_id = 0);
 
+#ifndef RNS_PROVISIONING_NO_BY_NAME
 		// -- Direct accessors, by name -----------------------------------
+		// Opt-out via -DRNS_PROVISIONING_NO_BY_NAME for builds that only
+		// address fields by id. Strips these four overloads plus the
+		// underlying linear-scan find-by-name paths through Registry and
+		// Namespace, saving a few KB on embedded.
 		Value field(const char* ns_name, const char* field_name, Source = Source::Working) const;
 		bool  field(const char* ns_name, const char* field_name, const Value& v);
 		bool  commit(const char* ns_name);
 		bool  discard(const char* ns_name);
+#endif
 
 		bool  factory_reset();
 
@@ -215,12 +259,15 @@ namespace RNS { namespace Provisioning {
 		bool needs_reboot() const { return _needs_reboot; }
 		bool draft_has_reboot() const;
 
-		void on_reboot_requested(RebootRequestedCallback cb) { _on_reboot = std::move(cb); }
+		void on_reboot_requested(RebootRequestedCallback cb) { _on_reboot = cb; }
 
 		// -- Introspection (for tests, debug, host bindings) --------------
+		// Opt-out via -DRNS_PROVISIONING_NO_INTROSPECTION on space-constrained
+		// builds that don't need direct Registry access from outside.
+#ifndef RNS_PROVISIONING_NO_INTROSPECTION
 		Registry& registry() { return _registry; }
 		const Registry& registry() const { return _registry; }
-		Storage* storage() { return _storage.get(); }
+#endif
 
 		// -- Schema/version constants ------------------------------------
 		// v2 adds the parent_id element to each namespace entry in the
@@ -237,7 +284,7 @@ namespace RNS { namespace Provisioning {
 		std::unique_ptr<Storage> _storage;
 		bool _started = false;
 		bool _needs_reboot = false;
-		RebootRequestedCallback _on_reboot;
+		RebootRequestedCallback _on_reboot = nullptr;
 
 		// Active namespace registration scope. Pushed by namespace_() (incl.
 		// the nested-builder form) and popped by NamespaceBuilder::end().

@@ -21,7 +21,7 @@ namespace RNS { namespace Provisioning {
 	static void warn_if_dup(Namespace* ns, bool ok, fid_t id, const char* name) {
 		if (!ok) {
 			WARNINGF("NamespaceBuilder: duplicate field id=%u name=\"%s\" in namespace %s",
-				id, name ? name : "", ns ? ns->name().c_str() : "?");
+				id, name ? name : "", ns ? ns->name() : "?");
 		}
 	}
 
@@ -211,8 +211,7 @@ namespace RNS { namespace Provisioning {
 
 	NamespaceBuilder& NamespaceBuilder::field_enum(const char* name, fid_t id, fflags_t flags,
 		fenum_t default_value,
-		std::vector<fenum_t> values,
-		std::vector<fstring_t> labels,
+		const fenum_t* values, const char* const* labels, flen_t count,
 		SetterFn setter,
 		std::function<fenum_t()> getter) {
 		Namespace* ns = scope(_mgr, "field_enum");
@@ -222,8 +221,9 @@ namespace RNS { namespace Provisioning {
 		f.name = name ? name : "";
 		f.type = Type::Enum;
 		f.flags = flags;
-		f.constraint.enum_values = std::move(values);
-		f.constraint.enum_labels = std::move(labels);
+		f.constraint.enum_values = values;
+		f.constraint.enum_labels = labels;
+		f.constraint.enum_count  = count;
 		f.default_value = Value::from_int_as(Type::Enum, default_value);
 		f.setter = std::move(setter);
 		if (getter) {
@@ -233,50 +233,9 @@ namespace RNS { namespace Provisioning {
 		return *this;
 	}
 
-	// -- metric_* helpers ----------------------------------------------------
-
-	NamespaceBuilder& NamespaceBuilder::metric_bool(const char* name, fid_t id,
-		std::function<fbool_t()> getter) {
-		return field_bool(name, id, FF_READ_ONLY, false, nullptr, std::move(getter));
-	}
-	NamespaceBuilder& NamespaceBuilder::metric_int(const char* name, fid_t id,
-		std::function<fint_t()> getter) {
-		return field_int(name, id, FF_READ_ONLY, 0, nullptr, std::move(getter));
-	}
-	NamespaceBuilder& NamespaceBuilder::metric_float(const char* name, fid_t id,
-		std::function<ffloat_t()> getter) {
-		return field_float(name, id, FF_READ_ONLY, 0.0, nullptr, std::move(getter));
-	}
-	NamespaceBuilder& NamespaceBuilder::metric_string(const char* name, fid_t id,
-		std::function<fstring_t()> getter) {
-		return field_string(name, id, FF_READ_ONLY, "", 0, nullptr, std::move(getter));
-	}
-	NamespaceBuilder& NamespaceBuilder::metric_bytes(const char* name, fid_t id,
-		std::function<fbytes_t()> getter) {
-		return field_bytes(name, id, FF_READ_ONLY, Bytes(), 0, nullptr, std::move(getter));
-	}
-
-	// -- command_* helpers ---------------------------------------------------
-
-	NamespaceBuilder& NamespaceBuilder::command_bool(const char* name, fid_t id, SetterFn setter) {
-		return field_bool(name, id, FF_WRITE_ONLY, false, std::move(setter));
-	}
-	NamespaceBuilder& NamespaceBuilder::command_int(const char* name, fid_t id,
-		fint_t imin, fint_t imax, SetterFn setter) {
-		return field_int(name, id, FF_WRITE_ONLY, 0, imin, imax, std::move(setter));
-	}
-	NamespaceBuilder& NamespaceBuilder::command_float(const char* name, fid_t id,
-		ffloat_t fmin, ffloat_t fmax, SetterFn setter) {
-		return field_float(name, id, FF_WRITE_ONLY, 0.0, fmin, fmax, std::move(setter));
-	}
-	NamespaceBuilder& NamespaceBuilder::command_string(const char* name, fid_t id,
-		flen_t max_len, SetterFn setter) {
-		return field_string(name, id, FF_WRITE_ONLY, "", max_len, std::move(setter));
-	}
-	NamespaceBuilder& NamespaceBuilder::command_bytes(const char* name, fid_t id,
-		flen_t max_len, SetterFn setter) {
-		return field_bytes(name, id, FF_WRITE_ONLY, Bytes(), max_len, std::move(setter));
-	}
+	// metric_* and command_* sugar wrappers are now inline in Provisioning.h
+	// so the linker (with LTO) can drop unused variants. command_void below
+	// has unique logic and stays out-of-line.
 
 	NamespaceBuilder& NamespaceBuilder::command_void(const char* name, fid_t id,
 		std::function<bool()> setter) {

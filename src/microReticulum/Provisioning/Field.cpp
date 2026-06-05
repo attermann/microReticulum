@@ -14,8 +14,6 @@
 
 #include "Field.h"
 
-#include <algorithm>
-
 namespace RNS { namespace Provisioning {
 
 	bool Field::validate(const Value& v) const {
@@ -47,9 +45,11 @@ namespace RNS { namespace Provisioning {
 				return true;
 			case Type::Enum: {
 				fenum_t iv = v.as_int();
-				if (!constraint.enum_values.empty()) {
-					return std::find(constraint.enum_values.begin(), constraint.enum_values.end(), iv)
-						!= constraint.enum_values.end();
+				if (constraint.enum_values && constraint.enum_count > 0) {
+					for (flen_t i = 0; i < constraint.enum_count; ++i) {
+						if (constraint.enum_values[i] == iv) return true;
+					}
+					return false;
 				}
 				return true;
 			}

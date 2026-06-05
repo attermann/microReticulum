@@ -56,17 +56,25 @@ namespace RNS { namespace Provisioning {
 		// FACTORY_RESET. Returns true if all known files were removed.
 		bool factory_reset(const Registry& registry);
 
+		// Bound used by build_path() and the static buffers in Storage.cpp.
+		// 192 bytes accommodates the longest filesystem path we expect:
+		// a 64-char storage root plus a 3-deep dotted name with 32-char
+		// segments plus the ".msgpack.tmp" suffix. Generous but cheap on
+		// stack — Storage call sites typically have plenty of headroom.
+		static constexpr size_t MAX_PATH_LEN = 192;
+
 	private:
 		fstring_t _root;
 		const Registry* _registry;	// optional; used for dotted-path filenames
 
-		fstring_t file_path(const Namespace& ns) const;
-		fstring_t tmp_path(const Namespace& ns) const;
-
-		// Builds "Parent.Child.GrandChild" by walking ns.parent_id() up the
-		// Registry. Falls back to ns.name() alone if _registry is null or
-		// a parent link is broken.
-		fstring_t dotted_name(const Namespace& ns) const;
+		// Fill 'out' with "<root>/<dotted_name>.msgpack" (suffix = ".msgpack")
+		// or "<root>/<dotted_name>.msgpack.tmp" (suffix = ".msgpack.tmp").
+		// Walks the parent chain inline rather than building intermediate
+		// std::strings — avoids ~1.3 KB of std::string concat/destructor
+		// code that the previous file_path/tmp_path/dotted_name trio pulled
+		// in on every platform.
+		void build_path(const Namespace& ns, const char* suffix,
+			char* out, size_t out_size) const;
 
 		bool load_namespace(Namespace& ns);
 	};

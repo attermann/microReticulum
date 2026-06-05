@@ -47,8 +47,14 @@ namespace RNS { namespace Provisioning {
 		// and maximum number of elements (0 = unlimited).
 		flen_t  element_size = 0;
 		flen_t  max_count    = 0;
-		std::vector<fenum_t>   enum_values;
-		std::vector<fstring_t> enum_labels;
+		// Enum-only: caller-owned arrays (string-literal / static-storage
+		// lifetime). enum_count applies to both values and labels (or labels
+		// may be nullptr if the app doesn't want UI labels). Avoids the
+		// std::vector<std::string> instantiation that the previous design
+		// pulled in even when no enum fields were registered.
+		const fenum_t*       enum_values = nullptr;
+		const char* const*   enum_labels = nullptr;
+		flen_t               enum_count  = 0;
 	};
 
 	using SetterFn = std::function<bool(const Value&)>;
@@ -61,7 +67,12 @@ namespace RNS { namespace Provisioning {
 
 	struct Field {
 		fid_t       id      = 0;
-		fstring_t   name;
+		// Caller-owned string literal lifetime. All in-tree registrations
+		// pass string literals (BuiltinNamespaces, test fixture, the builder
+		// helpers). Storing a raw pointer instead of fstring_t eliminates
+		// per-Field std::string overhead (~234 bytes of destructor code
+		// alone) and lets std::vector<Field> move/grow trivially.
+		const char* name    = "";
 		Type        type    = Type::None;
 		fflags_t    flags   = FF_NONE;
 		Constraint  constraint;

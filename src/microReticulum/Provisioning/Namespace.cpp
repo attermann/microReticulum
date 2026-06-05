@@ -14,22 +14,27 @@
 
 #include "Namespace.h"
 
+#include <string.h>
+
 namespace RNS { namespace Provisioning {
 
 	bool Namespace::add_field(Field f) {
 		if (_id_index.count(f.id) != 0) return false;
-		if (!f.name.empty() && _name_index.count(f.name) != 0) return false;
+		// Linear-scan duplicate-name check. With name_index removed (see
+		// Namespace.h note) the cost is O(N) over a typically small field
+		// list, paid once at registration.
+		if (f.name && f.name[0]) {
+			for (const Field& existing : _fields) {
+				if (existing.name && strcmp(existing.name, f.name) == 0) return false;
+			}
+		}
 		size_t idx = _fields.size();
 		_id_index[f.id] = idx;
-		if (!f.name.empty()) _name_index[f.name] = idx;
 		// Seed working from the live runtime when a getter is registered;
-		// otherwise from the field's declared default. Keeps working in sync
-		// with effective() from boot — without this, a getter that reports a
-		// runtime initialised to anything other than default_value causes
-		// set_draft()'s dedup to silently drop legitimate "set to default"
-		// requests at line 84.
+		// otherwise from the field's declared default.
 		_working[f.id] = f.getter ? f.getter() : f.default_value;
 		_fields.push_back(std::move(f));
+		(void)idx;
 		return true;
 	}
 
@@ -39,12 +44,15 @@ namespace RNS { namespace Provisioning {
 		return &_fields[it->second];
 	}
 
+#ifndef RNS_PROVISIONING_NO_BY_NAME
 	const Field* Namespace::find_field(const char* name) const {
 		if (!name) return nullptr;
-		auto it = _name_index.find(name);
-		if (it == _name_index.end()) return nullptr;
-		return &_fields[it->second];
+		for (const Field& f : _fields) {
+			if (f.name && strcmp(f.name, name) == 0) return &f;
+		}
+		return nullptr;
 	}
+#endif
 
 	Value Namespace::working(fid_t field_id) const {
 		auto it = _working.find(field_id);

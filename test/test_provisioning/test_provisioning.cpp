@@ -329,22 +329,28 @@ void test_live_vs_reboot_apply(void) {
 	TEST_ASSERT_FALSE(p.draft_has_reboot());
 }
 
+// File-static counter used by test_reboot_callback_fires_once. The reboot
+// callback is a plain fn pointer (smaller than std::function on embedded),
+// so captures aren't allowed — a static is the simplest substitute.
+static int g_reboot_callback_count = 0;
+static void on_reboot_test_cb() { ++g_reboot_callback_count; }
+
 void test_reboot_callback_fires_once(void) {
 	fresh_provisioning(g_test_root);
 	auto& p = Manager::instance();
 
-	int callback_count = 0;
-	p.on_reboot_requested([&callback_count]() { ++callback_count; });
+	g_reboot_callback_count = 0;
+	p.on_reboot_requested(on_reboot_test_cb);
 
 	p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value((int64_t)868000000));
 	TEST_ASSERT_TRUE(p.commit());
-	TEST_ASSERT_EQUAL(1, callback_count);
+	TEST_ASSERT_EQUAL(1, g_reboot_callback_count);
 
 	// A second commit of another reboot field should NOT fire again
 	// (needs_reboot is sticky until reboot or factory_reset).
 	p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value((int64_t)869000000));
 	TEST_ASSERT_TRUE(p.commit());
-	TEST_ASSERT_EQUAL(1, callback_count);
+	TEST_ASSERT_EQUAL(1, g_reboot_callback_count);
 }
 
 void test_getter_reflects_direct_setter(void) {

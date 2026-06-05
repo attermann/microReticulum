@@ -17,8 +17,8 @@
 #include "Field.h"
 
 #include <stdint.h>
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace RNS { namespace Provisioning {
@@ -30,7 +30,8 @@ namespace RNS { namespace Provisioning {
 			: _id(id), _name(name ? name : ""), _parent_id(parent_id) {}
 
 		nid_t id() const { return _id; }
-		const fstring_t& name() const { return _name; }
+		// Returns the caller-owned name pointer (string literal lifetime).
+		const char* name() const { return _name; }
 		// 0 = root (no parent). Non-zero values reference another namespace
 		// id in the same Registry, forming a tree used for UI grouping and
 		// disk filename construction.
@@ -40,7 +41,9 @@ namespace RNS { namespace Provisioning {
 		bool add_field(Field f);
 
 		const Field* find_field(fid_t id) const;
+#ifndef RNS_PROVISIONING_NO_BY_NAME
 		const Field* find_field(const char* name) const;
+#endif
 
 		const std::vector<Field>& fields() const { return _fields; }
 
@@ -94,13 +97,16 @@ namespace RNS { namespace Provisioning {
 
 	private:
 		nid_t _id;
-		fstring_t _name;
+		const char* _name;          // string-literal lifetime, caller-owned
 		nid_t _parent_id = 0;
 		std::vector<Field> _fields;
-		std::unordered_map<fid_t, size_t> _id_index;
-		std::unordered_map<fstring_t, size_t> _name_index;
-		std::unordered_map<fid_t, Value> _working;
-		std::unordered_map<fid_t, Value> _draft;
+		std::map<fid_t, size_t> _id_index;
+		// No _name_index: by-name lookups linear-scan _fields. For typical
+		// N<20 the overhead is comparable to a hash lookup and the saved
+		// std::map<std::string,_> instantiation alone is several hundred
+		// bytes of binary.
+		std::map<fid_t, Value> _working;
+		std::map<fid_t, Value> _draft;
 		bool _dirty_for_persist = false;
 	};
 

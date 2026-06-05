@@ -14,17 +14,22 @@
 
 #include "Registry.h"
 
+#include <string.h>
+
 namespace RNS { namespace Provisioning {
 
 	Namespace* Registry::add_namespace(nid_t id, const char* name, nid_t parent_id) {
 		if (_id_index.count(id) != 0) return nullptr;
-		// Names must be unique within their parent — siblings can't collide,
-		// but the same name under different parents is fine (e.g. "LoRa" under
-		// both "Interfaces" and "Radios"). For now, require name uniqueness
-		// globally only when caller passes parent_id=0 to keep filename
-		// collision risk down. Cheap and matches existing behavior.
-		fstring_t sname = name ? name : "";
-		if (!sname.empty() && parent_id == 0 && _name_index.count(sname) != 0) return nullptr;
+		// Names must be unique among root namespaces (parent_id == 0) to
+		// prevent filename collisions in Storage. Linear scan with strcmp,
+		// O(N) over the small set of root namespaces.
+		if (name && name[0] && parent_id == 0) {
+			for (const auto& up : _namespaces) {
+				if (up->parent_id() == 0 && up->name() && strcmp(up->name(), name) == 0) {
+					return nullptr;
+				}
+			}
+		}
 
 		// Cycle check: walk up parent chain — if we hit `id`, refuse.
 		if (parent_id != 0) {
@@ -40,7 +45,6 @@ namespace RNS { namespace Provisioning {
 		size_t idx = _namespaces.size();
 		_namespaces.push_back(std::unique_ptr<Namespace>(new Namespace(id, name, parent_id)));
 		_id_index[id] = idx;
-		if (!sname.empty() && parent_id == 0) _name_index[sname] = idx;
 		return _namespaces.back().get();
 	}
 
@@ -58,30 +62,33 @@ namespace RNS { namespace Provisioning {
 		return _namespaces[it->second].get();
 	}
 
-	Namespace* Registry::find(const char* name) {
-		if (!name) return nullptr;
-		auto it = _name_index.find(name);
-		if (it == _name_index.end()) return nullptr;
-		return _namespaces[it->second].get();
-	}
-
 	const Namespace* Registry::find(nid_t id) const {
 		auto it = _id_index.find(id);
 		if (it == _id_index.end()) return nullptr;
 		return _namespaces[it->second].get();
 	}
 
+#ifndef RNS_PROVISIONING_NO_BY_NAME
+	Namespace* Registry::find(const char* name) {
+		if (!name) return nullptr;
+		for (const auto& up : _namespaces) {
+			if (up->name() && strcmp(up->name(), name) == 0) return up.get();
+		}
+		return nullptr;
+	}
+
 	const Namespace* Registry::find(const char* name) const {
 		if (!name) return nullptr;
-		auto it = _name_index.find(name);
-		if (it == _name_index.end()) return nullptr;
-		return _namespaces[it->second].get();
+		for (const auto& up : _namespaces) {
+			if (up->name() && strcmp(up->name(), name) == 0) return up.get();
+		}
+		return nullptr;
 	}
+#endif
 
 	void Registry::clear() {
 		_namespaces.clear();
 		_id_index.clear();
-		_name_index.clear();
 	}
 
 } }

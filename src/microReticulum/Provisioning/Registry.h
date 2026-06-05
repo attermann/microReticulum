@@ -16,9 +16,9 @@
 
 #include "Namespace.h"
 
+#include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace RNS { namespace Provisioning {
@@ -34,9 +34,11 @@ namespace RNS { namespace Provisioning {
 		Namespace* add_namespace(nid_t id, const char* name, nid_t parent_id = 0);
 
 		Namespace* find(nid_t id);
-		Namespace* find(const char* name);
 		const Namespace* find(nid_t id) const;
+#ifndef RNS_PROVISIONING_NO_BY_NAME
+		Namespace* find(const char* name);
 		const Namespace* find(const char* name) const;
+#endif
 
 		const std::vector<std::unique_ptr<Namespace>>& namespaces() const { return _namespaces; }
 
@@ -48,8 +50,10 @@ namespace RNS { namespace Provisioning {
 
 	private:
 		std::vector<std::unique_ptr<Namespace>> _namespaces;
-		std::unordered_map<nid_t, size_t> _id_index;
-		std::unordered_map<fstring_t, size_t> _name_index;
+		std::map<nid_t, size_t> _id_index;
+		// No _name_index: find(const char*) linear-scans _namespaces. Saves
+		// a std::map<std::string,_> instantiation worth of code.
+
 	};
 
 } }

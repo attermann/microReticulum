@@ -19,73 +19,69 @@
 #include "../Log.h"
 #include "../Utilities/OS.h"
 
+#include <stdio.h>
+#include <string.h>
+
 namespace RNS { namespace Provisioning {
 
-	fstring_t Storage::dotted_name(const Namespace& ns) const {
-		fstring_t acc = ns.name();
-		if (!_registry) return acc;
-		nid_t hop = ns.parent_id();
-		// Bounded walk — registries are small. If the chain points at a
-		// missing namespace we stop and return whatever we have so far.
-		while (hop != 0) {
-			const Namespace* p = _registry->find(hop);
-			if (!p) break;
-			acc = p->name() + "." + acc;
-			hop = p->parent_id();
+	void Storage::build_path(const Namespace& ns, const char* suffix,
+		char* out, size_t out_size) const {
+		// Walk the parent chain once to collect ancestor names (root-first).
+		// Cap at 8 deep — far beyond any plausible namespace tree, but small
+		// enough that the local array costs nothing.
+		const char* parts[8];
+		size_t depth = 0;
+		parts[depth++] = ns.name();
+		if (_registry) {
+			nid_t hop = ns.parent_id();
+			while (hop != 0 && depth < 8) {
+				const Namespace* p = _registry->find(hop);
+				if (!p) break;
+				parts[depth++] = p->name();
+				hop = p->parent_id();
+			}
 		}
-		return acc;
-	}
-
-	fstring_t Storage::file_path(const Namespace& ns) const {
-		return _root + "/" + dotted_name(ns) + ".msgpack";
-	}
-
-	fstring_t Storage::tmp_path(const Namespace& ns) const {
-		return _root + "/" + dotted_name(ns) + ".msgpack.tmp";
+		// Compose "<root>/<root_ns>.<child>.<...>.<leaf><suffix>" in one pass.
+		size_t pos = 0;
+		auto append = [&](const char* s) {
+			while (*s && pos + 1 < out_size) out[pos++] = *s++;
+		};
+		append(_root.c_str());
+		if (pos + 1 < out_size) out[pos++] = '/';
+		for (size_t i = depth; i > 0; --i) {
+			append(parts[i - 1]);
+			if (i > 1 && pos + 1 < out_size) out[pos++] = '.';
+		}
+		append(suffix);
+		out[pos < out_size ? pos : out_size - 1] = '\0';
 	}
 
 	bool Storage::ensure_directory() {
-		try {
-			if (Utilities::OS::directory_exists(_root.c_str())) return true;
-			return Utilities::OS::create_directory(_root.c_str());
-		}
-		catch (const std::exception& e) {
-			ERRORF("Storage::ensure_directory: %s", e.what());
-			return false;
-		}
+		if (Utilities::OS::directory_exists(_root.c_str())) return true;
+		return Utilities::OS::create_directory(_root.c_str());
 	}
 
 	bool Storage::load_namespace(Namespace& ns) {
-		const fstring_t tmp = tmp_path(ns);
-		const fstring_t final = file_path(ns);
+		char tmp[MAX_PATH_LEN], final[MAX_PATH_LEN];
+		build_path(ns, ".msgpack.tmp", tmp, sizeof(tmp));
+		build_path(ns, ".msgpack",     final, sizeof(final));
 
-		// Discard any stale .tmp from an interrupted save.
-		try {
-			if (Utilities::OS::file_exists(tmp.c_str())) {
-				Utilities::OS::remove_file(tmp.c_str());
-			}
+		// Discard any stale .tmp from an interrupted save. microStore is
+		// nothrow; failures here are best-effort and we proceed regardless.
+		if (Utilities::OS::file_exists(tmp)) {
+			Utilities::OS::remove_file(tmp);
 		}
-		catch (...) { /* best-effort */ }
 
-		try {
-			if (!Utilities::OS::file_exists(final.c_str())) return false;
-		}
-		catch (...) { return false; }
+		if (!Utilities::OS::file_exists(final)) return false;
 
 		Bytes raw;
-		try {
-			size_t n = Utilities::OS::read_file(final.c_str(), raw);
-			if (n == 0) return false;
-		}
-		catch (const std::exception& e) {
-			ERRORF("Storage::load_namespace: read failed: %s", e.what());
-			return false;
-		}
+		size_t n = Utilities::OS::read_file(final, raw);
+		if (n == 0) return false;
 
 		MsgPack::Unpacker unpacker;
 		unpacker.feed(raw.data(), raw.size());
 		if (!Codec::unpack_namespace_working(unpacker, ns)) {
-			WARNINGF("Storage::load_namespace: malformed file for namespace %s", ns.name().c_str());
+			WARNINGF("Storage::load_namespace: malformed file for namespace %s", ns.name());
 			return false;
 		}
 		ns.mark_clean();
@@ -116,33 +112,28 @@ namespace RNS { namespace Provisioning {
 		if (!Codec::pack_namespace_working(packer, ns)) return false;
 		Bytes encoded(packer.data(), packer.size());
 
-		const fstring_t tmp = tmp_path(ns);
-		const fstring_t final = file_path(ns);
+		char tmp[MAX_PATH_LEN], final[MAX_PATH_LEN];
+		build_path(ns, ".msgpack.tmp", tmp, sizeof(tmp));
+		build_path(ns, ".msgpack",     final, sizeof(final));
 
-		try {
-			size_t wrote = Utilities::OS::write_file(tmp.c_str(), encoded);
-			if (wrote != encoded.size()) {
-				ERRORF("Storage::save: short write for %s (%zu/%zu)",
-					ns.name().c_str(), wrote, encoded.size());
-				Utilities::OS::remove_file(tmp.c_str());
+		size_t wrote = Utilities::OS::write_file(tmp, encoded);
+		if (wrote != encoded.size()) {
+			ERRORF("Storage::save: short write for %s (%zu/%zu)",
+				ns.name(), wrote, encoded.size());
+			Utilities::OS::remove_file(tmp);
+			return false;
+		}
+		// Rename overwrites on POSIX; on Arduino flash backends the adapter
+		// handles delete-then-rename internally.
+		if (!Utilities::OS::rename_file(tmp, final)) {
+			// Fallback: remove existing final and retry rename, since some
+			// Arduino FS adapters won't overwrite atomically.
+			Utilities::OS::remove_file(final);
+			if (!Utilities::OS::rename_file(tmp, final)) {
+				ERRORF("Storage::save: rename failed for %s", ns.name());
+				Utilities::OS::remove_file(tmp);
 				return false;
 			}
-			// Rename overwrites on POSIX; on Arduino flash backends the
-			// adapter handles delete-then-rename internally.
-			if (!Utilities::OS::rename_file(tmp.c_str(), final.c_str())) {
-				// Fallback: remove existing final and retry rename, since
-				// some Arduino FS adapters won't overwrite atomically.
-				try { Utilities::OS::remove_file(final.c_str()); } catch (...) {}
-				if (!Utilities::OS::rename_file(tmp.c_str(), final.c_str())) {
-					ERRORF("Storage::save: rename failed for %s", ns.name().c_str());
-					Utilities::OS::remove_file(tmp.c_str());
-					return false;
-				}
-			}
-		}
-		catch (const std::exception& e) {
-			ERRORF("Storage::save: %s", e.what());
-			return false;
 		}
 
 		ns.mark_clean();
@@ -150,20 +141,15 @@ namespace RNS { namespace Provisioning {
 	}
 
 	bool Storage::remove_namespace(const Namespace& ns) {
-		const fstring_t tmp = tmp_path(ns);
-		const fstring_t final = file_path(ns);
+		char tmp[MAX_PATH_LEN], final[MAX_PATH_LEN];
+		build_path(ns, ".msgpack.tmp", tmp, sizeof(tmp));
+		build_path(ns, ".msgpack",     final, sizeof(final));
 		bool ok = true;
-		try {
-			if (Utilities::OS::file_exists(tmp.c_str())) {
-				ok = Utilities::OS::remove_file(tmp.c_str()) && ok;
-			}
-			if (Utilities::OS::file_exists(final.c_str())) {
-				ok = Utilities::OS::remove_file(final.c_str()) && ok;
-			}
+		if (Utilities::OS::file_exists(tmp)) {
+			ok = Utilities::OS::remove_file(tmp) && ok;
 		}
-		catch (const std::exception& e) {
-			ERRORF("Storage::remove_namespace: %s", e.what());
-			return false;
+		if (Utilities::OS::file_exists(final)) {
+			ok = Utilities::OS::remove_file(final) && ok;
 		}
 		return ok;
 	}

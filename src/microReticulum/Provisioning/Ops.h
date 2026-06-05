@@ -51,17 +51,14 @@ namespace RNS { namespace Provisioning {
 		Internal            = 99,
 	};
 
-	// Envelope and response keys. Same set on both directions.
+	// Map-key constants used inside MsgPack payloads. Envelopes themselves
+	// are positional arrays ([op, seq, payload]) and don't need keys;
+	// GetSchema / GetCapabilities also use positional arrays for ns entries.
+	// Only keys actually referenced by the wire codec are listed here.
 	namespace Key {
-		constexpr uint16_t Op             = 1;
-		constexpr uint16_t Seq            = 2;
-		constexpr uint16_t Payload        = 3;
-
 		// Error payload keys
 		constexpr uint16_t ErrorCodeKey   = 1;
 		constexpr uint16_t ErrorMessage   = 2;
-		constexpr uint16_t ErrorNamespace = 3;
-		constexpr uint16_t ErrorField     = 4;
 
 		// Commit/SetState response keys
 		constexpr uint16_t Applied        = 1;
@@ -72,22 +69,13 @@ namespace RNS { namespace Provisioning {
 		// GetState / SetState request flags
 		constexpr uint16_t NamespaceFilter = 1;
 		constexpr uint16_t Pending         = 2;
-		constexpr uint16_t State           = 3;	// the {ns: {field: value}} map
 
 		// GetInfo
 		constexpr uint16_t FirmwareVersion = 1;
 		constexpr uint16_t SchemaVersion   = 2;
 		constexpr uint16_t NeedsRebootInfo = 3;
 
-		// GetCapabilities
-		constexpr uint16_t Namespaces      = 1;
-
-		// GetSchema field metadata
-		constexpr uint16_t SchemaNamespaces = 1;
-		constexpr uint16_t NsId             = 1;
-		constexpr uint16_t NsName           = 2;
-		constexpr uint16_t NsFields         = 3;
-		constexpr uint16_t NsParent         = 4;	// optional parent ns id (0 = root)
+		// GetSchema field metadata (per-field map keys)
 		constexpr uint16_t FieldId          = 1;
 		constexpr uint16_t FieldName        = 2;
 		constexpr uint16_t FieldType        = 3;

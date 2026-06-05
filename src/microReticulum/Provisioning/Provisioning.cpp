@@ -17,7 +17,7 @@
 
 #include "../Log.h"
 
-#include <unordered_set>
+#include <set>
 
 namespace RNS { namespace Provisioning {
 
@@ -106,10 +106,8 @@ namespace RNS { namespace Provisioning {
 		_build_scope.clear();
 		_needs_reboot = false;
 		_started = false;
-		// Drop the reboot-requested callback. If the caller captured stack
-		// state by reference (very common in tests), keeping the std::function
-		// alive past end() turns the next set_reboot_flag(true) into a
-		// write-through-dangling-reference.
+		// Drop the reboot callback so a stale fn pointer can't fire on the
+		// next session (unlikely with a fn pointer, but cheap defence).
 		_on_reboot = nullptr;
 	}
 
@@ -123,7 +121,9 @@ namespace RNS { namespace Provisioning {
 			// Recovery: existing namespace by id, or by name at root level.
 			// We still push it onto the scope so nested chaining works.
 			ns = _registry.find(id);
+#ifndef RNS_PROVISIONING_NO_BY_NAME
 			if (!ns && name) ns = _registry.find(name);
+#endif
 			WARNINGF("Provisioning::namespace_: namespace id=%u name=\"%s\" already exists or invalid; appending to it",
 				id, name ? name : "");
 		}
@@ -165,6 +165,7 @@ namespace RNS { namespace Provisioning {
 		return ns->set_draft(field_id, v);
 	}
 
+#ifndef RNS_PROVISIONING_NO_BY_NAME
 	Value Manager::field(const char* ns_name, const char* field_name, Source src) const {
 		const Namespace* ns = _registry.find(ns_name);
 		if (!ns) return {};
@@ -180,6 +181,7 @@ namespace RNS { namespace Provisioning {
 		if (!f) return false;
 		return ns->set_draft(f->id, v);
 	}
+#endif
 
 	bool Manager::commit(nid_t ns_id) {
 		auto do_one = [&](Namespace& ns) -> bool {
@@ -219,6 +221,7 @@ namespace RNS { namespace Provisioning {
 		return true;
 	}
 
+#ifndef RNS_PROVISIONING_NO_BY_NAME
 	bool Manager::commit(const char* ns_name) {
 		Namespace* ns = _registry.find(ns_name);
 		if (!ns) return false;
@@ -230,6 +233,7 @@ namespace RNS { namespace Provisioning {
 		if (!ns) return false;
 		return discard(ns->id());
 	}
+#endif
 
 	bool Manager::factory_reset() {
 		// Drop drafts, reset working to defaults, AND push defaults into
@@ -278,12 +282,7 @@ namespace RNS { namespace Provisioning {
 	void Manager::set_reboot_flag(bool any_reboot_applied) {
 		const bool was = _needs_reboot;
 		if (any_reboot_applied) _needs_reboot = true;
-		if (!was && _needs_reboot && _on_reboot) {
-			try { _on_reboot(); }
-			catch (const std::exception& e) {
-				ERRORF("Provisioning::on_reboot_requested callback threw: %s", e.what());
-			}
-		}
+		if (!was && _needs_reboot && _on_reboot) _on_reboot();
 	}
 
 	// ---------------------------------------------------------------------
@@ -403,8 +402,8 @@ namespace RNS { namespace Provisioning {
 		if (f.type == Type::Float && f.constraint.has_range) n += 2;
 		if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) n += 1;
 		if (f.type == Type::Enum) {
-			if (!f.constraint.enum_values.empty()) n += 1;
-			if (!f.constraint.enum_labels.empty()) n += 1;
+			if (f.constraint.enum_values && f.constraint.enum_count > 0) n += 1;
+			if (f.constraint.enum_labels && f.constraint.enum_count > 0) n += 1;
 		}
 		if (f.type == Type::BytesList) {
 			if (f.constraint.element_size > 0) n += 1;
@@ -425,14 +424,14 @@ namespace RNS { namespace Provisioning {
 				// the rest of the response correctly.
 				p.serialize(MsgPack::arr_size_t(4));
 				p.serialize((nid_t)ns.id());
-				p.serialize(ns.name().c_str());
+				p.serialize(ns.name());
 				p.serialize((nid_t)ns.parent_id());
 				const auto& fields = ns.fields();
 				p.serialize(MsgPack::arr_size_t(fields.size()));
 				for (const Field& f : fields) {
 					p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
 					p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
-					p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
+					p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name ? f.name : "");
 					p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
 					p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
 					p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
@@ -447,16 +446,20 @@ namespace RNS { namespace Provisioning {
 					if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
 						p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
 					}
-					if (f.type == Type::Enum) {
-						if (!f.constraint.enum_values.empty()) {
+					if (f.type == Type::Enum && f.constraint.enum_count > 0) {
+						if (f.constraint.enum_values) {
 							p.serialize((uint16_t)Key::FieldEnumValues);
-							p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
-							for (fenum_t v : f.constraint.enum_values) p.serialize(v);
+							p.serialize(MsgPack::arr_size_t(f.constraint.enum_count));
+							for (flen_t i = 0; i < f.constraint.enum_count; ++i) {
+								p.serialize(f.constraint.enum_values[i]);
+							}
 						}
-						if (!f.constraint.enum_labels.empty()) {
+						if (f.constraint.enum_labels) {
 							p.serialize((uint16_t)Key::FieldEnumLabels);
-							p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
-							for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
+							p.serialize(MsgPack::arr_size_t(f.constraint.enum_count));
+							for (flen_t i = 0; i < f.constraint.enum_count; ++i) {
+								p.serialize(f.constraint.enum_labels[i] ? f.constraint.enum_labels[i] : "");
+							}
 						}
 					}
 					if (f.type == Type::BytesList) {
@@ -481,7 +484,7 @@ namespace RNS { namespace Provisioning {
 
 	Bytes Manager::op_get_state(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
-		std::unordered_set<nid_t> ns_filter;
+		std::set<nid_t> ns_filter;
 		bool has_filter = false;
 		bool pending = false;
 		// Optional payload map: {1: [ns_filter], 2: pending}
