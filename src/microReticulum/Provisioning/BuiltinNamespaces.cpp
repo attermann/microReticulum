@@ -88,8 +88,8 @@ namespace RNS { namespace Provisioning {
 						const std::set<Bytes>& s = RNS::Transport::remote_management_allowed();
 						return std::vector<Bytes>(s.begin(), s.end());
 					})
-				.command_bool("clear_provisioning", Ns::Reticulum::Field::ClearStorage,
-					[](const Value&) { return Manager::instance().clear_storage(); })
+				.command_void("clear_provisioning", Ns::Reticulum::Field::ClearStorage,
+					[]() { return Manager::instance().clear_storage(); })
 				.end();
 		}
 
@@ -116,8 +116,8 @@ namespace RNS { namespace Provisioning {
 					FF_LIVE_APPLY, (int64_t)RNS::Transport::path_table_maxpersist(), 1, 65535,
 					[](const Value& v) { RNS::Transport::path_table_maxpersist((uint16_t)v.as_int()); return true; },
 					[]() { return (int64_t)RNS::Transport::path_table_maxpersist(); })
-				.command_bool("clear_storage", Ns::Transport::Field::ClearStorage,
-					[](const Value&) { RNS::Transport::clear_storage(); return true; })
+				.command_void("clear_storage", Ns::Transport::Field::ClearStorage,
+					[]() { RNS::Transport::clear_storage(); return true; })
 				.end();
 		}
 

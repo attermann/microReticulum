@@ -1963,9 +1963,12 @@ DestinationEntry empty_destination_entry;
 					TRACEF("Checking for existing path to %s", packet.destination_hash().toHex().c_str());
 					// CBA microStore
 					//auto& destination_entry = get_path(packet.destination_hash());
+					bool was_found = false;
 					DestinationEntry destination_entry;
 					_new_path_table.get(packet.destination_hash(), destination_entry);
 					if (destination_entry) {
+						was_found = true;
+						TRACEF("Found existing path to %s", packet.destination_hash().toHex().c_str());
 						//p random_blobs = Transport.destination_table[packet.destination_hash][4]
 						random_blobs = destination_entry._random_blobs;
 
@@ -2253,7 +2256,8 @@ DestinationEntry empty_destination_entry;
 
 						// CBA ACCUMULATES
 						//_packet_table.insert({packet.get_hash(), packet_entry});
-						TRACEF("Adding destination %s to path table", packet.destination_hash().toHex().c_str());
+						if (was_found) DEBUGF("Replacing destination %s in path table", packet.destination_hash().toHex().c_str());
+						else DEBUGF("Adding destination %s to path table", packet.destination_hash().toHex().c_str());
 						DestinationEntry destination_table_entry(
 							now,
 							received_from,
