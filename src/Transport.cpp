@@ -2464,27 +2464,32 @@ DestinationEntry empty_destination_entry;
 								}
 								Bytes peer_pub_bytes = packet.data().mid(Type::Identity::SIGLENGTH/8, Type::Link::ECPUBSIZE/2);
 								Identity peer_identity = Identity::recall(link_entry._destination_hash);
-								Bytes peer_sig_pub_bytes = peer_identity.get_public_key().mid(Type::Link::ECPUBSIZE/2, Type::Link::ECPUBSIZE/2);
+								if (peer_identity) {
+									Bytes peer_sig_pub_bytes = peer_identity.get_public_key().mid(Type::Link::ECPUBSIZE/2, Type::Link::ECPUBSIZE/2);
 
-								Bytes signed_data = packet.destination_hash() + peer_pub_bytes + peer_sig_pub_bytes + signalling_bytes;
-								Bytes signature = packet.data().left(Type::Identity::SIGLENGTH/8);
+									Bytes signed_data = packet.destination_hash() + peer_pub_bytes + peer_sig_pub_bytes + signalling_bytes;
+									Bytes signature = packet.data().left(Type::Identity::SIGLENGTH/8);
 
-								if (peer_identity.validate(signature, signed_data)) {
-									TRACEF("Link request proof validated for transport via %s", link_entry._receiving_interface.toString().c_str());
-									//p new_raw = packet.raw[0:1]
-									// CBA RESERVE
-									//Bytes new_raw = packet.raw().left(1);
-									Bytes new_raw(512);
-									new_raw << packet.raw().left(1);
-									//p new_raw += struct.pack("!B", packet.hops)
-									new_raw << packet.hops();
-									//p new_raw += packet.raw[2:]
-									new_raw << packet.raw().mid(2);
-									link_entry._validated = true;
-									transmit(link_entry._receiving_interface, new_raw);
+									if (peer_identity.validate(signature, signed_data)) {
+										TRACEF("Link request proof validated for transport via %s", link_entry._receiving_interface.toString().c_str());
+										//p new_raw = packet.raw[0:1]
+										// CBA RESERVE
+										//Bytes new_raw = packet.raw().left(1);
+										Bytes new_raw(512);
+										new_raw << packet.raw().left(1);
+										//p new_raw += struct.pack("!B", packet.hops)
+										new_raw << packet.hops();
+										//p new_raw += packet.raw[2:]
+										new_raw << packet.raw().mid(2);
+										link_entry._validated = true;
+										transmit(link_entry._receiving_interface, new_raw);
+									}
+									else {
+										DEBUGF("Invalid link request proof in transport for link %s, dropping proof.", packet.destination_hash().toHex().c_str());
+									}
 								}
 								else {
-									DEBUGF("Invalid link request proof in transport for link %s, dropping proof.", packet.destination_hash().toHex().c_str());
+									DEBUGF("Could not recall identity for link request proof destination %s, dropping proof.", link_entry._destination_hash.toHex().c_str());
 								}
 							}
 						}
