@@ -38,8 +38,24 @@
 	],
 	"frameworks": "*",
 	"platforms": "*",
-	"export": {},
-	"exclude": [
-		".github"
+	"export": {
+		"include": [
+			"library.json",
+			"platformio.ini",
+			"CMakeLists.txt",
+			"README.md",
+			"LICENSE",
+			"src",
+			"lib"
+		]
+	},
+	"include": [
+		"library.json",
+		"platformio.ini",
+		"CMakeLists.txt",
+		"README.md",
+		"LICENSE",
+		"src",
+		"lib"
 	]
 }
