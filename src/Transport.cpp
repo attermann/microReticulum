@@ -4772,6 +4772,16 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	return {Type::NONE};
 }
 
+/*static*/ Packet Transport::find_announce_packet_from_hash(const Bytes& destination_hash) {
+	TRACEF("Transport::find_announce_packet_from_hash: Searching for announce packet for destination %s", destination_hash.toHex().c_str());
+	DestinationEntry destination_entry;
+	if (_new_path_table.get(destination_hash, destination_entry)) {
+		return destination_entry.announce_packet();
+	}
+
+	return {Type::NONE};
+}
+
 /*static*/ void Transport::cull_path_table() {
 	TRACE("Transport::cull_path_table()");
 	if (_path_table.size() > _path_table_maxsize) {
