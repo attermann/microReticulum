@@ -18,6 +18,7 @@
 #include "Bytes.h"
 #include "Type.h"
 #include "Utilities/Memory.h"
+#include "Utilities/GenerationalSet.h"
 #include "Persistence/DestinationEntry.h"
 
 #include <map>
@@ -74,6 +75,7 @@ namespace RNS {
 
 		using InterfaceTable = std::map<Bytes, Interface>;
 		using DestinationTable = std::map<Bytes, Destination>;
+		using BytesList = RNS::Utilities::GenerationalSet<Bytes>;
 
 		class Callbacks {
 		public:
@@ -367,9 +369,15 @@ namespace RNS {
 		inline static uint16_t announce_table_maxsize() { return _announce_table_maxsize; }
 		inline static void announce_table_maxsize(uint16_t announce_table_maxsize) { _announce_table_maxsize = announce_table_maxsize; }
 		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
-		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) { _hashlist_maxsize = hashlist_maxsize; }
+		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) {
+			_hashlist_maxsize = hashlist_maxsize;
+			_packet_hashlist.max_size(hashlist_maxsize);
+		}
 		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
-		inline static void max_pr_tags(uint16_t max_pr_tags) { _max_pr_tags = max_pr_tags; }
+		inline static void max_pr_tags(uint16_t max_pr_tags) {
+			_max_pr_tags = max_pr_tags;
+			_discovery_pr_tags.max_size(max_pr_tags);
+		}
 		inline static uint16_t path_table_maxpersist() { return _path_table_maxpersist; }
 		inline static void path_table_maxpersist(uint16_t value) { _path_table_maxpersist = value; }
 		inline static uint32_t path_store_segment_size() { return _path_store_segment_size; }
@@ -392,10 +400,10 @@ namespace RNS {
 		inline static const std::map<Bytes, double>& path_requests() { return _path_requests; }
 		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
 		inline static const std::map<Bytes, const Interface>& pending_local_path_requests() { return _pending_local_path_requests; }
-		inline static const std::set<Bytes>& discovery_pr_tags() { return _discovery_pr_tags; }
+		inline static const BytesList& discovery_pr_tags() { return _discovery_pr_tags; }
 		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
 		inline static const std::set<Bytes>& control_hashes() { return _control_hashes; }
-		inline static const std::set<Bytes>& packet_hashlist() { return _packet_hashlist; }
+		inline static const BytesList& packet_hashlist() { return _packet_hashlist; }
 		inline static const std::list<PacketReceipt>& receipts() { return _receipts; }
 		inline static const TunnelTable& tunnels() { return _tunnels; }
 
@@ -411,7 +419,7 @@ namespace RNS {
 		// CBA TODO: Reconsider using std::set for enforcing uniqueness. Maybe consider std::map keyed on hash instead
 		static std::set<Link> _pending_links;		// Links that are being established
 		static std::set<Link> _active_links;		// Links that are active
-		static std::set<Bytes> _packet_hashlist;	// A list of packet hashes for duplicate detection
+		static BytesList _packet_hashlist;	    // A list of packet hashes for duplicate detection
 		static std::list<PacketReceipt> _receipts;	// Receipts of all outgoing packets for proof processing
 
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
@@ -425,7 +433,7 @@ namespace RNS {
 		static std::map<Bytes, double> _path_requests;	// A table for storing path request timestamps
 
 		static PathRequestTable _discovery_path_requests;	// A table for keeping track of path requests on behalf of other nodes
-		static std::set<Bytes> _discovery_pr_tags;	// A table for keeping track of tagged path requests
+		static BytesList _discovery_pr_tags;	// A table for keeping track of tagged path requests
 
 		// Transport control destinations are used
 		// for control purposes like path requests

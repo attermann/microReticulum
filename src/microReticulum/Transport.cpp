@@ -64,7 +64,7 @@ using namespace RNS::Persistence;
 /*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
 /*static*/ std::set<Link> Transport::_active_links;
-/*static*/ std::set<Bytes> Transport::_packet_hashlist;
+/*static*/ Transport::BytesList Transport::_packet_hashlist;
 /*static*/ std::list<PacketReceipt> Transport::_receipts;
 
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
@@ -78,7 +78,7 @@ using namespace RNS::Persistence;
 /*static*/ std::map<Bytes, double> Transport::_path_requests;
 
 /*static*/ std::map<Bytes, Transport::PathRequestEntry> Transport::_discovery_path_requests;
-/*static*/ std::set<Bytes> Transport::_discovery_pr_tags;
+/*static*/ Transport::BytesList Transport::_discovery_pr_tags;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
@@ -171,6 +171,11 @@ DestinationEntry empty_destination_entry;
 	_owner = reticulum_instance;
 
 	_jobs_running = true;
+
+	// Wire size caps into the GenerationalSet containers (no-op if already set
+	// via hashlist_maxsize()/max_pr_tags() setters before start()).
+	_packet_hashlist.max_size(_hashlist_maxsize);
+	_discovery_pr_tags.max_size(_max_pr_tags);
 
 	try {
 		// Initialize time-based variables *after* time offset update
@@ -564,6 +569,8 @@ DestinationEntry empty_destination_entry;
 				_announces_last_checked = OS::time();
 			}
 
+			// CBA Culling no longer necessary since switch to GenerationalSet<>
+			/*
 			// Cull the packet hashlist if it has reached its max size
 			if (_packet_hashlist.size() > _hashlist_maxsize) {
 				std::set<Bytes>::iterator iter = _packet_hashlist.begin();
@@ -577,6 +584,7 @@ DestinationEntry empty_destination_entry;
 				std::advance(iter, _discovery_pr_tags.size() - _max_pr_tags);
 				_discovery_pr_tags.erase(_discovery_pr_tags.begin(), iter);
 			}
+			*/
 
 			if (OS::time() > (_tables_last_culled + _tables_cull_interval)) {
 
@@ -1313,7 +1321,7 @@ DestinationEntry empty_destination_entry;
 		}
 	}
 
-	if (_packet_hashlist.find(packet.packet_hash()) == _packet_hashlist.end()) {
+	if (!_packet_hashlist.contains(packet.packet_hash())) {
 		TRACE("Transport::packet_filter: packet not previously seen");
 		return true;
 	}
@@ -1390,8 +1398,7 @@ DestinationEntry empty_destination_entry;
 		}
 	}
 
-	//p if not packet.packet_hash in Transport.packet_hashlist and not packet.packet_hash in Transport.packet_hashlist_prev:
-	if (_packet_hashlist.find(packet.packet_hash()) == _packet_hashlist.end()) {
+	if (!_packet_hashlist.contains(packet.packet_hash())) {
 		TRACE("Transport::packet_filter: packet not previously seen");
 		return true;
 	}
@@ -3686,7 +3693,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 				Bytes unique_tag = destination_hash + tag_bytes;
 				//TRACEF("Transport::path_request_handler: unique_tag: %s", unique_tag.toHex().c_str());
 
-				if (_discovery_pr_tags.find(unique_tag) == _discovery_pr_tags.end()) {
+				if (!_discovery_pr_tags.contains(unique_tag)) {
 					// CBA ACCUMULATES
 					_discovery_pr_tags.insert(unique_tag);
 
