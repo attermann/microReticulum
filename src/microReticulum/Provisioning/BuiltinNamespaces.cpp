@@ -74,7 +74,7 @@ namespace RNS { namespace Provisioning {
 					})
 				.field_bytes_list("remote_management_allowed",
 					Ns::Reticulum::Field::RemoteManagementAllowed,
-					FF_LIVE_APPLY,
+					FF_REBOOT_REQUIRED,
 					std::vector<Bytes>(),    // default: empty list
 					16,                       // each entry is a 16-byte destination hash
 					32,                       // cap the list at 32 entries
