@@ -500,14 +500,13 @@ void test_bytes_list_set_commit_persists(void) {
 		Ns::Reticulum::Field::RemoteManagementAllowed, Value(entries)));
 	TEST_ASSERT_TRUE(p.commit(Ns::Reticulum::Id));
 
-	// Setter pushed values into Transport's runtime set.
-	const std::set<Bytes>& live = RNS::Transport::remote_management_allowed();
-	TEST_ASSERT_EQUAL_size_t(2, live.size());
-	TEST_ASSERT_TRUE(live.count(make_hash(0x01)) == 1);
-	TEST_ASSERT_TRUE(live.count(make_hash(0x02)) == 1);
+	// Field is FF_REBOOT_REQUIRED, so the setter must NOT fire on commit —
+	// the runtime set stays at whatever reset_runtime_state seeded (empty).
+	TEST_ASSERT_EQUAL_size_t(0, RNS::Transport::remote_management_allowed().size());
+	TEST_ASSERT_TRUE(p.needs_reboot());
 
-	// Simulated reboot: Transport state cleared, then begin() reloads.
-	RNS::Transport::remote_management_allowed(std::set<Bytes>{});
+	// Simulated reboot: begin() reloads the file and apply_loaded_to_runtime
+	// fires the setter because working != runtime (empty).
 	fresh_provisioning(g_test_root);
 	const std::set<Bytes>& live2 = RNS::Transport::remote_management_allowed();
 	TEST_ASSERT_EQUAL_size_t(2, live2.size());
