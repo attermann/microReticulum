@@ -37,6 +37,11 @@ using namespace RNS::Utilities;
 #define RNS_KNOWN_DESTINATIONS_MAX 100
 #endif
 
+#ifndef RNS_IDENTITY_ANNOUNCE_RECALL
+#define RNS_IDENTITY_ANNOUNCE_RECALL 1
+#endif
+
+
 /*static*/ Identity::IdentityTable Identity::_known_destinations;
 /*static*/ bool Identity::_saving_known_destinations = false;
 // CBA
@@ -253,7 +258,9 @@ Recall identity for a destination hash.
 		identity.app_data(identity_data._app_data);
 		return identity;
 	}
-	
+
+#if RNS_IDENTITY_ANNOUNCE_RECALL
+	TRACEF("Identity::recall: Unable to find identity entry for destination %s, performing announce lookup...", destination_hash.toHex().c_str());
 	Packet announce_packet = Transport::find_announce_packet_from_hash(destination_hash);
 	if (announce_packet) {
 		TRACEF("Identity::recall: Extracted identity entry from announce packet for destination %s", destination_hash.toHex().c_str());
@@ -267,6 +274,7 @@ Recall identity for a destination hash.
 		remember(announce_packet.get_hash(), destination_hash, public_key, app_data);
 		return identity;
 	}
+#endif
 
 	TRACEF("Identity::recall: Unable to find identity entry for destination %s, performing destination lookup...", destination_hash.toHex().c_str());
 	Destination registered_destination(Transport::find_destination_from_hash(destination_hash));
