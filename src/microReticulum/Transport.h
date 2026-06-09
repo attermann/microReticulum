@@ -348,6 +348,7 @@ namespace RNS {
 		static uint16_t remove_tunnels(const std::vector<Bytes>& hashes);
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
+		static Packet find_announce_packet_from_hash(const Bytes& destination_hash);
 
 		// CBA
 		static void cull_path_table();
