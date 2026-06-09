@@ -39,11 +39,11 @@ namespace RNS { namespace Provisioning {
 					[](const Value& v) { Reticulum::link_mtu_discovery(v.as_bool()); return true; },
 					[]() { return Reticulum::link_mtu_discovery(); })
 				.field_bool("remote_management_enabled", Ns::Reticulum::Field::RemoteManagementEnabled,
-					FF_LIVE_APPLY, Reticulum::remote_management_enabled(),
+					FF_REBOOT_REQUIRED, Reticulum::remote_management_enabled(),
 					[](const Value& v) { Reticulum::remote_management_enabled(v.as_bool()); return true; },
 					[]() { return Reticulum::remote_management_enabled(); })
 				.field_bool("probe_destination_enabled", Ns::Reticulum::Field::ProbeDestinationEnabled,
-					FF_LIVE_APPLY, Reticulum::probe_destination_enabled(),
+					FF_REBOOT_REQUIRED, Reticulum::probe_destination_enabled(),
 					[](const Value& v) { Reticulum::probe_destination_enabled(v.as_bool()); return true; },
 					[]() { return Reticulum::probe_destination_enabled(); })
 				.field_int("persist_interval", Ns::Reticulum::Field::PersistInterval,

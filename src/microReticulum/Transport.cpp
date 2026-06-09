@@ -265,7 +265,7 @@ DestinationEntry empty_destination_entry;
 			//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
 			_mgmt_destinations.insert(_remote_management_destination);
 			_mgmt_hashes.insert(_remote_management_destination.hash());
-			NOTICEF("Enabled remote management on %s", _remote_management_destination.toString().c_str());
+			NOTICEF("Enabled remote management on <%s>", _remote_management_destination.toString().c_str());
 		}
 
 /*p
@@ -343,7 +343,7 @@ DestinationEntry empty_destination_entry;
 			DEBUGF("Created probe responder destination %s", _probe_destination.hash().toHex().c_str());
 			//_probe_destination.announce();
 			_mgmt_destinations.insert(_probe_destination);
-			NOTICEF("Transport Instance will respond to probe requests on <%s>", _probe_destination.hash().toHex().c_str());
+			NOTICEF("Transport instance will respond to probe requests on <%s>", _probe_destination.hash().toHex().c_str());
 		}
 
 		VERBOSEF("Transport instance %s started", _identity.toString().c_str());

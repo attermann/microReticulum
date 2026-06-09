@@ -386,6 +386,11 @@ namespace RNS {
 		inline static void path_store_segment_count(uint8_t value) { _path_store_segment_count = value; }
 		inline static const std::set<Bytes>& remote_management_allowed() { return _remote_management_allowed; }
 		inline static void remote_management_allowed(const std::set<Bytes>& value) { _remote_management_allowed = value; }
+		inline static const Destination& probe_destination() { return _probe_destination; }
+		inline static const Destination& remote_management_destination() { return _remote_management_destination; }
+		inline static const Destination& blackhole_destination() { return _blackhole_destination; }
+		inline static const Destination& instance_destination() { return _instance_destination; }
+		inline static const Destination& network_destination() { return _network_destination; }
 
 		inline static const PathTable& path_table() { return _path_table; }
 		inline static const NewPathTable& new_path_table() { return _new_path_table; }
