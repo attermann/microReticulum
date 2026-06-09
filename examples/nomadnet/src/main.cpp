@@ -103,8 +103,8 @@ RNS::Bytes serve_index(
 	const RNS::Identity& remote_identity,
 	double requested_at
 ) {
-	RNS::logf(RNS::LOG_NOTICE, "Serving %s to link <%s>",
-		path.toString().c_str(), link_id.toHex().c_str());
+	if (remote_identity) VERBOSEF("Serving %s to link <%s> with identity <%s>", path.toString().c_str(), link_id.toHex().c_str(), remote_identity.hash().toHex().c_str());
+	else VERBOSEF("Serving %s to link <%s>", path.toString().c_str(), link_id.toHex().c_str());
 	const size_t page_len = strlen(INDEX_PAGE);
 	MsgPack::Packer packer;
 	packer.packBinary(reinterpret_cast<const uint8_t*>(INDEX_PAGE), page_len);

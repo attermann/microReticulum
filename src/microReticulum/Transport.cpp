@@ -343,7 +343,7 @@ DestinationEntry empty_destination_entry;
 			DEBUGF("Created probe responder destination %s", _probe_destination.hash().toHex().c_str());
 			//_probe_destination.announce();
 			_mgmt_destinations.insert(_probe_destination);
-			NOTICEF("Transport Instance will respond to probe requests on %s", _probe_destination.toString().c_str());
+			NOTICEF("Transport Instance will respond to probe requests on <%s>", _probe_destination.hash().toHex().c_str());
 		}
 
 		VERBOSEF("Transport instance %s started", _identity.toString().c_str());
