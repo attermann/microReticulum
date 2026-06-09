@@ -51,13 +51,13 @@ static const char* reason_name(uint8_t r) {
 
 static void on_link_established(RNS::Link& link) {
 	if (phase == Phase::PASS1_ESTABLISH) {
-		printf("[cpp] pass1 link established: %s\n", link.hash().toHex().c_str());
+		printf("[cpp] pass1 link established: %s\n", RNS_HEX(link.hash()));
 		pass1_established      = true;
 		pass1_established_at   = RNS::Utilities::OS::time();
 		phase                  = Phase::PASS1_TEARDOWN;
 	}
 	else if (phase == Phase::PASS2_ESTABLISH) {
-		printf("[cpp] pass2 link established: %s\n", link.hash().toHex().c_str());
+		printf("[cpp] pass2 link established: %s\n", RNS_HEX(link.hash()));
 		pass2_established = true;
 		phase             = Phase::PASS2_AWAIT_REMOTE_TEARDOWN;
 	}
@@ -99,7 +99,7 @@ public:
 	                       const RNS::Bytes& app_data) override {
 		if (phase != Phase::WAIT_ANNOUNCE) return;
 		printf("[cpp] received announce: dest=%s\n",
-		       destination_hash.toHex().c_str());
+		       RNS_HEX(destination_hash));
 		outgoing_destination = RNS::Destination(announced_identity,
 		                                        RNS::Type::Destination::OUT,
 		                                        RNS::Type::Destination::SINGLE,

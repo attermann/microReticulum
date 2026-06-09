@@ -43,7 +43,7 @@ static double start_time = 0.0;
 static void on_resource_concluded(const RNS::Resource& resource) {
 	if (resource.status() == RNS::Type::Resource::COMPLETE) {
 		printf("[cpp] resource concluded COMPLETE: hash %s\n",
-		       resource.hash().toHex().c_str());
+		       RNS_HEX(resource.hash()));
 		exit_code = 0;
 	}
 	else {
@@ -56,7 +56,7 @@ static void on_resource_concluded(const RNS::Resource& resource) {
 
 // Link-established callback — kicks off the actual Resource send.
 static void on_link_established(RNS::Link& link) {
-	printf("[cpp] link established: %s\n", link.hash().toHex().c_str());
+	printf("[cpp] link established: %s\n", RNS_HEX(link.hash()));
 
 	RNS::Bytes payload = build_payload();
 	printf("[cpp] sending resource: %lu bytes\n", (unsigned long)payload.size());
@@ -88,8 +88,8 @@ public:
 		announce_seen = true;
 
 		printf("[cpp] received announce: dest=%s identity=%s\n",
-		       destination_hash.toHex().c_str(),
-		       announced_identity.hash().toHex().c_str());
+		       RNS_HEX(destination_hash),
+		       RNS_HEX(announced_identity.hash()));
 
 		// Build outgoing Destination using the announced identity.
 		outgoing_destination = RNS::Destination(announced_identity,

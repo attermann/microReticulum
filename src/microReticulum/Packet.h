@@ -433,14 +433,14 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			TRACEF("<<< Serializing packet hash %s", src.get_hash().toHex().c_str());
+			TRACEF("<<< Serializing packet hash %s", RNS_HEX(src.get_hash()));
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Packet fromJson(JsonVariantConst src) {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				TRACEF(">>> Deserialized packet hash %s", hash.toHex().c_str());
+				TRACEF(">>> Deserialized packet hash %s", RNS_HEX(hash));
 				TRACE(">>> Querying transport for cached packet");
 				// Query transport for matching interface
 				return RNS::Packet::get_cached_packet(hash);

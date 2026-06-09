@@ -653,6 +653,57 @@ void test_empty_collection() {
 	TEST_ASSERT_EQUAL_size_t(0, vec.size());
 }
 
+void test_toHex_buffer_basic() {
+	RNS::Bytes bytes;
+	bytes.assignHex("deadbeef");
+	char buf[16];
+	size_t n = bytes.toHex(buf, sizeof buf);
+	TEST_ASSERT_EQUAL_size_t(8, n);
+	TEST_ASSERT_EQUAL_STRING("deadbeef", buf);
+}
+
+void test_toHex_buffer_uppercase() {
+	RNS::Bytes bytes;
+	bytes.assignHex("deadbeef");
+	char buf[16];
+	size_t n = bytes.toHex(buf, sizeof buf, true);
+	TEST_ASSERT_EQUAL_size_t(8, n);
+	TEST_ASSERT_EQUAL_STRING("DEADBEEF", buf);
+}
+
+void test_toHex_buffer_truncates() {
+	// Buffer too small: should write what fits and NUL-terminate, no overrun.
+	RNS::Bytes bytes;
+	bytes.assignHex("deadbeef");  // 8 hex chars wanted
+	char buf[6];
+	buf[5] = 0x5A;  // canary past end of usable buffer (cap=5)
+	size_t n = bytes.toHex(buf, 5);
+	TEST_ASSERT_EQUAL_size_t(4, n);
+	TEST_ASSERT_EQUAL_STRING("dead", buf);  // 4 hex chars + NUL at buf[4]
+	TEST_ASSERT_EQUAL_HEX8(0x5A, (uint8_t)buf[5]);  // canary intact: no overrun
+}
+
+void test_toHex_buffer_null_or_zero_cap() {
+	RNS::Bytes bytes;
+	bytes.assignHex("dead");
+	TEST_ASSERT_EQUAL_size_t(0, bytes.toHex(nullptr, 16));
+	char buf[1] = {0x7E};
+	TEST_ASSERT_EQUAL_size_t(0, bytes.toHex(buf, 0));
+	TEST_ASSERT_EQUAL_HEX8(0x7E, (uint8_t)buf[0]);  // not touched
+}
+
+void test_HexBuf_macro() {
+	RNS::Bytes bytes;
+	bytes.assignHex("a1b2c3");
+	RNS::HexBuf hb(bytes);
+	TEST_ASSERT_EQUAL_STRING("a1b2c3", hb.c_str());
+	// RNS_HEX expansion is valid for the duration of the enclosing full-expression,
+	// which is how it's used at log call sites (passed to logf/snprintf).
+	char copy[16];
+	snprintf(copy, sizeof copy, "%s", RNS_HEX(bytes));
+	TEST_ASSERT_EQUAL_STRING("a1b2c3", copy);
+}
+
 
 void setUp(void) {
 	// set stuff up here before each test
@@ -692,6 +743,13 @@ int runUnityTests(void) {
 	RUN_TEST(test_mid_large_len);
 	RUN_TEST(test_mid_zero_size_bytes);
 	RUN_TEST(test_empty_collection);
+
+	// Non-allocating hex formatter (B1 — RNS_HEX optimization)
+	RUN_TEST(test_toHex_buffer_basic);
+	RUN_TEST(test_toHex_buffer_uppercase);
+	RUN_TEST(test_toHex_buffer_truncates);
+	RUN_TEST(test_toHex_buffer_null_or_zero_cap);
+	RUN_TEST(test_HexBuf_macro);
 
 	// Suite-level teardown
 	size_t post_memory = RNS::Utilities::Memory::heap_available();

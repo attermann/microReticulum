@@ -78,7 +78,7 @@ void client_connected(RNS::Link& link) {
 
 void server_loop(RNS::Destination& destination) {
 	// Let the user know that everything is ready
-	RNS::logf(RNS::LOG_NOTICE, "Link example <%s> running, waiting for a connection.", destination.hash().toHex().c_str());
+	RNS::logf(RNS::LOG_NOTICE, "Link example <%s> running, waiting for a connection.", RNS_HEX(destination.hash()));
 
 	RNS::log("Hit enter to manually send an announce (Ctrl-C to quit)");
 
@@ -93,7 +93,7 @@ void server_loop(RNS::Destination& destination) {
 		while (read(STDIN_FILENO, &ch, 1) > 0) {
 			if (ch == '\n') {
 				destination.announce();
-				RNS::logf(RNS::LOG_NOTICE, "Sent announce from %s", destination.hash().toHex().c_str());
+				RNS::logf(RNS::LOG_NOTICE, "Sent announce from %s", RNS_HEX(destination.hash()));
 			}
 		}
 	}

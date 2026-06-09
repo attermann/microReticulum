@@ -48,10 +48,10 @@ public:
 	virtual ~ExampleAnnounceHandler() {}
 	virtual void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) {
 		INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-		INFOF("ExampleAnnounceHandler: destination hash: %s", destination_hash.toHex().c_str());
+		INFOF("ExampleAnnounceHandler: destination hash: %s", RNS_HEX(destination_hash));
 		if (announced_identity) {
-			INFOF("ExampleAnnounceHandler: announced identity hash: %s", announced_identity.hash().toHex().c_str());
-			INFOF("ExampleAnnounceHandler: announced identity app data: %s", announced_identity.app_data().toHex().c_str());
+			INFOF("ExampleAnnounceHandler: announced identity hash: %s", RNS_HEX(announced_identity.hash()));
+			INFOF("ExampleAnnounceHandler: announced identity app data: %s", RNS_HEX(announced_identity.app_data()));
 		}
         if (app_data) {
 			INFOF("ExampleAnnounceHandler: app data text: \"%s\"", app_data.toString().c_str());
@@ -63,7 +63,7 @@ public:
 // Test packet receive callback
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	INFOF("onPacket: data: %s", data.toHex().c_str());
+	INFOF("onPacket: data: %s", RNS_HEX(data));
 	INFOF("onPacket: text: \"%s\"", data.toString().c_str());
 	//TRACEF("onPacket: %s", packet.debugString().c_str());
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -72,7 +72,7 @@ void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 // Ping packet receive callback
 void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	INFOF("onPingPacket: data: %s", data.toHex().c_str());
+	INFOF("onPingPacket: data: %s", RNS_HEX(data));
 	INFOF("onPingPacket: text: \"%s\"", data.toString().c_str());
 	//TRACEF("onPingPacket: %s", packet.debugString().c_str());
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");

@@ -60,11 +60,11 @@ Destination::Destination(const Identity& identity, const directions direction, c
 	//TRACE("Destination::Destination: creating hash...");
 	_object->_hash = hash(_object->_identity, app_name, fullaspects.c_str());
 	_object->_hexhash = _object->_hash.toHex();
-	TRACEF("Destination::Destination: hash: %s", _object->_hash.toHex().c_str());
+	TRACEF("Destination::Destination: hash: %s", RNS_HEX(_object->_hash));
 	//TRACE("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash(app_name, aspects);
-	//TRACEF("Destination::Destination: name hash: %s", _object->_name_hash.toHex().c_str());
+	//TRACEF("Destination::Destination: name hash: %s", RNS_HEX(_object->_name_hash));
 
 	//TRACE("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
@@ -85,11 +85,11 @@ Destination::Destination(const Identity& identity, const Type::Destination::dire
 
 	_object->_hash = hash;
 	_object->_hexhash = _object->_hash.toHex();
-	TRACEF("Destination::Destination: hash: %s", _object->_hash.toHex().c_str());
+	TRACEF("Destination::Destination: hash: %s", RNS_HEX(_object->_hash));
 	//TRACE("Destination::Destination: creating name hash...");
     //p self.name_hash = RNS.Identity.full_hash(self.expand_name(None, app_name, *aspects).encode("utf-8"))[:(RNS.Identity.NAME_HASH_LENGTH//8)]
 	_object->_name_hash = name_hash("unknown", "unknown");
-	//TRACEF("Destination::Destination: name hash: %s", _object->_name_hash.toHex().c_str());
+	//TRACEF("Destination::Destination: name hash: %s", RNS_HEX(_object->_name_hash));
 
 	//TRACE("Destination::Destination: calling register_destination");
 	Transport::register_destination(*this);
@@ -285,20 +285,20 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 			}
 
 			Bytes signed_data;
-			//TRACEF("Destination::announce: hash:         %s", _object->_hash.toHex().c_str());
-			//TRACEF("Destination::announce: public key:   %s", _object->_identity.get_public_key().toHex().c_str());
-			//TRACEF("Destination::announce: name hash:    %s", _object->_name_hash.toHex().c_str());
-			//TRACEF("Destination::announce: random hash:  %s", random_hash.toHex().c_str());
-			//TRACEF("Destination::announce: app data:     %s", new_app_data.toHex().c_str());
+			//TRACEF("Destination::announce: hash:         %s", RNS_HEX(_object->_hash));
+			//TRACEF("Destination::announce: public key:   %s", RNS_HEX(_object->_identity.get_public_key()));
+			//TRACEF("Destination::announce: name hash:    %s", RNS_HEX(_object->_name_hash));
+			//TRACEF("Destination::announce: random hash:  %s", RNS_HEX(random_hash));
+			//TRACEF("Destination::announce: app data:     %s", RNS_HEX(new_app_data));
 			//TRACEF("Destination::announce: app data text:%s", new_app_data.toString().c_str());
 			signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
 			if (new_app_data) {
 				signed_data << new_app_data;
 			}
-			//TRACEF("Destination::announce: signed data:  %s", signed_data.toHex().c_str());
+			//TRACEF("Destination::announce: signed data:  %s", RNS_HEX(signed_data));
 
 			Bytes signature(_object->_identity.sign(signed_data));
-			//TRACEF("Destination::announce: signature:    %s", signature.toHex().c_str());
+			//TRACEF("Destination::announce: signature:    %s", RNS_HEX(signature));
 
 			announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
 
@@ -311,13 +311,13 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 				_object->_path_responses.insert({tag, {OS::time(), announce_data}});
 			}
 			catch (const std::bad_alloc&) {
-				ERRORF("announce: bad_alloc - OUT OF MEMORY, path response not stored for %s", _object->_hash.toHex().c_str());
+				ERRORF("announce: bad_alloc - OUT OF MEMORY, path response not stored for %s", RNS_HEX(_object->_hash));
 			}
 			catch (const std::exception& e) {
 				ERRORF("announce: exception storing path response: %s", e.what());
 			}
 		}
-		//TRACEF("Destination::announce: announce_data:%s", announce_data.toHex().c_str());
+		//TRACEF("Destination::announce: announce_data:%s", RNS_HEX(announce_data));
 
 		Type::Packet::context_types announce_context = Type::Packet::CONTEXT_NONE;
 		if (path_response) {
@@ -343,7 +343,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		}
 	}
 	catch (const std::bad_alloc&) {
-		ERRORF("announce: bad_alloc - OUT OF MEMORY, announce not sent for %s", _object->_hash.toHex().c_str());
+		ERRORF("announce: bad_alloc - OUT OF MEMORY, announce not sent for %s", RNS_HEX(_object->_hash));
 		return {Type::NONE};
 	}
 	catch (const std::exception& e) {
@@ -409,7 +409,7 @@ void Destination::receive(const Packet& packet) {
 	else {
 		// CBA TODO Why isn't the Packet decrypting itself?
 		Bytes plaintext(decrypt(packet.data()));
-		//TRACEF("Destination::receive: decrypted data: %s", plaintext.toHex().c_str());
+		//TRACEF("Destination::receive: decrypted data: %s", RNS_HEX(plaintext));
 		if (plaintext) {
 			if (packet.packet_type() == Type::Packet::DATA) {
 				if (_object->_callbacks._packet) {

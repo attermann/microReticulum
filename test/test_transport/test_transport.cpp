@@ -533,7 +533,7 @@ void test_incoming_announce_stress() {
 				std::string app_data = "test_announce_" + std::to_string(announce_count + 1);
 				RNS::Packet announce_packet = temp_dest.announce(app_data, false, {RNS::Type::NONE}, {RNS::Type::NONE}, false);
 				announce_packet.pack();
-				//printf("test_incoming_anounce: Sending packet with data: %s\n", announce_packet.raw().toHex().c_str());
+				//printf("test_incoming_anounce: Sending packet with data: %s\n", RNS_HEX(announce_packet.raw()));
 
 				// Must deregister destination so that the ANNOUNCE appears to be from a remote node
 				RNS::Transport::deregister_destination(temp_dest);

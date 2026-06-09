@@ -246,7 +246,7 @@ namespace ArduinoJson {
 		if (!src) {
 			return dst.set(nullptr);
 		}
-		TRACEF("<<< Interface hash %s", src.get_hash().toHex().c_str());
+		TRACEF("<<< Interface hash %s", RNS_HEX(src.get_hash()));
 		return dst.set(src.get_hash().toHex());
 	}
 	void convertFromJson(JsonVariantConst src, RNS::Interface& dst);
@@ -263,14 +263,14 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			TRACEF("<<< Serializing interface hash %s", src.get_hash().toHex().c_str());
+			TRACEF("<<< Serializing interface hash %s", RNS_HEX(src.get_hash()));
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Interface fromJson(JsonVariantConst src) {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				TRACEF(">>> Deserialized interface hash %s", hash.toHex().c_str());
+				TRACEF(">>> Deserialized interface hash %s", RNS_HEX(hash));
 				TRACE(">>> Querying transport for interface");
 				// Query transport for matching interface
 				return RNS::Interface::find_interface_from_hash(hash);

@@ -176,12 +176,12 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	_object->_pub           = _object->_prv->public_key();
 	assert(_object->_pub);
 	_object->_pub_bytes     = _object->_pub->public_bytes();
-	TRACEF("Link::load_private_key: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
+	TRACEF("Link::load_private_key: pub bytes:     %s", RNS_HEX(_object->_pub_bytes));
 
 	_object->_sig_pub       = _object->_sig_prv->public_key();
 	assert(_object->_sig_pub);
 	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-	TRACEF("Link::load_private_key: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
+	TRACEF("Link::load_private_key: sig pub bytes: %s", RNS_HEX(_object->_sig_pub_bytes));
 
 	if (!peer_pub_bytes) {
 		_object->_peer_pub = nullptr;
@@ -221,8 +221,8 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		start_watchdog();
 		_object->_packet.send();
 		had_outbound();
-		DEBUGF("Link request %s sent to %s", _object->_link_id.toHex().c_str(), _object->_destination.toString().c_str());
-		TRACEF("Establishment timeout is %f for link request %s", _object->_establishment_timeout, _object->_link_id.toHex().c_str());
+		DEBUGF("Link request %s sent to %s", RNS_HEX(_object->_link_id), _object->_destination.toString().c_str());
+		TRACEF("Establishment timeout is %f for link request %s", _object->_establishment_timeout, RNS_HEX(_object->_link_id));
 	}
 
 	// CBA LINK
@@ -305,7 +305,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 					link.mtu((mtu != 0) ? mtu : Type::Reticulum::MTU);
 				}
 				catch (const std::exception& e) {
-					ERRORF("An error ocurred while validating link request %s", link.link_id().toHex().c_str());
+					ERRORF("An error ocurred while validating link request %s", RNS_HEX(link.link_id()));
 					link.mtu(Type::Reticulum::MTU);
 				}
 			}
@@ -319,9 +319,9 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 			link.destination(packet.destination());
 			link.establishment_timeout(ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, packet.hops()) + KEEPALIVE);
 			link.establishment_cost(link.establishment_cost() + packet.raw().size());
-			VERBOSEF("Validating link request %s", link.link_id().toHex().c_str());
+			VERBOSEF("Validating link request %s", RNS_HEX(link.link_id()));
             TRACEF("Link MTU configured to %d", link.mtu());
-			TRACEF("Establishment timeout is %f for incoming link request %s", link.establishment_timeout(), link.link_id().toHex().c_str());
+			TRACEF("Establishment timeout is %f for incoming link request %s", link.establishment_timeout(), RNS_HEX(link.link_id()));
 			link.handshake();
 			link.attached_interface(packet.receiving_interface());
 			link.prove();
@@ -392,7 +392,7 @@ void Link::handshake() {
 
 void Link::prove() {
 	assert(_object);
-	DEBUGF("Link %s requesting proof", link_id().toHex().c_str());
+	DEBUGF("Link %s requesting proof", RNS_HEX(link_id()));
 	Bytes signalling_bytes = Link::signalling_bytes(_object->_mtu, _object->_mode);
 	Bytes signed_data = _object->_link_id + _object->_pub_bytes + _object->_sig_pub_bytes + signalling_bytes;
 	const Bytes signature(_object->_owner.identity().sign(signed_data));
@@ -408,7 +408,7 @@ void Link::prove() {
 
 void Link::prove_packet(const Packet& packet) {
 	assert(_object);
-	DEBUGF("Link %s proving packet", link_id().toHex().c_str());
+	DEBUGF("Link %s proving packet", RNS_HEX(link_id()));
 	const Bytes signature(sign(packet.packet_hash()));
 	// TODO: Hardcoded as explicit proof for now
 	// if RNS.Reticulum.should_use_implicit_proof():
@@ -423,7 +423,7 @@ void Link::prove_packet(const Packet& packet) {
 
 void Link::validate_proof(const Packet& packet) {
 	assert(_object);
-	DEBUGF("Link %s validating proof", link_id().toHex().c_str());
+	DEBUGF("Link %s validating proof", RNS_HEX(link_id()));
 	try {
 		if (_object->_status == Type::Link::PENDING) {
 			Bytes packet_data(packet.data());
@@ -449,7 +449,7 @@ void Link::validate_proof(const Packet& packet) {
 				const Bytes peer_pub_bytes(packet_data.mid(Type::Identity::SIGLENGTH/8, ECPUBSIZE/2));
 				//p peer_sig_pub_bytes = _object->_destination.identity.get_public_key()[ECPUBSIZE//2:ECPUBSIZE]
 				const Bytes peer_sig_pub_bytes(_object->_destination.identity().get_public_key().mid(ECPUBSIZE/2, ECPUBSIZE/2));
-				TRACEF("Link %s performing handshake", link_id().toHex().c_str());
+				TRACEF("Link %s performing handshake", RNS_HEX(link_id()));
 				load_peer(peer_pub_bytes, peer_sig_pub_bytes);
 				handshake();
 
@@ -457,7 +457,7 @@ void Link::validate_proof(const Packet& packet) {
 				Bytes signed_data = _object->_link_id + _object->_peer_pub_bytes + _object->_peer_sig_pub_bytes + signalling_bytes;
 				const Bytes signature(packet_data.left(Type::Identity::SIGLENGTH/8));
 				
-				TRACEF("Link %s validating identity", link_id().toHex().c_str());
+				TRACEF("Link %s validating identity", RNS_HEX(link_id()));
 				if (_object->_destination.identity().validate(signature, signed_data)) {
 					if (_object->_status != Type::Link::HANDSHAKE) {
 						throw std::runtime_error("Invalid link state for proof validation: " + _object->_status);
@@ -486,20 +486,20 @@ void Link::validate_proof(const Packet& packet) {
 TRACEF("***** RTT data size: %d", rtt_data.size());
                     //p rtt_packet = RNS.Packet(self, rtt_data, context=RNS.Packet.LRRTT)
 					Packet rtt_packet = Packet(*this, rtt_data).context(Type::Packet::LRRTT);
-TRACEF("***** RTT packet data: %s", rtt_packet.data().toHex().c_str());
+TRACEF("***** RTT packet data: %s", RNS_HEX(rtt_packet.data()));
 rtt_packet.pack();
 Packet test_packet(RNS::Destination(RNS::Type::NONE), rtt_packet.raw());
 test_packet.unpack();
-TRACEF("***** RTT test packet destination hash: %s", test_packet.destination_hash().toHex().c_str());
+TRACEF("***** RTT test packet destination hash: %s", RNS_HEX(test_packet.destination_hash()));
 TRACEF("***** RTT test packet data size: %d", test_packet.data().size());
-TRACEF("***** RTT test packet data: %s", test_packet.data().toHex().c_str());
+TRACEF("***** RTT test packet data: %s", RNS_HEX(test_packet.data()));
 Bytes plaintext = decrypt(test_packet.data());
-TRACEF("***** RTT test packet plaintext: %s", plaintext.toHex().c_str());
+TRACEF("***** RTT test packet plaintext: %s", RNS_HEX(plaintext));
 					rtt_packet.send();
 					had_outbound();
 
 					if (_object->_callbacks._established != nullptr) {
-						VERBOSEF("Link %s is established", link_id().toHex().c_str());
+						VERBOSEF("Link %s is established", RNS_HEX(link_id()));
 						//p thread = threading.Thread(target=_object->_callbacks.link_established, args=(self,))
 						//p thread.daemon = True
 						//p thread.start()
@@ -533,7 +533,7 @@ thus preserved. This method can be used for authentication.
 */
 void Link::identify(const Identity& identity) {
 	assert(_object);
-	DEBUGF("Link %s requesting identity", link_id().toHex().c_str());
+	DEBUGF("Link %s requesting identity", RNS_HEX(link_id()));
 	if (_object->_initiator && _object->_status == Type::Link::ACTIVE) {
 		const Bytes signed_data(_object->_link_id + identity.get_public_key());
 		const Bytes signature(identity.sign(signed_data));
@@ -556,7 +556,7 @@ Sends a request to the remote peer.
 */
 const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*= {Bytes::NONE}*/, RequestReceipt::Callbacks::response response_callback /*= nullptr*/, RequestReceipt::Callbacks::failed failed_callback /*= nullptr*/, RequestReceipt::Callbacks::progress progress_callback /*= nullptr*/, double timeout /*= 0.0*/) {
 	assert(_object);
-	DEBUGF("Link %s sending request", link_id().toHex().c_str());
+	DEBUGF("Link %s sending request", RNS_HEX(link_id()));
 	const Bytes request_path_hash(Identity::truncated_hash(path));
 
 	//p unpacked_request = [OS::time(), request_path_hash, data]
@@ -593,7 +593,7 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 	}
 	else {
 		const Bytes request_id(Identity::truncated_hash(packed_request));
-		DEBUGF("Sending request %s as resource.", request_id.toHex().c_str());
+		DEBUGF("Sending request %s as resource.", RNS_HEX(request_id));
 		Resource request_resource = Resource(packed_request, *this)
 			.request_id(request_id)
 			.timeout(timeout)
@@ -968,7 +968,7 @@ void Link::send_keepalive() {
 
 void Link::handle_request(const Bytes& request_id, const ResourceRequest& resource_request) {
 	assert(_object);
-	DEBUGF("Link %s handling request", link_id().toHex().c_str());
+	DEBUGF("Link %s handling request", RNS_HEX(link_id()));
 	if (_object->_status == Type::Link::ACTIVE) {
 		//p requested_at = unpacked_request[0]
 		//p path_hash    = unpacked_request[1]
@@ -992,8 +992,8 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 			}
 
 			if (allowed) {
-				DEBUGF("Handling request %s for: %s", request_id.toHex().c_str(), request_handler._path.toString().c_str());
-				//DEBUGF("Handling request %s from %s for: %s", request_id.toHex().c_str(), get_remote_identity().hash().toHex().c_str(), request_handler._path.toString().c_str());
+				DEBUGF("Handling request %s for: %s", RNS_HEX(request_id), request_handler._path.toString().c_str());
+				//DEBUGF("Handling request %s from %s for: %s", RNS_HEX(request_id), RNS_HEX(get_remote_identity().hash()), request_handler._path.toString().c_str());
 				//p if len(inspect.signature(response_generator).parameters) == 5:
 				//p 	response = response_generator(path, request_data, request_id, _object->__remote_identity, requested_at)
 				//p elif len(inspect.signature(response_generator).parameters) == 6:
@@ -1033,7 +1033,7 @@ void Link::handle_request(const Bytes& request_id, const ResourceRequest& resour
 				else {
 					identity_string = "<Unknown>";
 				}
-				DEBUGF("Request %s from %s not allowed for: %s", request_id.toHex().c_str(), identity_string.c_str(), request_handler._path.toString().c_str());
+				DEBUGF("Request %s from %s not allowed for: %s", RNS_HEX(request_id), identity_string.c_str(), request_handler._path.toString().c_str());
 			}
 		}
 	}
@@ -1170,7 +1170,7 @@ void Link::receive(const Packet& packet) {
 				switch (packet.context()) {
 				case Type::Packet::CONTEXT_NONE:
 				{
-					TRACEF("Link %s received DATA packet with context CONTEXT_NONE", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context CONTEXT_NONE", RNS_HEX(hash()));
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						if (_object->_callbacks._packet) {
@@ -1207,7 +1207,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LINKIDENTIFY:
 				{
-					TRACEF("Link %s received DATA packet with context LINKIDENTIFY", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context LINKIDENTIFY", RNS_HEX(hash()));
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						if (!(_object->_initiator) && plaintext.size() == Type::Identity::KEYSIZE/8 + Type::Identity::SIGLENGTH/8) {
@@ -1234,7 +1234,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::REQUEST:
 				{
-					TRACEF("Link %s received DATA packet with context REQUEST", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context REQUEST", RNS_HEX(hash()));
 					try {
 						const Bytes request_id = packet.getTruncatedHash();
 						const Bytes packed_request = decrypt(packet.data());
@@ -1254,7 +1254,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESPONSE:
 				{
-					TRACEF("Link %s received DATA packet with context RESPONSE", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context RESPONSE", RNS_HEX(hash()));
 					try {
 						const Bytes packed_response = decrypt(packet.data());
 						if (packed_response) {
@@ -1280,7 +1280,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LRRTT:
 				{
-					TRACEF("Link %s received DATA packet with context LRRTT", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context LRRTT", RNS_HEX(hash()));
 					if (!_object->_initiator) {
 						rtt_packet(packet);
 					}
@@ -1288,13 +1288,13 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::LINKCLOSE:
 				{
-					TRACEF("Link %s received DATA packet with context LINKCLOSE", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context LINKCLOSE", RNS_HEX(hash()));
 					teardown_packet(packet);
 					break;
 				}
 				case Type::Packet::RESOURCE_ADV:
 				{
-					TRACEF("Link %s received DATA packet with context RESOURCE_ADV", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context RESOURCE_ADV", RNS_HEX(hash()));
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						const_cast<Packet&>(packet).plaintext(plaintext);
@@ -1348,7 +1348,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESOURCE_REQ:
 				{
-					TRACEF("Link %s received DATA packet with context RESOURCE_REQ", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context RESOURCE_REQ", RNS_HEX(hash()));
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						// Layout: [hmu_flag (1 byte) || maybe last_map_hash (4 bytes)
@@ -1392,7 +1392,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESOURCE_HMU:
 				{
-					TRACEF("Link %s received DATA packet with context RESOURCE_HMU", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context RESOURCE_HMU", RNS_HEX(hash()));
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
@@ -1418,7 +1418,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::RESOURCE_ICL:
 				{
-					TRACEF("Link %s received DATA packet with context RESOURCE_ICL", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context RESOURCE_ICL", RNS_HEX(hash()));
 					const Bytes plaintext = decrypt(packet.data());
 					if (plaintext) {
 						const size_t hash_bytes = Type::Identity::HASHLENGTH / 8;
@@ -1448,7 +1448,7 @@ void Link::receive(const Packet& packet) {
 				}
 				case Type::Packet::KEEPALIVE:
 				{
-					TRACEF("Link %s received DATA packet with context KEEPALIVE", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context KEEPALIVE", RNS_HEX(hash()));
 					if (!_object->_initiator && packet.data() == "\xFF") {
                         //p keepalive_packet = RNS.Packet(self, bytes([0xFE]), context=RNS.Packet.KEEPALIVE)
 						Packet(*this, Bytes("\xFE")).context(Type::Packet::KEEPALIVE).send();
@@ -1462,7 +1462,7 @@ void Link::receive(const Packet& packet) {
 				// of hash -> sequence map
 				case Type::Packet::RESOURCE:
 				{
-					TRACEF("Link %s received DATA packet with context RESOURCE", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context RESOURCE", RNS_HEX(hash()));
 					// Snapshot before invoking receive_part: assemble() can
 					// trigger cancel() (e.g. when the assembled resource is
 					// flagged compressed and we reject it), which erase()s
@@ -1483,7 +1483,7 @@ void Link::receive(const Packet& packet) {
 /*z
 				case Type::Packet::CHANNEL:
 				{
-					TRACEF("Link %s received DATA packet with context CHANNEL", hash().toHex().c_str());
+					TRACEF("Link %s received DATA packet with context CHANNEL", RNS_HEX(hash()));
 					//z if (!_object->_channel) {
 					if (true) {
 						DEBUG(f"Channel data received without open channel")
@@ -1502,7 +1502,7 @@ void Link::receive(const Packet& packet) {
 			}
 			else if (packet.packet_type() == Type::Packet::PROOF) {
 				if (packet.context() == Type::Packet::RESOURCE_PRF) {
-					TRACEF("Link %s received PROOF packet with context RESOURCE_PRF", hash().toHex().c_str());
+					TRACEF("Link %s received PROOF packet with context RESOURCE_PRF", RNS_HEX(hash()));
 					Bytes resource_hash = packet.data().left(Type::Identity::HASHLENGTH/8);
 					// Snapshot — validate_proof() may call resource_concluded()
 					// which erases from _outgoing_resources, invalidating any
@@ -1516,11 +1516,11 @@ void Link::receive(const Packet& packet) {
 					}
 				}
 				else {
-					WARNINGF("Link %s received PROOF packet with UNKNOWN context", hash().toHex().c_str());
+					WARNINGF("Link %s received PROOF packet with UNKNOWN context", RNS_HEX(hash()));
 				}
 			}
 			else {
-				WARNINGF("Link %s received UNKNOWN packet", hash().toHex().c_str());
+				WARNINGF("Link %s received UNKNOWN packet", RNS_HEX(hash()));
 			}
 		}
 	}
@@ -1905,7 +1905,7 @@ RequestReceipt::RequestReceipt(const Link& link, const PacketReceipt& packet_rec
 void RequestReceipt::request_resource_concluded(const Resource& resource) {
 	assert(_object);
 	if (resource.status() == Type::Resource::COMPLETE) {
-		DEBUGF("Request %s successfully sent as resource.", _object->_request_id.toHex().c_str());
+		DEBUGF("Request %s successfully sent as resource.", RNS_HEX(_object->_request_id));
 		if (_object->_started_at == 0.0) {
 			_object->_started_at = OS::time();
 		}
@@ -1916,7 +1916,7 @@ void RequestReceipt::request_resource_concluded(const Resource& resource) {
 		//p response_timeout_thread.start()
 	}
 	else {
-		DEBUGF("Sending request %s as resource failed with status: %d", _object->_request_id.toHex().c_str(), resource.status());
+		DEBUGF("Sending request %s as resource failed with status: %d", RNS_HEX(_object->_request_id), resource.status());
 		_object->_status = Type::RequestReceipt::FAILED;
 		_object->_concluded_at = OS::time();
 		_object->_link.pending_requests().erase(*this);

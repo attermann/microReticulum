@@ -131,7 +131,7 @@ using namespace RNS::Persistence;
 //TRACEF("Read %lu byte interface_hash", interface_hash.size());
 	entry._receiving_interface = Transport::find_interface_from_hash(interface_hash);
 	if (!entry._receiving_interface) {
-		WARNINGF("Path Interface %s not found", interface_hash.toHex().c_str());
+		WARNINGF("Path Interface %s not found", RNS_HEX(interface_hash));
 	}
 
 	// announce_packet

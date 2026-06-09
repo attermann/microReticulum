@@ -106,7 +106,7 @@ namespace RNS {
 		inline void update_hashes() {
 			assert(_object);
 			_object->_hash = truncated_hash(get_public_key());
-			TRACEF("Identity::update_hashes: hash: %s", _object->_hash.toHex().c_str());
+			TRACEF("Identity::update_hashes: hash: %s", RNS_HEX(_object->_hash));
 			_object->_hexhash = _object->_hash.toHex();
 		};
 		bool load(const char* path);

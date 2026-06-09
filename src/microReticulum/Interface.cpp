@@ -23,14 +23,14 @@ using namespace RNS::Type::Interface;
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY;
 
 void InterfaceImpl::handle_outgoing(const Bytes& data) {
-	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", data.toHex().c_str());
+	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", RNS_HEX(data));
 	//TRACE("InterfaceImpl.handle_outgoing");
 	_tx += 1;
 	_txbytes += data.size();
 }
 
 void InterfaceImpl::handle_incoming(const Bytes& data) {
-	//TRACEF("InterfaceImpl.handle_incoming: data: %s", data.toHex().c_str());
+	//TRACEF("InterfaceImpl.handle_incoming: data: %s", RNS_HEX(data));
 	//TRACE("InterfaceImpl.handle_incoming");
 	_rx += 1;
 	_rxbytes += data.size();
@@ -43,7 +43,7 @@ void InterfaceImpl::handle_incoming(const Bytes& data) {
 
 bool Interface::send_outgoing(const Bytes& data) {
 	assert(_impl);
-	//TRACEF("Interface.send_outgoing: data: %s", data.toHex().c_str());
+	//TRACEF("Interface.send_outgoing: data: %s", RNS_HEX(data));
 	//TRACE("Interface.send_outgoing");
 	// Catch exceptions from calls into Interface implementation
 	try {
@@ -66,7 +66,7 @@ bool Interface::send_outgoing(const Bytes& data) {
 
 void Interface::handle_incoming(const Bytes& data) {
 	assert(_impl);
-	//TRACEF("Interface.handle_incoming: data: %s", data.toHex().c_str());
+	//TRACEF("Interface.handle_incoming: data: %s", RNS_HEX(data));
 	//TRACE("Interface.handle_incoming");
 	// Catch exceptions from calls into Interface implementation
 	try {
@@ -140,7 +140,7 @@ TRACEF(">>> Interface pre: %s", dst.debugString().c_str());
 	if (!src.isNull()) {
 		RNS::Bytes hash;
 		hash.assignHex(src.as<const char*>());
-		TRACEF(">>> Querying Transport for Interface hash %s", hash.toHex().c_str());
+		TRACEF(">>> Querying Transport for Interface hash %s", RNS_HEX(hash));
 		// Query transport for matching interface
 		dst = Transport::find_interface_from_hash(hash);
 TRACEF(">>> Interface post: %s", dst.debugString().c_str());

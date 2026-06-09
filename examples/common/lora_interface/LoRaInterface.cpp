@@ -248,7 +248,7 @@ void LoRaInterface::loop() {
 }
 
 /*virtual*/ bool LoRaInterface::send_outgoing(const Bytes& data) {
-	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), data.toHex().c_str());
+	DEBUGF("%s.on_outgoing: data: %s", toString().c_str(), RNS_HEX(data));
 	bool success = true;
 	try {
 		if (_online) {
@@ -322,7 +322,7 @@ void LoRaInterface::loop() {
 }
 
 /*virtual*/ void LoRaInterface::on_incoming(const Bytes& data) {
-	DEBUGF("%s.on_incoming: data: %s", toString().c_str(), data.toHex().c_str());
+	DEBUGF("%s.on_incoming: data: %s", toString().c_str(), RNS_HEX(data));
 	// Pass received data on to transport
 	InterfaceImpl::handle_incoming(data);
 }

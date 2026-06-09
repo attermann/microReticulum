@@ -30,7 +30,7 @@ public:
 		_name = "(deleted)";
 	}
 	virtual bool send_outgoing(const RNS::Bytes &data) {
-		HEADF(RNS::LOG_TRACE, "OutInterface.send_outgoing: data: %s", data.toHex().c_str());
+		HEADF(RNS::LOG_TRACE, "OutInterface.send_outgoing: data: %s", RNS_HEX(data));
 
 		// Loop data back to InInterface for testing
 		// NOTE: This sends the incoming data directory to RNS::Interface (which relays to Transport)
@@ -53,10 +53,10 @@ public:
 	virtual ~ExampleAnnounceHandler() {}
 	virtual void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) {
 		INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-		INFOF("ExampleAnnounceHandler: destination hash: %s", destination_hash.toHex().c_str());
+		INFOF("ExampleAnnounceHandler: destination hash: %s", RNS_HEX(destination_hash));
 		if (announced_identity) {
-			INFOF("ExampleAnnounceHandler: announced identity hash: %s", announced_identity.hash().toHex().c_str());
-			INFOF("ExampleAnnounceHandler: announced identity app data: %s", announced_identity.app_data().toHex().c_str());
+			INFOF("ExampleAnnounceHandler: announced identity hash: %s", RNS_HEX(announced_identity.hash()));
+			INFOF("ExampleAnnounceHandler: announced identity app data: %s", RNS_HEX(announced_identity.app_data()));
 		}
         if (app_data) {
 			INFOF("ExampleAnnounceHandler: app data text: \"%s\"", app_data.toString().c_str());
@@ -73,7 +73,7 @@ RNS::HAnnounceHandler announce_handler(new ExampleAnnounceHandler());
 //void(*)(const Bytes& data, const Packet& packet)
 void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	INFOF("onPacket: data: %s", data.toHex().c_str());
+	INFOF("onPacket: data: %s", RNS_HEX(data));
 	INFOF("onPacket: text: \"%s\"", data.toString().c_str());
 	//TRACEF("onPacket: %s", packet.debugString().c_str());
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -83,7 +83,7 @@ void onPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 //void(*)(const Bytes& data, const Packet& packet)
 void onPingPacket(const RNS::Bytes& data, const RNS::Packet& packet) {
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-	INFOF("onPingPacket: data: %s", data.toHex().c_str());
+	INFOF("onPingPacket: data: %s", RNS_HEX(data));
 	INFOF("onPingPacket: text: \"%s\"", data.toString().c_str());
 	//TRACEF("onPingPacket: %s", packet.debugString().c_str());
 	INFO("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");

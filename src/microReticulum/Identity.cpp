@@ -57,29 +57,29 @@ void Identity::createKeys() {
 	_object->_prv           = Cryptography::X25519PrivateKey::generate();
 	assert(_object->_prv);
 	_object->_prv_bytes     = _object->_prv->private_bytes();
-	//TRACEF("Identity::createKeys: prv bytes:     %s", _object->_prv_bytes.toHex().c_str());
+	//TRACEF("Identity::createKeys: prv bytes:     %s", RNS_HEX(_object->_prv_bytes));
 
 	// CRYPTO: create signature private keys
 	_object->_sig_prv       = Cryptography::Ed25519PrivateKey::generate();
 	assert(_object->_sig_prv);
 	_object->_sig_prv_bytes = _object->_sig_prv->private_bytes();
-	//TRACEF("Identity::createKeys: sig prv bytes: %s", _object->_sig_prv_bytes.toHex().c_str());
+	//TRACEF("Identity::createKeys: sig prv bytes: %s", RNS_HEX(_object->_sig_prv_bytes));
 
 	// CRYPTO: create encryption public keys
 	_object->_pub           = _object->_prv->public_key();
 	assert(_object->_pub);
 	_object->_pub_bytes     = _object->_pub->public_bytes();
-	//TRACEF("Identity::createKeys: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
+	//TRACEF("Identity::createKeys: pub bytes:     %s", RNS_HEX(_object->_pub_bytes));
 
 	// CRYPTO: create signature public keys
 	_object->_sig_pub       = _object->_sig_prv->public_key();
 	assert(_object->_sig_pub);
 	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-	//TRACEF("Identity::createKeys: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
+	//TRACEF("Identity::createKeys: sig pub bytes: %s", RNS_HEX(_object->_sig_pub_bytes));
 
 	update_hashes();
 
-	VERBOSEF("Identity keys created for %s", _object->_hash.toHex().c_str());
+	VERBOSEF("Identity keys created for %s", RNS_HEX(_object->_hash));
 }
 
 /*
@@ -97,23 +97,23 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 		_object->_prv_bytes     = prv_bytes.left(Type::Identity::KEYSIZE/8/2);
 		_object->_prv           = X25519PrivateKey::from_private_bytes(_object->_prv_bytes);
 		assert(_object->_prv);
-		//TRACEF("Identity::load_private_key: prv bytes:     %s", _object->_prv_bytes.toHex().c_str());
+		//TRACEF("Identity::load_private_key: prv bytes:     %s", RNS_HEX(_object->_prv_bytes));
 
 		//p self.sig_prv_bytes = prv_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_prv_bytes = prv_bytes.mid(Type::Identity::KEYSIZE/8/2);
 		_object->_sig_prv       = Ed25519PrivateKey::from_private_bytes(_object->_sig_prv_bytes);
 		assert(_object->_sig_prv);
-		//TRACEF("Identity::load_private_key: sig prv bytes: %s", _object->_sig_prv_bytes.toHex().c_str());
+		//TRACEF("Identity::load_private_key: sig prv bytes: %s", RNS_HEX(_object->_sig_prv_bytes));
 
 		_object->_pub           = _object->_prv->public_key();
 		assert(_object->_pub);
 		_object->_pub_bytes     = _object->_pub->public_bytes();
-		//TRACEF("Identity::load_private_key: pub bytes:     %s", _object->_pub_bytes.toHex().c_str());
+		//TRACEF("Identity::load_private_key: pub bytes:     %s", RNS_HEX(_object->_pub_bytes));
 
 		_object->_sig_pub       = _object->_sig_prv->public_key();
 		assert(_object->_sig_pub);
 		_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
-		//TRACEF("Identity::load_private_key: sig pub bytes: %s", _object->_sig_pub_bytes.toHex().c_str());
+		//TRACEF("Identity::load_private_key: sig pub bytes: %s", RNS_HEX(_object->_sig_pub_bytes));
 
 		update_hashes();
 
@@ -140,11 +140,11 @@ void Identity::load_public_key(const Bytes& pub_bytes) {
 
 		//_pub_bytes     = pub_bytes[:Identity.KEYSIZE//8//2]
 		_object->_pub_bytes     = pub_bytes.left(Type::Identity::KEYSIZE/8/2);
-		//TRACEF("Identity::load_public_key: pub bytes:     ", _object->_pub_bytes.toHex().c_str());
+		//TRACEF("Identity::load_public_key: pub bytes:     ", RNS_HEX(_object->_pub_bytes));
 
 		//_sig_pub_bytes = pub_bytes[Identity.KEYSIZE//8//2:]
 		_object->_sig_pub_bytes = pub_bytes.mid(Type::Identity::KEYSIZE/8/2);
-		//TRACEF("Identity::load_public_key: sig pub bytes: ", _object->_sig_pub_bytes.toHex().c_str());
+		//TRACEF("Identity::load_public_key: sig pub bytes: ", RNS_HEX(_object->_sig_pub_bytes));
 
 		_object->_pub           = X25519PublicKey::from_public_bytes(_object->_pub_bytes);
 		_object->_sig_pub       = Ed25519PublicKey::from_public_bytes(_object->_sig_pub_bytes);
@@ -227,7 +227,7 @@ Can be used to load previously created and saved identities into Reticulum.
 			cull_known_destinations();
 		}
 		catch (const std::bad_alloc&) {
-			ERRORF("remember: bad_alloc - OUT OF MEMORY, identity not stored for %s", destination_hash.toHex().c_str());
+			ERRORF("remember: bad_alloc - OUT OF MEMORY, identity not stored for %s", RNS_HEX(destination_hash));
 		}
 		catch (const std::exception& e) {
 			ERRORF("remember: exception storing identity: %s", e.what());
@@ -245,7 +245,7 @@ Recall identity for a destination hash.
 	TRACE("Identity::recall...");
 	auto iter = _known_destinations.find(destination_hash);
 	if (iter != _known_destinations.end()) {
-		TRACEF("Identity::recall: Found identity entry for destination %s", destination_hash.toHex().c_str());
+		TRACEF("Identity::recall: Found identity entry for destination %s", RNS_HEX(destination_hash));
 		const IdentityEntry& identity_data = (*iter).second;
 		Identity identity(false);
 		identity.load_public_key(identity_data._public_key);
@@ -253,16 +253,16 @@ Recall identity for a destination hash.
 		return identity;
 	}
 	else {
-		TRACEF("Identity::recall: Unable to find identity entry for destination %s, performing destination lookup...", destination_hash.toHex().c_str());
+		TRACEF("Identity::recall: Unable to find identity entry for destination %s, performing destination lookup...", RNS_HEX(destination_hash));
 		Destination registered_destination(Transport::find_destination_from_hash(destination_hash));
 		if (registered_destination) {
-			TRACEF("Identity::recall: Found destination %s", destination_hash.toHex().c_str());
+			TRACEF("Identity::recall: Found destination %s", RNS_HEX(destination_hash));
 			Identity identity(false);
 			identity.load_public_key(registered_destination.identity().get_public_key());
 			identity.app_data({Bytes::NONE});
 			return identity;
 		}
-		TRACEF("Identity::recall: Unable to find destination %s", destination_hash.toHex().c_str());
+		TRACEF("Identity::recall: Unable to find destination %s", RNS_HEX(destination_hash));
 		return {Type::NONE};
 	}
 }
@@ -277,12 +277,12 @@ Recall last heard app_data for a destination hash.
 	TRACE("Identity::recall_app_data...");
 	auto iter = _known_destinations.find(destination_hash);
 	if (iter != _known_destinations.end()) {
-		TRACEF("Identity::recall_app_data: Found identity entry for destination %s", destination_hash.toHex().c_str());
+		TRACEF("Identity::recall_app_data: Found identity entry for destination %s", RNS_HEX(destination_hash));
 		const IdentityEntry& identity_data = (*iter).second;
 		return identity_data._app_data;
 	}
 	else {
-		TRACEF("Identity::recall_app_data: Unable to find identity entry for destination %s", destination_hash.toHex().c_str());
+		TRACEF("Identity::recall_app_data: Unable to find identity entry for destination %s", RNS_HEX(destination_hash));
 		return {Bytes::NONE};
 	}
 }
@@ -394,9 +394,9 @@ Recall last heard app_data for a destination hash.
 
 			uint16_t count = 0;
 			for (const auto& [timestamp, destination_hash] : sorted_keys) {
-				TRACEF("Identity::cull_known_destinations: Removing destination %s from known destinations", destination_hash.toHex().c_str());
+				TRACEF("Identity::cull_known_destinations: Removing destination %s from known destinations", RNS_HEX(destination_hash));
 				if (_known_destinations.erase(destination_hash) < 1) {
-					WARNINGF("Failed to remove destination %s from known destinations", destination_hash.toHex().c_str());
+					WARNINGF("Failed to remove destination %s from known destinations", RNS_HEX(destination_hash));
 				}
 				++count;
 				if (_known_destinations.size() <= _known_destinations_maxsize) {
@@ -462,19 +462,19 @@ Recall last heard app_data for a destination hash.
 			}
 
 /*
-			TRACEF("Identity::validate_announce: destination_hash: %s", destination_hash.toHex().c_str());
-			TRACEF("Identity::validate_announce: public_key:       %s", public_key.toHex().c_str());
-			TRACEF("Identity::validate_announce: name_hash:        %s", name_hash.toHex().c_str());
-			TRACEF("Identity::validate_announce: random_hash:      %s", random_hash.toHex().c_str());
-			TRACEF("Identity::validate_announce: ratchet:          %s", ratchet.toHex().c_str());
-			TRACEF("Identity::validate_announce: signature:        %s", signature.toHex().c_str());
-			TRACEF("Identity::validate_announce: app_data:         %s", app_data.toHex().c_str());
+			TRACEF("Identity::validate_announce: destination_hash: %s", RNS_HEX(destination_hash));
+			TRACEF("Identity::validate_announce: public_key:       %s", RNS_HEX(public_key));
+			TRACEF("Identity::validate_announce: name_hash:        %s", RNS_HEX(name_hash));
+			TRACEF("Identity::validate_announce: random_hash:      %s", RNS_HEX(random_hash));
+			TRACEF("Identity::validate_announce: ratchet:          %s", RNS_HEX(ratchet));
+			TRACEF("Identity::validate_announce: signature:        %s", RNS_HEX(signature));
+			TRACEF("Identity::validate_announce: app_data:         %s", RNS_HEX(app_data));
 			TRACEF("Identity::validate_announce: app_data text:    %s", app_data.toString().c_str());
 */
 
 			Bytes signed_data;
 			signed_data << destination_hash << public_key << name_hash << random_hash << ratchet << app_data;
-			//TRACEF("Identity::validate_announce: signed_data:      %s", signed_data.toHex().c_str());
+			//TRACEF("Identity::validate_announce: signed_data:      %s", RNS_HEX(signed_data));
 
 			if (packet.data().size() <= KEYSIZE/8 + NAME_HASH_LENGTH/8 + RANDOM_HASH_LENGTH/8 + SIGLENGTH/8) {
 				app_data.clear();
@@ -491,8 +491,8 @@ Recall last heard app_data for a destination hash.
 
 				Bytes hash_material = name_hash << announced_identity.hash();
 				Bytes expected_hash = full_hash(hash_material).left(Type::Reticulum::TRUNCATED_HASHLENGTH/8);
-				//TRACEF("Identity::validate_announce: destination_hash: %s", destination_hash.toHex().c_str());
-				//TRACEF("Identity::validate_announce: expected_hash:    %s", expected_hash.toHex().c_str());
+				//TRACEF("Identity::validate_announce: destination_hash: %s", RNS_HEX(destination_hash));
+				//TRACEF("Identity::validate_announce: expected_hash:    %s", RNS_HEX(expected_hash));
 
 				if (destination_hash == expected_hash) {
 					// Check if we already have a public key for this destination
@@ -529,21 +529,21 @@ Recall last heard app_data for a destination hash.
 */
 
 					if (packet.transport_id()) {
-						TRACEF("Valid announce for %s %d hops away, received via %s on %s%s", destination_hash.toHex().c_str(), packet.hops(), packet.transport_id().toHex().c_str(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
+						TRACEF("Valid announce for %s %d hops away, received via %s on %s%s", RNS_HEX(destination_hash), packet.hops(), RNS_HEX(packet.transport_id()), packet.receiving_interface().toString().c_str(), signal_str.c_str());
 					}
 					else {
-						TRACEF("Valid announce for %s %d hops away, received on %s%s", destination_hash.toHex().c_str(), packet.hops(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
+						TRACEF("Valid announce for %s %d hops away, received on %s%s", RNS_HEX(destination_hash), packet.hops(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
 					}
 
 					return true;
 				}
 				else {
-					DEBUGF("Received invalid announce for %s: Destination mismatch.", destination_hash.toHex().c_str());
+					DEBUGF("Received invalid announce for %s: Destination mismatch.", RNS_HEX(destination_hash));
 					return false;
 				}
 			}
 			else {
-				DEBUGF("Received invalid announce for %s: Invalid signature.", destination_hash.toHex().c_str());
+				DEBUGF("Received invalid announce for %s: Invalid signature.", RNS_HEX(destination_hash));
 				//p del announced_identity
 				return false;
 			}
@@ -581,12 +581,12 @@ const Bytes Identity::encrypt(const Bytes& plaintext) const {
 	}
 	Cryptography::X25519PrivateKey::Ptr ephemeral_key = Cryptography::X25519PrivateKey::generate();
 	Bytes ephemeral_pub_bytes = ephemeral_key->public_key()->public_bytes();
-	TRACEF("Identity::encrypt: ephemeral public key: %s", ephemeral_pub_bytes.toHex().c_str());
+	TRACEF("Identity::encrypt: ephemeral public key: %s", RNS_HEX(ephemeral_pub_bytes));
 
 	// CRYPTO: create shared key for key exchange using own public key
 	//shared_key = ephemeral_key.exchange(self.pub)
 	Bytes shared_key = ephemeral_key->exchange(_object->_pub_bytes);
-	TRACEF("Identity::encrypt: shared key:           %s", shared_key.toHex().c_str());
+	TRACEF("Identity::encrypt: shared key:           %s", RNS_HEX(shared_key));
 
 	Bytes derived_key = Cryptography::hkdf(
 		DERIVED_KEY_LENGTH,
@@ -594,13 +594,13 @@ const Bytes Identity::encrypt(const Bytes& plaintext) const {
 		get_salt(),
 		get_context()
 	);
-	TRACEF("Identity::encrypt: derived key:          %s", derived_key.toHex().c_str());
+	TRACEF("Identity::encrypt: derived key:          %s", RNS_HEX(derived_key));
 
 	Cryptography::Token token(derived_key);
 	TRACEF("Identity::encrypt: Token encrypting data of length %lu", plaintext.size());
-	TRACEF("Identity::encrypt: plaintext:  %s", plaintext.toHex().c_str());
+	TRACEF("Identity::encrypt: plaintext:  %s", RNS_HEX(plaintext));
 	Bytes ciphertext = token.encrypt(plaintext);
-	TRACEF("Identity::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
+	TRACEF("Identity::encrypt: ciphertext: %s", RNS_HEX(ciphertext));
 
 	return ephemeral_pub_bytes + ciphertext;
 }
@@ -629,13 +629,13 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 		Bytes peer_pub_bytes = ciphertext_token.left(Type::Identity::KEYSIZE/8/2);
 		//peer_pub = X25519PublicKey.from_public_bytes(peer_pub_bytes)
 		//Cryptography::X25519PublicKey::Ptr peer_pub = Cryptography::X25519PublicKey::from_public_bytes(peer_pub_bytes);
-		TRACEF("Identity::decrypt: peer public key:      %s", peer_pub_bytes.toHex().c_str());
+		TRACEF("Identity::decrypt: peer public key:      %s", RNS_HEX(peer_pub_bytes));
 
 
 		// CRYPTO: create shared key for key exchange using peer public key
 		//shared_key = _object->_prv->exchange(peer_pub);
 		Bytes shared_key = _object->_prv->exchange(peer_pub_bytes);
-		TRACEF("Identity::decrypt: shared key:           %s", shared_key.toHex().c_str());
+		TRACEF("Identity::decrypt: shared key:           %s", RNS_HEX(shared_key));
 
 		Bytes derived_key = Cryptography::hkdf(
 			DERIVED_KEY_LENGTH,
@@ -643,15 +643,15 @@ const Bytes Identity::decrypt(const Bytes& ciphertext_token) const {
 			get_salt(),
 			get_context()
 		);
-		TRACEF("Identity::decrypt: derived key:          %s", derived_key.toHex().c_str());
+		TRACEF("Identity::decrypt: derived key:          %s", RNS_HEX(derived_key));
 
 		Cryptography::Token token(derived_key);
 		//ciphertext = ciphertext_token[Identity.KEYSIZE//8//2:]
 		Bytes ciphertext(ciphertext_token.mid(Type::Identity::KEYSIZE/8/2));
 		TRACEF("Identity::decrypt: Token decrypting data of length %lu", ciphertext.size());
-		TRACEF("Identity::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
+		TRACEF("Identity::decrypt: ciphertext: %s", RNS_HEX(ciphertext));
 		plaintext = token.decrypt(ciphertext);
-		TRACEF("Identity::decrypt: plaintext:  %s", plaintext.toHex().c_str());
+		TRACEF("Identity::decrypt: plaintext:  %s", RNS_HEX(plaintext));
 		//TRACEF("Identity::decrypt: Token decrypted data of length %lu", plaintext.size());
 	}
 	catch (const std::exception& e) {
@@ -694,7 +694,7 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	if (_object->_pub) {
 		try {
-			TRACEF("Identity::validate: Verifying signature: %s against message: %s", signature.toHex().c_str(), message.toHex().c_str());
+			TRACEF("Identity::validate: Verifying signature: %s against message: %s", RNS_HEX(signature), RNS_HEX(message));
 			return _object->_sig_pub->verify(signature, message);
 		}
 		catch (const std::exception& e) {
@@ -712,11 +712,11 @@ void Identity::prove(const Packet& packet, const Destination& destination /*= {T
 	Bytes proof_data;
 	if (RNS::Reticulum::should_use_implicit_proof()) {
 		proof_data = signature;
-		TRACEF("Identity::prove: implicit proof data: %s", proof_data.toHex().c_str());
+		TRACEF("Identity::prove: implicit proof data: %s", RNS_HEX(proof_data));
 	}
 	else {
 		proof_data = packet.packet_hash() + signature;
-		TRACEF("Identity::prove: explicit proof data: %s", proof_data.toHex().c_str());
+		TRACEF("Identity::prove: explicit proof data: %s", RNS_HEX(proof_data));
 	}
 	
 	if (!destination) {

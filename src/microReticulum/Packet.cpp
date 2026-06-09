@@ -327,13 +327,13 @@ void Packet::pack() {
 	// CBA LINK
 	if (_object->_context == LRPROOF) {
 		if (!_object->_destination_link) throw std::invalid_argument("Packet is not associated with a Link");
-		TRACEF("Packet::pack: destination link id: %s", _object->_destination_link.link_id().toHex().c_str());
+		TRACEF("Packet::pack: destination link id: %s", RNS_HEX(_object->_destination_link.link_id()));
 		_object->_header << _object->_destination_link.link_id();
 		_object->_ciphertext = _object->_data;
 	}
 	else {
 		if (_object->_header_type == HEADER_1) {
-			TRACEF("Packet::pack: destination hash: %s", _object->_destination.hash().toHex().c_str());
+			TRACEF("Packet::pack: destination hash: %s", RNS_HEX(_object->_destination.hash()));
 			_object->_header << _object->_destination.hash();
 
 			if (_object->_packet_type == ANNOUNCE) {
@@ -374,11 +374,11 @@ void Packet::pack() {
 				// CBA LINK
 				if (_object->_destination_link) {
 					_object->_ciphertext = _object->_destination_link.encrypt(_object->_data);
-TRACEF("***** Link data: %s", _object->_ciphertext.toHex().c_str());
+TRACEF("***** Link data: %s", RNS_HEX(_object->_ciphertext));
 				}
 				else {
 					_object->_ciphertext = _object->_destination.encrypt(_object->_data);
-TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
+TRACEF("***** Destination Data: %s", RNS_HEX(_object->_ciphertext));
 				}
 				// CBA RATCHET
 				/*p TODO
@@ -392,8 +392,8 @@ TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
 			if (!_object->_transport_id) {
                 throw std::invalid_argument("Packet with header type 2 must have a transport ID");
 			}
-			TRACEF("Packet::pack: transport id: %s", _object->_transport_id.toHex().c_str());
-			TRACEF("Packet::pack: destination hash: %s", _object->_destination.hash().toHex().c_str());
+			TRACEF("Packet::pack: transport id: %s", RNS_HEX(_object->_transport_id));
+			TRACEF("Packet::pack: destination hash: %s", RNS_HEX(_object->_destination.hash()));
 			_object->_header << _object->_transport_id;
 			_object->_header << _object->_destination.hash();
 

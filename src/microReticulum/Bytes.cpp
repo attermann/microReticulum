@@ -209,6 +209,23 @@ std::string Bytes::toHex(bool upper /*= false*/) const {
 	return hex;
 }
 
+size_t Bytes::toHex(char* out, size_t cap, bool upper /*= false*/) const noexcept {
+	if (!out || cap == 0) return 0;
+	const char* table = upper ? hex_upper_chars : hex_lower_chars;
+	size_t n = 0;
+	if (_data) {
+		const size_t max_pairs = (cap - 1) / 2;
+		const size_t pairs = _data->size() < max_pairs ? _data->size() : max_pairs;
+		const uint8_t* src = _data->data();
+		for (size_t i = 0; i < pairs; ++i) {
+			out[n++] = table[(src[i] & 0xF0) >> 4];
+			out[n++] = table[(src[i] & 0x0F)];
+		}
+	}
+	out[n] = '\0';
+	return n;
+}
+
 // mid
 Bytes Bytes::mid(size_t beginpos, size_t len) const {
 	if (!_data || beginpos >= size()) {

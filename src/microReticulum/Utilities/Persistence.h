@@ -167,14 +167,14 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			//TRACEF("<<< Serializing interface hash %s", src.get_hash().toHex().c_str());
+			//TRACEF("<<< Serializing interface hash %s", RNS_HEX(src.get_hash()));
 			return dst.set(src.get_hash().toHex());
 		}
 		static RNS::Interface fromJson(JsonVariantConst src) {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				//TRACEF(">>> Deserialized interface hash %s", hash.toHex().c_str());
+				//TRACEF(">>> Deserialized interface hash %s", RNS_HEX(hash));
 				//TRACE(">>> Querying transport for interface");
 				// Query transport for matching interface
 				return RNS::Transport::find_interface_from_hash(hash);
@@ -197,7 +197,7 @@ namespace ArduinoJson {
 			if (!src) {
 				return dst.set(nullptr);
 			}
-			//TRACEF("<<< Serializing packet hash %s", src.get_hash().toHex().c_str());
+			//TRACEF("<<< Serializing packet hash %s", RNS_HEX(src.get_hash()));
 			// Whenever a reference to a packet is serialized we must ensure that packet itself also gets serialized separately
 			RNS::Transport::cache_packet(src, true);
 			return dst.set(src.get_hash().toHex());
@@ -206,7 +206,7 @@ namespace ArduinoJson {
 			if (!src.isNull()) {
 				RNS::Bytes hash;
 				hash.assignHex(src.as<const char*>());
-				//TRACEF(">>> Deserialized packet hash %s", hash.toHex().c_str());
+				//TRACEF(">>> Deserialized packet hash %s", RNS_HEX(hash));
 				//TRACE(">>> Querying transport for cached packet");
 				// Query transport for matching packet
 				return RNS::Transport::get_cached_packet(hash);
@@ -319,7 +319,7 @@ namespace ArduinoJson {
 					}
 				}
 				else {
-					TRACEF("Destination announce packet %s is already cached", src._announce_packet.get_hash().toHex().c_str());
+					TRACEF("Destination announce packet %s is already cached", RNS_HEX(src._announce_packet.get_hash()));
 				}
 			}
 			else {
@@ -429,7 +429,7 @@ namespace RNS {
 				}
 			}
 			else {
-				TRACEF("Destination announce packet %s is already cached", src._announce_packet.get_hash().toHex().c_str());
+				TRACEF("Destination announce packet %s is already cached", RNS_HEX(src._announce_packet.get_hash()));
 			}
 		}
 		else {
@@ -695,7 +695,7 @@ namespace RNS { namespace Persistence {
 					if (file.readBytesUntil('"', key_str, sizeof(key_str)) > 0) {
 						Bytes key;
 						key.assignHex(key_str);
-						TRACEF("Persistence::deserialize: key: %s", key.toHex().c_str());
+						TRACEF("Persistence::deserialize: key: %s", RNS_HEX(key));
 						if (file.find(':')) {
 #ifdef USE_MSGPACK
 							//DeserializationError error = deserializeMsgPack(_document, _buffer.data());

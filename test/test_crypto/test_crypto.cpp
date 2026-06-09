@@ -34,10 +34,10 @@ void testHMAC() {
 		RNS::Bytes key(keystr);
 		RNS::Bytes data(datastr);
 		RNS::Bytes hash(hasharr, sizeof(hasharr));
-		//TRACEF("expected hash: %s", hash.toHex().c_str());
+		//TRACEF("expected hash: %s", RNS_HEX(hash));
 		RNS::Cryptography::HMAC hmac(key, data);
 		RNS::Bytes result = hmac.digest();
-		//TRACEF("result hash:   %s", result.toHex().c_str());
+		//TRACEF("result hash:   %s", RNS_HEX(result));
 		TEST_ASSERT_EQUAL_INT(0, memcmp(hash.data(), result.data(), result.size()));
 	}
 }

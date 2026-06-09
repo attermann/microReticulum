@@ -72,7 +72,7 @@ public:
 		announce_seen = true;
 
 		printf("[cpp] received announce: dest=%s\n",
-		       destination_hash.toHex().c_str());
+		       RNS_HEX(destination_hash));
 
 		outgoing_destination = RNS::Destination(announced_identity,
 		                                        RNS::Type::Destination::OUT,
@@ -121,7 +121,7 @@ int main() {
 	// Announce so Python can discover our destination.
 	local_destination.announce();
 	printf("[cpp] announced own destination %s\n",
-	       local_destination.hash().toHex().c_str());
+	       RNS_HEX(local_destination.hash()));
 
 	const double TIMEOUT_S = 30.0;
 	const double start = RNS::Utilities::OS::time();

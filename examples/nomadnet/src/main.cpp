@@ -103,8 +103,8 @@ RNS::Bytes serve_index(
 	const RNS::Identity& remote_identity,
 	double requested_at
 ) {
-	if (remote_identity) VERBOSEF("Serving %s to link <%s> with identity <%s>", path.toString().c_str(), link_id.toHex().c_str(), remote_identity.hash().toHex().c_str());
-	else VERBOSEF("Serving %s to link <%s>", path.toString().c_str(), link_id.toHex().c_str());
+	if (remote_identity) VERBOSEF("Serving %s to link <%s> with identity <%s>", path.toString().c_str(), RNS_HEX(link_id), RNS_HEX(remote_identity.hash()));
+	else VERBOSEF("Serving %s to link <%s>", path.toString().c_str(), RNS_HEX(link_id));
 	const size_t page_len = strlen(INDEX_PAGE);
 	MsgPack::Packer packer;
 	packer.packBinary(reinterpret_cast<const uint8_t*>(INDEX_PAGE), page_len);
@@ -112,13 +112,13 @@ RNS::Bytes serve_index(
 }
 
 void server_link_established(RNS::Link& link) {
-	RNS::logf(RNS::LOG_NOTICE, "Client link established <%s>", link.hash().toHex().c_str());
+	RNS::logf(RNS::LOG_NOTICE, "Client link established <%s>", RNS_HEX(link.hash()));
 }
 
 void server_loop(RNS::Destination& destination) {
 	RNS::logf(RNS::LOG_NOTICE,
 		"NomadNet example node <%s> running, serving %s",
-		destination.hash().toHex().c_str(), DEFAULT_PAGE_PATH);
+		RNS_HEX(destination.hash()), DEFAULT_PAGE_PATH);
 	RNS::log("Hit enter to re-announce (Ctrl-C to quit)");
 
 	const RNS::Bytes node_name_app_data(NODE_NAME);
@@ -131,7 +131,7 @@ void server_loop(RNS::Destination& destination) {
 			if (ch == '\n') {
 				destination.announce(node_name_app_data);
 				RNS::logf(RNS::LOG_NOTICE, "Sent announce from %s as \"%s\"",
-					destination.hash().toHex().c_str(), NODE_NAME);
+					RNS_HEX(destination.hash()), NODE_NAME);
 			}
 		}
 	}
@@ -172,7 +172,7 @@ void server() {
 	const RNS::Bytes node_name_app_data(NODE_NAME);
 	server_destination.announce(node_name_app_data);
 	RNS::logf(RNS::LOG_NOTICE, "Sent startup announce from %s as \"%s\"",
-		server_destination.hash().toHex().c_str(), NODE_NAME);
+		RNS_HEX(server_destination.hash()), NODE_NAME);
 
 	server_loop(server_destination);
 }
@@ -244,7 +244,7 @@ void on_response(const RNS::RequestReceipt& receipt) {
 
 	RNS::logf(RNS::LOG_NOTICE,
 		"Response received for request <%s>: %lu page_bytes (msgpack-encoded)",
-		request_id.toHex().c_str(),
+		RNS_HEX(request_id),
 		(unsigned long)page_bytes.size());
 
 	// page_bytes is the still-msgpack-encoded `response` element of the
@@ -257,7 +257,7 @@ void on_response(const RNS::RequestReceipt& receipt) {
 		RNS::logf(RNS::LOG_ERROR,
 			"Response payload for <%s> is not a msgpack bin value — "
 			"first byte 0x%02x. Saving raw bytes for inspection.",
-			request_id.toHex().c_str(),
+			RNS_HEX(request_id),
 			page_bytes.size() > 0 ? page_bytes.data()[0] : 0);
 		const std::string saved = write_response_temp_file(request_id, page_bytes);
 		if (!saved.empty()) {

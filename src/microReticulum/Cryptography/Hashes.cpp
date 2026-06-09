@@ -29,13 +29,13 @@ calls in RNS end up here.
 */
 
 const Bytes RNS::Cryptography::sha256(const Bytes& data) {
-	//TRACEF("Cryptography::sha256: data: %s", data.toHex().c_str());
+	//TRACEF("Cryptography::sha256: data: %s", RNS_HEX(data));
 	SHA256 digest;
 	digest.reset();
 	digest.update(data.data(), data.size());
 	Bytes hash;
 	digest.finalize(hash.writable(32), 32);
-	//TRACEF("Cryptography::sha256: hash: %s", hash.toHex().c_str());
+	//TRACEF("Cryptography::sha256: hash: %s", RNS_HEX(hash));
 	return hash;
 }
 
@@ -45,6 +45,6 @@ const Bytes RNS::Cryptography::sha512(const Bytes& data) {
 	digest.update(data.data(), data.size());
 	Bytes hash;
 	digest.finalize(hash.writable(64), 64);
-	//TRACEF("Cryptography::sha512: hash: %s", hash.toHex().c_str());
+	//TRACEF("Cryptography::sha512: hash: %s", RNS_HEX(hash));
 	return hash;
 }

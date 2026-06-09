@@ -55,10 +55,10 @@ bool Fernet::verify_hmac(const Bytes& token) {
 
 	//received_hmac = token[-32:]
 	Bytes received_hmac = token.right(32);
-	DEBUGF("Fernet::verify_hmac: received_hmac: %s", received_hmac.toHex().c_str());
+	DEBUGF("Fernet::verify_hmac: received_hmac: %s", RNS_HEX(received_hmac));
 	//expected_hmac = HMAC.new(self._signing_key, token[:-32]).digest()
 	Bytes expected_hmac = HMAC::generate(_signing_key, token.left(token.size()-32))->digest();
-	DEBUGF("Fernet::verify_hmac: expected_hmac: %s", expected_hmac.toHex().c_str());
+	DEBUGF("Fernet::verify_hmac: expected_hmac: %s", RNS_HEX(expected_hmac));
 
 	return (received_hmac == expected_hmac);
 }
@@ -68,22 +68,22 @@ const Bytes Fernet::encrypt(const Bytes& data) {
 	DEBUGF("Fernet::encrypt: plaintext length: %lu", data.size());
 	Bytes iv = random(16);
 	//double current_time = OS::time();
-	TRACEF("Fernet::encrypt: iv:         %s", iv.toHex().c_str());
+	TRACEF("Fernet::encrypt: iv:         %s", RNS_HEX(iv));
 
-	TRACEF("Fernet::encrypt: plaintext:  %s", data.toHex().c_str());
+	TRACEF("Fernet::encrypt: plaintext:  %s", RNS_HEX(data));
 	Bytes ciphertext = AES_128_CBC::encrypt(
 		PKCS7::pad(data),
 		_encryption_key,
 		iv
 	);
 	DEBUGF("Fernet::encrypt: padded ciphertext length: %lu", ciphertext.size());
-	TRACEF("Fernet::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
+	TRACEF("Fernet::encrypt: ciphertext: %s", RNS_HEX(ciphertext));
 
 	Bytes signed_parts = iv + ciphertext;
 
 	//return signed_parts + HMAC::generate(_signing_key, signed_parts)->digest();
 	Bytes sig(HMAC::generate(_signing_key, signed_parts)->digest());
-	TRACEF("Fernet::encrypt: sig:        %s", sig.toHex().c_str());
+	TRACEF("Fernet::encrypt: sig:        %s", RNS_HEX(sig));
 	Bytes token(signed_parts + sig);
 	DEBUGF("Fernet::encrypt: token length: %lu", token.size());
 	return token;
@@ -103,11 +103,11 @@ const Bytes Fernet::decrypt(const Bytes& token) {
 
 	//iv = token[:16]
 	Bytes iv = token.left(16);
-	TRACEF("Fernet::decrypt: iv:         %s", iv.toHex().c_str());
+	TRACEF("Fernet::decrypt: iv:         %s", RNS_HEX(iv));
 
 	//ciphertext = token[16:-32]
 	Bytes ciphertext = token.mid(16, token.size()-48);
-	TRACEF("Fernet::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
+	TRACEF("Fernet::decrypt: ciphertext: %s", RNS_HEX(ciphertext));
 
 	try {
 		Bytes plaintext = PKCS7::unpad(
@@ -118,7 +118,7 @@ const Bytes Fernet::decrypt(const Bytes& token) {
 			)
 		);
 		DEBUGF("Fernet::encrypt: unpadded plaintext length: %lu", plaintext.size());
-		TRACEF("Fernet::decrypt: plaintext:  %s", plaintext.toHex().c_str());
+		TRACEF("Fernet::decrypt: plaintext:  %s", RNS_HEX(plaintext));
 
 		DEBUGF("Fernet::decrypt: plaintext length: %lu", plaintext.size());
 		return plaintext;

@@ -384,6 +384,11 @@ MEM("Creating from data-move...");
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = false) const;
+		// Non-allocating hex formatter for log call sites. noexcept lets the
+		// compiler skip exception-cleanup emission at every call site.
+		// Writes up to (cap-1) hex chars + NUL into `out`. Returns chars written excluding NUL.
+		// Truncates silently if cap is too small. Returns 0 if out is null or cap is 0.
+		size_t toHex(char* out, size_t cap, bool upper = false) const noexcept;
 		Bytes mid(size_t beginpos, size_t len) const;
 		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }
@@ -441,7 +446,25 @@ MEM("Creating from data-move...");
 	inline std::string hexFromBytes(const Bytes& bytes) { return bytes.toHex(); }
 	std::string hexFromByte(uint8_t byte, bool upper = true);
 
+	// Fixed-size stack buffer that formats Bytes as a NUL-terminated hex string
+	// without heap allocation. Sized to fit up to 64-byte fields (e.g. concatenated
+	// Ed25519+X25519 public keys = 128 hex chars + NUL).
+	// Intended for transient use in log call sites: the buffer lives as long as the
+	// temporary, which is the full-expression containing it (safe for printf-family).
+	class HexBuf {
+	public:
+		explicit HexBuf(const Bytes& b, bool upper = false) noexcept { b.toHex(_data, sizeof _data, upper); }
+		const char* c_str() const noexcept { return _data; }
+	private:
+		char _data[129];
+	};
+
 }
+
+// Drop-in replacement for `<bytes-expr>.toHex().c_str()` in log call sites.
+// Expands to a const char* whose backing buffer lives for the full enclosing
+// expression — safe for printf-style varargs.
+#define RNS_HEX(b) (::RNS::HexBuf(b).c_str())
 
 inline RNS::Bytes& operator << (RNS::Bytes& lhbytes, const RNS::Bytes& rhbytes) {
 //MEM("Appending right-hand Bytes to left-hand Bytes");

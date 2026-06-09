@@ -123,13 +123,13 @@ Resource Resource::accept(const Packet& advertisement_packet, Callbacks::conclud
 	resource._object->_hashmap_height = 0;
 
 	if (link.has_incoming_resource(resource)) {
-		DEBUGF("Ignoring resource advertisement for %s, resource already transferring", resource._object->_hash.toHex().c_str());
+		DEBUGF("Ignoring resource advertisement for %s, resource already transferring", RNS_HEX(resource._object->_hash));
 		return {Type::NONE};
 	}
 
 	link.register_incoming_resource(resource);
 	DEBUGF("Accepting resource advertisement for %s. Transfer size is %lu in %u parts.",
-	       resource._object->_hash.toHex().c_str(),
+	       RNS_HEX(resource._object->_hash),
 	       static_cast<unsigned long>(resource._object->_size),
 	       resource._object->_total_parts);
 
@@ -461,7 +461,7 @@ void Resource::advertise_job() {
 		_object->_status               = Type::Resource::ADVERTISED;
 		_object->_retries_left         = _object->_max_adv_retries;
 		_object->_link.register_outgoing_resource(*this);
-		TRACEF("Sent resource advertisement for %s", _object->_hash.toHex().c_str());
+		TRACEF("Sent resource advertisement for %s", RNS_HEX(_object->_hash));
 	}
 	catch (const std::exception& e) {
 		ERRORF("Could not advertise resource, the contained exception was: %s", e.what());
@@ -688,7 +688,7 @@ void Resource::assemble() {
 		}
 
 		if (_object->_compressed) {
-			ERRORF("Received resource %s flagged as compressed, but bz2 is not supported on the C++ port. Rejecting.", _object->_hash.toHex().c_str());
+			ERRORF("Received resource %s flagged as compressed, but bz2 is not supported on the C++ port. Rejecting.", RNS_HEX(_object->_hash));
 			_object->_status = Type::Resource::CORRUPT;
 			cancel();
 			return;

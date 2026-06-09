@@ -60,7 +60,7 @@ static void on_link_closed(RNS::Link& link) {
 }
 
 static void on_link_established(RNS::Link& link) {
-	printf("[cpp] link established: %s\n", link.hash().toHex().c_str());
+	printf("[cpp] link established: %s\n", RNS_HEX(link.hash()));
 
 	// Msgpack-encode the payload as the third array element of the
 	// request envelope. The Link::request() contract is that `data` is
@@ -88,7 +88,7 @@ public:
 		if (announce_seen) return;
 		announce_seen = true;
 		printf("[cpp] received announce: dest=%s\n",
-		       destination_hash.toHex().c_str());
+		       RNS_HEX(destination_hash));
 		outgoing_destination = RNS::Destination(announced_identity,
 		                                        RNS::Type::Destination::OUT,
 		                                        RNS::Type::Destination::SINGLE,

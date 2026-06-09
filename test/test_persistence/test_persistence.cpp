@@ -26,13 +26,13 @@ public:
 
 private:
 	virtual bool send_outgoing(const RNS::Bytes& data) {
-		DEBUGF("TestInterface.send_outgoing: data: %s", data.toHex().c_str());
+		DEBUGF("TestInterface.send_outgoing: data: %s", RNS_HEX(data));
 		// Perform post-send housekeeping
 		InterfaceImpl::handle_outgoing(data);
 		return true;
 	}
 	void on_incoming(const RNS::Bytes& data) {
-		DEBUGF("TestInterface.on_incoming: data: %s", data.toHex().c_str());
+		DEBUGF("TestInterface.on_incoming: data: %s", RNS_HEX(data));
 		// Pass received data on to transport
 		InterfaceImpl::handle_incoming(data);
 	}
@@ -543,7 +543,7 @@ void testSerializeDestinationTable() {
 	}
 
 	for (auto& [hash, test] : map) {
-		TRACEF("testSerializeDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
+		TRACEF("testSerializeDestinationTable: entry: %s = %s", RNS_HEX(hash), test.debugString().c_str());
 	}
 
 	JsonDocument doc;
@@ -596,7 +596,7 @@ void testDeserializeDestinationTable() {
 			static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Persistence::DestinationEntry>>());
 			TEST_ASSERT_EQUAL_size_t(22, map.size());
 			for (auto& [hash, test] : map) {
-				TRACEF("testDeserializeDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
+				TRACEF("testDeserializeDestinationTable: entry: %s = %s", RNS_HEX(hash), test.debugString().c_str());
 			}
 
 			//JsonObject root = doc.as<JsonObject>();
@@ -639,7 +639,7 @@ void testDeserializeEmptyDestinationTable() {
 			static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map(doc.as<std::map<RNS::Bytes, RNS::Persistence::DestinationEntry>>());
 			TEST_ASSERT_EQUAL_size_t(0, map.size());
 			for (auto& [hash, test] : map) {
-				TRACEF("testDeserializeEmptyDestinationTable: entry: %s = %s", hash.toHex().c_str(), test.debugString().c_str());
+				TRACEF("testDeserializeEmptyDestinationTable: entry: %s = %s", RNS_HEX(hash), test.debugString().c_str());
 			}
 
 			//JsonObject root = doc.as<JsonObject>();
