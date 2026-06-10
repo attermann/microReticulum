@@ -456,6 +456,8 @@ bool Reticulum::drop_path(const Bytes& destination) {
 
 // CBA TODO: Integrate with new microStore path table
 uint16_t Reticulum::drop_all_via(const Bytes& transport_hash) {
+	// CBA microStore: this operation is expensive so leaving unimplemented for now
+/*
 	uint16_t dropped_count = 0;
 	//for (auto& destination_hash : Transport::path_table()) {
 	for (const auto& [destination_hash, destination_entry] : Transport::path_table()) {
@@ -465,6 +467,8 @@ uint16_t Reticulum::drop_all_via(const Bytes& transport_hash) {
 		}
 	}
 	return dropped_count;
+*/
+	return 0;
 }
 
 void Reticulum::drop_announce_queues() {

@@ -60,6 +60,10 @@ using namespace RNS::Persistence;
 #define RNS_PR_TAGS_MAX	 32
 #endif
 
+#ifndef RNS_SAME_INTERFACE_PATH_REQUESTS
+#define RNS_SAME_INTERFACE_PATH_REQUESTS 1
+#endif
+
 /*static*/ Transport::InterfaceTable Transport::_interfaces;
 /*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
@@ -3138,16 +3142,21 @@ Deregisters an announce handler.
 /*static*/ bool Transport::expire_path(const Bytes& destination_hash) {
 	// CBA microStore
 	//auto& destination_entry = get_path(destination_hash);
+/*
 	DestinationEntry destination_entry;
 	_new_path_table.get(destination_hash, destination_entry);
 	if (destination_entry) {
 		destination_entry._timestamp = 0;
+		_new_path_table.put(destination_hash, destination_entry);
 		_tables_last_culled = 0;
 		return true;
 	}
 	else {
 		return false;
 	}
+*/
+	// Just removing the path table entry directly
+	return _new_path_table.remove(destination_hash);
 }
 
 /*p
@@ -3914,10 +3923,15 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 			}});
 
 			for (auto& [hash, interface] : _interfaces) {
+				// DIVERGENCE
+
+#if RNS_SAME_INTERFACE_PATH_REQUESTS
 				// CBA EXPERIMENTAL forwarding path requests even on requestor interface in order to support
 				//  path-finding over LoRa mesh
-				//if (interface != attached_interface) {
 				if (true) {
+#else
+				//if (interface != attached_interface) {
+#endif
 					TRACEF("Transport::path_request: requesting path on interface %s", interface.toString().c_str());
 					// Use the previously extracted tag from this path request
 					// on the new path requests as well, to avoid potential loops
