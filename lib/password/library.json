@@ -1,0 +1,19 @@
+{
+	"name": "password",
+	"version": "1.0.0",
+	"description": "PBKDF2 + AES-256-CTR password-protected file storage for microReticulum identities",
+	"keywords": "reticulum, password, aes, encryption, identity",
+	"license": "Apache-2.0",
+	"dependencies": [
+		{
+			"name": "Crypto",
+			"url": "https://github.com/attermann/Crypto.git"
+		},
+		{
+			"name": "microReticulum",
+			"url": "https://github.com/attermann/microReticulum.git"
+		}
+	],
+	"frameworks": "arduino",
+	"platforms": "*"
+}
