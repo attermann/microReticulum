@@ -459,12 +459,15 @@ uint16_t Reticulum::drop_all_via(const Bytes& transport_hash) {
 	// CBA microStore: this operation is expensive so leaving unimplemented for now
 /*
 	uint16_t dropped_count = 0;
-	//for (auto& destination_hash : Transport::path_table()) {
-	for (const auto& [destination_hash, destination_entry] : Transport::path_table()) {
-		if (destination_entry._received_from == transport_hash) {
-			Transport::expire_path(destination_hash);
-			++dropped_count;
+	std::vector<Bytes> drop_paths;
+	for (const auto& entry : _new_path_table) {
+		if (entry.value._received_from == transport_hash) {
+			drop_paths.add(entry.key);
 		}
+	}
+	for (destination_hash : drop_paths) {
+		Transport::expire_path(destination_hash);
+		++dropped_count;
 	}
 	return dropped_count;
 */

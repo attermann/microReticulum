@@ -3629,7 +3629,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			// list (nor do we likely want to on resource-constrained devices) so leaving this as a no-op for now.
 
 			size_t match_count = 0;
-			for (auto& path : _new_path_table) {
+			for (const auto& path : _new_path_table) {
 				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
 				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
 				match_count++;
@@ -3645,7 +3645,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			}
 */
 			match_count = 0;
-			for (auto& path : _new_path_table) {
+			for (const auto& path : _new_path_table) {
 				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
 				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
 				remote_path_pack_path_entry(p, path.key, path.value);
