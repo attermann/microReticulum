@@ -30,7 +30,7 @@ namespace RNS { namespace Provisioning {
 		// building dotted-path filenames for hierarchical namespaces.
 		// May be nullptr — in that case filenames are flat (just ns.name()).
 		Storage(const char* root, const Registry* registry = nullptr)
-			: _root(root ? root : "/config"), _registry(registry) {}
+			: _root(root ? root : "./config"), _registry(registry) {}
 
 		const fstring_t& root() const { return _root; }
 

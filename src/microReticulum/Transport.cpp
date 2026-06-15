@@ -315,7 +315,7 @@ DestinationEntry empty_destination_entry;
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 		// CBA microStore
 		if (Utilities::OS::get_filesystem()) {
-			INFOF("FileSystem available: %lu", Utilities::OS::get_filesystem().storageAvailable());
+			INFOF("FileSystem available: %lu bytes", Utilities::OS::get_filesystem().storageAvailable());
 			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
 #if defined(ARDUINO)
 			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);

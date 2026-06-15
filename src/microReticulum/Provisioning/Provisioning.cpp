@@ -49,7 +49,7 @@ namespace RNS { namespace Provisioning {
 			_build_scope.clear();
 		}
 #ifdef RNS_USE_FS
-		_storage.reset(new Storage(storage_root ? storage_root : "/config", &_registry));
+		_storage.reset(new Storage(storage_root ? storage_root : "./config", &_registry));
 		_storage->load_all(_registry);
 		// Push the just-loaded working values into the runtime statics via
 		// each field's setter. Without this step, persistence is decorative —
