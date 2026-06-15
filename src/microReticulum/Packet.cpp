@@ -670,8 +670,21 @@ std::string Packet::dumpString() const {
 	default:
 		std::to_string(_object->_header_type) + "\n";
 	}
-	//dump += "  transport_type:   " + std::to_string(_object->_transport_type) + "\n";
-	dump += "  transport_type:   ";
+	//dump += "  context_flag:     " + std::to_string(_object->_context_flag) + "\n";
+	dump += "  context_flag:     ";
+	switch (_object->_context_flag) {
+	case FLAG_SET:
+		dump += "SET\n";
+		break;
+	case FLAG_UNSET:
+		encrypted = false;
+		dump += "UNSET\n";
+		break;
+	default:
+		std::to_string(_object->_context_flag) + "\n";
+	}
+	//dump += "  propagation_type: " + std::to_string(_object->_transport_type) + "\n";
+	dump += "  propagation_type: ";
 	switch (_object->_transport_type) {
 	case Type::Transport::BROADCAST:
 		dump += "BROADCAST\n";
@@ -816,6 +829,7 @@ std::string Packet::dumpString() const {
 	dump += "raw:          " + _object->_raw.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_object->_raw.size()) + "\n";
 	dump += "data:         " + _object->_data.toHex() + "\n";
+	dump += "text:         " + _object->_data.toString() + "\n";
 	dump += "  length:           " + std::to_string(_object->_data.size()) + "\n";
 	//if ((encrypted || _object->_encrypted) && _object->_raw.size() > 0) {
 	if (false) {
