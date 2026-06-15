@@ -829,7 +829,7 @@ std::string Packet::dumpString() const {
 	dump += "raw:          " + _object->_raw.toHex() + "\n";
 	dump += "  length:           " + std::to_string(_object->_raw.size()) + "\n";
 	dump += "data:         " + _object->_data.toHex() + "\n";
-	dump += "text:         " + _object->_data.toString() + "\n";
+	//dump += "text:         " + _object->_data.toString() + "\n";
 	dump += "  length:           " + std::to_string(_object->_data.size()) + "\n";
 	//if ((encrypted || _object->_encrypted) && _object->_raw.size() > 0) {
 	if (false) {
