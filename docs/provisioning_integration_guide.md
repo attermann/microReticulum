@@ -607,7 +607,7 @@ class Manager {
 public:
     static Manager& instance();
 
-    void begin(const char* storage_root = "./config");
+    void begin(const char* storage_root = nullptr);
     void end();
     bool started() const;
 

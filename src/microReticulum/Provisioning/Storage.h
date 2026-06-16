@@ -15,6 +15,7 @@
 #pragma once
 
 #include "Registry.h"
+#include "../Reticulum.h"
 
 #include <string>
 
@@ -29,7 +30,7 @@ namespace RNS { namespace Provisioning {
 		// registry pointer is used solely to walk parent chains when
 		// building dotted-path filenames for hierarchical namespaces.
 		// May be nullptr — in that case filenames are flat (just ns.name()).
-		Storage(const char* root, const Registry* registry = nullptr)
+		Storage(const char* root = nullptr, const Registry* registry = nullptr)
 			: _root(root ? root : "./config"), _registry(registry) {}
 
 		const fstring_t& root() const { return _root; }

@@ -168,6 +168,8 @@ namespace RNS {
 		inline static void persist_interval(uint16_t persist_interval) { _persist_interval = persist_interval; }
 		inline static uint16_t clean_interval() { return _clean_interval; }
 		inline static void clean_interval(uint16_t clean_interval) { _clean_interval = clean_interval; }
+		inline static const char* storagepath() { return _storagepath; }
+		inline static void storagepath(const char* storagepath) { strncpy(_storagepath, storagepath, sizeof(_storagepath)); }
 
 	protected:
 		static bool readTimeOffset();

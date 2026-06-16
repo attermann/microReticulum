@@ -173,8 +173,7 @@ namespace RNS { namespace Provisioning {
 		static Manager& instance();
 
 		// Idempotent: must be called once after the filesystem is registered.
-		// storage_root defaults to "./config".
-		void begin(const char* storage_root = "./config");
+		void begin(const char* storage_root = nullptr);
 		void end();
 		bool started() const { return _started; }
 
