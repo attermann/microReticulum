@@ -697,7 +697,9 @@ DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to cull link table: %s", e.what());
 				}
 
-				// CBA TODO perform path expiry in microStore!!!
+				// CBA microStore
+				// Path expiry handled internally by microStore
+/*
 				// Cull the path table
 				DEBUG("Culling path table...");
 				try {
@@ -733,6 +735,7 @@ DestinationEntry empty_destination_entry;
 				catch (const std::exception& e) {
 					ERRORF("jobs: failed to cull path table: %s", e.what());
 				}
+*/
 
 				// Cull the pending discovery path requests table
 				try {
@@ -4639,15 +4642,17 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 	// memory
 	// storage
+	HEADF(LOG_VERBOSE, "sram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d]", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash);
+#endif // RNS_DEBUG_MEMORY
+
+#ifdef RNS_DEBUG_METRICS
 	// _destinations
 	// _path_table
 	// _reverse_table
 	// _announce_table
 	// _held_announces
-	HEADF(LOG_VERBOSE, "sram: %u (%u%%) [%d] psram: %u (%u%%) [%d] flash: %u (%u%%) [%d] paths: %u dsts: %u revr: %u annc: %u held: %u", memory, memory_pct, memory - _last_memory, psram, psram_pct, psram - _last_psram, flash, flash_pct, flash - _last_flash, _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
-#endif // RNS_DEBUG_MEMORY
+	HEADF(LOG_VERBOSE, "paths: %u dsts: %u revr: %u annc: %u held: %u", _new_path_table.size(), _destinations.size(), _reverse_table.size(), _announce_table.size(), _held_announces.size());
 
-#ifdef RNS_DEBUG_METRICS
 	// _path_requests
 	// _discovery_path_requests
 	// _pending_local_path_requests
