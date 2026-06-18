@@ -17,11 +17,23 @@
 #include "Field.h"
 
 #include <stdint.h>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace RNS { namespace Provisioning {
+
+	class Namespace;
+
+	// Fires once per Manager::commit on a namespace that has at least one
+	// pending draft entry. Invoked BEFORE any field setter fires, so the
+	// callback can inspect the pending drafts via has_draft()/draft() and
+	// validate, modify (set_draft), or revert them (clear_draft) before
+	// the commit proceeds. After the callback returns, the manager
+	// re-collects the draft id list — so additions and reverts both take
+	// effect on this same commit pass.
+	using CommitCallback = std::function<void(Namespace&)>;
 
 	class Namespace {
 
@@ -92,6 +104,12 @@ namespace RNS { namespace Provisioning {
 		// commit_one). No validation, no setter invocation.
 		void put_working(fid_t field_id, const Value& v);
 
+		// Optional per-namespace commit hook. See CommitCallback above for
+		// semantics. Pass nullptr to clear a previously registered callback.
+		void on_commit(CommitCallback cb) { _on_commit = std::move(cb); }
+		bool has_on_commit() const { return (bool)_on_commit; }
+		const CommitCallback& on_commit_callback() const { return _on_commit; }
+
 	private:
 		nid_t _id;
 		fstring_t _name;
@@ -101,6 +119,7 @@ namespace RNS { namespace Provisioning {
 		std::unordered_map<fstring_t, size_t> _name_index;
 		std::unordered_map<fid_t, Value> _working;
 		std::unordered_map<fid_t, Value> _draft;
+		CommitCallback _on_commit;
 		bool _dirty_for_persist = false;
 	};
 

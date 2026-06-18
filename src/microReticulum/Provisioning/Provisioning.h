@@ -154,6 +154,14 @@ namespace RNS { namespace Provisioning {
 		NamespaceBuilder& command_void(const char* name, fid_t id,
 			std::function<bool()> setter);
 
+		// Register a pre-commit hook for the current namespace scope. Fires
+		// once per commit pass on this namespace, only when at least one
+		// draft entry exists, and BEFORE any field setter runs — so the
+		// callback can validate the pending drafts and revert (clear_draft)
+		// or amend (set_draft) them before commit_one promotes them into
+		// working state. See Namespace::CommitCallback for semantics.
+		NamespaceBuilder& on_commit(CommitCallback cb);
+
 	private:
 		Manager* _mgr;
 	};

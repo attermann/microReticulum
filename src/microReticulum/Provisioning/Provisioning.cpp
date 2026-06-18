@@ -184,7 +184,24 @@ namespace RNS { namespace Provisioning {
 	bool Manager::commit(nid_t ns_id) {
 		auto do_one = [&](Namespace& ns) -> bool {
 			bool any_reboot = false;
-			// Collect ids first; commit_one() mutates _draft.
+			// Fire the pre-commit hook before any field setter runs, but
+			// only when this namespace actually has pending drafts — the
+			// callback contract is "called when there is something to
+			// commit". The callback may revert (clear_draft) or amend
+			// (set_draft) drafts, so we re-collect the id list after it
+			// returns to honour those edits.
+			bool has_any_draft = false;
+			for (const Field& f : ns.fields()) {
+				if (ns.has_draft(f.id)) { has_any_draft = true; break; }
+			}
+			if (has_any_draft && ns.has_on_commit()) {
+				try { ns.on_commit_callback()(ns); }
+				catch (const std::exception& e) {
+					ERRORF("Provisioning::commit: on_commit callback for namespace %u threw: %s",
+						ns.id(), e.what());
+				}
+			}
+			// Collect ids after the callback; commit_one() mutates _draft.
 			std::vector<fid_t> ids;
 			for (const Field& f : ns.fields()) {
 				if (ns.has_draft(f.id)) ids.push_back(f.id);
@@ -641,6 +658,21 @@ namespace RNS { namespace Provisioning {
 		bool any_reboot = false;
 
 		auto do_one = [&](Namespace& ns) {
+			// Pre-commit hook: fires once per namespace iff at least one
+			// draft entry exists, before any field setter runs. Mirrors
+			// the in-process Manager::commit path so wire-driven commits
+			// see identical semantics.
+			bool has_any_draft = false;
+			for (const Field& f : ns.fields()) {
+				if (ns.has_draft(f.id)) { has_any_draft = true; break; }
+			}
+			if (has_any_draft && ns.has_on_commit()) {
+				try { ns.on_commit_callback()(ns); }
+				catch (const std::exception& e) {
+					ERRORF("Provisioning::op_commit: on_commit callback for namespace %u threw: %s",
+						ns.id(), e.what());
+				}
+			}
 			std::vector<fid_t> ids;
 			for (const Field& f : ns.fields()) if (ns.has_draft(f.id)) ids.push_back(f.id);
 			for (fid_t id : ids) {
