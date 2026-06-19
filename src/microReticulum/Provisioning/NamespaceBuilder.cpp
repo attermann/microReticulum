@@ -296,4 +296,11 @@ namespace RNS { namespace Provisioning {
 		return *this;
 	}
 
+	NamespaceBuilder& NamespaceBuilder::on_commit(CommitCallback cb) {
+		Namespace* ns = scope(_mgr, "on_commit");
+		if (!ns) return *this;
+		ns->on_commit(std::move(cb));
+		return *this;
+	}
+
 } }

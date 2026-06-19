@@ -1201,6 +1201,137 @@ void test_duplicate_field_id_rejected(void) {
 }
 
 // ---------------------------------------------------------------------------
+// Namespace-level on_commit callback
+// ---------------------------------------------------------------------------
+
+void test_on_commit_callback_fires_only_when_drafts_present(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+
+	int callback_count = 0;
+	ns->on_commit([&](Namespace&) { ++callback_count; });
+
+	// No drafts staged → commit should skip the callback entirely.
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(0, callback_count);
+
+	// Stage a draft → callback fires exactly once on this commit pass.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(1, callback_count);
+
+	// And the field's own setter still ran.
+	TEST_ASSERT_EQUAL(1, g_live_int_setter_count);
+	TEST_ASSERT_EQUAL_INT64(42, g_live_int_setter_value);
+}
+
+void test_on_commit_callback_runs_before_field_setters(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+
+	int setter_count_observed = -1;
+	ns->on_commit([&](Namespace&) {
+		// Snapshot the field setter counter at the moment the namespace
+		// callback fires — it must still be 0, proving the namespace
+		// callback wins the ordering race against commit_one's setter.
+		setter_count_observed = g_live_int_setter_count;
+	});
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)11)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+	TEST_ASSERT_EQUAL(0, setter_count_observed);
+	TEST_ASSERT_EQUAL(1, g_live_int_setter_count);
+}
+
+void test_on_commit_callback_can_revert_specific_draft(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+
+	ns->on_commit([](Namespace& self) {
+		// Veto the level change but allow the label change to proceed.
+		self.clear_draft(CUSTOM_INT);
+	});
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_STR, Value("ok")));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+
+	// Reverted draft: setter never fires, working untouched.
+	TEST_ASSERT_EQUAL(0, g_live_int_setter_count);
+	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+	// Unreverted draft: still applied.
+	TEST_ASSERT_EQUAL_STRING("ok", p.field(CUSTOM_NS_ID, CUSTOM_STR).as_string().c_str());
+}
+
+void test_on_commit_callback_can_revert_entire_namespace(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+
+	ns->on_commit([](Namespace& self) { self.clear_draft(); });
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_STR, Value("vetoed")));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+
+	TEST_ASSERT_EQUAL(0, g_live_int_setter_count);
+	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+	TEST_ASSERT_EQUAL_STRING("default", p.field(CUSTOM_NS_ID, CUSTOM_STR).as_string().c_str());
+}
+
+void test_on_commit_callback_can_amend_draft(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+
+	ns->on_commit([](Namespace& self) {
+		// Clamp the level draft to 50 — exercises set_draft inside the hook.
+		Value v;
+		if (self.draft(CUSTOM_INT, v) && v.as_int() > 50) {
+			self.set_draft(CUSTOM_INT, Value((int64_t)50));
+		}
+	});
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)90)));
+	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
+
+	TEST_ASSERT_EQUAL(1, g_live_int_setter_count);
+	TEST_ASSERT_EQUAL_INT64(50, g_live_int_setter_value);
+	TEST_ASSERT_EQUAL_INT64(50, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+}
+
+void test_on_commit_callback_scoped_per_namespace(void) {
+	// Two namespaces with their own callbacks. A draft on one must not
+	// fire the other's hook.
+	fresh_provisioning(g_test_root);
+	auto& p = Manager::instance();
+	Namespace* ns_custom = p.registry().find(CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns_custom);
+	Namespace* ns_other = p.registry().find(Ns::Transport::Id);
+	TEST_ASSERT_NOT_NULL(ns_other);
+
+	int custom_count = 0;
+	int other_count = 0;
+	ns_custom->on_commit([&](Namespace&) { ++custom_count; });
+	ns_other->on_commit([&](Namespace&) { ++other_count; });
+
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
+	// Global commit walks every namespace; only the one with a draft
+	// should invoke its hook.
+	TEST_ASSERT_TRUE(p.commit());
+	TEST_ASSERT_EQUAL(1, custom_count);
+	TEST_ASSERT_EQUAL(0, other_count);
+}
+
+// ---------------------------------------------------------------------------
 // Wire round-trip tests — exercise handle_message()
 // ---------------------------------------------------------------------------
 
@@ -1419,6 +1550,12 @@ int runUnityTests(void) {
 	RUN_TEST(test_factory_reset);
 	RUN_TEST(test_by_name_accessors);
 	RUN_TEST(test_duplicate_field_id_rejected);
+	RUN_TEST(test_on_commit_callback_fires_only_when_drafts_present);
+	RUN_TEST(test_on_commit_callback_runs_before_field_setters);
+	RUN_TEST(test_on_commit_callback_can_revert_specific_draft);
+	RUN_TEST(test_on_commit_callback_can_revert_entire_namespace);
+	RUN_TEST(test_on_commit_callback_can_amend_draft);
+	RUN_TEST(test_on_commit_callback_scoped_per_namespace);
 	RUN_TEST(test_wire_get_info);
 	RUN_TEST(test_wire_set_state_then_commit);
 	RUN_TEST(test_wire_set_state_constraint_error);

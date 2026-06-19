@@ -25,6 +25,10 @@
 #include "Utilities/OS.h"
 #include "Utilities/Persistence.h"
 
+#if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
+#include "Provisioning/Provisioning.h"
+#endif
+
 #include <MsgPack.h>
 
 #include <algorithm>
@@ -267,9 +271,15 @@ DestinationEntry empty_destination_entry;
 			//_remote_management_destination.register_request_handler({"/status"}, remote_status_handler, Type::Destination::ALLOW_ALL);
 			_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
 			//_remote_management_destination.register_request_handler("/path", remote_path_handler, Type::Destination::ALLOW_ALL);
+#if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
+			_remote_management_destination.register_request_handler("/provision", remote_provision_handler, Type::Destination::ALLOW_LIST, _remote_management_allowed);
+#endif
 			_mgmt_destinations.insert(_remote_management_destination);
 			_mgmt_hashes.insert(_remote_management_destination.hash());
 			NOTICEF("Enabled remote management on <%s>", _remote_management_destination.toString().c_str());
+#if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
+			NOTICEF("Enabled remote provisioning on <%s>", _remote_management_destination.toString().c_str());
+#endif
 		}
 
 /*p
@@ -3673,6 +3683,13 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 
 	return Bytes(p.data(), p.size());
 }
+
+#if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
+/*static*/ Bytes Transport::remote_provision_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
+	TRACEF("remote_provision_handler: forwarding %u bytes to Provisioning::Manager", (unsigned)data.size());
+	return Provisioning::Manager::instance().handle_message(data);
+}
+#endif
 
 /*static*/ void Transport::path_request_handler(const Bytes& data, const Packet& packet) {
 	TRACE("Transport::path_request_handler");
