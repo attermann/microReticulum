@@ -54,7 +54,7 @@ Every request and every response is a **MsgPack array of exactly 3 elements**:
 
 The response's `op_id` is identical to the request's, **except** when the engine returns an error — in which case `op_id` is `ERROR` (101) and the original op id can be recovered from the `seq` you sent.
 
-If the device receives a request before `Manager::begin()` has run (the firmware hasn't started Provisioning), it responds with an `ERROR` carrying `NotInitialized` (9).
+If the device receives a request before `Provisioner::begin()` has run (the firmware hasn't started Provisioning), it responds with an `ERROR` carrying `NotInitialized` (9).
 
 ## Operation IDs
 
@@ -256,6 +256,16 @@ Delete every persisted namespace file from flash and reset all working values to
 |---|---|---|
 | 2 (`NeedsReboot`) | `bool` | Always `false` after a successful factory reset. |
 
+Integrations may register an `on_factory_reset` callback to extend the operation with app-side cleanup (storage outside Provisioning's root, in-memory app state, etc.). The callback fires after the internal reset has completed; the wire contract is unchanged.
+
+### `REBOOT` (op = 9)
+
+Ask the firmware to reboot. microReticulum itself performs no reboot — it dispatches to an `on_reboot` callback registered by the integration. If the integration registered a callback the device is expected to actually reboot (usually scheduled, so the response can be sent first); if no callback is registered the op is a successful no-op.
+
+**Request payload**: `nil`.
+
+**Response payload**: none. The response envelope is a successful ack `[op=9, seq]` with no payload element. Clients should not depend on receiving the response, since the device may be mid-reboot by the time it would have been sent.
+
 ### `ERROR` response (op = 101)
 
 Returned in place of the normal response when the engine cannot service the request at the envelope/transport layer (malformed envelope, unknown op, Provisioning not started). Per-field errors during `SET_STATE` come back in the normal response's `FieldErrors` array, not as a separate `ERROR` op.
@@ -387,7 +397,7 @@ Parent ids are stable across firmware releases per the same rules as namespace i
 | 6   | `ConstraintViolation` | Value type-decoded fine but violates the field's range/length/enum/element-size constraint. |
 | 7   | `ReadOnly`            | `SET_STATE` targeted an `FF_READ_ONLY` field. |
 | 8   | `StorageError`        | Filesystem error during a `COMMIT` (rare — disk full, FS not mounted, rename failed). |
-| 9   | `NotInitialized`      | Request arrived before `Manager::begin()` ran on the device. Wait and retry. |
+| 9   | `NotInitialized`      | Request arrived before `Provisioner::begin()` ran on the device. Wait and retry. |
 | 99  | `Internal`            | Engine bug — please report. |
 
 Codes 1, 2, 9, 99 are returned as full `ERROR` responses. Codes 3–8 also appear inside `SET_STATE` responses as per-field errors.

@@ -26,7 +26,7 @@ namespace RNS { namespace Provisioning {
 
 	class Namespace;
 
-	// Fires once per Manager::commit on a namespace that has at least one
+	// Fires once per Provisioner::commit on a namespace that has at least one
 	// pending draft entry. Invoked BEFORE any field setter fires, so the
 	// callback can inspect the pending drafts via has_draft()/draft() and
 	// validate, modify (set_draft), or revert them (clear_draft) before

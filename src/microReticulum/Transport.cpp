@@ -3686,8 +3686,8 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 
 #if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
 /*static*/ Bytes Transport::remote_provision_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
-	TRACEF("remote_provision_handler: forwarding %u bytes to Provisioning::Manager", (unsigned)data.size());
-	return Provisioning::Manager::instance().handle_message(data);
+	TRACEF("remote_provision_handler: forwarding %u bytes to Provisioning::Provisioner", (unsigned)data.size());
+	return Provisioning::Provisioner::instance().handle_message(data);
 }
 #endif
 

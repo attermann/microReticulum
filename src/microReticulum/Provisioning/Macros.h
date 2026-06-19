@@ -33,7 +33,7 @@
 // headers under src/Provisioning/Ids/.
 
 #define RNS_PROVISION_BEGIN(builder_name, ns_name, ns_id) \
-	{ auto builder_name = RNS::Provisioning::Manager::instance() \
+	{ auto builder_name = RNS::Provisioning::Provisioner::instance() \
 		.register_namespace((ns_name), (ns_id));
 
 #define RNS_PROVISION_END(builder_name) \

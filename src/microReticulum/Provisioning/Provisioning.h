@@ -30,11 +30,11 @@
 
 namespace RNS { namespace Provisioning {
 
-	class Manager;
+	class Provisioner;
 
 	// Fluent builder for app-side namespace registration.
 	//
-	//   Manager::instance()
+	//   Provisioner::instance()
 	//       .namespace_("radio", 100)
 	//       .field_float("frequency", 1, FF_REBOOT_REQUIRED, 915.0e6, 100e6, 1e9,
 	//                    [&](const Value& v) { radio.frequency(v.as_float()); return true; })
@@ -43,10 +43,10 @@ namespace RNS { namespace Provisioning {
 	class NamespaceBuilder {
 
 	public:
-		// Thin handle into the Manager's registration scope. Every fluent
-		// call operates on Manager::current_build_scope() — which is the
+		// Thin handle into the Provisioner's registration scope. Every fluent
+		// call operates on Provisioner::current_build_scope() — which is the
 		// most-recently-opened namespace, including nested ones.
-		explicit NamespaceBuilder(Manager* mgr) : _mgr(mgr) {}
+		explicit NamespaceBuilder(Provisioner* mgr) : _mgr(mgr) {}
 
 		// Open a child namespace under the current scope. Subsequent
 		// field_*() / metric_*() / command_*() calls on this builder
@@ -59,7 +59,7 @@ namespace RNS { namespace Provisioning {
 		NamespaceBuilder& end();
 
 		// Each field_* overload optionally accepts a typed getter that
-		// returns the field's native C++ type. When provided, Manager::field()
+		// returns the field's native C++ type. When provided, Provisioner::field()
 		// queries it for the live runtime value instead of returning a
 		// cached working-map entry. Internally wrapped to produce a Value.
 		NamespaceBuilder& field_bool(const char* name, fid_t id, fflags_t flags,
@@ -163,11 +163,11 @@ namespace RNS { namespace Provisioning {
 		NamespaceBuilder& on_commit(CommitCallback cb);
 
 	private:
-		Manager* _mgr;
+		Provisioner* _mgr;
 	};
 
 	// Singleton orchestrating schema, storage, working/draft, wire codec.
-	class Manager {
+	class Provisioner {
 
 	public:
 		enum class Source : uint8_t {
@@ -176,9 +176,11 @@ namespace RNS { namespace Provisioning {
 			Effective = 2,	// working overlaid with draft
 		};
 
-		using RebootRequestedCallback = std::function<void()>;
+		using RebootRequiredCallback = std::function<void()>;
+		using RebootCallback         = std::function<void()>;
+		using FactoryResetCallback   = std::function<void()>;
 
-		static Manager& instance();
+		static Provisioner& instance();
 
 		// Idempotent: must be called once after the filesystem is registered.
 		void begin(const char* storage_root = nullptr);
@@ -222,7 +224,22 @@ namespace RNS { namespace Provisioning {
 		bool needs_reboot() const { return _needs_reboot; }
 		bool draft_has_reboot() const;
 
-		void on_reboot_requested(RebootRequestedCallback cb) { _on_reboot = std::move(cb); }
+		// Passive: fires when a commit flips needs_reboot false->true (a
+		// reboot-required field was committed). App typically surfaces a
+		// "reboot needed" badge; the user triggers the actual reboot.
+		void on_reboot_required(RebootRequiredCallback cb) { _on_reboot_required = std::move(cb); }
+
+		// Active: fires when the client sent the explicit Reboot wire op.
+		// App is expected to actually reboot the device. microReticulum
+		// itself does not reboot; if no callback is registered the op
+		// still ack's, but nothing happens.
+		void on_reboot(RebootCallback cb) { _on_reboot = std::move(cb); }
+
+		// Fires after factory_reset() has completed its internal reset
+		// (working values restored, setters fired, storage cleared). Lets
+		// the app perform additional cleanup outside Provisioning's
+		// storage root.
+		void on_factory_reset(FactoryResetCallback cb) { _on_factory_reset = std::move(cb); }
 
 		// -- Introspection (for tests, debug, host bindings) --------------
 		Registry& registry() { return _registry; }
@@ -236,15 +253,17 @@ namespace RNS { namespace Provisioning {
 		static constexpr nid_t SCHEMA_VERSION = 2;
 
 	private:
-		Manager() = default;
-		Manager(const Manager&) = delete;
-		Manager& operator=(const Manager&) = delete;
+		Provisioner() = default;
+		Provisioner(const Provisioner&) = delete;
+		Provisioner& operator=(const Provisioner&) = delete;
 
 		Registry _registry;
 		std::unique_ptr<Storage> _storage;
 		bool _started = false;
 		bool _needs_reboot = false;
-		RebootRequestedCallback _on_reboot;
+		RebootRequiredCallback _on_reboot_required;
+		RebootCallback         _on_reboot;
+		FactoryResetCallback   _on_factory_reset;
 
 		// Active namespace registration scope. Pushed by namespace_() (incl.
 		// the nested-builder form) and popped by NamespaceBuilder::end().
@@ -282,6 +301,7 @@ namespace RNS { namespace Provisioning {
 		Bytes op_commit(seq_t seq, void* unpacker);
 		Bytes op_discard(seq_t seq, void* unpacker);
 		Bytes op_factory_reset(seq_t seq);
+		Bytes op_reboot(seq_t seq);
 
 		void  set_reboot_flag(bool any_reboot_applied);
 

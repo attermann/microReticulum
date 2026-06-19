@@ -32,6 +32,7 @@ namespace RNS { namespace Provisioning {
 		Commit          = 6,
 		Discard         = 7,
 		FactoryReset    = 8,
+		Reboot          = 9,
 		Ack             = 100,
 		Error           = 101,
 	};

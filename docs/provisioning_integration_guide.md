@@ -15,18 +15,19 @@ For the **wire protocol** (what clients send and receive), see [`provisioning_cl
 5. [Field types reference](#field-types-reference)
 6. [Field flags and the lifecycle they imply](#field-flags-and-the-lifecycle-they-imply)
 7. [Setter and getter contracts](#setter-and-getter-contracts)
-8. [Working, draft, and commit semantics](#working-draft-and-commit-semantics)
-9. [Persistence on flash](#persistence-on-flash)
-10. [Hierarchical namespaces (nested builder)](#hierarchical-namespaces-nested-builder)
-11. [Reboot handling](#reboot-handling)
-12. [Direct in-process accessors](#direct-in-process-accessors)
-13. [Hooking up a transport](#hooking-up-a-transport)
-14. [Patterns: metrics and commands](#patterns-metrics-and-commands)
-15. [Linker exclusion when Provisioning isn't used](#linker-exclusion-when-provisioning-isnt-used)
-16. [Field & namespace id stability](#field--namespace-id-stability)
-17. [Testing patterns](#testing-patterns)
-18. [Common pitfalls](#common-pitfalls)
-19. [API reference summary](#api-reference-summary)
+8. [Namespace-level commit hook](#namespace-level-commit-hook)
+9. [Working, draft, and commit semantics](#working-draft-and-commit-semantics)
+10. [Persistence on flash](#persistence-on-flash)
+11. [Hierarchical namespaces (nested builder)](#hierarchical-namespaces-nested-builder)
+12. [Reboot handling](#reboot-handling)
+13. [Direct in-process accessors](#direct-in-process-accessors)
+14. [Hooking up a transport](#hooking-up-a-transport)
+15. [Patterns: metrics and commands](#patterns-metrics-and-commands)
+16. [Linker exclusion when Provisioning isn't used](#linker-exclusion-when-provisioning-isnt-used)
+17. [Field & namespace id stability](#field--namespace-id-stability)
+18. [Testing patterns](#testing-patterns)
+19. [Common pitfalls](#common-pitfalls)
+20. [API reference summary](#api-reference-summary)
 
 ---
 
@@ -37,7 +38,7 @@ The Provisioning subsystem (`src/Provisioning/`) provides a schema-driven config
 - **Typed fields** with declarative constraints, organized into named **namespaces** (optionally hierarchical).
 - A **working/draft/commit** workflow so external tools can stage edits, validate them, and apply atomically.
 - **Atomic per-namespace persistence** to a flash filesystem (when `RNS_USE_FS` is enabled), with reload at boot and graceful recovery from interrupted writes.
-- A **MsgPack wire codec** with `Bytes Manager::handle_message(const Bytes&)` for any transport you choose (KISS, BLE, Web Serial, raw socket, Reticulum link).
+- A **MsgPack wire codec** with `Bytes Provisioner::handle_message(const Bytes&)` for any transport you choose (KISS, BLE, Web Serial, raw socket, Reticulum link).
 - **In-process accessors** by namespace/field id or by name so app code can read configured values without going through the wire.
 - **Read-only metric fields** (counters/sensors) and **write-only command fields** (one-shot actions) on top of the same schema model.
 - A **linker-level opt-out** so you pay zero binary cost if your firmware doesn't need Provisioning.
@@ -54,7 +55,7 @@ Both flags default to **ON** in CMake and PlatformIO. You can disable them per-e
 
 | Flag | Default | Effect |
 |---|---|---|
-| `RNS_USE_PROVISIONING` | ON | `Reticulum::start()` calls `Provisioning::Manager::instance().begin()`. With this off, **zero Provisioning symbols are linked into the final binary** — apps can use only the existing fluent setters as before. |
+| `RNS_USE_PROVISIONING` | ON | `Reticulum::start()` calls `Provisioning::Provisioner::instance().begin()`. With this off, **zero Provisioning symbols are linked into the final binary** — apps can use only the existing fluent setters as before. |
 | `RNS_USE_FS`           | ON | Provisioning persists committed values to per-namespace files on flash. With this off, Provisioning still runs but is RAM-only: edits and commits work, but everything is lost on reboot. |
 
 Combination matrix:
@@ -76,7 +77,7 @@ void Reticulum::start() {
     // ... time setup ...
 #ifdef RNS_USE_PROVISIONING
     INFO("Starting Provisioning...");
-    Provisioning::Manager::instance().begin();
+    Provisioning::Provisioner::instance().begin();
 #endif
     INFO("Starting Transport...");
     Transport::start(*this);
@@ -86,7 +87,7 @@ void Reticulum::start() {
 
 Order is significant: Provisioning runs **before** `Transport::start()` so any committed values that affect Transport (path table sizes, identity, etc.) are already in the runtime statics by the time Transport's own initialization reads them.
 
-Inside `Manager::begin()`:
+Inside `Provisioner::begin()`:
 
 1. **Registers built-in namespaces** (`Reticulum`, `Transport`) with their fields, setters, and getters.
 2. (`RNS_USE_FS` only) **Mounts storage** under `<root>/config/` and walks every registered namespace, loading any persisted `.msgpack` file into the namespace's working map.
@@ -105,18 +106,28 @@ void setup() {
     // 3. Start Reticulum — Provisioning::begin() runs inside this.
     reticulum.start();
 
-    // 4. Register a reboot callback if your firmware can reboot itself.
-    Provisioning::Manager::instance().on_reboot_requested([]{ schedule_reboot(); });
+    // 4. Register a reboot-required callback if you want to react when a
+    //    committed field flips needs_reboot from false -> true. Typical
+    //    integrations leave this unset and let the user trigger the reboot.
+    Provisioning::Provisioner::instance().on_reboot_required([]{ display_reboot_badge(); });
+
+    // 5. Register an active reboot callback if the firmware should reboot
+    //    when the client sends the explicit REBOOT wire op (op = 9).
+    Provisioning::Provisioner::instance().on_reboot([]{ schedule_reboot(); });
+
+    // 6. Optional: extend FACTORY_RESET with app-side cleanup. Fires after
+    //    Provisioning's internal reset has completed.
+    Provisioning::Provisioner::instance().on_factory_reset([]{ wipe_app_state(); });
 }
 ```
 
-If app code calls `Manager::instance().begin()` itself, the auto-start in `Reticulum::start()` is a no-op (begin is idempotent).
+If app code calls `Provisioner::instance().begin()` itself, the auto-start in `Reticulum::start()` is a no-op (begin is idempotent).
 
-`Manager::end()` resets the entire singleton: clears the registry, drops storage, clears reboot state, clears the registration scope stack, and resets the `on_reboot_requested` callback. Used in tests and on shutdown. Not typically called by production firmware.
+`Provisioner::end()` resets the entire singleton: clears the registry, drops storage, clears reboot state, clears the registration scope stack, and drops the three app-registered callbacks (`on_reboot_required`, `on_reboot`, `on_factory_reset`). Used in tests and on shutdown. Not typically called by production firmware.
 
 ## Registering namespaces and fields
 
-All registration goes through the fluent `NamespaceBuilder` returned by `Manager::namespace_()` or `Manager::register_namespace()` (the same call under two names — `register_namespace` reads better from inside macros).
+All registration goes through the fluent `NamespaceBuilder` returned by `Provisioner::namespace_()` or `Provisioner::register_namespace()` (the same call under two names — `register_namespace` reads better from inside macros).
 
 The minimum example — a single namespace with a couple of fields:
 
@@ -129,7 +140,7 @@ constexpr uint16_t F_NAME      = 1;
 constexpr uint16_t F_BRIGHTNESS = 2;
 
 void register_my_app_namespaces() {
-    Manager::instance()
+    Provisioner::instance()
         .namespace_("MyApp", NS_MYAPP)
             .field_string("device_name", F_NAME, FF_LIVE_APPLY, "device-001", 32,
                 [](const Value& v) { set_device_name(v.as_string()); return true; },
@@ -231,11 +242,56 @@ The builder accepts **typed** getters and wraps them internally:
 
 When a field has a getter:
 
-- `Manager::field(ns_id, field_id)` reads return the getter's value, not the working-map cache. This is what eliminates drift when something mutates the runtime outside Provisioning.
+- `Provisioner::field(ns_id, field_id)` reads return the getter's value, not the working-map cache. This is what eliminates drift when something mutates the runtime outside Provisioning.
 - `Codec::pack_namespace_working` (save path) writes the getter's value for `FF_LIVE_APPLY` fields, so the on-disk state always reflects current runtime. For `FF_REBOOT_REQUIRED` fields the save path uses the working map instead (since the runtime hasn't caught up yet — that's the whole point of the flag).
 - Read-only / write-only fields use their getter for reads where applicable; write-only reads always return `Value::None`.
 
 Getters should be **cheap** — they may be called frequently during `GET_STATE` polls. If a getter is expensive, cache the value in your runtime static and return that.
+
+## Namespace-level commit hook
+
+In addition to per-field setters and getters, each namespace can register an optional **commit hook** that fires once per `COMMIT` pass — before any field setter runs — when the namespace has at least one pending draft. The hook is the natural place to validate combinations of related fields, clamp values across multiple drafts, or veto an entire change set that's inconsistent.
+
+```cpp
+Provisioner::instance()
+    .namespace_("radio", 100)
+        .field_int  ("sf",        1, FF_REBOOT_REQUIRED, 8, 7, 12)
+        .field_float("bandwidth", 2, FF_REBOOT_REQUIRED, 125e3, 7.8e3, 500e3)
+        .on_commit([](Namespace& ns) {
+            // Cross-field validation: SF12 + BW7.8k is allowed but SF12 + BW500k
+            // saturates the chip. Revert just the bandwidth draft if the
+            // combination is illegal, leaving the SF change to proceed.
+            Value sf, bw;
+            const bool has_sf = ns.draft(1, sf);
+            const bool has_bw = ns.draft(2, bw);
+            const int64_t eff_sf = has_sf ? sf.as_int() : ns.effective(1).as_int();
+            const double  eff_bw = has_bw ? bw.as_float() : ns.effective(2).as_float();
+            if (eff_sf >= 11 && eff_bw > 250e3) {
+                ns.clear_draft(2);   // bandwidth change refused
+            }
+        })
+    .end();
+```
+
+**Contract:**
+
+- Fires once per namespace per `Provisioner::commit()` / wire `COMMIT` pass.
+- Fires only if the namespace has at least one pending draft entry. A commit pass over a namespace with no drafts skips the hook entirely.
+- Fires **before** any of that namespace's field setters run via `commit_one`. This is the key ordering guarantee — the hook sees the drafts before they are promoted into the working map and before any `FF_LIVE_APPLY` side-effects happen on the runtime.
+- The hook receives a mutable `Namespace&` so it can:
+  - **Inspect** drafts with `ns.has_draft(fid)` / `ns.draft(fid, out)` and current values with `ns.effective(fid)`.
+  - **Revert** a single draft with `ns.clear_draft(fid)` — that field will not commit, its setter will not fire, and the on-disk file will not change for that entry.
+  - **Revert everything** with `ns.clear_draft()` — turns the whole commit into a no-op for this namespace.
+  - **Amend** a draft with `ns.set_draft(fid, v)` — applies the field's validator first. The amended value is what reaches the setter.
+- After the hook returns, the engine **re-collects** the draft id list before iterating `commit_one`, so additions and reverts inside the hook are honoured on this same commit pass.
+- Exceptions thrown by the hook are caught and logged via `ERRORF`; the commit continues with whatever state the hook left in the draft map. Don't rely on `throw` to abort — call `clear_draft()` instead.
+
+**When to use the hook vs a per-field setter:**
+
+- Use a **setter** when the constraint applies to one field in isolation and the apply action is straightforward.
+- Use the **hook** when validation depends on multiple drafts seen together, when you need to enforce ordering between fields, or when "accept all-or-nothing" semantics matter (commit either every change or none).
+
+The hook lives on the `Namespace` itself — `Namespace::on_commit(cb)` — so it can also be registered or replaced after the namespace was built, e.g. when wiring up callbacks that depend on objects constructed later in the boot sequence.
 
 ## Working, draft, and commit semantics
 
@@ -248,13 +304,13 @@ For fields with getters, the working map is essentially a cache — the getter i
 
 | Operation | Effect |
 |---|---|
-| `Manager::field(ns, f, Source::Working)`   | Read: getter if present, else working map. |
-| `Manager::field(ns, f, Source::Draft)`     | Returns the draft value if any, else `Value::None`. |
-| `Manager::field(ns, f, Source::Effective)` | Draft if present, else getter/working. |
-| `Manager::field(ns, f, value)` (set)       | Validates type and constraint, writes to draft. Rejects `FF_READ_ONLY`. |
-| `Manager::commit(ns)` / `Manager::commit()` | Promotes drafts → working, fires setters per flag rules, persists to flash. |
-| `Manager::discard(ns)` / `Manager::discard()` | Drops drafts; working unchanged. |
-| `Manager::factory_reset()`                  | Resets all working to declared defaults, fires setters with defaults, removes all namespace files. |
+| `Provisioner::field(ns, f, Source::Working)`   | Read: getter if present, else working map. |
+| `Provisioner::field(ns, f, Source::Draft)`     | Returns the draft value if any, else `Value::None`. |
+| `Provisioner::field(ns, f, Source::Effective)` | Draft if present, else getter/working. |
+| `Provisioner::field(ns, f, value)` (set)       | Validates type and constraint, writes to draft. Rejects `FF_READ_ONLY`. |
+| `Provisioner::commit(ns)` / `Provisioner::commit()` | Promotes drafts → working, fires setters per flag rules, persists to flash. |
+| `Provisioner::discard(ns)` / `Provisioner::discard()` | Drops drafts; working unchanged. |
+| `Provisioner::factory_reset()`                  | Resets all working to declared defaults, fires setters with defaults, removes all namespace files. |
 
 The same workflow is driven by the wire ops `SET_STATE`, `COMMIT`, `DISCARD`, `FACTORY_RESET`.
 
@@ -280,7 +336,7 @@ constexpr uint16_t NS_INTERFACES = 100;
 constexpr uint16_t NS_LORA       = 101;
 constexpr uint16_t NS_UDP        = 102;
 
-Manager::instance()
+Provisioner::instance()
     .namespace_("Interfaces", NS_INTERFACES)
         .field_bool("enabled", 1, FF_LIVE_APPLY, true, ...)    // parents can have own fields
         .namespace_("LoRa", NS_LORA)
@@ -296,8 +352,8 @@ Manager::instance()
 
 Mechanics:
 
-- Each `.namespace_()` call pushes onto a per-`Manager` scope stack and uses the current scope top as the new namespace's parent.
-- Each `.end()` pops one level. Forgetting `.end()` is caught at `Manager::begin()` — the scope stack must be empty by the time `begin()` runs (or it gets cleared with a warning).
+- Each `.namespace_()` call pushes onto a per-`Provisioner` scope stack and uses the current scope top as the new namespace's parent.
+- Each `.end()` pops one level. Forgetting `.end()` is caught at `Provisioner::begin()` — the scope stack must be empty by the time `begin()` runs (or it gets cleared with a warning).
 - The Registry remains **flat** internally — every namespace is a top-level entry with an optional `parent_id`. Lookups stay O(1) by id.
 - On disk: `Interfaces.msgpack`, `Interfaces.LoRa.msgpack`, `Interfaces.UDP.msgpack`. Three files at the top level of the storage directory.
 - On the wire: `GET_STATE` keeps each namespace at the top level keyed by its own id. The tree shape is conveyed only through the schema's `parent_id`. Clients reconstruct the tree client-side.
@@ -312,33 +368,60 @@ Field ids stay **per-namespace**, so `LoRa.frequency` (field 1) and `UDP.host` (
 
 1. Client `SET_STATE` writes the field's draft.
 2. Client `COMMIT` promotes draft → working and persists to flash. The setter is **not** called. `needs_reboot()` flips to `true`.
-3. App / firmware detects `needs_reboot()` (or receives the `on_reboot_requested` callback) and triggers a reboot via its platform's mechanism (`ESP.restart()`, `NVIC_SystemReset()`, host process exit, etc.).
-4. On next boot, `Manager::begin()` reads the file from flash, populates working, then `apply_loaded_to_runtime()` fires the setter for any value that differs from the field's declared default. The runtime now reflects the committed value.
+3. App / firmware detects `needs_reboot()` (or receives the `on_reboot_required` callback) and triggers a reboot via its platform's mechanism (`ESP.restart()`, `NVIC_SystemReset()`, host process exit, etc.).
+4. On next boot, `Provisioner::begin()` reads the file from flash, populates working, then `apply_loaded_to_runtime()` fires the setter for any value that differs from the field's declared default. The runtime now reflects the committed value.
 
-The callback hook:
+There are two reboot-related callbacks, kept distinct on purpose:
+
+| Callback | Triggered by | Intended action |
+|---|---|---|
+| `on_reboot_required(cb)` | *Passive* — fires when a commit flips `needs_reboot()` false → true. | Surface a "reboot needed" UI badge / log event. Most integrations leave this unset and let the user decide when to reboot. |
+| `on_reboot(cb)` | *Active* — fires when the client sent the explicit `REBOOT` wire op (op 9). | Actually reboot the device (usually scheduled so the wire ack can be sent first). |
 
 ```cpp
-Manager::instance().on_reboot_requested([] {
+// Passive: only react to "reboot is needed".
+Provisioner::instance().on_reboot_required([] {
     INFO("Provisioning committed a reboot-required change.");
-    ESP.restart();   // or NVIC_SystemReset() on nRF52, or just exit() on native
+});
+
+// Active: the client explicitly asked us to reboot.
+Provisioner::instance().on_reboot([] {
+    schedule_reboot();   // ESP.restart(), NVIC_SystemReset(), exit(), ...
 });
 ```
 
-The callback fires once, on the `false → true` transition of `needs_reboot()`. Subsequent commits of more `REBOOT_REQUIRED` fields don't re-fire (you're already pending a reboot).
+`on_reboot_required` fires once, on the `false → true` transition of `needs_reboot()`. Subsequent commits of more `REBOOT_REQUIRED` fields don't re-fire (you're already pending a reboot). `on_reboot` fires every time the `REBOOT` wire op is dispatched.
 
-`Manager::end()` clears the callback, so re-registering after a test teardown is required if you want to keep receiving notifications.
+The `REBOOT` wire op always returns a successful ack envelope; if no `on_reboot` callback is registered, microReticulum performs no reboot itself and the op is a successful no-op. This lets clients ack-poll without depending on the device actually rebooting.
 
-If your firmware can't reboot itself (e.g. it's a Linux process), you can ignore the callback. Clients see `needs_reboot=true` in `COMMIT` responses and `GET_INFO` and can prompt the user.
+`Provisioner::end()` clears both callbacks (and `on_factory_reset`), so re-registering after a test teardown is required if you want to keep receiving notifications.
+
+If your firmware can't reboot itself (e.g. it's a Linux process), you can leave both callbacks unset. Clients see `needs_reboot=true` in `COMMIT` responses and `GET_INFO` and can prompt the user.
+
+## Factory-reset extension hook
+
+`FACTORY_RESET` (op 8) resets every working value to its declared default, fires field setters for `FF_LIVE_APPLY` fields, deletes the persisted namespace files under `<storage_root>/config/`, and clears `needs_reboot`.
+
+If the app needs to extend the operation — wiping storage outside Provisioning's root, dropping in-memory app state, etc. — register `on_factory_reset(cb)`. The callback fires **after** the internal reset has completed, so the namespaces it reads back will already be at defaults.
+
+```cpp
+Provisioner::instance().on_factory_reset([] {
+    INFO("Factory reset complete; extending with app cleanup.");
+    wipe_app_state();
+});
+```
+
+The wire response is unchanged — clients don't see any extension. The callback is cleared by `Provisioner::end()`.
 
 ## Direct in-process accessors
 
-App code that wants to read or write Provisioning state without going through MsgPack can use the direct accessors on `Manager`. All edits land in the draft layer; only `commit()` promotes them.
+App code that wants to read or write Provisioning state without going through MsgPack can use the direct accessors on `Provisioner`. All edits land in the draft layer; only `commit()` promotes them.
 
 By id (preferred — uses constexpr ids from `Ids.h`):
 
 ```cpp
 namespace R = RNS::Provisioning::Ns::Reticulum;
-auto& mgr = Provisioning::Manager::instance();
+auto& mgr = Provisioning::Provisioner::instance();
 
 // Read working / live value
 bool live = mgr.field(R::Id, R::Field::TransportEnabled).as_bool();
@@ -369,14 +452,14 @@ Value v = mgr.field("Interfaces.LoRa", "frequency");   // NOTE: by-name uses jus
 
 Important: namespace name lookup is by the **registered name only** (e.g. `"LoRa"`), not by the dotted path. The dotted path is a storage/UI convention, not an identifier.
 
-`needs_reboot()` and `draft_has_reboot()` are also available for in-process inspection. The optional `Manager::factory_reset()` does the same job as the wire op.
+`needs_reboot()` and `draft_has_reboot()` are also available for in-process inspection. The optional `Provisioner::factory_reset()` does the same job as the wire op.
 
 ## Hooking up a transport
 
 Wiring Provisioning to your wire transport is one line per direction. The library doesn't care what your framing looks like — it gives you bytes-in/bytes-out:
 
 ```cpp
-RNS::Bytes Provisioning::Manager::handle_message(const RNS::Bytes& request);
+RNS::Bytes Provisioning::Provisioner::handle_message(const RNS::Bytes& request);
 ```
 
 A typical KISS-over-USB-serial handler:
@@ -386,7 +469,7 @@ constexpr uint8_t KISS_CMD_PROVISIONING = 0x0F;   // reserved KISS command byte
 
 void on_kiss_frame(uint8_t cmd, const RNS::Bytes& payload) {
     if (cmd == KISS_CMD_PROVISIONING) {
-        RNS::Bytes response = Provisioning::Manager::instance().handle_message(payload);
+        RNS::Bytes response = Provisioning::Provisioner::instance().handle_message(payload);
         kiss_send(KISS_CMD_PROVISIONING, response);
     }
     // ... other KISS commands ...
@@ -398,7 +481,7 @@ Equivalent over BLE (Nordic UART Service):
 ```cpp
 void on_nus_rx(const uint8_t* data, size_t len) {
     RNS::Bytes request(data, len);
-    RNS::Bytes response = Provisioning::Manager::instance().handle_message(request);
+    RNS::Bytes response = Provisioning::Provisioner::instance().handle_message(request);
     nus_send(response.data(), response.size());
 }
 ```
@@ -412,7 +495,7 @@ The Provisioning engine is **synchronous and reentrant-unsafe**. Serialise calls
 Use `metric_*` for instrumentation that the device pushes to clients on demand. The getter is consulted every time a client reads.
 
 ```cpp
-Manager::instance().namespace_("Stats", NS_STATS)
+Provisioner::instance().namespace_("Stats", NS_STATS)
     .metric_int("packets_received",  1, []() { return (int64_t)Transport::packets_received(); })
     .metric_int("packets_sent",      2, []() { return (int64_t)Transport::packets_sent(); })
     .metric_float("rssi_dbm",        3, []() { return radio.last_rssi(); })
@@ -427,7 +510,7 @@ Manager::instance().namespace_("Stats", NS_STATS)
 Use `command_*` for "do something now" gestures: reboot, format flash, rotate identity, send test packet. The setter receives the argument the client supplied and runs the action. Nothing is persisted; nothing replays at boot; the field doesn't appear in `GET_STATE`.
 
 ```cpp
-Manager::instance().namespace_("Actions", NS_ACTIONS)
+Provisioner::instance().namespace_("Actions", NS_ACTIONS)
     .command_bool("ping", 1,
         [](const Value&) { send_test_packet(); return true; })
     .command_int("reboot_in_seconds", 2, 0, 3600,
@@ -466,9 +549,9 @@ The field is settable from clients (UI presents a write-only password input) and
 With `-DRNS_USE_PROVISIONING=OFF`, the library compiles the Provisioning sources into `libmicroReticulum.a` but **no Provisioning object files get linked into the final binary**. The mechanism:
 
 - Static-archive linkage pulls in only `.o` files that resolve undefined references in the executable.
-- `Reticulum.cpp`'s `Manager::instance().begin()` call is the **only** reference to a Provisioning symbol from outside `src/Provisioning/`.
+- `Reticulum.cpp`'s `Provisioner::instance().begin()` call is the **only** reference to a Provisioning symbol from outside `src/Provisioning/`.
 - That reference is gated by `#ifdef RNS_USE_PROVISIONING`. With the flag off, the call (and its `#include`) disappear at preprocessing time.
-- With zero outside references, zero Provisioning `.o` files are pulled in. The Meyers-style singleton inside `Manager::instance()` is a function-local `static` — it never constructs because the function is never linked.
+- With zero outside references, zero Provisioning `.o` files are pulled in. The Meyers-style singleton inside `Provisioner::instance()` is a function-local `static` — it never constructs because the function is never linked.
 
 To preserve this property as you add code:
 
@@ -553,7 +636,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-    Provisioning::Manager::instance().end();   // clears registry, scope, callback
+    Provisioning::Provisioner::instance().end();   // clears registry, scope, callback
     rm_rf(g_test_root);
 }
 ```
@@ -562,9 +645,9 @@ void tearDown(void) {
 
 ```cpp
 static void fresh(const std::string& root) {
-    Manager::instance().end();
+    Provisioner::instance().end();
     register_my_app_namespaces();   // must run before begin()
-    Manager::instance().begin(root.c_str());
+    Provisioner::instance().begin(root.c_str());
 }
 ```
 
@@ -581,10 +664,10 @@ static Bytes make_request(uint8_t op, uint64_t seq, F&& pack_payload) {
     return Bytes(p.data(), p.size());
 }
 
-Bytes resp = Manager::instance().handle_message(make_request(...));
+Bytes resp = Provisioner::instance().handle_message(make_request(...));
 ```
 
-**Cross-test state leak**: the `Manager` is a process-global singleton. Tests that register a callback, mutate a global static (e.g. `Transport::_remote_management_allowed`), or commit fields must reset that state in `setUp` / `tearDown`. The library's tests reset every Transport static that Provisioning fields touch — do the same for yours.
+**Cross-test state leak**: the `Provisioner` is a process-global singleton. Tests that register a callback, mutate a global static (e.g. `Transport::_remote_management_allowed`), or commit fields must reset that state in `setUp` / `tearDown`. The library's tests reset every Transport static that Provisioning fields touch — do the same for yours.
 
 ## Common pitfalls
 
@@ -595,17 +678,17 @@ Bytes resp = Manager::instance().handle_message(make_request(...));
 - **Heavy work in setters or getters** — these run on the wire handler's thread. Defer to your main loop via flags/queues.
 - **Persistence churn from metrics** — never persist counter-like fields. Use `metric_*` (which sets `FF_READ_ONLY`) or `FF_WRITE_ONLY`. Both skip the save path.
 - **Re-using a removed id** — breaks any field already on flash with that id. If you're not sure whether an id was ever shipped, allocate a new one.
-- **Multiple `Manager::instance()` calls in tests assuming fresh state** — the singleton persists across tests in the same process. Always `end()` in `tearDown`, and reset any non-Provisioning globals that your setters write into.
+- **Multiple `Provisioner::instance()` calls in tests assuming fresh state** — the singleton persists across tests in the same process. Always `end()` in `tearDown`, and reset any non-Provisioning globals that your setters write into.
 - **Mixing direct setters with REBOOT_REQUIRED fields** — direct setter changes are LIVE; committing the same field via Provisioning is REBOOT. Both can apply, but they don't synchronise via the working map automatically (the working map gets the committed value; the runtime reflects whichever happened last). Pick one path per field.
 
 ## API reference summary
 
-### `Manager` (singleton)
+### `Provisioner` (singleton)
 
 ```cpp
-class Manager {
+class Provisioner {
 public:
-    static Manager& instance();
+    static Provisioner& instance();
 
     void begin(const char* storage_root = nullptr);
     void end();
@@ -632,8 +715,12 @@ public:
     bool needs_reboot() const;
     bool draft_has_reboot() const;
 
-    using RebootRequestedCallback = std::function<void()>;
-    void on_reboot_requested(RebootRequestedCallback cb);
+    using RebootRequiredCallback = std::function<void()>;
+    using RebootCallback         = std::function<void()>;
+    using FactoryResetCallback   = std::function<void()>;
+    void on_reboot_required(RebootRequiredCallback cb);
+    void on_reboot(RebootCallback cb);
+    void on_factory_reset(FactoryResetCallback cb);
 
     Registry& registry();
     Storage* storage();
@@ -669,7 +756,12 @@ public:
     NamespaceBuilder& command_float(name, id, fmin, fmax, setter);
     NamespaceBuilder& command_string(name, id, max_len, setter);
     NamespaceBuilder& command_bytes(name, id, max_len, setter);
+
+    // Per-namespace pre-commit hook — see "Namespace-level commit hook" above.
+    NamespaceBuilder& on_commit(CommitCallback cb);
 };
+
+using CommitCallback = std::function<void(Namespace&)>;
 ```
 
 ### `Value` (tagged variant)

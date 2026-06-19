@@ -34,7 +34,7 @@ namespace RNS { namespace Provisioning {
 
 	// Helper to grab the current scope namespace; if registration is
 	// outside any scope, emit a warning and return nullptr.
-	static Namespace* scope(Manager* mgr, const char* op) {
+	static Namespace* scope(Provisioner* mgr, const char* op) {
 		Namespace* ns = mgr ? mgr->current_build_scope() : nullptr;
 		if (!ns) {
 			WARNINGF("NamespaceBuilder::%s called with no open namespace scope", op);
@@ -45,9 +45,9 @@ namespace RNS { namespace Provisioning {
 	// -- Scope control -------------------------------------------------------
 
 	NamespaceBuilder& NamespaceBuilder::namespace_(const char* name, nid_t id) {
-		// Delegates to Manager::namespace_, which pushes the new namespace
+		// Delegates to Provisioner::namespace_, which pushes the new namespace
 		// onto the scope stack. The returned builder value is discarded —
-		// it's identical to this one (both reference the same Manager).
+		// it's identical to this one (both reference the same Provisioner).
 		if (_mgr) _mgr->namespace_(name, id);
 		return *this;
 	}

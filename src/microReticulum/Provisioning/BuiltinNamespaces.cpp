@@ -24,8 +24,8 @@
 namespace RNS { namespace Provisioning {
 
 	// Idempotent: re-calling does nothing because Registry rejects duplicate
-	// namespace ids. Called automatically from Manager::begin().
-	void register_builtin_namespaces(Manager& p) {
+	// namespace ids. Called automatically from Provisioner::begin().
+	void register_builtin_namespaces(Provisioner& p) {
 
 		// reticulum
 		if (!p.registry().find(Ns::Reticulum::Id)) {
@@ -89,7 +89,7 @@ namespace RNS { namespace Provisioning {
 						return std::vector<Bytes>(s.begin(), s.end());
 					})
 				.command_void("clear_provisioning", Ns::Reticulum::Field::ClearStorage,
-					[]() { return Manager::instance().clear_storage(); })
+					[]() { return Provisioner::instance().clear_storage(); })
 				.end();
 		}
 

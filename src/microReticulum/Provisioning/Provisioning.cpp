@@ -22,18 +22,18 @@
 namespace RNS { namespace Provisioning {
 
 	// Defined in BuiltinNamespaces.cpp.
-	void register_builtin_namespaces(Manager& p);
+	void register_builtin_namespaces(Provisioner& p);
 
 	// ---------------------------------------------------------------------
 	// Singleton
 	// ---------------------------------------------------------------------
 
-	Manager& Manager::instance() {
-		static Manager inst;
+	Provisioner& Provisioner::instance() {
+		static Provisioner inst;
 		return inst;
 	}
 
-	void Manager::begin(const char* storage_root) {
+	void Provisioner::begin(const char* storage_root) {
 		if (_started) return;
 		// Register library-side namespaces before mounting storage so that
 		// load_all() has a Registry to overlay onto.
@@ -63,7 +63,7 @@ namespace RNS { namespace Provisioning {
 		_started = true;
 	}
 
-	void Manager::apply_loaded_to_runtime() {
+	void Provisioner::apply_loaded_to_runtime() {
 		for (const auto& ns_ptr : _registry.namespaces()) {
 			for (const Field& f : ns_ptr->fields()) {
 				if (f.has_flag(FF_READ_ONLY)) continue;
@@ -92,7 +92,7 @@ namespace RNS { namespace Provisioning {
 					f.setter(v);
 				}
 				catch (const std::exception& e) {
-					ERRORF("Manager::apply_loaded_to_runtime: setter for "
+					ERRORF("Provisioner::apply_loaded_to_runtime: setter for "
 						"namespace %u field %u threw: %s",
 						ns_ptr->id(), f.id, e.what());
 				}
@@ -100,20 +100,22 @@ namespace RNS { namespace Provisioning {
 		}
 	}
 
-	void Manager::end() {
+	void Provisioner::end() {
 		_storage.reset();
 		_registry.clear();
 		_build_scope.clear();
 		_needs_reboot = false;
 		_started = false;
-		// Drop the reboot-requested callback. If the caller captured stack
+		// Drop all app-registered callbacks. If the caller captured stack
 		// state by reference (very common in tests), keeping the std::function
-		// alive past end() turns the next set_reboot_flag(true) into a
+		// alive past end() turns the next invocation into a
 		// write-through-dangling-reference.
-		_on_reboot = nullptr;
+		_on_reboot_required = nullptr;
+		_on_reboot          = nullptr;
+		_on_factory_reset   = nullptr;
 	}
 
-	NamespaceBuilder Manager::namespace_(const char* name, nid_t id) {
+	NamespaceBuilder Provisioner::namespace_(const char* name, nid_t id) {
 		// Parent comes from the current top of the registration scope stack
 		// (set up by previous .namespace_(...) calls in the same chain).
 		// If the scope is empty, this is a root namespace.
@@ -135,7 +137,7 @@ namespace RNS { namespace Provisioning {
 	// Direct accessors
 	// ---------------------------------------------------------------------
 
-	Value Manager::field(nid_t ns_id, fid_t field_id, Source src) const {
+	Value Provisioner::field(nid_t ns_id, fid_t field_id, Source src) const {
 		const Namespace* ns = _registry.find(ns_id);
 		if (!ns) return {};
 		switch (src) {
@@ -159,13 +161,13 @@ namespace RNS { namespace Provisioning {
 		return {};
 	}
 
-	bool Manager::field(nid_t ns_id, fid_t field_id, const Value& v) {
+	bool Provisioner::field(nid_t ns_id, fid_t field_id, const Value& v) {
 		Namespace* ns = _registry.find(ns_id);
 		if (!ns) return false;
 		return ns->set_draft(field_id, v);
 	}
 
-	Value Manager::field(const char* ns_name, const char* field_name, Source src) const {
+	Value Provisioner::field(const char* ns_name, const char* field_name, Source src) const {
 		const Namespace* ns = _registry.find(ns_name);
 		if (!ns) return {};
 		const Field* f = ns->find_field(field_name);
@@ -173,7 +175,7 @@ namespace RNS { namespace Provisioning {
 		return field(ns->id(), f->id, src);
 	}
 
-	bool Manager::field(const char* ns_name, const char* field_name, const Value& v) {
+	bool Provisioner::field(const char* ns_name, const char* field_name, const Value& v) {
 		Namespace* ns = _registry.find(ns_name);
 		if (!ns) return false;
 		const Field* f = ns->find_field(field_name);
@@ -181,7 +183,7 @@ namespace RNS { namespace Provisioning {
 		return ns->set_draft(f->id, v);
 	}
 
-	bool Manager::commit(nid_t ns_id) {
+	bool Provisioner::commit(nid_t ns_id) {
 		auto do_one = [&](Namespace& ns) -> bool {
 			bool any_reboot = false;
 			// Fire the pre-commit hook before any field setter runs, but
@@ -225,7 +227,7 @@ namespace RNS { namespace Provisioning {
 		return do_one(*ns);
 	}
 
-	bool Manager::discard(nid_t ns_id) {
+	bool Provisioner::discard(nid_t ns_id) {
 		if (ns_id == 0) {
 			for (const auto& ns_ptr : _registry.namespaces()) ns_ptr->clear_draft();
 			return true;
@@ -236,19 +238,19 @@ namespace RNS { namespace Provisioning {
 		return true;
 	}
 
-	bool Manager::commit(const char* ns_name) {
+	bool Provisioner::commit(const char* ns_name) {
 		Namespace* ns = _registry.find(ns_name);
 		if (!ns) return false;
 		return commit(ns->id());
 	}
 
-	bool Manager::discard(const char* ns_name) {
+	bool Provisioner::discard(const char* ns_name) {
 		Namespace* ns = _registry.find(ns_name);
 		if (!ns) return false;
 		return discard(ns->id());
 	}
 
-	bool Manager::factory_reset() {
+	bool Provisioner::factory_reset() {
 		// Drop drafts, reset working to defaults, AND push defaults into
 		// the runtime via each field's setter — otherwise the live state
 		// (and any field that's read via a getter) would keep whatever was
@@ -266,7 +268,7 @@ namespace RNS { namespace Provisioning {
 					&& !f.default_value.is_none()) {
 					try { f.setter(f.default_value); }
 					catch (const std::exception& e) {
-						ERRORF("Manager::factory_reset: setter for ns %u field %u threw: %s",
+						ERRORF("Provisioner::factory_reset: setter for ns %u field %u threw: %s",
 							ns_ptr->id(), f.id, e.what());
 					}
 				}
@@ -276,29 +278,37 @@ namespace RNS { namespace Provisioning {
 		bool ok = true;
 		if (_storage) ok = _storage->factory_reset(_registry);
 		_needs_reboot = false;
+		// Fired after the internal reset so the app callback sees a clean
+		// baseline and can extend cleanup beyond Provisioning's storage root.
+		if (_on_factory_reset) {
+			try { _on_factory_reset(); }
+			catch (const std::exception& e) {
+				ERRORF("Provisioning::on_factory_reset callback threw: %s", e.what());
+			}
+		}
 		return ok;
 	}
 
-	bool Manager::clear_storage() {
+	bool Provisioner::clear_storage() {
 		TRACE("Provisioning::clear_storage()");
 		if (!_storage) return true;
 		return _storage->factory_reset(_registry);
 	}
 
-	bool Manager::draft_has_reboot() const {
+	bool Provisioner::draft_has_reboot() const {
 		for (const auto& ns_ptr : _registry.namespaces()) {
 			if (ns_ptr->draft_has_reboot()) return true;
 		}
 		return false;
 	}
 
-	void Manager::set_reboot_flag(bool any_reboot_applied) {
+	void Provisioner::set_reboot_flag(bool any_reboot_applied) {
 		const bool was = _needs_reboot;
 		if (any_reboot_applied) _needs_reboot = true;
-		if (!was && _needs_reboot && _on_reboot) {
-			try { _on_reboot(); }
+		if (!was && _needs_reboot && _on_reboot_required) {
+			try { _on_reboot_required(); }
 			catch (const std::exception& e) {
-				ERRORF("Provisioning::on_reboot_requested callback threw: %s", e.what());
+				ERRORF("Provisioning::on_reboot_required callback threw: %s", e.what());
 			}
 		}
 	}
@@ -321,7 +331,7 @@ namespace RNS { namespace Provisioning {
 		return Bytes(packer.data(), packer.size());
 	}
 
-	Bytes Manager::encode_error(opid_t op_id, seq_t seq, ErrorCode code, const char* msg) {
+	Bytes Provisioner::encode_error(opid_t op_id, seq_t seq, ErrorCode code, const char* msg) {
 		return pack_response((opid_t)Op::Error, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(msg ? 2 : 1));
 			p.serialize((uint16_t)Key::ErrorCodeKey);
@@ -333,7 +343,7 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::encode_ack(opid_t op_id, seq_t seq) {
+	Bytes Provisioner::encode_ack(opid_t op_id, seq_t seq) {
 		return pack_response(op_id, seq, nullptr);
 	}
 
@@ -365,16 +375,16 @@ namespace RNS { namespace Provisioning {
 		}
 	}
 
-	Bytes Manager::op_get_info(seq_t seq) {
+	Bytes Provisioner::op_get_info(seq_t seq) {
 		return pack_response((opid_t)Op::GetInfo, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(3));
 			p.serialize((uint16_t)Key::FirmwareVersion); p.serialize("microReticulum");
-			p.serialize((uint16_t)Key::SchemaVersion);   p.serialize((nid_t)Manager::SCHEMA_VERSION);
+			p.serialize((uint16_t)Key::SchemaVersion);   p.serialize((nid_t)Provisioner::SCHEMA_VERSION);
 			p.serialize((uint16_t)Key::NeedsRebootInfo); p.serialize((bool)_needs_reboot);
 		});
 	}
 
-	Bytes Manager::op_get_capabilities(seq_t seq) {
+	Bytes Provisioner::op_get_capabilities(seq_t seq) {
 		return pack_response((opid_t)Op::GetCapabilities, seq, [&](MsgPack::Packer& p) {
 			const auto& nss = _registry.namespaces();
 			p.serialize(MsgPack::arr_size_t(nss.size()));
@@ -430,7 +440,7 @@ namespace RNS { namespace Provisioning {
 		return n;
 	}
 
-	Bytes Manager::op_get_schema(seq_t seq) {
+	Bytes Provisioner::op_get_schema(seq_t seq) {
 		return pack_response((opid_t)Op::GetSchema, seq, [&](MsgPack::Packer& p) {
 			const auto& nss = _registry.namespaces();
 			p.serialize(MsgPack::arr_size_t(nss.size()));
@@ -496,7 +506,7 @@ namespace RNS { namespace Provisioning {
 		Codec::pack_value(p, v);
 	}
 
-	Bytes Manager::op_get_state(seq_t seq, void* unpacker_v) {
+	Bytes Provisioner::op_get_state(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		std::unordered_set<nid_t> ns_filter;
 		bool has_filter = false;
@@ -567,7 +577,7 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::op_set_state(seq_t seq, void* unpacker_v) {
+	Bytes Provisioner::op_set_state(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		if (!up || !up->isMap()) {
 			return encode_error((opid_t)Op::SetState, seq, ErrorCode::MalformedRequest, "expected map payload");
@@ -637,7 +647,7 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::op_commit(seq_t seq, void* unpacker_v) {
+	Bytes Provisioner::op_commit(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		std::vector<nid_t> filter;
 		bool has_filter = false;
@@ -660,7 +670,7 @@ namespace RNS { namespace Provisioning {
 		auto do_one = [&](Namespace& ns) {
 			// Pre-commit hook: fires once per namespace iff at least one
 			// draft entry exists, before any field setter runs. Mirrors
-			// the in-process Manager::commit path so wire-driven commits
+			// the in-process Provisioner::commit path so wire-driven commits
 			// see identical semantics.
 			bool has_any_draft = false;
 			for (const Field& f : ns.fields()) {
@@ -706,7 +716,7 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::op_discard(seq_t seq, void* unpacker_v) {
+	Bytes Provisioner::op_discard(seq_t seq, void* unpacker_v) {
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		std::vector<nid_t> filter;
 		bool has_filter = false;
@@ -744,7 +754,7 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::op_factory_reset(seq_t seq) {
+	Bytes Provisioner::op_factory_reset(seq_t seq) {
 		factory_reset();
 		return pack_response((opid_t)Op::FactoryReset, seq, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(1));
@@ -752,7 +762,20 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Manager::handle_message(const Bytes& request) {
+	Bytes Provisioner::op_reboot(seq_t seq) {
+		// microReticulum performs no reboot itself; if the app registered a
+		// callback, fire it. The ack is still returned either way so the
+		// client can always observe success at the wire layer.
+		if (_on_reboot) {
+			try { _on_reboot(); }
+			catch (const std::exception& e) {
+				ERRORF("Provisioning::on_reboot callback threw: %s", e.what());
+			}
+		}
+		return encode_ack((opid_t)Op::Reboot, seq);
+	}
+
+	Bytes Provisioner::handle_message(const Bytes& request) {
 		if (!_started) {
 			return encode_error(0, 0, ErrorCode::NotInitialized, "Provisioning::begin not called");
 		}
@@ -797,6 +820,7 @@ namespace RNS { namespace Provisioning {
 			case Op::Commit:          return op_commit(seq, has_payload ? &up : nullptr);
 			case Op::Discard:         return op_discard(seq, has_payload ? &up : nullptr);
 			case Op::FactoryReset:    if (has_payload) skip_value(up); return op_factory_reset(seq);
+			case Op::Reboot:          if (has_payload) skip_value(up); return op_reboot(seq);
 			default:
 				return encode_error(op_id, seq, ErrorCode::UnknownOp, "unrecognised op id");
 		}

@@ -77,7 +77,7 @@ Appropriate settings should be selected to match the storage and memory resource
 microReticulum ships an optional schema-driven configuration subsystem under `src/microReticulum/Provisioning/`. It maintains a registry of namespaces and fields, holds a "working" config in RAM plus a "draft" overlay for pending edits, and (when filesystem support is enabled) persists committed values atomically to flash. Apps frame and transport MsgPack request/response payloads using their preferred link (KISS, BLE GATT, Web Serial, etc.); the library handles everything from the engine inward.
 
 Two build flags gate the subsystem:
-- `-DRNS_USE_PROVISIONING` &mdash; `Reticulum::start()` auto-calls `Manager::begin()`. Without the flag, nothing in `src/microReticulum/Provisioning/` is linked into the final binary; apps configure microReticulum entirely through the existing fluent setters as before.
+- `-DRNS_USE_PROVISIONING` &mdash; `Reticulum::start()` auto-calls `Provisioner::begin()`. Without the flag, nothing in `src/microReticulum/Provisioning/` is linked into the final binary; apps configure microReticulum entirely through the existing fluent setters as before.
 - `-DRNS_USE_FS` &mdash; independently controls disk persistence inside the subsystem. Without it the working/draft model still works in RAM, but commits are lost on reboot.
 
 ### Registering a namespace
@@ -93,7 +93,7 @@ constexpr uint16_t FLD_SF   = 2;
 
 void register_my_namespaces() {
     using namespace RNS::Provisioning;
-    Manager::instance()
+    Provisioner::instance()
         .namespace_("radio", NS_RADIO)
         .field_float("frequency", FLD_FREQ, FF_REBOOT_REQUIRED, 915.0e6, 100e6, 1e9,
             [](const Value& v) { my_radio.frequency(v.as_float()); return true; })
@@ -111,7 +111,7 @@ The app receives a MsgPack-encoded request payload (already stripped of whatever
 
 ```cpp
 RNS::Bytes request  = receive_from_transport();
-RNS::Bytes response = RNS::Provisioning::Manager::instance().handle_message(request);
+RNS::Bytes response = RNS::Provisioning::Provisioner::instance().handle_message(request);
 send_to_transport(response);
 ```
 
@@ -122,7 +122,7 @@ Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STAT
 In-process code can edit and commit without going through MsgPack. Edits land in the draft layer; only `commit()` promotes them to the working layer and (if `RNS_USE_FS` is defined) persists them:
 
 ```cpp
-auto& mgr = RNS::Provisioning::Manager::instance();
+auto& mgr = RNS::Provisioning::Provisioner::instance();
 namespace R = RNS::Provisioning::Ns::Reticulum;
 
 // Edit draft (multiple calls accumulate)
@@ -141,13 +141,14 @@ mgr.discard();
 Commits to `FF_REBOOT_REQUIRED` fields are persisted to flash but not applied to the runtime until the next boot. The app can poll `needs_reboot()` or register a callback that fires the moment a reboot becomes necessary:
 
 ```cpp
-RNS::Provisioning::Manager::instance().on_reboot_requested([]{
-    INFO("Provisioning committed a reboot-required change; restarting...");
-    ESP.restart();   // or NVIC_SystemReset(), or schedule via your app's idle loop
+RNS::Provisioning::Provisioner::instance().on_reboot_required([]{
+    INFO("Provisioning committed a reboot-required change.");
 });
 ```
 
-The `needs_reboot()` flag stays sticky from the commit until an actual reboot. On the next boot, `Manager::begin()` reloads the persisted values and fires the setter callbacks for any field whose committed value differs from its declared default &mdash; so `FF_REBOOT_REQUIRED` values take effect exactly once at startup without further intervention.
+A separate `on_reboot` callback fires only when the client sends the explicit `REBOOT` wire op &mdash; that's where most integrations actually call `ESP.restart()` / `NVIC_SystemReset()`. There is also an `on_factory_reset` hook that fires after `FACTORY_RESET` has completed its internal work, for app-side cleanup. See [docs/provisioning_integration_guide.md](docs/provisioning_integration_guide.md) for details.
+
+The `needs_reboot()` flag stays sticky from the commit until an actual reboot. On the next boot, `Provisioner::begin()` reloads the persisted values and fires the setter callbacks for any field whose committed value differs from its declared default &mdash; so `FF_REBOOT_REQUIRED` values take effect exactly once at startup without further intervention.
 
 ## Building
 

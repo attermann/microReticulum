@@ -104,7 +104,7 @@ static void reset_runtime_state() {
 }
 
 static void register_custom_namespace() {
-	Manager::instance()
+	Provisioner::instance()
 		.namespace_("custom", CUSTOM_NS_ID)
 		.field_bool ("enabled",      CUSTOM_BOOL,  FF_LIVE_APPLY,      false)
 		.field_int  ("level",        CUSTOM_INT,   FF_LIVE_APPLY,      5, 0, 100,
@@ -145,9 +145,9 @@ static void register_custom_namespace() {
 }
 
 static void fresh_provisioning(const std::string& root) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();	// must register before begin()
-	Manager::instance().begin(root.c_str());
+	Provisioner::instance().begin(root.c_str());
 }
 
 void setUp(void) {
@@ -157,7 +157,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	rm_rf(g_test_root);
 }
 
@@ -181,7 +181,7 @@ static Bytes make_request(uint8_t op, uint64_t seq, F&& pack_payload) {
 
 void test_register_and_lookup(void) {
 	fresh_provisioning(g_test_root);
-	auto& reg = Manager::instance().registry();
+	auto& reg = Provisioner::instance().registry();
 
 	// Built-ins registered automatically.
 	TEST_ASSERT_NOT_NULL(reg.find(Ns::Reticulum::Id));
@@ -199,7 +199,7 @@ void test_register_and_lookup(void) {
 
 void test_default_values(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Value v_bool = p.field(CUSTOM_NS_ID, CUSTOM_BOOL);
 	TEST_ASSERT_EQUAL(Provisioning::Type::Bool, (int)v_bool.type());
@@ -211,22 +211,22 @@ void test_default_values(void) {
 
 void test_set_draft_independent_of_working(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
 	// Working still holds default.
-	TEST_ASSERT_EQUAL_INT64(5,  p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Working).as_int());
+	TEST_ASSERT_EQUAL_INT64(5,  p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Working).as_int());
 	// Draft holds new.
-	TEST_ASSERT_EQUAL_INT64(42, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
+	TEST_ASSERT_EQUAL_INT64(42, p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).as_int());
 	// Effective overlays.
-	TEST_ASSERT_EQUAL_INT64(42, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Effective).as_int());
+	TEST_ASSERT_EQUAL_INT64(42, p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Effective).as_int());
 	// Live setter not invoked yet — only fires at commit.
 	TEST_ASSERT_EQUAL(0, g_live_int_setter_count);
 }
 
 void test_commit_promotes_and_invokes_live_setter(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
 	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
@@ -235,26 +235,26 @@ void test_commit_promotes_and_invokes_live_setter(void) {
 	TEST_ASSERT_EQUAL(1, g_live_int_setter_count);
 	TEST_ASSERT_EQUAL_INT64(42, g_live_int_setter_value);
 	// Draft was cleared.
-	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type() != Provisioning::Type::None);
+	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).type() != Provisioning::Type::None);
 }
 
 void test_discard_clears_draft(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42));
 	TEST_ASSERT_TRUE(p.discard(CUSTOM_NS_ID));
 
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 	TEST_ASSERT_EQUAL(Provisioning::Type::None,
-		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type());
+		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).type());
 	TEST_ASSERT_EQUAL(0, g_live_int_setter_count);
 }
 
 void test_reload_after_reboot(void) {
 	// Commit a change, simulate restart, expect value to survive.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)77));
 	p.field(CUSTOM_NS_ID, CUSTOM_STR, Value("hello"));
@@ -273,7 +273,7 @@ void test_reload_after_reboot(void) {
 
 	// Simulate reboot: tear down and re-init using the same storage root.
 	fresh_provisioning(g_test_root);
-	auto& p2 = Manager::instance();
+	auto& p2 = Provisioner::instance();
 
 	TEST_ASSERT_EQUAL_INT64(77, p2.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 	TEST_ASSERT_EQUAL_STRING("hello",
@@ -290,7 +290,7 @@ void test_reload_after_reboot(void) {
 
 void test_constraint_violation_rejected(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Out-of-range for [0, 100].
 	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)500)));
@@ -298,7 +298,7 @@ void test_constraint_violation_rejected(void) {
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 	// No draft entry created.
 	TEST_ASSERT_EQUAL(Provisioning::Type::None,
-		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type());
+		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).type());
 
 	// Wrong type also rejected.
 	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value("oops")));
@@ -306,7 +306,7 @@ void test_constraint_violation_rejected(void) {
 
 void test_live_vs_reboot_apply(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_FALSE(p.draft_has_reboot());
 	TEST_ASSERT_FALSE(p.needs_reboot());
@@ -329,12 +329,12 @@ void test_live_vs_reboot_apply(void) {
 	TEST_ASSERT_FALSE(p.draft_has_reboot());
 }
 
-void test_reboot_callback_fires_once(void) {
+void test_reboot_required_callback_fires_once(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	int callback_count = 0;
-	p.on_reboot_requested([&callback_count]() { ++callback_count; });
+	p.on_reboot_required([&callback_count]() { ++callback_count; });
 
 	p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value((int64_t)868000000));
 	TEST_ASSERT_TRUE(p.commit());
@@ -354,7 +354,7 @@ void test_getter_reflects_direct_setter(void) {
 	// so Provisioning::field() must reflect the new value immediately —
 	// no drift between direct setters and Provisioning reads.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Default visible at startup.
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
@@ -369,9 +369,9 @@ void test_getter_reflects_direct_setter(void) {
 
 	// Effective source overlays draft on top of the live value.
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)99)));
-	TEST_ASSERT_EQUAL_INT64(17, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Working).as_int());
-	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
-	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Effective).as_int());
+	TEST_ASSERT_EQUAL_INT64(17, p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Working).as_int());
+	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).as_int());
+	TEST_ASSERT_EQUAL_INT64(99, p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Effective).as_int());
 }
 
 void test_set_draft_dedups_against_live_runtime(void) {
@@ -384,7 +384,7 @@ void test_set_draft_dedups_against_live_runtime(void) {
 	// commit-through-Provisioning so persistence catches up) gets the
 	// draft silently erased and the working map stays stale on disk.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Simulate the firmware mutating the runtime AFTER provisioning
 	// registration. Working map is now stale relative to the runtime.
@@ -396,13 +396,13 @@ void test_set_draft_dedups_against_live_runtime(void) {
 	// pending change is needed.
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)73)));
 	TEST_ASSERT_EQUAL(Provisioning::Type::None,
-		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).type());
+		(int)p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).type());
 
 	// User submits a different value (50). Draft must be stored and
 	// committable so the runtime can be updated through the normal flow.
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)50)));
 	TEST_ASSERT_EQUAL_INT64(50,
-		p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
+		p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).as_int());
 	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
 	TEST_ASSERT_EQUAL_INT64(50, g_custom_int_runtime);
 }
@@ -415,7 +415,7 @@ void test_reboot_required_dedups_against_working(void) {
 	// a pending change correctly produces a new draft rather than being
 	// silently dropped as "matches runtime".
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	const int64_t initial = 915000000;
 	const int64_t pending = 868000000;
@@ -434,14 +434,14 @@ void test_reboot_required_dedups_against_working(void) {
 	// the draft.
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value(initial)));
 	TEST_ASSERT_EQUAL_INT64(initial,
-		p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Manager::Source::Draft).as_int());
+		p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Provisioner::Source::Draft).as_int());
 
 	// Commit promotes the revert into working; runtime still lags (no
 	// setter call for REBOOT), but the next boot's apply will pick up
 	// the reverted-to-initial value from disk.
 	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
 	TEST_ASSERT_EQUAL_INT64(initial,
-		p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Manager::Source::Working).as_int());
+		p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Provisioner::Source::Working).as_int());
 }
 
 void test_boot_apply_fires_reboot_required_setter(void) {
@@ -449,7 +449,7 @@ void test_boot_apply_fires_reboot_required_setter(void) {
 	// (existing post-boot semantic) but MUST fire once on the next boot
 	// when apply_loaded_to_runtime() walks the registry.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	p.field(CUSTOM_NS_ID, CUSTOM_REBOOT_INT, Value((int64_t)868000000));
 	TEST_ASSERT_TRUE(p.commit());
@@ -460,7 +460,7 @@ void test_boot_apply_fires_reboot_required_setter(void) {
 	// Simulate reboot. Reset counters so the boot apply is isolated.
 	reset_setter_counters();
 	fresh_provisioning(g_test_root);
-	auto& p2 = Manager::instance();
+	auto& p2 = Provisioner::instance();
 
 	// Boot apply fires the REBOOT_REQUIRED setter exactly once.
 	TEST_ASSERT_EQUAL(1, g_reboot_int_setter_count);
@@ -483,7 +483,7 @@ static Bytes make_hash(uint8_t fill) {
 
 void test_bytes_list_default_is_empty(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// remote_management_allowed default is an empty list.
 	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::RemoteManagementAllowed);
@@ -493,7 +493,7 @@ void test_bytes_list_default_is_empty(void) {
 
 void test_bytes_list_set_commit_persists(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	std::vector<Bytes> entries = { make_hash(0x01), make_hash(0x02) };
 	TEST_ASSERT_TRUE(p.field(Ns::Reticulum::Id,
@@ -516,7 +516,7 @@ void test_bytes_list_set_commit_persists(void) {
 
 void test_bytes_list_constraint_rejects_wrong_element_size(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// 8-byte hash violates the declared 16-byte element_size constraint.
 	std::vector<uint8_t> short_bytes(8, 0xAB);
@@ -530,7 +530,7 @@ void test_bytes_list_constraint_rejects_wrong_element_size(void) {
 
 void test_bytes_list_getter_reflects_direct_setter(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Mutate via the Transport direct setter, then read via Provisioning.
 	std::set<Bytes> s = { make_hash(0x42) };
@@ -553,7 +553,7 @@ void test_transport_identity_getter_unset_returns_empty(void) {
 	// setUp clears Transport::_identity to NONE. The getter must guard
 	// against dereferencing a NONE Identity and return an empty Bytes.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::TransportIdentity);
 	TEST_ASSERT_EQUAL(Provisioning::Type::Bytes, (int)v.type());
@@ -562,7 +562,7 @@ void test_transport_identity_getter_unset_returns_empty(void) {
 
 void test_transport_identity_commit_reloads_on_reboot(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Generate a fresh identity to obtain a known-good 64-byte private key
 	// and the hash it should produce when reloaded.
@@ -592,7 +592,7 @@ void test_transport_identity_commit_reloads_on_reboot(void) {
 void test_transport_identity_excluded_from_get_state(void) {
 	// FF_SECRET fields must be omitted from GET_STATE responses.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Plant a real key so the field has a non-empty value via the getter.
 	RNS::Identity src;
@@ -652,7 +652,7 @@ void test_transport_identity_excluded_from_get_state(void) {
 
 void test_metric_getter_reflects_runtime(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Mutate the simulated runtime; getter must surface live value.
 	g_custom_metric_runtime = 0;
@@ -665,7 +665,7 @@ void test_metric_getter_reflects_runtime(void) {
 
 void test_metric_rejects_set_state(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Direct accessor: SET on read-only field returns false.
 	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_METRIC, Value((int64_t)42)));
@@ -678,7 +678,7 @@ void test_metric_not_persisted(void) {
 	// Set a non-default runtime value, then look at the on-disk file
 	// after a commit of an unrelated field. The metric must not appear.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	g_custom_metric_runtime = 7777;
 
 	// Force a save by committing an unrelated stateful field.
@@ -715,7 +715,7 @@ void test_metric_not_persisted(void) {
 
 void test_command_fires_setter_on_commit(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_EQUAL(0, g_command_invocations);
 
@@ -728,7 +728,7 @@ void test_command_fires_setter_on_commit(void) {
 
 void test_command_can_be_invoked_repeatedly_with_same_arg(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// First invocation.
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)7)));
@@ -744,7 +744,7 @@ void test_command_can_be_invoked_repeatedly_with_same_arg(void) {
 
 void test_command_read_returns_none(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Before any invocation: read returns None (no readable state).
 	Value v = p.field(CUSTOM_NS_ID, CUSTOM_COMMAND);
@@ -760,7 +760,7 @@ void test_command_read_returns_none(void) {
 
 void test_command_not_persisted_or_replayed(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Invoke the command, then simulate a reboot. The setter must NOT
 	// fire again on apply_loaded_to_runtime — commands are one-shot.
@@ -779,7 +779,7 @@ void test_command_not_persisted_or_replayed(void) {
 
 void test_command_excluded_from_get_state(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Wire GET_STATE for the custom namespace; CUSTOM_COMMAND must not
 	// appear in the field map.
@@ -825,7 +825,7 @@ void test_command_excluded_from_get_state(void) {
 
 void test_command_constraint_violation_rejected(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Constraint declared as 0..3600; 9999 violates.
 	TEST_ASSERT_FALSE(p.field(CUSTOM_NS_ID, CUSTOM_COMMAND, Value((int64_t)9999)));
@@ -838,7 +838,7 @@ void test_command_constraint_violation_rejected(void) {
 
 void test_command_void_fires_setter_on_commit(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_EQUAL(0, g_void_command_invocations);
 
@@ -850,7 +850,7 @@ void test_command_void_fires_setter_on_commit(void) {
 
 void test_command_void_read_returns_none(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// Write-only: reads return None regardless of prior invocations.
 	TEST_ASSERT_EQUAL(Provisioning::Type::None,
@@ -866,7 +866,7 @@ void test_command_void_wire_set_state_with_nil(void) {
 	// End-to-end wire trip: SET_STATE carrying nil as the void field's
 	// value, then COMMIT — the setter must fire.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Bytes set_req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
 		// Payload is the bare {ns_id: {field_id: value}} map.
@@ -891,7 +891,7 @@ void test_command_void_wire_set_state_with_nil(void) {
 
 void test_command_void_not_persisted_or_replayed(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_VOID_CMD, Value::make_void()));
 	TEST_ASSERT_TRUE(p.commit(CUSTOM_NS_ID));
@@ -913,7 +913,7 @@ static constexpr uint16_t HIER_LORA       = 9201;
 static constexpr uint16_t HIER_UDP        = 9202;
 
 static void register_hierarchy() {
-	Manager::instance()
+	Provisioner::instance()
 		.namespace_("Interfaces", HIER_INTERFACES)
 			.field_bool("enabled", 1, FF_LIVE_APPLY, true)
 			.namespace_("LoRa", HIER_LORA)
@@ -926,12 +926,12 @@ static void register_hierarchy() {
 }
 
 void test_hierarchy_nested_builder_registers_all(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
 	register_hierarchy();
-	Manager::instance().begin(g_test_root.c_str());
+	Provisioner::instance().begin(g_test_root.c_str());
 
-	const Registry& reg = Manager::instance().registry();
+	const Registry& reg = Provisioner::instance().registry();
 	const Namespace* interfaces = reg.find(HIER_INTERFACES);
 	const Namespace* lora       = reg.find(HIER_LORA);
 	const Namespace* udp        = reg.find(HIER_UDP);
@@ -950,23 +950,23 @@ void test_hierarchy_nested_builder_registers_all(void) {
 }
 
 void test_hierarchy_root_has_no_parent(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
 	register_hierarchy();
-	Manager::instance().begin(g_test_root.c_str());
+	Provisioner::instance().begin(g_test_root.c_str());
 
-	const Namespace* reticulum = Manager::instance().registry().find(Ns::Reticulum::Id);
+	const Namespace* reticulum = Provisioner::instance().registry().find(Ns::Reticulum::Id);
 	TEST_ASSERT_NOT_NULL(reticulum);
 	TEST_ASSERT_EQUAL(0, reticulum->parent_id());
 }
 
 void test_hierarchy_storage_filename_is_dotted_path(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
 	register_hierarchy();
-	Manager::instance().begin(g_test_root.c_str());
+	Provisioner::instance().begin(g_test_root.c_str());
 
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	TEST_ASSERT_TRUE(p.field(HIER_LORA, 1, Value((double)868e6)));
 	TEST_ASSERT_TRUE(p.commit(HIER_LORA));
 
@@ -979,12 +979,12 @@ void test_hierarchy_storage_filename_is_dotted_path(void) {
 }
 
 void test_hierarchy_schema_emits_parent_id(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
 	register_hierarchy();
-	Manager::instance().begin(g_test_root.c_str());
+	Provisioner::instance().begin(g_test_root.c_str());
 
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Bytes req = make_request((uint8_t)Op::GetSchema, 1, [](MsgPack::Packer& pk) {
 		MsgPack::object::nil_t n; pk.serialize(n);
@@ -1041,12 +1041,12 @@ void test_hierarchy_schema_emits_parent_id(void) {
 }
 
 void test_hierarchy_get_state_stays_flat(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
 	register_hierarchy();
-	Manager::instance().begin(g_test_root.c_str());
+	Provisioner::instance().begin(g_test_root.c_str());
 
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	// Touch the LoRa field via SET+COMMIT so it has a non-default value.
 	TEST_ASSERT_TRUE(p.field(HIER_LORA, 1, Value((double)868e6)));
 	TEST_ASSERT_TRUE(p.commit(HIER_LORA));
@@ -1073,31 +1073,31 @@ void test_hierarchy_get_state_stays_flat(void) {
 }
 
 void test_hierarchy_unbalanced_scope_is_recovered(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
-	// Deliberately open a namespace without calling .end(). Manager::begin()
+	// Deliberately open a namespace without calling .end(). Provisioner::begin()
 	// should warn and clear the scope so the next round of registrations
 	// isn't poisoned.
-	Manager::instance().namespace_("Forgotten", 9300)
+	Provisioner::instance().namespace_("Forgotten", 9300)
 		.field_int("x", 1, FF_LIVE_APPLY, 0);
 	// (no .end() here)
 
-	Manager::instance().begin(g_test_root.c_str());
-	TEST_ASSERT_TRUE(Manager::instance().registry().find((uint16_t)9300) != nullptr);
+	Provisioner::instance().begin(g_test_root.c_str());
+	TEST_ASSERT_TRUE(Provisioner::instance().registry().find((uint16_t)9300) != nullptr);
 	// Scope must be empty after begin() — subsequent registrations would
 	// otherwise nest under the orphan. Best-effort check via behavior:
-	Manager::instance().namespace_("AfterBegin", 9301).field_int("y", 1, FF_LIVE_APPLY, 0).end();
-	const Namespace* after = Manager::instance().registry().find((uint16_t)9301);
+	Provisioner::instance().namespace_("AfterBegin", 9301).field_int("y", 1, FF_LIVE_APPLY, 0).end();
+	const Namespace* after = Provisioner::instance().registry().find((uint16_t)9301);
 	TEST_ASSERT_NOT_NULL(after);
 	TEST_ASSERT_EQUAL(0, after->parent_id());   // would be 9300 if scope had leaked
 }
 
 void test_hierarchy_cycle_rejected(void) {
-	Manager::instance().end();
+	Provisioner::instance().end();
 	register_custom_namespace();
-	Manager::instance().begin(g_test_root.c_str());
+	Provisioner::instance().begin(g_test_root.c_str());
 
-	Registry& reg = Manager::instance().registry();
+	Registry& reg = Provisioner::instance().registry();
 	// Self-cycle: parent_id == own id.
 	TEST_ASSERT_NULL(reg.add_namespace(9400, "BadSelfCycle", 9400));
 	// Missing parent.
@@ -1108,7 +1108,7 @@ void test_unknown_field_ignored_on_load(void) {
 	// Hand-craft a MsgPack file with an extra unknown field and verify it
 	// loads cleanly with the unknown id silently dropped.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)33));
 	TEST_ASSERT_TRUE(p.commit());
@@ -1126,7 +1126,7 @@ void test_unknown_field_ignored_on_load(void) {
 
 	// Reload.
 	fresh_provisioning(g_test_root);
-	auto& p2 = Manager::instance();
+	auto& p2 = Provisioner::instance();
 
 	TEST_ASSERT_EQUAL_INT64(77, p2.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 }
@@ -1135,7 +1135,7 @@ void test_atomic_write_resilience(void) {
 	// Write a normal file, then drop a stray .tmp and ensure load_all
 	// removes it and still loads the real file.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)21));
 	TEST_ASSERT_TRUE(p.commit());
 
@@ -1146,7 +1146,7 @@ void test_atomic_write_resilience(void) {
 	TEST_ASSERT_TRUE(Utilities::OS::file_exists(tmp_path.c_str()));
 
 	fresh_provisioning(g_test_root);
-	auto& p2 = Manager::instance();
+	auto& p2 = Provisioner::instance();
 
 	TEST_ASSERT_EQUAL_INT64(21, p2.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 	// .tmp was cleaned up on load.
@@ -1155,7 +1155,7 @@ void test_atomic_write_resilience(void) {
 
 void test_factory_reset(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42));
 	p.commit();
@@ -1167,15 +1167,15 @@ void test_factory_reset(void) {
 
 	// Survives reboot.
 	fresh_provisioning(g_test_root);
-	TEST_ASSERT_EQUAL_INT64(5, Manager::instance().field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+	TEST_ASSERT_EQUAL_INT64(5, Provisioner::instance().field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 }
 
 void test_by_name_accessors(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	TEST_ASSERT_TRUE(p.field("custom", "level", Value((int64_t)17)));
-	TEST_ASSERT_EQUAL_INT64(17, p.field("custom", "level", Manager::Source::Draft).as_int());
+	TEST_ASSERT_EQUAL_INT64(17, p.field("custom", "level", Provisioner::Source::Draft).as_int());
 
 	TEST_ASSERT_TRUE(p.commit("custom"));
 	TEST_ASSERT_EQUAL_INT64(17, p.field("custom", "level").as_int());
@@ -1188,14 +1188,14 @@ void test_by_name_accessors(void) {
 void test_duplicate_field_id_rejected(void) {
 	// Register a fresh namespace with a duplicate field id; second add
 	// must fail (Namespace::add_field returns false).
-	Manager::instance().end();
-	auto b = Manager::instance()
+	Provisioner::instance().end();
+	auto b = Provisioner::instance()
 		.namespace_("dup", 9200)
 		.field_int("a", 1, FF_LIVE_APPLY, 0, 0, 10)
 		.field_int("b", 1, FF_LIVE_APPLY, 0, 0, 10);
 	// Pull the underlying namespace to inspect.
-	Manager::instance().begin(g_test_root.c_str());
-	const Namespace* ns = Manager::instance().registry().find((uint16_t)9200);
+	Provisioner::instance().begin(g_test_root.c_str());
+	const Namespace* ns = Provisioner::instance().registry().find((uint16_t)9200);
 	TEST_ASSERT_NOT_NULL(ns);
 	TEST_ASSERT_EQUAL(1u, ns->fields().size());	// duplicate dropped
 }
@@ -1206,7 +1206,7 @@ void test_duplicate_field_id_rejected(void) {
 
 void test_on_commit_callback_fires_only_when_drafts_present(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns);
 
@@ -1229,7 +1229,7 @@ void test_on_commit_callback_fires_only_when_drafts_present(void) {
 
 void test_on_commit_callback_runs_before_field_setters(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns);
 
@@ -1249,7 +1249,7 @@ void test_on_commit_callback_runs_before_field_setters(void) {
 
 void test_on_commit_callback_can_revert_specific_draft(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns);
 
@@ -1271,7 +1271,7 @@ void test_on_commit_callback_can_revert_specific_draft(void) {
 
 void test_on_commit_callback_can_revert_entire_namespace(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns);
 
@@ -1288,7 +1288,7 @@ void test_on_commit_callback_can_revert_entire_namespace(void) {
 
 void test_on_commit_callback_can_amend_draft(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	Namespace* ns = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns);
 
@@ -1312,7 +1312,7 @@ void test_on_commit_callback_scoped_per_namespace(void) {
 	// Two namespaces with their own callbacks. A draft on one must not
 	// fire the other's hook.
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	Namespace* ns_custom = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns_custom);
 	Namespace* ns_other = p.registry().find(Ns::Transport::Id);
@@ -1337,7 +1337,7 @@ void test_on_commit_callback_scoped_per_namespace(void) {
 
 void test_wire_get_info(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Bytes req = make_request((uint8_t)Op::GetInfo, 42, [](MsgPack::Packer& pk) {
 		MsgPack::object::nil_t n;
@@ -1363,7 +1363,7 @@ void test_wire_get_info(void) {
 
 void test_wire_set_state_then_commit(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	// SetState: { CUSTOM_NS_ID: { CUSTOM_INT: 88 } }
 	Bytes req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
@@ -1378,7 +1378,7 @@ void test_wire_set_state_then_commit(void) {
 	// Working still default, draft has 88.
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 	TEST_ASSERT_EQUAL_INT64(88,
-		p.field(CUSTOM_NS_ID, CUSTOM_INT, Manager::Source::Draft).as_int());
+		p.field(CUSTOM_NS_ID, CUSTOM_INT, Provisioner::Source::Draft).as_int());
 
 	// Commit
 	Bytes commit_req = make_request((uint8_t)Op::Commit, 2, [](MsgPack::Packer& pk) {
@@ -1393,7 +1393,7 @@ void test_wire_set_state_then_commit(void) {
 
 void test_wire_set_state_constraint_error(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Bytes req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
 		pk.serialize(MsgPack::map_size_t(1));
@@ -1440,7 +1440,7 @@ void test_wire_set_state_constraint_error(void) {
 
 void test_wire_get_capabilities(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Bytes req = make_request((uint8_t)Op::GetCapabilities, 1, [](MsgPack::Packer& pk) {
 		MsgPack::object::nil_t n;
@@ -1461,7 +1461,7 @@ void test_wire_get_capabilities(void) {
 
 void test_wire_factory_reset(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42));
 	p.commit();
 
@@ -1474,9 +1474,90 @@ void test_wire_factory_reset(void) {
 	TEST_ASSERT_EQUAL_INT64(5, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
 }
 
+void test_wire_reboot(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	int callback_count = 0;
+	p.on_reboot([&callback_count]() { ++callback_count; });
+
+	Bytes req = make_request((uint8_t)Op::Reboot, 3, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n;
+		pk.serialize(n);
+	});
+	Bytes resp = p.handle_message(req);
+	TEST_ASSERT_GREATER_THAN(0, resp.size());
+	TEST_ASSERT_EQUAL(1, callback_count);
+
+	// Response envelope echoes the Reboot op id and seq; no payload map.
+	MsgPack::Unpacker u;
+	u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::Reboot, op);
+	TEST_ASSERT_EQUAL(3, seq);
+}
+
+void test_wire_reboot_no_callback_still_acks(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+	// Intentionally do NOT register on_reboot.
+
+	Bytes req = make_request((uint8_t)Op::Reboot, 1, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n;
+		pk.serialize(n);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u;
+	u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	TEST_ASSERT_EQUAL((uint8_t)Op::Reboot, op);
+}
+
+// Captures field state at the moment the callback fires, so we can prove
+// the internal reset has already restored defaults by then.
+static int g_factory_reset_cb_count = 0;
+static int64_t g_factory_reset_cb_observed_int = -1;
+
+void test_factory_reset_callback_fires_after_internal_reset(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	g_factory_reset_cb_count = 0;
+	g_factory_reset_cb_observed_int = -1;
+	p.on_factory_reset([]() {
+		++g_factory_reset_cb_count;
+		g_factory_reset_cb_observed_int =
+			Provisioner::instance().field(CUSTOM_NS_ID, CUSTOM_INT).as_int();
+	});
+
+	// Mutate so default vs current is visible.
+	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42));
+	p.commit();
+	TEST_ASSERT_EQUAL_INT64(42, p.field(CUSTOM_NS_ID, CUSTOM_INT).as_int());
+
+	TEST_ASSERT_TRUE(p.factory_reset());
+	TEST_ASSERT_EQUAL(1, g_factory_reset_cb_count);
+	// Callback ran AFTER the internal reset, so it observed the default (5).
+	TEST_ASSERT_EQUAL_INT64(5, g_factory_reset_cb_observed_int);
+
+	// Wire path also fires it.
+	p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)99));
+	p.commit();
+	Bytes req = make_request((uint8_t)Op::FactoryReset, 2, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n;
+		pk.serialize(n);
+	});
+	p.handle_message(req);
+	TEST_ASSERT_EQUAL(2, g_factory_reset_cb_count);
+}
+
 void test_wire_unknown_op_error(void) {
 	fresh_provisioning(g_test_root);
-	auto& p = Manager::instance();
+	auto& p = Provisioner::instance();
 
 	Bytes req = make_request(250, 7, [](MsgPack::Packer& pk) {
 		MsgPack::object::nil_t n;
@@ -1513,7 +1594,7 @@ int runUnityTests(void) {
 	RUN_TEST(test_reload_after_reboot);
 	RUN_TEST(test_constraint_violation_rejected);
 	RUN_TEST(test_live_vs_reboot_apply);
-	RUN_TEST(test_reboot_callback_fires_once);
+	RUN_TEST(test_reboot_required_callback_fires_once);
 	RUN_TEST(test_getter_reflects_direct_setter);
 	RUN_TEST(test_set_draft_dedups_against_live_runtime);
 	RUN_TEST(test_reboot_required_dedups_against_working);
@@ -1561,6 +1642,9 @@ int runUnityTests(void) {
 	RUN_TEST(test_wire_set_state_constraint_error);
 	RUN_TEST(test_wire_get_capabilities);
 	RUN_TEST(test_wire_factory_reset);
+	RUN_TEST(test_wire_reboot);
+	RUN_TEST(test_wire_reboot_no_callback_still_acks);
+	RUN_TEST(test_factory_reset_callback_fires_after_internal_reset);
 	RUN_TEST(test_wire_unknown_op_error);
 
 	Utilities::OS::deregister_filesystem();

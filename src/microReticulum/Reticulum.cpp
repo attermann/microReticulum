@@ -202,7 +202,7 @@ void Reticulum::start() {
 
 #ifdef RNS_USE_PROVISIONING
 	INFO("Starting Provisioning...");
-	Provisioning::Manager::instance().begin();
+	Provisioning::Provisioner::instance().begin();
 #endif
 
 	INFO("Starting Transport...");
