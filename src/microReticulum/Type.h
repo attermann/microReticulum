@@ -19,6 +19,20 @@
 #include <stdint.h>
 #include <math.h>
 
+// [[deprecated(msg)]] requires C++14. Fall back to GCC/Clang's attribute
+// syntax under C++11 so the native (gnu++11) build still compiles. Defined
+// identically in Resource.h; duplicate here to avoid creating a dependency
+// on Resource.h just for the macro.
+#ifndef RNS_DEPRECATED
+#if __cplusplus >= 201402L
+#define RNS_DEPRECATED(msg) [[deprecated(msg)]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define RNS_DEPRECATED(msg) __attribute__((deprecated(msg)))
+#else
+#define RNS_DEPRECATED(msg)
+#endif
+#endif
+
 #ifndef RNS_QUEUED_ANNOUNCES_MAX
 #define RNS_QUEUED_ANNOUNCES_MAX 20
 #endif

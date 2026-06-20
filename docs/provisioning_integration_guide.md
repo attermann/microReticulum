@@ -127,7 +127,7 @@ If app code calls `Provisioner::instance().begin()` itself, the auto-start in `R
 
 ## Registering namespaces and fields
 
-All registration goes through the fluent `NamespaceBuilder` returned by `Provisioner::namespace_()` or `Provisioner::register_namespace()` (the same call under two names — `register_namespace` reads better from inside macros).
+All registration goes through the fluent `NamespaceBuilder` returned by `Provisioner::register_namespace()`.
 
 The minimum example — a single namespace with a couple of fields:
 
@@ -141,7 +141,7 @@ constexpr uint16_t F_BRIGHTNESS = 2;
 
 void register_my_app_namespaces() {
     Provisioner::instance()
-        .namespace_("MyApp", NS_MYAPP)
+        .register_namespace("MyApp", NS_MYAPP)
             .field_string("device_name", F_NAME, FF_LIVE_APPLY, "device-001", 32,
                 [](const Value& v) { set_device_name(v.as_string()); return true; },
                 []() { return std::string(get_device_name()); })
@@ -254,7 +254,7 @@ In addition to per-field setters and getters, each namespace can register an opt
 
 ```cpp
 Provisioner::instance()
-    .namespace_("radio", 100)
+    .register_namespace("radio", 100)
         .field_int  ("sf",        1, FF_REBOOT_REQUIRED, 8, 7, 12)
         .field_float("bandwidth", 2, FF_REBOOT_REQUIRED, 125e3, 7.8e3, 500e3)
         .on_commit([](Namespace& ns) {
@@ -337,13 +337,13 @@ constexpr uint16_t NS_LORA       = 101;
 constexpr uint16_t NS_UDP        = 102;
 
 Provisioner::instance()
-    .namespace_("Interfaces", NS_INTERFACES)
+    .register_namespace("Interfaces", NS_INTERFACES)
         .field_bool("enabled", 1, FF_LIVE_APPLY, true, ...)    // parents can have own fields
-        .namespace_("LoRa", NS_LORA)
+        .register_namespace("LoRa", NS_LORA)
             .field_float("frequency", 1, FF_REBOOT_REQUIRED, 915e6, 100e6, 1e9, ...)
             .field_int("sf",          2, FF_REBOOT_REQUIRED, 8, 7, 12, ...)
             .end()
-        .namespace_("UDP", NS_UDP)
+        .register_namespace("UDP", NS_UDP)
             .field_string("host", 1, FF_LIVE_APPLY, "0.0.0.0", 64, ...)
             .field_int("port",    2, FF_LIVE_APPLY, 4242, 1, 65535, ...)
             .end()
@@ -352,7 +352,7 @@ Provisioner::instance()
 
 Mechanics:
 
-- Each `.namespace_()` call pushes onto a per-`Provisioner` scope stack and uses the current scope top as the new namespace's parent.
+- Each `.register_namespace()` call pushes onto a per-`Provisioner` scope stack and uses the current scope top as the new namespace's parent.
 - Each `.end()` pops one level. Forgetting `.end()` is caught at `Provisioner::begin()` — the scope stack must be empty by the time `begin()` runs (or it gets cleared with a warning).
 - The Registry remains **flat** internally — every namespace is a top-level entry with an optional `parent_id`. Lookups stay O(1) by id.
 - On disk: `Interfaces.msgpack`, `Interfaces.LoRa.msgpack`, `Interfaces.UDP.msgpack`. Three files at the top level of the storage directory.
@@ -495,7 +495,7 @@ The Provisioning engine is **synchronous and reentrant-unsafe**. Serialise calls
 Use `metric_*` for instrumentation that the device pushes to clients on demand. The getter is consulted every time a client reads.
 
 ```cpp
-Provisioner::instance().namespace_("Stats", NS_STATS)
+Provisioner::instance().register_namespace("Stats", NS_STATS)
     .metric_int("packets_received",  1, []() { return (int64_t)Transport::packets_received(); })
     .metric_int("packets_sent",      2, []() { return (int64_t)Transport::packets_sent(); })
     .metric_float("rssi_dbm",        3, []() { return radio.last_rssi(); })
@@ -510,7 +510,7 @@ Provisioner::instance().namespace_("Stats", NS_STATS)
 Use `command_*` for "do something now" gestures: reboot, format flash, rotate identity, send test packet. The setter receives the argument the client supplied and runs the action. Nothing is persisted; nothing replays at boot; the field doesn't appear in `GET_STATE`.
 
 ```cpp
-Provisioner::instance().namespace_("Actions", NS_ACTIONS)
+Provisioner::instance().register_namespace("Actions", NS_ACTIONS)
     .command_bool("ping", 1,
         [](const Value&) { send_test_packet(); return true; })
     .command_int("reboot_in_seconds", 2, 0, 3600,
@@ -671,7 +671,7 @@ Bytes resp = Provisioner::instance().handle_message(make_request(...));
 
 ## Common pitfalls
 
-- **Forgetting `.end()`** — leaves the scope stack non-empty and silently nests the next registration under the previous namespace. The library warns and clears at `begin()`, but you'll likely register things under the wrong parent. Match every `.namespace_()` with an `.end()`.
+- **Forgetting `.end()`** — leaves the scope stack non-empty and silently nests the next registration under the previous namespace. The library warns and clears at `begin()`, but you'll likely register things under the wrong parent. Match every `.register_namespace()` with an `.end()`.
 - **Registering after `Reticulum::start()`** — built-ins are already registered, your namespace won't have its disk file loaded into working, and `apply_loaded_to_runtime()` has already run. Register before `start()`.
 - **Direct mutation of statics after begin()** — without a getter, the working map drifts. Always wire both a setter and a getter when the value is also mutable via direct code paths.
 - **Setting `default_value` that doesn't match the field's `Type`** — silent acceptance, weird `GET_STATE` output. The builder type and the `Value` constructor types must match.
@@ -694,7 +694,6 @@ public:
     void end();
     bool started() const;
 
-    NamespaceBuilder namespace_(const char* name, uint16_t id);
     NamespaceBuilder register_namespace(const char* name, uint16_t id);
 
     Bytes handle_message(const Bytes& request);
@@ -734,7 +733,7 @@ public:
 ```cpp
 class NamespaceBuilder {
 public:
-    NamespaceBuilder& namespace_(const char* name, uint16_t id);   // push child
+    NamespaceBuilder& register_namespace(const char* name, uint16_t id);   // push child
     NamespaceBuilder& end();                                       // pop scope
 
     NamespaceBuilder& field_bool(...);

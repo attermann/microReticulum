@@ -22,16 +22,6 @@
 #include <memory>
 #include <cassert>
 
-// [[deprecated(msg)]] requires C++14. Fall back to GCC/Clang's attribute
-// syntax under C++11 so the native (gnu++11) build still compiles.
-#if __cplusplus >= 201402L
-#define RNS_DEPRECATED(msg) [[deprecated(msg)]]
-#elif defined(__GNUC__) || defined(__clang__)
-#define RNS_DEPRECATED(msg) __attribute__((deprecated(msg)))
-#else
-#define RNS_DEPRECATED(msg)
-#endif
-
 namespace RNS {
 
 	class ResourceData;

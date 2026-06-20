@@ -94,7 +94,7 @@ constexpr uint16_t FLD_SF   = 2;
 void register_my_namespaces() {
     using namespace RNS::Provisioning;
     Provisioner::instance()
-        .namespace_("radio", NS_RADIO)
+        .register_namespace("radio", NS_RADIO)
         .field_float("frequency", FLD_FREQ, FF_REBOOT_REQUIRED, 915.0e6, 100e6, 1e9,
             [](const Value& v) { my_radio.frequency(v.as_float()); return true; })
         .field_int("sf", FLD_SF, FF_LIVE_APPLY, 8, 7, 12,

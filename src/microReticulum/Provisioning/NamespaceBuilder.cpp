@@ -44,11 +44,11 @@ namespace RNS { namespace Provisioning {
 
 	// -- Scope control -------------------------------------------------------
 
-	NamespaceBuilder& NamespaceBuilder::namespace_(const char* name, nid_t id) {
+	NamespaceBuilder& NamespaceBuilder::register_namespace(const char* name, nid_t id) {
 		// Delegates to Provisioner::namespace_, which pushes the new namespace
 		// onto the scope stack. The returned builder value is discarded —
 		// it's identical to this one (both reference the same Provisioner).
-		if (_mgr) _mgr->namespace_(name, id);
+		if (_mgr) _mgr->register_namespace(name, id);
 		return *this;
 	}
 

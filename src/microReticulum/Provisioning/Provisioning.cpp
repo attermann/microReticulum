@@ -115,9 +115,9 @@ namespace RNS { namespace Provisioning {
 		_on_factory_reset   = nullptr;
 	}
 
-	NamespaceBuilder Provisioner::namespace_(const char* name, nid_t id) {
+	NamespaceBuilder Provisioner::register_namespace(const char* name, nid_t id) {
 		// Parent comes from the current top of the registration scope stack
-		// (set up by previous .namespace_(...) calls in the same chain).
+		// (set up by previous .register_namespace(...) calls in the same chain).
 		// If the scope is empty, this is a root namespace.
 		nid_t parent_id = build_scope_empty() ? 0 : current_build_scope()->id();
 		Namespace* ns = _registry.add_namespace(id, name, parent_id);
@@ -126,7 +126,7 @@ namespace RNS { namespace Provisioning {
 			// We still push it onto the scope so nested chaining works.
 			ns = _registry.find(id);
 			if (!ns && name) ns = _registry.find(name);
-			WARNINGF("Provisioning::namespace_: namespace id=%u name=\"%s\" already exists or invalid; appending to it",
+			WARNINGF("Provisioning::register_namespace: namespace id=%u name=\"%s\" already exists or invalid; appending to it",
 				id, name ? name : "");
 		}
 		if (ns) push_build_scope(ns);

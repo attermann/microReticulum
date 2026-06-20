@@ -35,7 +35,7 @@ namespace RNS { namespace Provisioning {
 	// Fluent builder for app-side namespace registration.
 	//
 	//   Provisioner::instance()
-	//       .namespace_("radio", 100)
+	//       .register_namespace("radio", 100)
 	//       .field_float("frequency", 1, FF_REBOOT_REQUIRED, 915.0e6, 100e6, 1e9,
 	//                    [&](const Value& v) { radio.frequency(v.as_float()); return true; })
 	//       .field_int("sf", 4, FF_REBOOT_REQUIRED, 8, 7, 12)
@@ -51,7 +51,7 @@ namespace RNS { namespace Provisioning {
 		// Open a child namespace under the current scope. Subsequent
 		// field_*() / metric_*() / command_*() calls on this builder
 		// will target the child until .end() is called.
-		NamespaceBuilder& namespace_(const char* name, nid_t id);
+		NamespaceBuilder& register_namespace(const char* name, nid_t id);
 
 		// Close the current scope, returning the builder so chaining can
 		// continue at the parent level (or beyond, if .end() pops the
@@ -187,14 +187,8 @@ namespace RNS { namespace Provisioning {
 		void end();
 		bool started() const { return _started; }
 
-		// Register an app-defined namespace.
-		NamespaceBuilder namespace_(const char* name, nid_t id);
-
-		// Register a built-in namespace (same backing call as namespace_
-		// but named for symmetry with the RNS_PROVISION_NAMESPACE macros).
-		NamespaceBuilder register_namespace(const char* name, nid_t id) {
-			return namespace_(name, id);
-		}
+		// Register a namespace.
+		NamespaceBuilder register_namespace(const char* name, nid_t id);
 
 		// -- Wire entry point --------------------------------------------
 		Bytes handle_message(const Bytes& request);
@@ -265,7 +259,7 @@ namespace RNS { namespace Provisioning {
 		RebootCallback         _on_reboot;
 		FactoryResetCallback   _on_factory_reset;
 
-		// Active namespace registration scope. Pushed by namespace_() (incl.
+		// Active namespace registration scope. Pushed by register_namespace() (incl.
 		// the nested-builder form) and popped by NamespaceBuilder::end().
 		// Must be empty by the time begin() is called; assert there.
 		std::vector<Namespace*> _build_scope;

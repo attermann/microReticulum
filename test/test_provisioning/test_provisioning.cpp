@@ -105,7 +105,7 @@ static void reset_runtime_state() {
 
 static void register_custom_namespace() {
 	Provisioner::instance()
-		.namespace_("custom", CUSTOM_NS_ID)
+		.register_namespace("custom", CUSTOM_NS_ID)
 		.field_bool ("enabled",      CUSTOM_BOOL,  FF_LIVE_APPLY,      false)
 		.field_int  ("level",        CUSTOM_INT,   FF_LIVE_APPLY,      5, 0, 100,
 			[](const Value& v) {
@@ -184,9 +184,9 @@ void test_register_and_lookup(void) {
 	auto& reg = Provisioner::instance().registry();
 
 	// Built-ins registered automatically.
-	TEST_ASSERT_NOT_NULL(reg.find(Ns::Reticulum::Id));
+	TEST_ASSERT_NOT_NULL(reg.find(Ns::GeneralConfig::Id));
 	TEST_ASSERT_NOT_NULL(reg.find("Reticulum"));
-	TEST_ASSERT_NOT_NULL(reg.find(Ns::Transport::Id));
+	TEST_ASSERT_NOT_NULL(reg.find(Ns::TransportConfig::Id));
 
 	// Custom namespace registered explicitly.
 	const Namespace* ns = reg.find(CUSTOM_NS_ID);
@@ -486,7 +486,7 @@ void test_bytes_list_default_is_empty(void) {
 	auto& p = Provisioner::instance();
 
 	// remote_management_allowed default is an empty list.
-	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::RemoteManagementAllowed);
+	Value v = p.field(Ns::GeneralConfig::Id, Ns::GeneralConfig::Field::RemoteManagementAllowed);
 	TEST_ASSERT_EQUAL(Provisioning::Type::BytesList, (int)v.type());
 	TEST_ASSERT_EQUAL_size_t(0, v.as_bytes_list().size());
 }
@@ -496,9 +496,9 @@ void test_bytes_list_set_commit_persists(void) {
 	auto& p = Provisioner::instance();
 
 	std::vector<Bytes> entries = { make_hash(0x01), make_hash(0x02) };
-	TEST_ASSERT_TRUE(p.field(Ns::Reticulum::Id,
-		Ns::Reticulum::Field::RemoteManagementAllowed, Value(entries)));
-	TEST_ASSERT_TRUE(p.commit(Ns::Reticulum::Id));
+	TEST_ASSERT_TRUE(p.field(Ns::GeneralConfig::Id,
+		Ns::GeneralConfig::Field::RemoteManagementAllowed, Value(entries)));
+	TEST_ASSERT_TRUE(p.commit(Ns::GeneralConfig::Id));
 
 	// Field is FF_REBOOT_REQUIRED, so the setter must NOT fire on commit —
 	// the runtime set stays at whatever reset_runtime_state seeded (empty).
@@ -521,8 +521,8 @@ void test_bytes_list_constraint_rejects_wrong_element_size(void) {
 	// 8-byte hash violates the declared 16-byte element_size constraint.
 	std::vector<uint8_t> short_bytes(8, 0xAB);
 	std::vector<Bytes> bad = { Bytes(short_bytes.data(), short_bytes.size()) };
-	TEST_ASSERT_FALSE(p.field(Ns::Reticulum::Id,
-		Ns::Reticulum::Field::RemoteManagementAllowed, Value(bad)));
+	TEST_ASSERT_FALSE(p.field(Ns::GeneralConfig::Id,
+		Ns::GeneralConfig::Field::RemoteManagementAllowed, Value(bad)));
 
 	// Draft not populated, runtime untouched.
 	TEST_ASSERT_EQUAL_size_t(0, RNS::Transport::remote_management_allowed().size());
@@ -536,7 +536,7 @@ void test_bytes_list_getter_reflects_direct_setter(void) {
 	std::set<Bytes> s = { make_hash(0x42) };
 	RNS::Transport::remote_management_allowed(s);
 
-	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::RemoteManagementAllowed);
+	Value v = p.field(Ns::GeneralConfig::Id, Ns::GeneralConfig::Field::RemoteManagementAllowed);
 	TEST_ASSERT_EQUAL(Provisioning::Type::BytesList, (int)v.type());
 	TEST_ASSERT_EQUAL_size_t(1, v.as_bytes_list().size());
 	TEST_ASSERT_TRUE(v.as_bytes_list()[0] == make_hash(0x42));
@@ -555,7 +555,7 @@ void test_transport_identity_getter_unset_returns_empty(void) {
 	fresh_provisioning(g_test_root);
 	auto& p = Provisioner::instance();
 
-	Value v = p.field(Ns::Reticulum::Id, Ns::Reticulum::Field::TransportIdentity);
+	Value v = p.field(Ns::GeneralConfig::Id, Ns::GeneralConfig::Field::TransportIdentity);
 	TEST_ASSERT_EQUAL(Provisioning::Type::Bytes, (int)v.type());
 	TEST_ASSERT_EQUAL_size_t(0, v.as_bytes().size());
 }
@@ -574,9 +574,9 @@ void test_transport_identity_commit_reloads_on_reboot(void) {
 	// Set via Provisioning and commit. Field is REBOOT_REQUIRED + SECRET,
 	// so the setter must NOT fire on commit — Transport::_identity stays
 	// at the NONE state set during reset_runtime_state.
-	TEST_ASSERT_TRUE(p.field(Ns::Reticulum::Id,
-		Ns::Reticulum::Field::TransportIdentity, Value(prv)));
-	TEST_ASSERT_TRUE(p.commit(Ns::Reticulum::Id));
+	TEST_ASSERT_TRUE(p.field(Ns::GeneralConfig::Id,
+		Ns::GeneralConfig::Field::TransportIdentity, Value(prv)));
+	TEST_ASSERT_TRUE(p.commit(Ns::GeneralConfig::Id));
 	TEST_ASSERT_FALSE((bool)RNS::Transport::identity());
 	TEST_ASSERT_TRUE(p.needs_reboot());
 
@@ -603,7 +603,7 @@ void test_transport_identity_excluded_from_get_state(void) {
 		pk.serialize(MsgPack::map_size_t(1));
 		pk.serialize((uint16_t)Key::NamespaceFilter);
 		pk.serialize(MsgPack::arr_size_t(1));
-		pk.serialize((uint16_t)Ns::Reticulum::Id);
+		pk.serialize((uint16_t)Ns::GeneralConfig::Id);
 	});
 	Bytes resp = p.handle_message(req);
 
@@ -619,7 +619,7 @@ void test_transport_identity_excluded_from_get_state(void) {
 	TEST_ASSERT_EQUAL_size_t(1, n_ns);
 
 	int64_t ns_id_raw = 0; u.deserialize(ns_id_raw);
-	TEST_ASSERT_EQUAL((int64_t)Ns::Reticulum::Id, ns_id_raw);
+	TEST_ASSERT_EQUAL((int64_t)Ns::GeneralConfig::Id, ns_id_raw);
 	TEST_ASSERT_TRUE(u.isMap());
 	const size_t n_fields = u.unpackMapSize();
 
@@ -628,7 +628,7 @@ void test_transport_identity_excluded_from_get_state(void) {
 	for (size_t i = 0; i < n_fields; ++i) {
 		int64_t fid = 0;
 		u.deserialize(fid);
-		if (fid == Ns::Reticulum::Field::TransportIdentity) found_secret = true;
+		if (fid == Ns::GeneralConfig::Field::TransportIdentity) found_secret = true;
 		// Skip the value — type varies per field.
 		if (u.isBool())                              { bool b; u.deserialize(b); }
 		else if (u.isUInt() || u.isInt())            { int64_t iv; u.deserialize(iv); }
@@ -914,12 +914,12 @@ static constexpr uint16_t HIER_UDP        = 9202;
 
 static void register_hierarchy() {
 	Provisioner::instance()
-		.namespace_("Interfaces", HIER_INTERFACES)
+		.register_namespace("Interfaces", HIER_INTERFACES)
 			.field_bool("enabled", 1, FF_LIVE_APPLY, true)
-			.namespace_("LoRa", HIER_LORA)
+			.register_namespace("LoRa", HIER_LORA)
 				.field_float("frequency", 1, FF_REBOOT_REQUIRED, 915e6, 100e6, 1e9)
 				.end()
-			.namespace_("UDP", HIER_UDP)
+			.register_namespace("UDP", HIER_UDP)
 				.field_string("host", 1, FF_LIVE_APPLY, "0.0.0.0", 64)
 				.end()
 			.end();
@@ -955,7 +955,7 @@ void test_hierarchy_root_has_no_parent(void) {
 	register_hierarchy();
 	Provisioner::instance().begin(g_test_root.c_str());
 
-	const Namespace* reticulum = Provisioner::instance().registry().find(Ns::Reticulum::Id);
+	const Namespace* reticulum = Provisioner::instance().registry().find(Ns::GeneralConfig::Id);
 	TEST_ASSERT_NOT_NULL(reticulum);
 	TEST_ASSERT_EQUAL(0, reticulum->parent_id());
 }
@@ -1078,7 +1078,7 @@ void test_hierarchy_unbalanced_scope_is_recovered(void) {
 	// Deliberately open a namespace without calling .end(). Provisioner::begin()
 	// should warn and clear the scope so the next round of registrations
 	// isn't poisoned.
-	Provisioner::instance().namespace_("Forgotten", 9300)
+	Provisioner::instance().register_namespace("Forgotten", 9300)
 		.field_int("x", 1, FF_LIVE_APPLY, 0);
 	// (no .end() here)
 
@@ -1086,7 +1086,7 @@ void test_hierarchy_unbalanced_scope_is_recovered(void) {
 	TEST_ASSERT_TRUE(Provisioner::instance().registry().find((uint16_t)9300) != nullptr);
 	// Scope must be empty after begin() — subsequent registrations would
 	// otherwise nest under the orphan. Best-effort check via behavior:
-	Provisioner::instance().namespace_("AfterBegin", 9301).field_int("y", 1, FF_LIVE_APPLY, 0).end();
+	Provisioner::instance().register_namespace("AfterBegin", 9301).field_int("y", 1, FF_LIVE_APPLY, 0).end();
 	const Namespace* after = Provisioner::instance().registry().find((uint16_t)9301);
 	TEST_ASSERT_NOT_NULL(after);
 	TEST_ASSERT_EQUAL(0, after->parent_id());   // would be 9300 if scope had leaked
@@ -1190,7 +1190,7 @@ void test_duplicate_field_id_rejected(void) {
 	// must fail (Namespace::add_field returns false).
 	Provisioner::instance().end();
 	auto b = Provisioner::instance()
-		.namespace_("dup", 9200)
+		.register_namespace("dup", 9200)
 		.field_int("a", 1, FF_LIVE_APPLY, 0, 0, 10)
 		.field_int("b", 1, FF_LIVE_APPLY, 0, 0, 10);
 	// Pull the underlying namespace to inspect.
@@ -1315,7 +1315,7 @@ void test_on_commit_callback_scoped_per_namespace(void) {
 	auto& p = Provisioner::instance();
 	Namespace* ns_custom = p.registry().find(CUSTOM_NS_ID);
 	TEST_ASSERT_NOT_NULL(ns_custom);
-	Namespace* ns_other = p.registry().find(Ns::Transport::Id);
+	Namespace* ns_other = p.registry().find(Ns::TransportConfig::Id);
 	TEST_ASSERT_NOT_NULL(ns_other);
 
 	int custom_count = 0;

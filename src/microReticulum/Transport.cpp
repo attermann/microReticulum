@@ -155,7 +155,11 @@ using namespace RNS::Persistence;
 // CBA Stats
 /*static*/ uint32_t Transport::_packets_sent = 0;
 /*static*/ uint32_t Transport::_packets_received = 0;
-/*static*/ uint32_t Transport::_destinations_added = 0;
+/*static*/ uint32_t Transport::_announces_received = 0;
+/*static*/ uint32_t Transport::_path_requests_received = 0;
+/*static*/ uint32_t Transport::_paths_added = 0;
+/*static*/ uint32_t Transport::_paths_updated = 0;
+/*static*/ uint32_t Transport::_paths_failed = 0;
 /*static*/ size_t Transport::_last_memory = 0;
 /*static*/ size_t Transport::_last_psram = 0;
 /*static*/ size_t Transport::_last_flash = 0;
@@ -1067,6 +1071,7 @@ DestinationEntry empty_destination_entry;
 				}
 
 				if (packet.packet_type() == Type::Packet::ANNOUNCE) {
+					//++_announces_sent;
 					if (!packet.attached_interface()) {
 						TRACE("Transport::outbound: Packet has no attached interface");
 						if (interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
@@ -1925,6 +1930,7 @@ DestinationEntry empty_destination_entry;
 		// announces, queueing rebroadcasts of these, and removal
 		// of queued announce rebroadcasts once handed to the next node.
 		if (packet.packet_type() == Type::Packet::ANNOUNCE) {
+			++_announces_received;
 			TRACE("Transport::inbound: Packet is ANNOUNCE");
 			Bytes received_from;
 			//p local_destination = next((d for d in Transport.destinations if d.hash == packet.destination_hash), None)
@@ -1987,11 +1993,11 @@ DestinationEntry empty_destination_entry;
 					TRACEF("Checking for existing path to %s", packet.destination_hash().toHex().c_str());
 					// CBA microStore
 					//auto& destination_entry = get_path(packet.destination_hash());
-					bool was_found = false;
+					bool path_found = false;
 					DestinationEntry destination_entry;
 					_new_path_table.get(packet.destination_hash(), destination_entry);
 					if (destination_entry) {
-						was_found = true;
+						path_found = true;
 						TRACEF("Found existing path to %s", packet.destination_hash().toHex().c_str());
 						//p random_blobs = Transport.destination_table[packet.destination_hash][4]
 						random_blobs = destination_entry._random_blobs;
@@ -2280,7 +2286,7 @@ DestinationEntry empty_destination_entry;
 
 						// CBA ACCUMULATES
 						//_packet_table.insert({packet.get_hash(), packet_entry});
-						if (was_found) DEBUGF("Replacing destination %s in path table", packet.destination_hash().toHex().c_str());
+						if (path_found) DEBUGF("Replacing destination %s in path table", packet.destination_hash().toHex().c_str());
 						else DEBUGF("Adding destination %s to path table", packet.destination_hash().toHex().c_str());
 						DestinationEntry destination_table_entry(
 							now,
@@ -2303,7 +2309,7 @@ DestinationEntry empty_destination_entry;
 							remove_path(packet.destination_hash());
 							if (_path_table.insert({packet.destination_hash(), destination_table_entry}).second) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
-								++_destinations_added;
+								++_paths_added;
 								// CBA IMMEDIATE CULL
 								cull_path_table();
 							}
@@ -2324,10 +2330,12 @@ DestinationEntry empty_destination_entry;
 							}
 							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry, ttl)) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
-								++_destinations_added;
+								if (path_found) ++_paths_updated;
+								else ++_paths_added;
 							}
 							else {
 								ERRORF("Failed to add destination %s to path table!", packet.destination_hash().toHex().c_str());
+								++_paths_failed;
 							}
 						}
 						catch (const std::bad_alloc&) {
@@ -3692,6 +3700,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 #endif
 
 /*static*/ void Transport::path_request_handler(const Bytes& data, const Packet& packet) {
+	++_path_requests_received;
 	TRACE("Transport::path_request_handler");
 	try {
 		// If there is at least bytes enough for a destination
@@ -3943,9 +3952,8 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 			}});
 
 			for (auto& [hash, interface] : _interfaces) {
-				// DIVERGENCE
-
 #if RNS_SAME_INTERFACE_PATH_REQUESTS
+				// DIVERGENCE
 				// CBA EXPERIMENTAL forwarding path requests even on requestor interface in order to support
 				//  path-finding over LoRa mesh
 				if (true) {
@@ -4693,7 +4701,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		interface_announces += interface.announce_queue().size();
 	}
 	VERBOSEF("phl: %u rcp: %u lt: %u pl: %u al: %u tun: %u", _packet_hashlist.size(), _receipts.size(), _link_table.size(), _pending_links.size(), _active_links.size(), _tunnels.size());
-	VERBOSEF("pin: %u pout: %u padd: %u dpr: %u ikd: %u ia: %u\r\n", _packets_received, _packets_sent, _destinations_added, destination_path_responses, Identity::known_destinations().size(), interface_announces);
+	VERBOSEF("pin: %u pout: %u padd: %u pupd: %u pfail: %u dpr: %u ikd: %u ia: %u\r\n", _packets_received, _packets_sent, _paths_added, _paths_updated, _paths_failed, destination_path_responses, Identity::known_destinations().size(), interface_announces);
 #endif // RNS_DEBUG_METRICS
 
 #ifdef RNS_DEBUG_MEMORY
