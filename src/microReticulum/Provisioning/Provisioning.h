@@ -246,6 +246,11 @@ namespace RNS { namespace Provisioning {
 		// stop after reading the first three elements remain compatible.
 		static constexpr nid_t SCHEMA_VERSION = 2;
 
+		// CRC32 of the serialized GetSchema payload, computed once at the
+		// end of begin(). Surfaced in GetInfo as Key::SchemaHash so clients
+		// can cache the schema by hash and skip re-fetching when unchanged.
+		uint32_t schema_hash() const { return _schema_hash; }
+
 	private:
 		Provisioner() = default;
 		Provisioner(const Provisioner&) = delete;
@@ -255,6 +260,7 @@ namespace RNS { namespace Provisioning {
 		std::unique_ptr<Storage> _storage;
 		bool _started = false;
 		bool _needs_reboot = false;
+		uint32_t _schema_hash = 0;
 		RebootRequiredCallback _on_reboot_required;
 		RebootCallback         _on_reboot;
 		FactoryResetCallback   _on_factory_reset;

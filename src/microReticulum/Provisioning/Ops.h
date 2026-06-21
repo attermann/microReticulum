@@ -79,6 +79,7 @@ namespace RNS { namespace Provisioning {
 		constexpr uint16_t FirmwareVersion = 1;
 		constexpr uint16_t SchemaVersion   = 2;
 		constexpr uint16_t NeedsRebootInfo = 3;
+		constexpr uint16_t SchemaHash      = 4;	// CRC32 of serialized GetSchema response bytes
 
 		// GetCapabilities
 		constexpr uint16_t Namespaces      = 1;

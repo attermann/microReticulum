@@ -16,6 +16,7 @@
 #include "Codec.h"
 
 #include "../Log.h"
+#include "../Utilities/Crc.h"
 
 #include <unordered_set>
 
@@ -23,6 +24,12 @@ namespace RNS { namespace Provisioning {
 
 	// Defined in BuiltinNamespaces.cpp.
 	void register_builtin_namespaces(Provisioner& p);
+
+	// Forward declaration — definition lives next to op_get_schema below so
+	// the schema serialization logic stays grouped. Called from begin() to
+	// compute the boot-time schema hash and from op_get_schema for the wire
+	// path so the hash matches the bytes clients actually receive.
+	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry);
 
 	// ---------------------------------------------------------------------
 	// Singleton
@@ -60,6 +67,16 @@ namespace RNS { namespace Provisioning {
 		(void)storage_root;
 #endif
 		_needs_reboot = false;
+		// Hash the schema payload as it will go out on the wire. Computed
+		// once here after registration is complete so GetInfo can report
+		// it as a cache key — clients keying their local schema cache by
+		// this hash skip a full GetSchema fetch when the device's schema
+		// has not changed.
+		{
+			MsgPack::Packer hp;
+			pack_schema_payload(hp, _registry);
+			_schema_hash = Utilities::Crc::crc32(0, (const uint8_t*)hp.data(), hp.size());
+		}
 		_started = true;
 	}
 
@@ -377,10 +394,11 @@ namespace RNS { namespace Provisioning {
 
 	Bytes Provisioner::op_get_info(seq_t seq) {
 		return pack_response((opid_t)Op::GetInfo, seq, [&](MsgPack::Packer& p) {
-			p.serialize(MsgPack::map_size_t(3));
+			p.serialize(MsgPack::map_size_t(4));
 			p.serialize((uint16_t)Key::FirmwareVersion); p.serialize("microReticulum");
 			p.serialize((uint16_t)Key::SchemaVersion);   p.serialize((nid_t)Provisioner::SCHEMA_VERSION);
 			p.serialize((uint16_t)Key::NeedsRebootInfo); p.serialize((bool)_needs_reboot);
+			p.serialize((uint16_t)Key::SchemaHash);      p.serialize((uint32_t)_schema_hash);
 		});
 	}
 
@@ -440,64 +458,71 @@ namespace RNS { namespace Provisioning {
 		return n;
 	}
 
-	Bytes Provisioner::op_get_schema(seq_t seq) {
-		return pack_response((opid_t)Op::GetSchema, seq, [&](MsgPack::Packer& p) {
-			const auto& nss = _registry.namespaces();
-			p.serialize(MsgPack::arr_size_t(nss.size()));
-			for (const auto& ns_ptr : nss) {
-				const Namespace& ns = *ns_ptr;
-				// Each namespace is [id, name, parent_id_or_zero, [field-maps]].
-				// parent_id of 0 means root (no parent). Schema v2 layout —
-				// v1 clients reading the first three elements still parse
-				// the rest of the response correctly.
-				p.serialize(MsgPack::arr_size_t(4));
-				p.serialize((nid_t)ns.id());
-				p.serialize(ns.name().c_str());
-				p.serialize((nid_t)ns.parent_id());
-				const auto& fields = ns.fields();
-				p.serialize(MsgPack::arr_size_t(fields.size()));
-				for (const Field& f : fields) {
-					p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
-					p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
-					p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
-					p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
-					p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
-					p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
-					if (f.type == Type::Int && f.constraint.has_range) {
-						p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
-						p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
+	// Packs the GetSchema payload (just the namespaces array) onto `p`.
+	// Shared by op_get_schema() and the boot-time CRC32 hashing path so
+	// the hash is computed over the exact bytes clients receive.
+	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry) {
+		const auto& nss = registry.namespaces();
+		p.serialize(MsgPack::arr_size_t(nss.size()));
+		for (const auto& ns_ptr : nss) {
+			const Namespace& ns = *ns_ptr;
+			// Each namespace is [id, name, parent_id_or_zero, [field-maps]].
+			// parent_id of 0 means root (no parent). Schema v2 layout —
+			// v1 clients reading the first three elements still parse
+			// the rest of the response correctly.
+			p.serialize(MsgPack::arr_size_t(4));
+			p.serialize((nid_t)ns.id());
+			p.serialize(ns.name().c_str());
+			p.serialize((nid_t)ns.parent_id());
+			const auto& fields = ns.fields();
+			p.serialize(MsgPack::arr_size_t(fields.size()));
+			for (const Field& f : fields) {
+				p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
+				p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
+				p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
+				p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
+				p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
+				p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
+				if (f.type == Type::Int && f.constraint.has_range) {
+					p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
+					p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
+				}
+				if (f.type == Type::Float && f.constraint.has_range) {
+					p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
+					p.serialize((uint16_t)Key::FieldMaxF); p.serialize((double)f.constraint.fmax);
+				}
+				if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
+					p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
+				}
+				if (f.type == Type::Enum) {
+					if (!f.constraint.enum_values.empty()) {
+						p.serialize((uint16_t)Key::FieldEnumValues);
+						p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
+						for (fenum_t v : f.constraint.enum_values) p.serialize(v);
 					}
-					if (f.type == Type::Float && f.constraint.has_range) {
-						p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
-						p.serialize((uint16_t)Key::FieldMaxF); p.serialize((double)f.constraint.fmax);
+					if (!f.constraint.enum_labels.empty()) {
+						p.serialize((uint16_t)Key::FieldEnumLabels);
+						p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
+						for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
 					}
-					if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
-						p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
+				}
+				if (f.type == Type::BytesList) {
+					if (f.constraint.element_size > 0) {
+						p.serialize((uint16_t)Key::FieldElementSize);
+						p.serialize((uint64_t)f.constraint.element_size);
 					}
-					if (f.type == Type::Enum) {
-						if (!f.constraint.enum_values.empty()) {
-							p.serialize((uint16_t)Key::FieldEnumValues);
-							p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
-							for (fenum_t v : f.constraint.enum_values) p.serialize(v);
-						}
-						if (!f.constraint.enum_labels.empty()) {
-							p.serialize((uint16_t)Key::FieldEnumLabels);
-							p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
-							for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
-						}
-					}
-					if (f.type == Type::BytesList) {
-						if (f.constraint.element_size > 0) {
-							p.serialize((uint16_t)Key::FieldElementSize);
-							p.serialize((uint64_t)f.constraint.element_size);
-						}
-						if (f.constraint.max_count > 0) {
-							p.serialize((uint16_t)Key::FieldMaxCount);
-							p.serialize((uint64_t)f.constraint.max_count);
-						}
+					if (f.constraint.max_count > 0) {
+						p.serialize((uint16_t)Key::FieldMaxCount);
+						p.serialize((uint64_t)f.constraint.max_count);
 					}
 				}
 			}
+		}
+	}
+
+	Bytes Provisioner::op_get_schema(seq_t seq) {
+		return pack_response((opid_t)Op::GetSchema, seq, [&](MsgPack::Packer& p) {
+			pack_schema_payload(p, _registry);
 		});
 	}
 
