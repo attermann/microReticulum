@@ -17,6 +17,8 @@
 
 #include "../Reticulum.h"
 #include "../Transport.h"
+#include "../Utilities/Memory.h"
+#include "../Utilities/tlsf.h"
 
 #include <set>
 #include <vector>
@@ -117,46 +119,6 @@ namespace RNS { namespace Provisioning {
 				.end();
 		}
 
-		// Memory
-		if (!p.registry().find(Ns::Memory::Id)) {
-			p.register_namespace("uReticulum Memory", Ns::Memory::Id)
-				.register_namespace("Heap", Ns::Memory::Heap::Id)
-					.metric_int("Size", Ns::Memory::Heap::Field::Size, []() { return RNS::Utilities::Memory::heap_size(); })
-					.metric_int("Free", Ns::Memory::Heap::Field::Free, []() { return RNS::Utilities::Memory::heap_available(); })
-					.metric_int("Free (%)", Ns::Memory::Heap::Field::FreePct, []() { return (unsigned)((double)RNS::Utilities::Memory::heap_available() / (double)RNS::Utilities::Memory::heap_size() * 100.0); })
-#if defined(ESP32)
-					.metric_int("Min Free", Ns::Memory::Heap::Field::MinFree, []() { return ESP.getMinFreeHeap(); })
-					.metric_int("Max Alloc", Ns::Memory::Heap::Field::MaxAlloc, []() { return ESP.getMaxAllocHeap(); })
-					.metric_int("Fragmented (%)", Ns::Memory::Heap::Field::Fragmented, []() { return (unsigned)(100.0 - (double)ESP.getMaxAllocHeap() / (double)ESP.getFreeHeap() * 100.0); })
-#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-#endif
-					.end()
-#if defined(ESP32)
-				.register_namespace("PSRAM", Ns::Memory::Psram::Id)
-					.metric_int("Size", Ns::Memory::Psram::Field::Size, []() { return ESP.getPsramSize(); })
-					.metric_int("Free", Ns::Memory::Psram::Field::Free, []() { return ESP.getFreePsram(); })
-					.metric_int("Free (%)", Ns::Memory::Psram::Field::FreePct, []() { return (ESP.getPsramSize() > 0) ? (unsigned)((double)ESP.getFreePsram() / (double)ESP.getPsramSize() * 100.0) : 0; })
-					.metric_int("Min Free", Ns::Memory::Psram::Field::MinFree, []() { return ESP.getMinFreePsram(); })
-					.metric_int("Max Alloc", Ns::Memory::Psram::Field::MaxAlloc, []() { return ESP.getMaxAllocPsram(); })
-					.metric_int("Fragmented (%)", Ns::Memory::Psram::Field::Fragmented, []() { return (ESP.getFreePsram() > 0) ? (unsigned)(100.0 - (double)ESP.getMaxAllocPsram() / (double)ESP.getFreePsram() * 100.0) : 0; })
-					.end()
-#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
-#endif
-				.register_namespace("Flash", Ns::Memory::Flash::Id)
-					.metric_int("Size", Ns::Memory::Flash::Field::Size, []() { return RNS::Utilities::OS::storage_size(); })
-					.metric_int("Free", Ns::Memory::Flash::Field::Free, []() { return RNS::Utilities::OS::storage_available(); })
-					.metric_int("Free (%)", Ns::Memory::Flash::Field::FreePct, []() {
-						size_t flash_size = RNS::Utilities::OS::storage_size();
-						size_t flash_free = RNS::Utilities::OS::storage_available();
-						uint8_t flash_freepct = 0;
-						if (flash_size > 0) flash_freepct = (uint8_t)((double)flash_free / (double)flash_size * 100.0);
-						return (fint_t)flash_freepct;
-					})
-					.end()
-
-				.end();
-		}
-
 		// Storage
 		if (!p.registry().find(Ns::Storage::Id)) {
 			p.register_namespace("uReticulum Storage", Ns::Storage::Id)
@@ -212,6 +174,76 @@ namespace RNS { namespace Provisioning {
 				.metric_int("Paths Failed", Ns::Metrics::Field::PathsFailed, []() { return RNS::Transport::paths_failed(); })
 
 				.end();
+		}
+
+		// Memory
+		if (!p.registry().find(Ns::Memory::Id)) {
+			p.register_namespace("uReticulum Memory", Ns::Memory::Id)
+				.register_namespace("Heap", Ns::Memory::Heap::Id)
+					.metric_int("Size", Ns::Memory::Heap::Field::Size, []() { return RNS::Utilities::Memory::heap_size(); })
+					.metric_int("Free", Ns::Memory::Heap::Field::Free, []() { return RNS::Utilities::Memory::heap_available(); })
+					.metric_int("Free (%)", Ns::Memory::Heap::Field::FreePct, []() { return (unsigned)((double)RNS::Utilities::Memory::heap_available() / (double)RNS::Utilities::Memory::heap_size() * 100.0); })
+#if defined(ESP32)
+					.metric_int("Min Free", Ns::Memory::Heap::Field::MinFree, []() { return ESP.getMinFreeHeap(); })
+					.metric_int("Max Alloc", Ns::Memory::Heap::Field::MaxAlloc, []() { return ESP.getMaxAllocHeap(); })
+					.metric_int("Fragmented (%)", Ns::Memory::Heap::Field::Fragmented, []() { return (unsigned)(100.0 - (double)ESP.getMaxAllocHeap() / (double)ESP.getFreeHeap() * 100.0); })
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+#endif
+					.end()
+#if defined(ESP32)
+				.register_namespace("PSRAM", Ns::Memory::Psram::Id)
+					.metric_int("Size", Ns::Memory::Psram::Field::Size, []() { return ESP.getPsramSize(); })
+					.metric_int("Free", Ns::Memory::Psram::Field::Free, []() { return ESP.getFreePsram(); })
+					.metric_int("Free (%)", Ns::Memory::Psram::Field::FreePct, []() { return (ESP.getPsramSize() > 0) ? (unsigned)((double)ESP.getFreePsram() / (double)ESP.getPsramSize() * 100.0) : 0; })
+					.metric_int("Min Free", Ns::Memory::Psram::Field::MinFree, []() { return ESP.getMinFreePsram(); })
+					.metric_int("Max Alloc", Ns::Memory::Psram::Field::MaxAlloc, []() { return ESP.getMaxAllocPsram(); })
+					.metric_int("Fragmented (%)", Ns::Memory::Psram::Field::Fragmented, []() { return (ESP.getFreePsram() > 0) ? (unsigned)(100.0 - (double)ESP.getMaxAllocPsram() / (double)ESP.getFreePsram() * 100.0) : 0; })
+					.end()
+#elif defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+#endif
+				.register_namespace("Flash", Ns::Memory::Flash::Id)
+					.metric_int("Size", Ns::Memory::Flash::Field::Size, []() { return RNS::Utilities::OS::storage_size(); })
+					.metric_int("Free", Ns::Memory::Flash::Field::Free, []() { return RNS::Utilities::OS::storage_available(); })
+					.metric_int("Free (%)", Ns::Memory::Flash::Field::FreePct, []() {
+						size_t flash_size = RNS::Utilities::OS::storage_size();
+						size_t flash_free = RNS::Utilities::OS::storage_available();
+						uint8_t flash_freepct = 0;
+						if (flash_size > 0) flash_freepct = (uint8_t)((double)flash_free / (double)flash_size * 100.0);
+						return (fint_t)flash_freepct;
+					})
+					.end()
+
+				.end();
+		}
+
+		// Allocator
+		if (!p.registry().find(Ns::Allocator::Id)) {
+			auto b = p.register_namespace("uReticulum Allocator", Ns::Allocator::Id);
+
+			if (Utilities::Memory::heap_pool_info.tlsf != nullptr) {
+				b.register_namespace("Heap Pool", Ns::Allocator::HeapPool::Id)
+					.metric_int("Size", Ns::Allocator::HeapPool::Field::Size, []() { return RNS::Utilities::Memory::heap_pool_size(); })
+					.metric_int("Free", Ns::Allocator::HeapPool::Field::Free, []() { return RNS::Utilities::Memory::heap_pool_free(); })
+					.metric_int("Free (%)", Ns::Allocator::HeapPool::Field::FreePct, []() { return (uint8_t)((double)RNS::Utilities::Memory::heap_pool_free() / (double)RNS::Utilities::Memory::heap_pool_size() * 100.0); })
+					.metric_int("Fragmented (%)", Ns::Allocator::HeapPool::Field::Fragmented, []() { return RNS::Utilities::Memory::heap_pool_fragmented(); })
+					.end();
+			}
+			if (Utilities::Memory::psram_pool_info.tlsf != nullptr) {
+				b.register_namespace("PSRAM Pool", Ns::Allocator::PsramPool::Id)
+					.metric_int("Size", Ns::Allocator::PsramPool::Field::Size, []() { return RNS::Utilities::Memory::psram_pool_size(); })
+					.metric_int("Free", Ns::Allocator::PsramPool::Field::Free, []() { return RNS::Utilities::Memory::psram_pool_free(); })
+					.metric_int("Free (%)", Ns::Allocator::PsramPool::Field::FreePct, []() { return (uint8_t)((double)RNS::Utilities::Memory::psram_pool_free() / (double)RNS::Utilities::Memory::psram_pool_size() * 100.0); })
+					.metric_int("Fragmented (%)", Ns::Allocator::PsramPool::Field::Fragmented, []() { return RNS::Utilities::Memory::heap_pool_fragmented(); })
+					.end();
+			}
+			b.register_namespace("Default Allocator", Ns::Allocator::DefaultAllocator::Id)
+				.metric_int("Active", Ns::Allocator::DefaultAllocator::Field::Active, []() { return RNS::Utilities::Memory::default_allocator_alloc() - RNS::Utilities::Memory::default_allocator_alloc(); })
+				.end();
+			b.register_namespace("Container Allocator", Ns::Allocator::ContainerAllocator::Id)
+				.metric_int("Active", Ns::Allocator::ContainerAllocator::Field::Active, []() { return RNS::Utilities::Memory::container_allocator_alloc() - RNS::Utilities::Memory::container_allocator_alloc(); })
+				.end();
+
+			b.end();
 		}
 
 	}

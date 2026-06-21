@@ -83,9 +83,10 @@ const Bytes Token::encrypt(const Bytes& data) {
 	DEBUGF("Token::encrypt: plaintext length: %lu", data.size());
 	Bytes iv = random(16);
 	//double current_time = OS::time();
-	TRACEF("Token::encrypt: iv:         %s", iv.toHex().c_str());
+	//TRACEF("Token::encrypt: iv:         %s", iv.toHex().c_str());
 
-	TRACEF("Token::encrypt: plaintext:  %s", data.toHex().c_str());
+	// CBA Note following doesn't use container allocator so could be an issue when using heap pool
+	//TRACEF("Token::encrypt: plaintext:  %s", data.toHex().c_str());
 	Bytes ciphertext;
 	if (_mode == MODE_AES_128_CBC) {
 		ciphertext = AES_128_CBC::encrypt(
@@ -105,7 +106,8 @@ const Bytes Token::encrypt(const Bytes& data) {
 		throw std::invalid_argument("Invalid token mode "+std::to_string(_mode));
 	}
 	DEBUGF("Token::encrypt: padded ciphertext length: %lu", ciphertext.size());
-	TRACEF("Token::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
+	// CBA Note following doesn't use container allocator so could be an issue when using heap pool
+	//TRACEF("Token::encrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	Bytes signed_parts = iv + ciphertext;
 
@@ -135,7 +137,8 @@ const Bytes Token::decrypt(const Bytes& token) {
 
 	//ciphertext = token[16:-32]
 	Bytes ciphertext = token.mid(16, token.size()-48);
-	TRACEF("Token::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
+	// CBA Note following doesn't use container allocator so could be an issue when using heap pool
+	//TRACEF("Token::decrypt: ciphertext: %s", ciphertext.toHex().c_str());
 
 	try {
 		Bytes plaintext;
@@ -161,7 +164,8 @@ const Bytes Token::decrypt(const Bytes& token) {
 			throw std::invalid_argument("Invalid token mode "+std::to_string(_mode));
 		}
 		DEBUGF("Token::encrypt: unpadded plaintext length: %lu", plaintext.size());
-		TRACEF("Token::decrypt: plaintext:  %s", plaintext.toHex().c_str());
+		// CBA Note following doesn't use container allocator so could be an issue when using heap pool
+		//TRACEF("Token::decrypt: plaintext:  %s", plaintext.toHex().c_str());
 
 		DEBUGF("Token::decrypt: plaintext length: %lu", plaintext.size());
 		return plaintext;

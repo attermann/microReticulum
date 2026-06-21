@@ -55,6 +55,55 @@ namespace RNS { namespace Provisioning { namespace Ns {
 		}
 	}
 
+	// Storage namespace — memory and flash consumers
+	namespace Storage {
+		constexpr nid_t Id = 59;
+		namespace Field {
+			constexpr fid_t SchemaVersion		     = 0;	// reserved
+			constexpr fid_t Paths                    = 1;
+			constexpr fid_t Destinations             = 2;
+			constexpr fid_t Announces                = 3;
+			constexpr fid_t HeldAnnounces            = 4;
+
+			constexpr fid_t PathRequests             = 5;
+			constexpr fid_t DiscoveryPathRequests    = 6;
+			constexpr fid_t PendingLocalPathRequests = 7;
+			constexpr fid_t DiscoveryPrTags          = 8;
+			constexpr fid_t ControlDestinations      = 9;
+			constexpr fid_t ControlHashes            = 10;
+
+			constexpr fid_t PacketHashes             = 11;
+			constexpr fid_t ReverseHashes            = 12;
+			constexpr fid_t Receipts                 = 13;
+
+			constexpr fid_t Links                    = 14;
+			constexpr fid_t PendingLinks             = 15;
+			constexpr fid_t ActiveLinks              = 16;
+			constexpr fid_t Tunnels                  = 17;
+
+			constexpr fid_t KnownDestinations        = 18;
+			constexpr fid_t DestinationPathResponses = 19;
+			constexpr fid_t QueuedAnnounces          = 20;
+		}
+	}
+
+	// Metrics namespace - usage counts
+	namespace Metrics {
+		constexpr nid_t Id = 60;
+		namespace Field {
+			constexpr fid_t SchemaVersion		     = 0;	// reserved
+			constexpr fid_t PacketsSent              = 1;
+			constexpr fid_t PacketsReceived          = 2;
+			constexpr fid_t AnnouncesSent            = 3;
+			constexpr fid_t AnnouncesReceived        = 4;
+			constexpr fid_t PathRequestSent          = 5;
+			constexpr fid_t PathRequestsReceived     = 6;
+			constexpr fid_t PathsAdded               = 7;
+			constexpr fid_t PathsUpdated             = 8;
+			constexpr fid_t PathsFailed              = 9;
+		}
+	}
+
 	// Memory namespace - heap, flash, allocators, etc.
 	namespace Memory {
 		constexpr nid_t Id = 50;
@@ -96,52 +145,49 @@ namespace RNS { namespace Provisioning { namespace Ns {
 		}
 	}
 
-	// Storage namespace — memory and flash consumers
-	namespace Storage {
+	// Allocator namespace - memory pools and allocators
+	namespace Allocator {
 		constexpr nid_t Id = 54;
 		namespace Field {
 			constexpr fid_t SchemaVersion		     = 0;	// reserved
-			constexpr fid_t Paths                    = 1;
-			constexpr fid_t Destinations             = 2;
-			constexpr fid_t Announces                = 3;
-			constexpr fid_t HeldAnnounces            = 4;
-
-			constexpr fid_t PathRequests             = 5;
-			constexpr fid_t DiscoveryPathRequests    = 6;
-			constexpr fid_t PendingLocalPathRequests = 7;
-			constexpr fid_t DiscoveryPrTags          = 8;
-			constexpr fid_t ControlDestinations      = 9;
-			constexpr fid_t ControlHashes            = 10;
-
-			constexpr fid_t PacketHashes             = 11;
-			constexpr fid_t ReverseHashes            = 12;
-			constexpr fid_t Receipts                 = 13;
-
-			constexpr fid_t Links                    = 14;
-			constexpr fid_t PendingLinks             = 15;
-			constexpr fid_t ActiveLinks              = 16;
-			constexpr fid_t Tunnels                  = 17;
-
-			constexpr fid_t KnownDestinations        = 18;
-			constexpr fid_t DestinationPathResponses = 19;
-			constexpr fid_t QueuedAnnounces          = 20;
 		}
-	}
-
-	// Metrics namespace - usage counts
-	namespace Metrics {
-		constexpr nid_t Id = 55;
-		namespace Field {
-			constexpr fid_t SchemaVersion		     = 0;	// reserved
-			constexpr fid_t PacketsSent              = 1;
-			constexpr fid_t PacketsReceived          = 2;
-			constexpr fid_t AnnouncesSent            = 3;
-			constexpr fid_t AnnouncesReceived        = 4;
-			constexpr fid_t PathRequestSent          = 5;
-			constexpr fid_t PathRequestsReceived     = 6;
-			constexpr fid_t PathsAdded               = 7;
-			constexpr fid_t PathsUpdated             = 8;
-			constexpr fid_t PathsFailed              = 9;
+		namespace HeapPool {
+			constexpr nid_t Id = 55;
+			namespace Field {
+				constexpr fid_t SchemaVersion		 = 0;	// reserved
+				constexpr fid_t Size                 = 1;
+				constexpr fid_t Free                 = 2;
+				constexpr fid_t FreePct              = 3;
+				constexpr fid_t Fragmented           = 4;
+			}
+		}
+		namespace PsramPool {
+			constexpr nid_t Id = 56;
+			namespace Field {
+				constexpr fid_t SchemaVersion		 = 0;	// reserved
+				constexpr fid_t Size                 = 1;
+				constexpr fid_t Free                 = 2;
+				constexpr fid_t FreePct              = 3;
+				constexpr fid_t Fragmented           = 4;
+			}
+		}
+		namespace DefaultAllocator {
+			constexpr nid_t Id = 57;
+			namespace Field {
+				constexpr fid_t SchemaVersion		 = 0;	// reserved
+				constexpr fid_t Active               = 1;
+				constexpr fid_t Alloc                = 2;
+				constexpr fid_t Free                 = 3;
+			}
+		}
+		namespace ContainerAllocator {
+			constexpr nid_t Id = 58;
+			namespace Field {
+				constexpr fid_t SchemaVersion		 = 0;	// reserved
+				constexpr fid_t Active               = 1;
+				constexpr fid_t Alloc                = 2;
+				constexpr fid_t Free                 = 3;
+			}
 		}
 	}
 

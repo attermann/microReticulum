@@ -57,6 +57,16 @@ namespace RNS { namespace Utilities {
 
 	public:
 
+		struct tlsf_stats {
+			uint32_t used_count = 0;
+			uint32_t used_size = 0;
+			uint32_t free_count = 0;
+			uint32_t free_size = 0;
+			uint32_t free_max_size = 0;
+		};
+
+	public:
+
 		static void pool_init(pool_info& pool_info);
 		static void* pool_malloc(pool_info& pool_info, size_t size);
 		static void pool_free(pool_info& pool_info, void* p, size_t size = 0) noexcept;
@@ -181,6 +191,16 @@ namespace RNS { namespace Utilities {
 			//bool operator!=(const MyAllocator<T>&, const MyAllocator<U>&) { return false; }
 		};
 
+		static size_t heap_pool_size();
+		static size_t heap_pool_free();
+		static uint8_t heap_pool_fragmented();
+		static size_t psram_pool_size();
+		static size_t psram_pool_free();
+		static uint8_t psram_pool_fragmented();
+		static size_t default_allocator_alloc();
+		static size_t default_allocator_free();
+		static size_t container_allocator_alloc();
+		static size_t container_allocator_free();
 	};
 
 } }

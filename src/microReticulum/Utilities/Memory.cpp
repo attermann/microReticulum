@@ -60,21 +60,12 @@ using namespace RNS::Utilities;
 /*static*/ Memory::allocator_info Memory::default_allocator_info;
 /*static*/ Memory::allocator_info Memory::container_allocator_info;
 
-
-struct tlsf_stats {
-	uint32_t used_count = 0;
-	uint32_t used_size = 0;
-	uint32_t free_count = 0;
-	uint32_t free_size = 0;
-	uint32_t free_max_size = 0;
-};
-
 void tlsf_mem_walker(void* ptr, size_t size, int used, void* user)
 {
 	if (!user) {
 		return;
 	}
-	struct tlsf_stats* stats = (struct tlsf_stats*)user;
+	struct Memory::tlsf_stats* stats = (struct Memory::tlsf_stats*)user;
 	if (used) {
 		stats->used_count++;
 		stats->used_size += size;
@@ -426,6 +417,64 @@ size_t maxContiguousAllocation() {
 	dump_basic_pool_stats();
 	dump_basic_allocator_stats();
 
+}
+
+/*static*/ size_t Memory::heap_pool_size() {
+	if (heap_pool_info.tlsf == nullptr) return 0;
+	return heap_pool_info.buffer_size;
+}
+
+/*static*/ size_t Memory::heap_pool_free() {
+	if (heap_pool_info.tlsf == nullptr) return 0;
+	struct tlsf_stats stats;
+	memset(&stats, 0, sizeof(stats));
+	tlsf_walk_pool(tlsf_get_pool(heap_pool_info.tlsf), tlsf_mem_walker, &stats);
+	return stats.free_size;
+}
+
+/*static*/ uint8_t Memory::heap_pool_fragmented() {
+	if (heap_pool_info.tlsf == nullptr) return 0;
+	struct tlsf_stats stats;
+	memset(&stats, 0, sizeof(stats));
+	tlsf_walk_pool(tlsf_get_pool(heap_pool_info.tlsf), tlsf_mem_walker, &stats);
+	return (uint8_t)(100.0 - (double)stats.free_max_size / (double)stats.free_size * 100.0);
+}
+
+/*static*/ size_t Memory::psram_pool_size() {
+	if (psram_pool_info.tlsf == nullptr) return 0;
+	return psram_pool_info.buffer_size;
+}
+
+/*static*/ size_t Memory::psram_pool_free() {
+	if (psram_pool_info.tlsf == nullptr) return 0;
+	struct tlsf_stats stats;
+	memset(&stats, 0, sizeof(stats));
+	tlsf_walk_pool(tlsf_get_pool(psram_pool_info.tlsf), tlsf_mem_walker, &stats);
+	return stats.free_size;
+}
+
+/*static*/ uint8_t Memory::psram_pool_fragmented() {
+	if (psram_pool_info.tlsf == nullptr) return 0;
+	struct tlsf_stats stats;
+	memset(&stats, 0, sizeof(stats));
+	tlsf_walk_pool(tlsf_get_pool(psram_pool_info.tlsf), tlsf_mem_walker, &stats);
+	return (uint8_t)(100.0 - (double)stats.free_max_size / (double)stats.free_size * 100.0);
+}
+
+/*static*/ size_t Memory::default_allocator_alloc() {
+	return default_allocator_info.alloc_count;
+}
+
+/*static*/ size_t Memory::default_allocator_free() {
+	return default_allocator_info.free_count;
+}
+
+/*static*/ size_t Memory::container_allocator_alloc() {
+	return container_allocator_info.alloc_count;
+}
+
+/*static*/ size_t Memory::container_allocator_free() {
+	return container_allocator_info.free_count;
 }
 
 

@@ -29,6 +29,10 @@
 #include <string>
 #include <memory>
 
+#ifndef RNS_BYTES_ALLOCATOR
+#define RNS_BYTES_ALLOCATOR 1
+#endif
+
 // Finds the start of the first occurrence of the substring needle of length needlelen in the  memory  area  haystack  of length haystacklen.
 inline void* memmem(const void* haystack, size_t haystack_len, const void* needle, size_t needle_len) {
 	const unsigned char* h = (const unsigned char*)haystack;
@@ -56,9 +60,12 @@ namespace RNS {
 	class Bytes {
 
 	private:
-		using Data = std::vector<uint8_t>;
+#if RNS_BYTES_ALLOCATOR
 		// CBA Need to fix msgpack serialize/deserialize before enabling ContainerAllocator
-		//using Data = std::vector<uint8_t, Utilities::Memory::ContainerAllocator<uint8_t>>;
+		using Data = std::vector<uint8_t, Utilities::Memory::ContainerAllocator<uint8_t>>;
+#else
+		using Data = std::vector<uint8_t>;
+#endif
 		using SharedData = std::shared_ptr<Data>;
 
 		static Data _empty_data;
@@ -242,6 +249,20 @@ MEM("Creating from data-move...");
 			*_data = bytes._data;
 #endif
 		}
+#if RNS_BYTES_ALLOCATOR
+		// Data type is *not* plain std::vector<uint8_t> so we need an additional assign variant for it
+		inline void assign(const std::vector<uint8_t>& data) {
+			// if assignment is empty then clear data and don't bother creating new
+			if (data.size() <= 0) {
+				_data = nullptr;
+				_exclusive = true;
+				return;
+			}
+			exclusiveData(false, data.size());
+			_data->assign(data.begin(), data.end());
+			//*_data = data;
+		}
+#endif
 		inline void assign(const Data& data) {
 			// if assignment is empty then clear data and don't bother creating new
 			if (data.size() <= 0) {
