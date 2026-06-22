@@ -1,6 +1,6 @@
 {
 	"name": "microReticulum",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"description": "C++ port of the Reticulum Network Stack — a cryptographic mesh networking library that runs on both 32-bit+ microcontrollers (ESP32, nRF52, LoRa boards) and native platforms (Linux, macOS), with PlatformIO and CMake build support.",
 	"keywords": "reticulum, rns, mesh, embedded, mcu, esp32, nrf52, native",
 	"repository":
@@ -26,6 +26,10 @@
 		{
 			"name": "MsgPack",
 			"version": "~0.4.2"
+		},
+		{
+			"name": "heatshrink",
+			"url": "https://github.com/atomicobject/heatshrink.git#v0.4.1"
 		},
 		{
 			"name": "Crypto",

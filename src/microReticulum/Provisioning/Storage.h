@@ -59,15 +59,13 @@ namespace RNS { namespace Provisioning {
 
 	private:
 		fstring_t _root;
-		const Registry* _registry;	// optional; used for dotted-path filenames
+		const Registry* _registry;	// optional; reserved for future name-based
+									// lookups; the file_path/tmp_path helpers
+									// derive names from ns.id() and do not
+									// need the registry at all.
 
 		fstring_t file_path(const Namespace& ns) const;
 		fstring_t tmp_path(const Namespace& ns) const;
-
-		// Builds "Parent.Child.GrandChild" by walking ns.parent_id() up the
-		// Registry. Falls back to ns.name() alone if _registry is null or
-		// a parent link is broken.
-		fstring_t dotted_name(const Namespace& ns) const;
 
 		bool load_namespace(Namespace& ns);
 	};

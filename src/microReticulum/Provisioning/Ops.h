@@ -104,6 +104,18 @@ namespace RNS { namespace Provisioning {
 		constexpr uint16_t FieldDefault     = 12;
 		constexpr uint16_t FieldElementSize = 13;	// BytesList: required size per entry
 		constexpr uint16_t FieldMaxCount    = 14;	// BytesList: max number of entries
+
+		// Per-request compression negotiation. Clients set ReqCompress=true
+		// in the request payload map to ask the server to compress the
+		// response. When the server complies, the response payload becomes
+		// a single-entry map { CompressedPayload: <bin> } whose value is
+		// heatshrink-compressed bytes that decompress to the original
+		// MsgPack-encoded payload. Servers always pick the smaller wire
+		// form and may send an uncompressed payload even when compression
+		// was requested (tiny payloads where the wrapper overhead exceeds
+		// the savings).
+		constexpr uint16_t ReqCompress       = 100;
+		constexpr uint16_t CompressedPayload = 101;
 	}
 
 } }
