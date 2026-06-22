@@ -368,6 +368,11 @@ namespace RNS {
 		static inline const Reticulum& reticulum() { return _owner; }
 		static inline const Identity& identity() { return _identity; }
 		static inline void identity(Identity& identity) { _identity = identity; }
+		static inline const Identity& network_identity() { return _network_identity; }
+		static inline void network_identity(Identity& identity) {
+			if (!_network_identity) { _network_identity = identity; }
+		}
+		static inline bool has_network_identity() { return (bool)_network_identity; }
 		inline static uint16_t path_table_maxsize() { return _path_table_maxsize; }
 		inline static void path_table_maxsize(uint16_t path_table_maxsize) { _path_table_maxsize = path_table_maxsize; _path_store.set_max_recs(_path_table_maxsize); }
 		inline static uint16_t announce_table_maxsize() { return _announce_table_maxsize; }
