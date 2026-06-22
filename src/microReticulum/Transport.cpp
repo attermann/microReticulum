@@ -90,6 +90,7 @@ using namespace RNS::Persistence;
 /*static*/ Transport::PathStateTable Transport::_path_states;
 /*static*/ Transport::PendingDiscoveryPRs Transport::_pending_discovery_prs;
 /*static*/ double Transport::_pending_discovery_prs_last_tx = 0.0;
+/*static*/ Transport::BlackholeTable Transport::_blackholed_identities;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
@@ -123,6 +124,8 @@ using namespace RNS::Persistence;
 /*static*/ float Transport::_tables_cull_interval		= 60.0;
 /*static*/ double Transport::_traffic_last_checked		= 0.0;
 /*static*/ float Transport::_traffic_check_interval		= 1.0;
+/*static*/ double Transport::_blackhole_last_checked	= 0.0;
+/*static*/ float Transport::_blackhole_check_interval	= 60.0;
 /*static*/ double Transport::_last_mgmt_announce		= 0.0;
 /*static*/ float Transport::_mgmt_announce_interval		= 7200.0;
 /*static*/ bool Transport::_saving_path_table			= false;
@@ -206,6 +209,7 @@ DestinationEntry empty_destination_entry;
 		_announces_last_checked = OS::time();
 		_tables_last_culled = OS::time();
 		_traffic_last_checked = OS::time();
+		_blackhole_last_checked = OS::time();
 		_last_saved = OS::time();
 
 		// Ensure required directories exist
@@ -296,15 +300,18 @@ DestinationEntry empty_destination_entry;
 #endif
 		}
 
-/*p
-		//if (Reticulum::publish_blackhole_enabled() && !_owner.is_connected_to_shared_instance()) {
+		// Load any persisted blackhole list (always, regardless of publish flag).
+		reload_blackhole();
+
+		if (Reticulum::publish_blackhole_enabled() && !_owner.is_connected_to_shared_instance()) {
 			_blackhole_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "info.blackhole"};
 			_blackhole_destination.register_request_handler({"/list"}, blackhole_list_handler, Type::Destination::ALLOW_ALL);
 			_mgmt_destinations.insert(_blackhole_destination);
 			_mgmt_hashes.insert(_blackhole_destination.hash());
 			NOTICEF("Enabled blackhole list publishing for transport identity %s", _identity.hash().toHex().c_str());
-		//}
+		}
 
+/*p
 		//if (network_identity() && !_owner.is_connected_to_shared_instance()) {
 			//p Transport.instance_destination = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network", "instance", RNS.hexrep(Transport.network_identity.hash, delimit=False))
 			std::string instance_aspect = "network.instance." + _network_identity.hash().toHex();
@@ -603,6 +610,29 @@ DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to count traffic: %s", e.what());
 				}
 				_traffic_last_checked = OS::time();
+			}
+
+			// Expire blackhole entries whose 'until' timestamp has passed
+			if (OS::time() > (_blackhole_last_checked + _blackhole_check_interval)) {
+				try {
+					std::vector<Bytes> stale_blackholes;
+					double now = OS::time();
+					for (const auto& [identity_hash, entry] : _blackholed_identities) {
+						if (entry._until > 0.0 && now > entry._until) {
+							stale_blackholes.push_back(identity_hash);
+						}
+					}
+					for (const Bytes& identity_hash : stale_blackholes) {
+						_blackholed_identities.erase(identity_hash);
+					}
+					if (!stale_blackholes.empty()) {
+						VERBOSEF("Removed %zu expired blackhole entries", stale_blackholes.size());
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to expire blackhole entries: %s", e.what());
+				}
+				_blackhole_last_checked = OS::time();
 			}
 
 			// Keep _interfaces ordered by bitrate descending
@@ -2162,6 +2192,23 @@ DestinationEntry empty_destination_entry;
 						// If this destination is unknown in our table
 						// we should add it
 						should_add = true;
+					}
+
+					// DIVERGENCE
+					// Python (Transport.py:313-337) only purges blackholed paths
+					// at three triggers: explicit blackhole_identity() call,
+					// reload_blackhole() at startup, and the 60s expiry sweep.
+					// New announces from a blackholed identity still get accepted
+					// into the path table and stay there until the next manual
+					// purge. To make blackholing actually effective on a leaf
+					// node we filter inline here: if the announce's associated
+					// identity is blackholed, reject path acceptance now.
+					if (should_add && !_blackholed_identities.empty()) {
+						Identity announced_identity = Identity::recall(packet.destination_hash());
+						if (announced_identity && is_blackholed(announced_identity.hash())) {
+							DEBUGF("Dropping announce from blackholed identity %s", announced_identity.hash().toHex().c_str());
+							should_add = false;
+						}
 					}
 
 					if (should_add) {
@@ -4357,6 +4404,206 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 		}
 	}
 	return timebase;
+}
+
+// Adds an identity to the blackhole list. Source is set to this transport's
+// own identity hash. If until > 0 it is treated as a unix-timestamp expiry;
+// 0 means permanent. After insertion, any paths in the path table associated
+// with the blackholed identity are removed and the local blackhole file is
+// rewritten. Returns true if a new entry was added, false on error or if the
+// identity was already blackholed.
+/*static*/ bool Transport::blackhole_identity(const Bytes& identity_hash, double until, const std::string& reason) {
+	try {
+		if (_blackholed_identities.find(identity_hash) != _blackholed_identities.end()) {
+			return false;
+		}
+		_blackholed_identities.emplace(identity_hash, BlackholeEntry(_identity.hash(), until, reason));
+		persist_blackhole();
+		remove_blackholed_paths();
+		INFOF("Blackholed identity %s", identity_hash.toHex().c_str());
+		return true;
+	}
+	catch (const std::exception& e) {
+		ERRORF("Error while blackholing identity: %s", e.what());
+		return false;
+	}
+}
+
+// Removes a previously-blackholed identity from the list and rewrites the
+// local blackhole file. Returns true if an entry was removed.
+/*static*/ bool Transport::unblackhole_identity(const Bytes& identity_hash) {
+	try {
+		auto iter = _blackholed_identities.find(identity_hash);
+		if (iter == _blackholed_identities.end()) {
+			return false;
+		}
+		_blackholed_identities.erase(iter);
+		persist_blackhole();
+		INFOF("Lifted blackhole for identity %s", identity_hash.toHex().c_str());
+		return true;
+	}
+	catch (const std::exception& e) {
+		ERRORF("Error while unblackholing identity: %s", e.what());
+		return false;
+	}
+}
+
+// Quick membership check used by the inline announce filter.
+/*static*/ bool Transport::is_blackholed(const Bytes& identity_hash) {
+	return _blackholed_identities.find(identity_hash) != _blackholed_identities.end();
+}
+
+// Loads the persisted blackhole list from {storagepath}/blackhole_local and
+// then purges any path-table entries associated with the loaded identities.
+// Entries with an expired 'until' timestamp are silently skipped during load.
+// Called once during Transport::start().
+/*static*/ void Transport::reload_blackhole() {
+	std::string path = std::string(Reticulum::storagepath()) + "/blackhole_local";
+	if (!OS::file_exists(path.c_str())) {
+		return;
+	}
+
+	Bytes data;
+	size_t n = OS::read_file(path.c_str(), data);
+	if (n == 0 || data.size() == 0) {
+		return;
+	}
+
+	try {
+		MsgPack::Unpacker u;
+		u.feed(data.data(), data.size());
+		if (!u.isMap()) {
+			WARNING("Blackhole file is not a msgpack map; ignoring");
+			return;
+		}
+		const size_t map_size = u.unpackMapSize();
+		double now = OS::time();
+		size_t loaded = 0;
+		for (size_t i = 0; i < map_size; i++) {
+			MsgPack::bin_t<uint8_t> key_bin;
+			if (!u.deserialize(key_bin)) return;
+			Bytes identity_hash(key_bin.data(), key_bin.size());
+
+			// Each value is a 3-element array: [source, until, reason]
+			if (!u.isArray()) return;
+			const size_t arr_size = u.unpackArraySize();
+			if (arr_size < 3) return;
+			MsgPack::bin_t<uint8_t> src_bin;
+			if (!u.deserialize(src_bin)) return;
+			Bytes source(src_bin.data(), src_bin.size());
+			double until = 0.0;
+			if (!u.deserialize(until)) return;
+			// Decode through MsgPack::str_t (aliased to std::string on native and
+			// Arduino's String on embedded) then normalise to std::string for storage.
+			MsgPack::str_t reason_str;
+			if (!u.deserialize(reason_str)) return;
+			std::string reason(reason_str.c_str(), reason_str.length());
+
+			if (until > 0.0 && now > until) {
+				continue;   // expired, skip
+			}
+			_blackholed_identities.emplace(identity_hash, BlackholeEntry(source, until, reason));
+			loaded++;
+		}
+		if (loaded > 0) {
+			NOTICEF("Loaded %zu blackholed identities from storage", loaded);
+		}
+	}
+	catch (const std::exception& e) {
+		ERRORF("Could not load blackholed identities: %s", e.what());
+	}
+
+	remove_blackholed_paths();
+}
+
+// Scans the path table and removes any destination whose associated identity
+// (resolved via Identity::recall) is currently blackholed. Called after every
+// blackhole_identity() and at startup after reload_blackhole().
+/*static*/ void Transport::remove_blackholed_paths() {
+	if (_blackholed_identities.empty()) return;
+
+	std::vector<Bytes> drop_destinations;
+	try {
+		for (const auto& path : _new_path_table) {
+			Bytes destination_hash = path.key;
+			Identity associated = Identity::recall(destination_hash);
+			if (associated && is_blackholed(associated.hash())) {
+				drop_destinations.push_back(destination_hash);
+			}
+		}
+	}
+	catch (const std::exception& e) {
+		ERRORF("Error while enumerating blackhole-associated destinations: %s", e.what());
+	}
+
+	for (const Bytes& destination_hash : drop_destinations) {
+		try {
+			_new_path_table.remove(destination_hash);
+		}
+		catch (const std::exception& e) {
+			ERRORF("Error while dropping blackhole-associated destination from path table: %s", e.what());
+		}
+	}
+
+	if (!drop_destinations.empty()) {
+		INFOF("Removed %zu destinations associated with blackholed identities from path table", drop_destinations.size());
+	}
+}
+
+// Writes the local blackhole list (entries whose source is this transport's
+// own identity) to {storagepath}/blackhole_local as a msgpack map of
+// identity_hash -> [source, until, reason]. Entries originating from other
+// sources are not re-persisted by us (they belong to their own source files
+// in the multi-source design that is currently out of scope).
+/*static*/ void Transport::persist_blackhole() {
+	try {
+		MsgPack::Packer p;
+		size_t local_count = 0;
+		for (const auto& [hash, entry] : _blackholed_identities) {
+			if (entry._source == _identity.hash()) local_count++;
+		}
+		p.packMapSize(local_count);
+		for (const auto& [hash, entry] : _blackholed_identities) {
+			if (entry._source != _identity.hash()) continue;
+			p.packBinary(hash.data(), hash.size());
+			p.packArraySize(3);
+			p.packBinary(entry._source.data(), entry._source.size());
+			p.packFloat64(entry._until);
+			p.pack(entry._reason.c_str(), entry._reason.size());
+		}
+
+		Bytes data(p.data(), p.size());
+		std::string path = std::string(Reticulum::storagepath()) + "/blackhole_local";
+		size_t written = OS::write_file(path.c_str(), data);
+		if (written != data.size()) {
+			WARNINGF("Short write while persisting blackhole list (%zu of %zu bytes)", written, data.size());
+		}
+	}
+	catch (const std::exception& e) {
+		ERRORF("Error while persisting blackhole list: %s", e.what());
+	}
+}
+
+// Request handler for the /list endpoint on the blackhole publishing
+// destination. Returns the current blackhole list as a msgpack map matching
+// Python's serialization so cross-stack clients can ingest it.
+/*static*/ Bytes Transport::blackhole_list_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
+	try {
+		MsgPack::Packer p;
+		p.packMapSize(_blackholed_identities.size());
+		for (const auto& [hash, entry] : _blackholed_identities) {
+			p.packBinary(hash.data(), hash.size());
+			p.packArraySize(3);
+			p.packBinary(entry._source.data(), entry._source.size());
+			p.packFloat64(entry._until);
+			p.pack(entry._reason.c_str(), entry._reason.size());
+		}
+		return Bytes(p.data(), p.size());
+	}
+	catch (const std::exception& e) {
+		ERRORF("Error while processing blackhole list request: %s", e.what());
+		return {};
+	}
 }
 
 /*static*/ void Transport::write_packet_hashlist() {

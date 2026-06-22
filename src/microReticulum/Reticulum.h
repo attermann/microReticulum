@@ -57,6 +57,7 @@ namespace RNS {
         static bool __remote_management_enabled;
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
+		static bool __publish_blackhole_enabled;
 		static bool panic_on_interface_error;
 
 		static uint16_t _persist_interval;
@@ -133,6 +134,12 @@ namespace RNS {
 		*/
 		inline static bool transport_enabled() { return __transport_enabled; }
 		inline static void transport_enabled(bool transport_enabled) { __transport_enabled = transport_enabled; }
+
+		// Whether this instance publishes its local blackhole list over RNS via
+		// Transport's /list request handler. Default false (opt-in); enable per
+		// deployment to let trusted peers query this node's blackhole entries.
+		inline static bool publish_blackhole_enabled() { return __publish_blackhole_enabled; }
+		inline static void publish_blackhole_enabled(bool enabled) { __publish_blackhole_enabled = enabled; }
 
 		/*
 		Returns whether link MTU discovery is enabled for the running

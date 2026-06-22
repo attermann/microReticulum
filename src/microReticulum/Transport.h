@@ -226,6 +226,17 @@ namespace RNS {
 		};
 		using PendingDiscoveryPRs = std::deque<PendingDiscoveryPREntry>;
 
+		class BlackholeEntry {
+		public:
+			BlackholeEntry() = default;
+			BlackholeEntry(const Bytes& source, double until, const std::string& reason) :
+				_source(source), _until(until), _reason(reason) {}
+			Bytes _source;             // identity hash of who blackholed this identity
+			double _until = 0.0;       // 0.0 = permanent; otherwise unix timestamp expiry
+			std::string _reason;       // optional human-readable reason
+		};
+		using BlackholeTable = std::map<Bytes, BlackholeEntry>;
+
 /*
 		// CBA TODO Analyze safety of using Inrerface references here
 		class SerialisedEntry {
@@ -337,6 +348,14 @@ namespace RNS {
 		static void prioritize_interfaces();   // Sorts _interfaces in place by bitrate descending
 		static uint64_t timebase_from_random_blob(const Bytes& random_blob);
 		static uint64_t timebase_from_random_blobs(const std::vector<Bytes>& random_blobs);
+
+		static bool blackhole_identity(const Bytes& identity_hash, double until = 0.0, const std::string& reason = "");
+		static bool unblackhole_identity(const Bytes& identity_hash);
+		static bool is_blackholed(const Bytes& identity_hash);
+		static void reload_blackhole();
+		static void remove_blackholed_paths();
+		static void persist_blackhole();
+		static Bytes blackhole_list_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);
@@ -441,6 +460,7 @@ namespace RNS {
 		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
 		inline static const PathStateTable& path_states() { return _path_states; }
 		inline static const PendingDiscoveryPRs& pending_discovery_prs() { return _pending_discovery_prs; }
+		inline static const BlackholeTable& blackholed_identities() { return _blackholed_identities; }
 		inline static const std::map<Bytes, const Interface>& pending_local_path_requests() { return _pending_local_path_requests; }
 		inline static const BytesList& discovery_pr_tags() { return _discovery_pr_tags; }
 		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
@@ -487,6 +507,7 @@ namespace RNS {
 		static PathStateTable _path_states;		// A table for keeping track of path states (UNKNOWN/UNRESPONSIVE/RESPONSIVE)
 		static PendingDiscoveryPRs _pending_discovery_prs;	// A bounded queue of discovery path requests pending throttled transmission
 		static double _pending_discovery_prs_last_tx;		// Timestamp of last discovery path request transmission
+		static BlackholeTable _blackholed_identities;		// Identity hashes blocked from path-table population
 
 		// Transport control destinations are used
 		// for control purposes like path requests
@@ -525,6 +546,8 @@ namespace RNS {
 		static float _tables_cull_interval;
 		static double _traffic_last_checked;
 		static float _traffic_check_interval;
+		static double _blackhole_last_checked;
+		static float _blackhole_check_interval;
 		static double _last_mgmt_announce;
 		static float _mgmt_announce_interval;
 		static bool _saving_path_table;

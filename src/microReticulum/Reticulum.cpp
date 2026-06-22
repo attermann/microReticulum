@@ -46,6 +46,7 @@ using namespace RNS::Utilities;
 /*static*/ bool Reticulum::__remote_management_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
+/*static*/ bool Reticulum::__publish_blackhole_enabled = false;
 /*static*/ bool Reticulum::panic_on_interface_error = false;
 
 /*static*/ uint16_t Reticulum::_persist_interval = PERSIST_INTERVAL;
