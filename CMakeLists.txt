@@ -35,7 +35,6 @@ set(RNS_HEAP_POOL_BUFFER_SIZE  "" CACHE STRING "TLSF heap pool size (bytes)")
 set(RNS_ARDUINOJSON_SOURCE_DIR    "" CACHE PATH "Use local ArduinoJson checkout instead of FetchContent")
 set(RNS_MSGPACK_SOURCE_DIR        "" CACHE PATH "Use local MsgPack checkout instead of FetchContent")
 set(RNS_CRYPTO_SOURCE_DIR         "" CACHE PATH "Use local Crypto checkout instead of FetchContent")
-set(RNS_HEATSHRINK_SOURCE_DIR     "" CACHE PATH "Use local Heatshrink checkout instead of FetchContent")
 set(RNS_MICROSTORE_SOURCE_DIR     "" CACHE PATH "Use local microStore checkout instead of FetchContent")
 set(RNS_ARXCONTAINER_SOURCE_DIR   "" CACHE PATH "Use local ArxContainer checkout instead of FetchContent")
 set(RNS_ARXTYPETRAITS_SOURCE_DIR  "" CACHE PATH "Use local ArxTypeTraits checkout instead of FetchContent")
@@ -66,7 +65,6 @@ rns_fetch(msgpack        RNS_MSGPACK_SOURCE_DIR        https://github.com/hideak
 rns_fetch(arxcontainer   RNS_ARXCONTAINER_SOURCE_DIR   https://github.com/hideakitai/ArxContainer.git v0.7.0)
 rns_fetch(arxtypetraits  RNS_ARXTYPETRAITS_SOURCE_DIR  https://github.com/hideakitai/ArxTypeTraits.git v0.3.2)
 rns_fetch(debuglog       RNS_DEBUGLOG_SOURCE_DIR       https://github.com/hideakitai/DebugLog.git v0.8.4)
-rns_fetch(heatshrink     RNS_HEATSHRINK_SOURCE_DIR     https://github.com/atomicobject/heatshrink.git v0.4.1)
 # Crypto and microStore have no upstream tags suitable for pinning, so pin commit SHAs.
 # Refresh by running `git ls-remote <url> HEAD` and updating the hex below.
 rns_fetch(crypto         RNS_CRYPTO_SOURCE_DIR         https://github.com/attermann/Crypto.git)
@@ -90,8 +88,6 @@ add_library(ArxTypeTraitsHeaders INTERFACE)
 target_include_directories(ArxTypeTraitsHeaders INTERFACE "${arxtypetraits_SOURCE_DIR}")
 add_library(DebugLogHeaders      INTERFACE)
 target_include_directories(DebugLogHeaders      INTERFACE "${debuglog_SOURCE_DIR}")
-add_library(HeatshrinkHeaders    INTERFACE)
-target_include_directories(HeatshrinkHeaders    INTERFACE "${heatshrink_SOURCE_DIR}")
 add_library(microStoreHeaders    INTERFACE)
 target_include_directories(microStoreHeaders    INTERFACE "${microstore_SOURCE_DIR}/include")
 
@@ -159,7 +155,6 @@ target_link_libraries(microReticulum
         ArxContainerHeaders
         ArxTypeTraitsHeaders
         DebugLogHeaders
-        HeatshrinkHeaders
         microStoreHeaders
         CryptoLib
 )

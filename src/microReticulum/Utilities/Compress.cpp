@@ -15,8 +15,8 @@
 #include "Compress.h"
 
 extern "C" {
-#include "heatshrink_encoder.h"
-#include "heatshrink_decoder.h"
+#include "heatshrink/heatshrink_encoder.h"
+#include "heatshrink/heatshrink_decoder.h"
 }
 
 namespace RNS { namespace Utilities {

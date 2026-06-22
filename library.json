@@ -28,10 +28,6 @@
 			"version": "~0.4.2"
 		},
 		{
-			"name": "heatshrink",
-			"url": "https://github.com/atomicobject/heatshrink.git#v0.4.1"
-		},
-		{
 			"name": "Crypto",
 			"url": "https://github.com/attermann/Crypto.git"
 		},
