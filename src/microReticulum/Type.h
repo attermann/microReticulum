@@ -55,6 +55,10 @@
 #define RNS_RANDOM_BLOBS_MAX 32
 #endif
 
+#ifndef RNS_QUEUED_DISCOVERY_PRS_MAX
+#define RNS_QUEUED_DISCOVERY_PRS_MAX 32
+#endif
+
 
 namespace RNS { namespace Type {
 
@@ -472,6 +476,9 @@ namespace RNS { namespace Type {
 		static constexpr const float PATH_REQUEST_GRACE     = 0.4;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 20;           // Minimum interval in seconds for automated path requests
+
+		static const uint8_t MAX_QUEUED_DISCOVERY_PRS = RNS_QUEUED_DISCOVERY_PRS_MAX;   // Max amount of queued discovery path requests
+		static constexpr const float DISCOVERY_PR_TX_THROTTLE = 0.5;                   // Min interval in seconds between throttled discovery PR transmissions
 
 		static constexpr const float LINK_TIMEOUT  = Link::STALE_TIME * 1.25;
 		static const uint16_t REVERSE_TIMEOUT      = 8*60;        // Reverse table entries are removed after 8 minutes

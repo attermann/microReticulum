@@ -88,6 +88,8 @@ using namespace RNS::Persistence;
 /*static*/ std::map<Bytes, Transport::PathRequestEntry> Transport::_discovery_path_requests;
 /*static*/ Transport::BytesList Transport::_discovery_pr_tags;
 /*static*/ Transport::PathStateTable Transport::_path_states;
+/*static*/ Transport::PendingDiscoveryPRs Transport::_pending_discovery_prs;
+/*static*/ double Transport::_pending_discovery_prs_last_tx = 0.0;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
@@ -402,7 +404,7 @@ DestinationEntry empty_destination_entry;
 	//TRACE("Transport::jobs()");
 
 	std::vector<Packet> outgoing;
-	std::set<Bytes> path_requests;
+	std::map<Bytes, Interface> path_requests;	// destination_hash -> blocked_interface ({NONE} = no interface to avoid)
 	int count;
 	_jobs_running = true;
 
@@ -432,10 +434,8 @@ DestinationEntry empty_destination_entry;
 
 								if ((OS::time() - last_path_request) > Type::Transport::PATH_REQUEST_MI) {
 									DEBUGF("Trying to rediscover path for %s since an attempted link was never established", link.destination().hash().toHex().c_str());
-									//if (path_requests.find(link.destination().hash()) == path_requests.end()) {
 									if (path_requests.count(link.destination().hash()) == 0) {
-										// CBA ACCUMULATES
-										path_requests.insert(link.destination().hash());
+										path_requests.emplace(link.destination().hash(), Interface{Type::NONE});
 									}
 								}
 							}
@@ -653,7 +653,8 @@ DestinationEntry empty_destination_entry;
 
 								bool path_request_throttle = (OS::time() - last_path_request) < PATH_REQUEST_MI;
 								bool path_request_conditions = false;
-								
+								Interface blocked_if{Type::NONE};
+
 								// If the path has been invalidated between the time of
 								// making the link request and now, try to rediscover it
 								if (!has_path(link_entry._destination_hash)) {
@@ -677,6 +678,7 @@ DestinationEntry empty_destination_entry;
 								else if (!path_request_throttle && hops_to(link_entry._destination_hash) == 1) {
 									DEBUGF("Trying to rediscover path for %s since an attempted link was never established, and destination was previously local to an interface on this instance", link_entry._destination_hash.toHex().c_str());
 									path_request_conditions = true;
+									blocked_if = link_entry._receiving_interface;
 
 									if (Reticulum::transport_enabled()) {
 										if (link_entry._receiving_interface && link_entry._receiving_interface.mode() != Type::Interface::MODE_BOUNDARY) {
@@ -692,6 +694,7 @@ DestinationEntry empty_destination_entry;
 								else if ( !path_request_throttle and lr_taken_hops == 1) {
 									DEBUGF("Trying to rediscover path for %s since an attempted link was never established, and link initiator is local to an interface on this instance", link_entry._destination_hash.toHex().c_str());
 									path_request_conditions = true;
+									blocked_if = link_entry._receiving_interface;
 
 									if (Reticulum::transport_enabled()) {
 										if (link_entry._receiving_interface && link_entry._receiving_interface.mode() != Type::Interface::MODE_BOUNDARY) {
@@ -702,8 +705,7 @@ DestinationEntry empty_destination_entry;
 
 								if (path_request_conditions) {
 									if (path_requests.count(link_entry._destination_hash) == 0) {
-										// CBA ACCUMULATES
-										path_requests.insert(link_entry._destination_hash);
+										path_requests.emplace(link_entry._destination_hash, blocked_if);
 									}
 
 									if (!Reticulum::transport_enabled()) {
@@ -889,9 +891,28 @@ DestinationEntry empty_destination_entry;
 		packet.send();
 	}
 
-	// CBA send link-related path requests
-	for (auto& destination_hash : path_requests) {
-		request_path(destination_hash);
+	// Queue link-related path requests into the bounded discovery PR queue
+	// for throttled transmission via handle_disovery_path_requests().
+	if (!path_requests.empty()) {
+		for (const auto& [destination_hash, blocked_if] : path_requests) {
+			// Skip if this destination is already queued
+			bool already_queued = false;
+			for (const auto& entry : _pending_discovery_prs) {
+				if (entry._destination_hash == destination_hash) {
+					already_queued = true;
+					break;
+				}
+			}
+			if (already_queued) continue;
+			// Skip if queue is at capacity
+			if (_pending_discovery_prs.size() >= MAX_QUEUED_DISCOVERY_PRS) break;
+			_pending_discovery_prs.emplace_back(destination_hash, blocked_if);
+		}
+	}
+
+	// Drain one queued discovery path request if the throttle has elapsed
+	if (!_pending_discovery_prs.empty()) {
+		handle_disovery_path_requests();
 	}
 
 	// Send announces for management destinations
@@ -3302,6 +3323,30 @@ Deregisters an announce handler.
 		return iter->second == STATE_UNRESPONSIVE;
 	}
 	return false;
+}
+
+// Drains one entry from the pending discovery path requests queue if the
+// per-transmission throttle (DISCOVERY_PR_TX_THROTTLE) has elapsed. In Python
+// this runs as a sleeping background thread; here we are called once per
+// jobs() tick and drain at most one entry to enforce the same average rate.
+/*static*/ void Transport::handle_disovery_path_requests() {
+	if (_pending_discovery_prs.empty()) return;
+	if (OS::time() < (_pending_discovery_prs_last_tx + DISCOVERY_PR_TX_THROTTLE)) return;
+
+	PendingDiscoveryPREntry entry = _pending_discovery_prs.front();
+	_pending_discovery_prs.pop_front();
+	_pending_discovery_prs_last_tx = OS::time();
+
+	if (!entry._blocked_interface) {
+		request_path(entry._destination_hash);
+	}
+	else {
+		for (const auto& [interface_hash, interface] : _interfaces) {
+			if (interface_hash != entry._blocked_interface.get_hash()) {
+				request_path(entry._destination_hash, interface);
+			}
+		}
+	}
 }
 
 

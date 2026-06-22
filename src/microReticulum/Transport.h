@@ -25,6 +25,7 @@
 #include <vector>
 #include <list>
 #include <set>
+#include <deque>
 #include <array>
 #include <memory>
 #include <functional>
@@ -214,6 +215,17 @@ namespace RNS {
 		using PathRequestTable = std::map<Bytes, PathRequestEntry>;
 		using PathStateTable = std::map<Bytes, uint8_t>;
 
+		class PendingDiscoveryPREntry {
+		public:
+			PendingDiscoveryPREntry() : _blocked_interface({Type::NONE}) {}
+			PendingDiscoveryPREntry(const Bytes& destination_hash, const Interface& blocked_interface) :
+				_destination_hash(destination_hash),
+				_blocked_interface(blocked_interface) {}
+			const Bytes _destination_hash;
+			const Interface _blocked_interface;   // {Type::NONE} = no specific interface to avoid
+		};
+		using PendingDiscoveryPRs = std::deque<PendingDiscoveryPREntry>;
+
 /*
 		// CBA TODO Analyze safety of using Inrerface references here
 		class SerialisedEntry {
@@ -320,6 +332,7 @@ namespace RNS {
 		static bool mark_path_responsive(const Bytes& destination_hash);
 		static bool mark_path_unknown_state(const Bytes& destination_hash);
 		static bool path_is_unresponsive(const Bytes& destination_hash);
+		static void handle_disovery_path_requests();   // typo preserved to match Python reference
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);
@@ -423,6 +436,7 @@ namespace RNS {
 		inline static const std::map<Bytes, double>& path_requests() { return _path_requests; }
 		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
 		inline static const PathStateTable& path_states() { return _path_states; }
+		inline static const PendingDiscoveryPRs& pending_discovery_prs() { return _pending_discovery_prs; }
 		inline static const std::map<Bytes, const Interface>& pending_local_path_requests() { return _pending_local_path_requests; }
 		inline static const BytesList& discovery_pr_tags() { return _discovery_pr_tags; }
 		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
@@ -463,6 +477,8 @@ namespace RNS {
 		static PathRequestTable _discovery_path_requests;	// A table for keeping track of path requests on behalf of other nodes
 		static BytesList _discovery_pr_tags;	// A table for keeping track of tagged path requests
 		static PathStateTable _path_states;		// A table for keeping track of path states (UNKNOWN/UNRESPONSIVE/RESPONSIVE)
+		static PendingDiscoveryPRs _pending_discovery_prs;	// A bounded queue of discovery path requests pending throttled transmission
+		static double _pending_discovery_prs_last_tx;		// Timestamp of last discovery path request transmission
 
 		// Transport control destinations are used
 		// for control purposes like path requests
