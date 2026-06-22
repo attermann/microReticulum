@@ -95,6 +95,14 @@ namespace RNS {
 		bool _FIXED_MTU = false;
 		double _announce_allowed_at = 0;
 		float _announce_cap = 0.0;
+		// Announce rate-limit configuration. 0 (target) means disabled; a positive
+		// target is the minimum interval (seconds) between announces from a given
+		// destination before that destination accumulates rate violations. After
+		// _announce_rate_grace consecutive violations, the destination is blocked
+		// for _announce_rate_target + _announce_rate_penalty seconds.
+		float _announce_rate_target  = 0.0;
+		uint8_t _announce_rate_grace = 0;
+		float _announce_rate_penalty = 0.0;
 		std::list<AnnounceEntry> _announce_queue;
 		bool _is_connected_to_shared_instance = false;
 		bool _is_local_shared_instance = false;
@@ -219,6 +227,12 @@ namespace RNS {
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }
 		inline void bitrate(uint32_t bitrate) { assert(_impl); _impl->_bitrate = bitrate; }
+		inline float announce_rate_target() const { assert(_impl); return _impl->_announce_rate_target; }
+		inline void announce_rate_target(float seconds) { assert(_impl); _impl->_announce_rate_target = seconds; }
+		inline uint8_t announce_rate_grace() const { assert(_impl); return _impl->_announce_rate_grace; }
+		inline void announce_rate_grace(uint8_t violations) { assert(_impl); _impl->_announce_rate_grace = violations; }
+		inline float announce_rate_penalty() const { assert(_impl); return _impl->_announce_rate_penalty; }
+		inline void announce_rate_penalty(float seconds) { assert(_impl); _impl->_announce_rate_penalty = seconds; }
 		inline uint16_t HW_MTU() const { assert(_impl); return _impl->_HW_MTU; }
 		inline bool AUTOCONFIGURE_MTU() const { assert(_impl); return _impl->_AUTOCONFIGURE_MTU; }
 		inline bool FIXED_MTU() const { assert(_impl); return _impl->_FIXED_MTU; }

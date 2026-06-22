@@ -2223,41 +2223,51 @@ DestinationEntry empty_destination_entry;
 
 						bool rate_blocked = false;
 
-// TODO
-/*p
-						if packet.context != RNS.Packet.PATH_RESPONSE and packet.receiving_interface.announce_rate_target != None:
-							if not packet.destination_hash in Transport.announce_rate_table:
-								rate_entry = { "last": now, "rate_violations": 0, "blocked_until": 0, "timestamps": [now]}
-								Transport.announce_rate_table[packet.destination_hash] = rate_entry
+						// Announce rate-limit enforcement. The receiving interface opts in
+						// by setting announce_rate_target > 0 on itself. Repeated announces
+						// from the same destination faster than the target accumulate
+						// rate_violations; once over the grace count, the destination is
+						// blocked for target+penalty seconds.
+						if (packet.context() != Type::Packet::PATH_RESPONSE
+								&& packet.receiving_interface()
+								&& packet.receiving_interface().announce_rate_target() > 0) {
+							auto iter = _announce_rate_table.find(packet.destination_hash());
+							if (iter == _announce_rate_table.end()) {
+								_announce_rate_table.emplace(packet.destination_hash(), RateEntry(now));
+							}
+							else {
+								RateEntry& rate_entry = iter->second;
+								rate_entry._timestamps.push_back(now);
+								while (rate_entry._timestamps.size() > Type::Transport::MAX_RATE_TIMESTAMPS) {
+									rate_entry._timestamps.erase(rate_entry._timestamps.begin());
+								}
 
-							else:
-								rate_entry = Transport.announce_rate_table[packet.destination_hash]
-								rate_entry["timestamps"].append(now)
+								const double current_rate = now - rate_entry._last;
 
-								while len(rate_entry["timestamps"]) > Transport.MAX_RATE_TIMESTAMPS:
-									rate_entry["timestamps"].pop(0)
+								if (now > rate_entry._blocked_until) {
+									const float rate_target = packet.receiving_interface().announce_rate_target();
+									if (current_rate < rate_target) {
+										rate_entry._rate_violations += 1.0;
+									}
+									else {
+										rate_entry._rate_violations = std::max(0.0, rate_entry._rate_violations - 1.0);
+									}
 
-								current_rate = now - rate_entry["last"]
-
-								if now > rate_entry["blocked_until"]:
-
-									if current_rate < packet.receiving_interface.announce_rate_target:
-										rate_entry["rate_violations"] += 1
-
-									else:
-										rate_entry["rate_violations"] = std::max(0, rate_entry["rate_violations"]-1)
-
-									if rate_entry["rate_violations"] > packet.receiving_interface.announce_rate_grace:
-										rate_target = packet.receiving_interface.announce_rate_target
-										rate_penalty = packet.receiving_interface.announce_rate_penalty
-										rate_entry["blocked_until"] = rate_entry["last"] + rate_target + rate_penalty
-										rate_blocked = True
-									else:
-										rate_entry["last"] = now
-
-								else:
-									rate_blocked = True
-*/
+									const uint8_t rate_grace = packet.receiving_interface().announce_rate_grace();
+									if (rate_entry._rate_violations > rate_grace) {
+										const float rate_penalty = packet.receiving_interface().announce_rate_penalty();
+										rate_entry._blocked_until = rate_entry._last + rate_target + rate_penalty;
+										rate_blocked = true;
+									}
+									else {
+										rate_entry._last = now;
+									}
+								}
+								else {
+									rate_blocked = true;
+								}
+							}
+						}
 
 						uint8_t retries = 0;
 						uint8_t announce_hops = packet.hops();
