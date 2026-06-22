@@ -647,12 +647,23 @@ namespace RNS { namespace Provisioning {
 			p.serialize(MsgPack::map_size_t(ns_list.size()));
 			for (const Namespace* ns : ns_list) {
 				p.serialize((nid_t)ns->id());
+				// For FF_REBOOT_REQUIRED fields the read returns the working
+				// (committed-but-pending-reboot) value, not the live runtime
+				// via effective()'s getter — see Codec::persist_value for the
+				// matching persistence rule. Operators are entitled to see
+				// the canonical committed value across reconnects, transports,
+				// and reader identities; the live-runtime value of a reboot-
+				// gated field would diverge between commit and reboot and
+				// would disagree across clients reading the same device.
+				auto base_value = [](const Namespace& n, const Field& fl) {
+					return fl.has_flag(FF_REBOOT_REQUIRED) ? n.working(fl.id) : n.effective(fl.id);
+				};
 				// Count entries first (skip SECRET fields).
 				size_t entries = 0;
 				for (const Field& f : ns->fields()) {
 					if (f.has_flag(FF_SECRET)) continue;
 					if (f.has_flag(FF_WRITE_ONLY)) continue;
-					Value v = ns->effective(f.id);
+					Value v = base_value(*ns, f);
 					if (pending) {
 						Value d;
 						if (ns->draft(f.id, d)) v = d;
@@ -662,7 +673,7 @@ namespace RNS { namespace Provisioning {
 				p.serialize(MsgPack::map_size_t(entries));
 				for (const Field& f : ns->fields()) {
 					if (f.has_flag(FF_SECRET)) continue;
-					Value v = ns->effective(f.id);
+					Value v = base_value(*ns, f);
 					if (pending) {
 						Value d;
 						if (ns->draft(f.id, d)) v = d;
