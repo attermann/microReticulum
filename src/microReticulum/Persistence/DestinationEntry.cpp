@@ -49,15 +49,17 @@ using namespace RNS::Persistence;
 //TRACEF("Writing %lu byte received_from", entry._received_from.collection().size());
 	out.insert(out.end(), entry._received_from.collection().begin(), entry._received_from.collection().end());
 
-	// random_blobs
-	uint16_t blob_count = entry._random_blobs.size();
-//TRACEF("Writing %lu byte blob_count: %u", sizeof(blob_count), blob_count);
+	// random_blobs -- write only the tail-newest PERSIST_RANDOM_BLOBS entries
+	const size_t persist_cap = Type::Transport::PERSIST_RANDOM_BLOBS;
+	const size_t total_blobs = entry._random_blobs.size();
+	const size_t persist_n   = (total_blobs > persist_cap) ? persist_cap : total_blobs;
+	const size_t start_idx   = total_blobs - persist_n;
+	uint16_t blob_count = static_cast<uint16_t>(persist_n);
 	write(&blob_count, sizeof(blob_count));
-	for (auto& blob : entry._random_blobs) {
+	for (size_t i = start_idx; i < total_blobs; i++) {
+		const auto& blob = entry._random_blobs[i];
 		uint16_t blob_size = blob.collection().size();
-//TRACEF("Writing %lu byte blob_size: %u", sizeof(blob_size), blob_size);
 		write(&blob_size, sizeof(blob_size));
-//TRACEF("Writing %lu byte blob", blob.collection().size());
 		out.insert(out.end(), blob.collection().begin(), blob.collection().end());
 	}
 
@@ -120,7 +122,7 @@ using namespace RNS::Persistence;
 		Bytes blob(blob_size);
 		if(!read((void*)blob.writable(blob_size), blob_size)) return false;
 		blob.resize(blob_size);
-		entry._random_blobs.insert(blob);
+		entry._random_blobs.push_back(blob);
 //TRACEF("Read %lu byte blob", blob.size());
 	}
 

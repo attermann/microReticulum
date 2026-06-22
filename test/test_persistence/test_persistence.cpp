@@ -506,13 +506,13 @@ void testSerializeDestinationTable() {
 	RNS::Interface test_interface(new TestInterface());
 	//RNS::Packet packet({RNS::Type::NONE});
 	static std::map<RNS::Bytes, RNS::Persistence::DestinationEntry> map;
-	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::set<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
+	//DestinationEntry(double time, const Bytes& received_from, uint8_t announce_hops, double expires, const std::vector<Bytes>& random_blobs, Interface& receiving_interface, const Packet& packet) :
 	//RNS::Persistence::DestinationEntry entry_one(1.0, empty, 1, 0.0, blobs, interface, packet);
 	RNS::Bytes received;
 	received.assignHex("deadbeef");
 	RNS::Bytes blob;
 	blob.assignHex("b10bb10b");
-	std::set<RNS::Bytes> blobs({received, blob});
+	std::vector<RNS::Bytes> blobs({received, blob});
 	RNS::Persistence::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;
@@ -1056,7 +1056,7 @@ void test_codec_destination_entry() {
 
 	RNS::Bytes blob;
 	blob.assignHex("b10bb10b");
-	std::set<RNS::Bytes> blobs({received, blob});
+	std::vector<RNS::Bytes> blobs({received, blob});
 
 	microStore::Codec<RNS::Persistence::DestinationEntry> codec;
 

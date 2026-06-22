@@ -335,6 +335,8 @@ namespace RNS {
 		static void handle_disovery_path_requests();   // typo preserved to match Python reference
 		static void count_traffic();   //p count_traffic_loop() in Python; called once per tick in C++'s single-loop model
 		static void prioritize_interfaces();   // Sorts _interfaces in place by bitrate descending
+		static uint64_t timebase_from_random_blob(const Bytes& random_blob);
+		static uint64_t timebase_from_random_blobs(const std::vector<Bytes>& random_blobs);
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);

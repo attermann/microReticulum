@@ -2064,8 +2064,8 @@ DestinationEntry empty_destination_entry;
 					//p random_blob = packet.data[RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8:RNS.Identity.KEYSIZE//8+RNS.Identity.NAME_HASH_LENGTH//8+10]
 					Bytes random_blob = packet.data().mid(Type::Identity::KEYSIZE/8 + Type::Identity::NAME_HASH_LENGTH/8, Type::Identity::RANDOM_HASH_LENGTH/8);
 					//p random_blobs = []
-					std::set<Bytes> empty_random_blobs;
-					std::set<Bytes>& random_blobs = empty_random_blobs;
+					std::vector<Bytes> empty_random_blobs;
+					std::vector<Bytes>& random_blobs = empty_random_blobs;
 					TRACEF("Checking for existing path to %s", packet.destination_hash().toHex().c_str());
 					// CBA microStore
 					//auto& destination_entry = get_path(packet.destination_hash());
@@ -2083,12 +2083,14 @@ DestinationEntry empty_destination_entry;
 						// less, we'll update our tables.
 						if (packet.hops() <= destination_entry._hops) {
 							// Make sure we haven't heard the random
-							// blob before, so announces can't be
-							// replayed to forge paths.
-							// TODO: Check whether this approach works
-							// under all circumstances
-							//p if not random_blob in random_blobs:
-							if (random_blobs.find(random_blob) == random_blobs.end()) {
+							// blob before, and that the announce is
+							// newer than any we've already seen for
+							// this path. Together this prevents both
+							// replay forgery and acceptance of an
+							// out-of-order older announce.
+							uint64_t path_timebase = timebase_from_random_blobs(random_blobs);
+							if (std::find(random_blobs.begin(), random_blobs.end(), random_blob) == random_blobs.end()
+									&& announce_emitted > path_timebase) {
 								mark_path_unknown_state(packet.destination_hash());
 								should_add = true;
 							}
@@ -2117,7 +2119,7 @@ DestinationEntry empty_destination_entry;
 								// We also check that the announce is
 								// different from ones we've already heard,
 								// to avoid loops in the network
-								if (random_blobs.find(random_blob) == random_blobs.end()) {
+								if (std::find(random_blobs.begin(), random_blobs.end(), random_blob) == random_blobs.end()) {
 									// TODO: Check that this ^ approach actually
 									// works under all circumstances
 									DEBUGF("Replacing destination table entry for %s with new announce due to expired path", packet.destination_hash().toHex().c_str());
@@ -2130,7 +2132,7 @@ DestinationEntry empty_destination_entry;
 							}
 							else {
 								if (announce_emitted > path_announce_emitted) {
-									if (random_blobs.find(random_blob) == random_blobs.end()) {
+									if (std::find(random_blobs.begin(), random_blobs.end(), random_blob) == random_blobs.end()) {
 										DEBUGF("Replacing destination table entry for %s with new announce, since it was more recently emitted", packet.destination_hash().toHex().c_str());
 										mark_path_unknown_state(packet.destination_hash());
 										should_add = true;
@@ -2222,7 +2224,16 @@ DestinationEntry empty_destination_entry;
 							expires = now + PATHFINDER_E;
 						}
 
-						random_blobs.insert(random_blob);
+						// Append the new blob and cap the list at MAX_RANDOM_BLOBS,
+						// dropping oldest entries from the front. Matches Python's
+						// `random_blobs = random_blobs[-MAX_RANDOM_BLOBS:]` semantics.
+						if (std::find(random_blobs.begin(), random_blobs.end(), random_blob) == random_blobs.end()) {
+							random_blobs.push_back(random_blob);
+							if (random_blobs.size() > MAX_RANDOM_BLOBS) {
+								random_blobs.erase(random_blobs.begin(),
+									random_blobs.begin() + (random_blobs.size() - MAX_RANDOM_BLOBS));
+							}
+						}
 
 						if ((Reticulum::transport_enabled() || Transport::from_local_client(packet)) && packet.context() != Type::Packet::PATH_RESPONSE) {
 							// Insert announce into announce table for retransmission
@@ -4323,6 +4334,29 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 		return OS::from_bytes_big_endian(random_blob.data() + 5, 5);
 	}
 	return 0;
+}
+
+// Extracts the 5-byte big-endian emission timebase from offset 5 of a single
+// random_blob. Returns 0 if the blob is shorter than 10 bytes.
+/*static*/ uint64_t Transport::timebase_from_random_blob(const Bytes& random_blob) {
+	if (random_blob.size() < 10) {
+		return 0;
+	}
+	return OS::from_bytes_big_endian(random_blob.data() + 5, 5);
+}
+
+// Returns the maximum emission timebase across all stored random blobs for
+// a path. Used during announce ingestion to reject announces that are older
+// than what we've already seen for the same destination.
+/*static*/ uint64_t Transport::timebase_from_random_blobs(const std::vector<Bytes>& random_blobs) {
+	uint64_t timebase = 0;
+	for (const Bytes& blob : random_blobs) {
+		uint64_t emitted = timebase_from_random_blob(blob);
+		if (emitted > timebase) {
+			timebase = emitted;
+		}
+	}
+	return timebase;
 }
 
 /*static*/ void Transport::write_packet_hashlist() {

@@ -27,7 +27,7 @@
 #include <microStore/TypedStore.h>
 #include <microStore/Codec.h>
 
-#include <set>
+#include <vector>
 #include <map>
 
 namespace RNS { namespace Persistence {
@@ -35,7 +35,7 @@ namespace RNS { namespace Persistence {
 class DestinationEntry {
 public:
 	DestinationEntry() {}
-	DestinationEntry(double timestamp, const RNS::Bytes& received_from, uint8_t announce_hops, double expires, const std::set<RNS::Bytes>& random_blobs, const Interface& receiving_interface, const Packet& announce_packet) :
+	DestinationEntry(double timestamp, const RNS::Bytes& received_from, uint8_t announce_hops, double expires, const std::vector<RNS::Bytes>& random_blobs, const Interface& receiving_interface, const Packet& announce_packet) :
 		_timestamp(timestamp),
 		_received_from(received_from),
 		_hops(announce_hops),
@@ -63,7 +63,7 @@ public:
 	RNS::Bytes _received_from;
 	uint8_t _hops = 0;
 	double _expires = 0;
-	std::set<RNS::Bytes> _random_blobs;
+	std::vector<RNS::Bytes> _random_blobs;   // Oldest at front, newest at back; capped at MAX_RANDOM_BLOBS in callers
 	Interface _receiving_interface = {Type::NONE};
 	Packet _announce_packet = {Type::NONE};
 public:

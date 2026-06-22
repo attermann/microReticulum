@@ -338,7 +338,7 @@ namespace ArduinoJson {
 			dst._received_from = src["received_from"];
 			dst._hops = src["announce_hops"];
 			dst._expires = src["expires"];
-			dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
+			dst._random_blobs = src["random_blobs"].as<std::vector<RNS::Bytes>>();
 
 			RNS::Bytes interface_hash = src["interface_hash"];
 			if (interface_hash) {
@@ -359,7 +359,7 @@ namespace ArduinoJson {
 				src["received_from"].as<RNS::Bytes>(),
 				src["announce_hops"].as<int>(),
 				src["expires"].as<double>(),
-				src["random_blobs"].as<std::set<RNS::Bytes>>(),
+				src["random_blobs"].as<std::vector<RNS::Bytes>>(),
 				src["receiving_interface"].as<RNS::Interface>(),
 				src["packet"].as<RNS::Packet>()
 			);
@@ -448,7 +448,7 @@ namespace RNS {
 		dst._received_from = src["received_from"];
 		dst._hops = src["announce_hops"];
 		dst._expires = src["expires"];
-		dst._random_blobs = src["random_blobs"].as<std::set<RNS::Bytes>>();
+		dst._random_blobs = src["random_blobs"].as<std::vector<RNS::Bytes>>();
 
 		RNS::Bytes interface_hash = src["interface_hash"];
 		if (interface_hash) {
@@ -469,7 +469,7 @@ namespace RNS {
 			src["received_from"].as<RNS::Bytes>(),
 			src["announce_hops"].as<int>(),
 			src["expires"].as<double>(),
-			src["random_blobs"].as<std::set<RNS::Bytes>>(),
+			src["random_blobs"].as<std::vector<RNS::Bytes>>(),
 			src["receiving_interface"].as<RNS::Interface>(),
 			src["packet"].as<RNS::Packet>()
 		);
