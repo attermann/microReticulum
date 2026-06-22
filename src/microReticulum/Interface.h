@@ -60,6 +60,10 @@ namespace RNS {
 		virtual bool start() { return true; }
 		virtual void stop() {}
 		virtual void loop() {}
+		// Called by Transport::detach_interfaces() during clean shutdown so
+		// subclasses can release resources (sockets, threads, hardware) before
+		// destruction. Default is a no-op; idempotency is the subclass's call.
+		virtual void detach() {}
 
 		// CBA Virtual override method for custom interface to send outgoing data
 		virtual bool send_outgoing(const Bytes& data) = 0;
@@ -238,6 +242,7 @@ namespace RNS {
 		inline void current_rx_speed(double speed) const { assert(_impl); _impl->_current_rx_speed = speed; }
 		inline void current_tx_speed(double speed) const { assert(_impl); _impl->_current_tx_speed = speed; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
+		inline void detach() const { assert(_impl); _impl->detach(); }
 		inline bool is_connected_to_shared_instance() const { assert(_impl); return _impl->_is_connected_to_shared_instance; }
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }
 		inline HInterface parent_interface() const { assert(_impl); return _impl->_parent_interface; }

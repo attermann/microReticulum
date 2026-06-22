@@ -4284,32 +4284,48 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 	}
 }
 
+// Clean-shutdown sequence for the interface layer: tear down all links so peers
+// see the connection drop, drain for 150ms to let teardown packets leave, then
+// call detach() on every interface so they can release resources before
+// destruction. Python additionally orders LocalServerInterface and
+// LocalClientInterface teardown separately for its shared-instance protocol;
+// microReticulum does not support shared-instance clients/servers, so those
+// branches collapse to the unified loop here.
 /*static*/ void Transport::detach_interfaces() {
-// TODO
-/*p
-	detachable_interfaces = []
+	TRACE("Transport::detach_interfaces()");
 
-	for interface in Transport.interfaces:
-		// Currently no rules are being applied
-		// here, and all interfaces will be sent
-		// the detach call on RNS teardown.
-		if True:
-			detachable_interfaces.append(interface)
-		else:
-			pass
-	
-	for interface in Transport.local_client_interfaces:
-		// Currently no rules are being applied
-		// here, and all interfaces will be sent
-		// the detach call on RNS teardown.
-		if True:
-			detachable_interfaces.append(interface)
-		else:
-			pass
+	size_t closed_links = 0;
+	// Iterate by value -- Link is a value-type wrapping a shared impl, so a
+	// copy still routes teardown() to the same underlying object. std::set
+	// yields const references which can't call the non-const teardown().
+	for (Link link : _active_links) {
+		try { link.teardown(); closed_links++; }
+		catch (const std::exception& e) {
+			WARNINGF("Could not tear down active link before interface detach: %s", e.what());
+		}
+	}
+	for (Link link : _pending_links) {
+		try { link.teardown(); closed_links++; }
+		catch (const std::exception& e) {
+			WARNINGF("Could not tear down pending link before interface detach: %s", e.what());
+		}
+	}
 
-	for interface in detachable_interfaces:
-		interface.detach()
-*/
+	// Provide a 150ms window to allow link teardown packets to leave local transport
+	if (closed_links > 0) {
+		OS::sleep(0.15f);
+	}
+
+	DEBUG("Detaching interfaces");
+	for (Interface& iface : _interfaces) {
+		try {
+			iface.detach();
+		}
+		catch (const std::exception& e) {
+			ERRORF("Error while detaching %s: %s", iface.toString().c_str(), e.what());
+		}
+	}
+	DEBUG("All interfaces detached");
 }
 
 /*static*/ void Transport::shared_connection_disappeared() {
@@ -4341,21 +4357,18 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 */
 }
 
+// Empties every interface's pending announce queue. Useful when shutting down
+// cleanly without flushing buffered outbound announces, or when an interface
+// is being deregistered.
 /*static*/ void Transport::drop_announce_queues() {
-// TODO
-/*p
-	for interface in Transport.interfaces:
-		if hasattr(interface, "announce_queue") and interface.announce_queue != None:
-			na = len(interface.announce_queue)
-			if na > 0:
-				if na == 1:
-					na_str = "1 announce"
-				else:
-					na_str = str(na)+" announces"
-
-				interface.announce_queue = []
-				RNS.log("Dropped "+na_str+" on "+str(interface), RNS.LOG_VERBOSE)
-*/
+	for (Interface& iface : _interfaces) {
+		auto& queue = iface.announce_queue();
+		size_t na = queue.size();
+		if (na > 0) {
+			queue.clear();
+			VERBOSEF("Dropped %zu announce%s on %s", na, na == 1 ? "" : "s", iface.toString().c_str());
+		}
+	}
 }
 
 /*p
@@ -5223,6 +5236,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	if (!_owner.is_connected_to_shared_instance()) {
 		persist_data();
 	}
+	detach_interfaces();
 }
 
 /*p
