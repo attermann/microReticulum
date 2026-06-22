@@ -246,6 +246,11 @@ namespace RNS { namespace Provisioning {
 		// stop after reading the first three elements remain compatible.
 		static constexpr nid_t SCHEMA_VERSION = 2;
 
+		// CRC32 of the serialized GetSchema payload, computed once at the
+		// end of begin(). Surfaced in GetInfo as Key::SchemaHash so clients
+		// can cache the schema by hash and skip re-fetching when unchanged.
+		uint32_t schema_hash() const { return _schema_hash; }
+
 	private:
 		Provisioner() = default;
 		Provisioner(const Provisioner&) = delete;
@@ -255,6 +260,7 @@ namespace RNS { namespace Provisioning {
 		std::unique_ptr<Storage> _storage;
 		bool _started = false;
 		bool _needs_reboot = false;
+		uint32_t _schema_hash = 0;
 		RebootRequiredCallback _on_reboot_required;
 		RebootCallback         _on_reboot;
 		FactoryResetCallback   _on_factory_reset;
@@ -285,17 +291,20 @@ namespace RNS { namespace Provisioning {
 
 		// Per-op response builders. The unpacker is positioned at the
 		// envelope's payload value (which may be nil / map / array depending
-		// on op). The returned Bytes is a fully framed response.
+		// on op), or null if the envelope had no payload element. The
+		// returned Bytes is a fully framed response. Each handler reads its
+		// payload (including the optional ReqCompress flag) and calls
+		// pack_response with the resolved compress decision.
 		class Unpacker;	// forward; defined in .cpp
-		Bytes op_get_schema(seq_t seq);
-		Bytes op_get_info(seq_t seq);
-		Bytes op_get_capabilities(seq_t seq);
+		Bytes op_get_schema(seq_t seq, void* unpacker);
+		Bytes op_get_info(seq_t seq, void* unpacker);
+		Bytes op_get_capabilities(seq_t seq, void* unpacker);
 		Bytes op_get_state(seq_t seq, void* unpacker);
 		Bytes op_set_state(seq_t seq, void* unpacker);
 		Bytes op_commit(seq_t seq, void* unpacker);
 		Bytes op_discard(seq_t seq, void* unpacker);
-		Bytes op_factory_reset(seq_t seq);
-		Bytes op_reboot(seq_t seq);
+		Bytes op_factory_reset(seq_t seq, void* unpacker);
+		Bytes op_reboot(seq_t seq, void* unpacker);
 
 		void  set_reboot_flag(bool any_reboot_applied);
 

@@ -16,13 +16,22 @@
 #include "Codec.h"
 
 #include "../Log.h"
+#include "../Utilities/Crc.h"
+#include "../Utilities/Compress.h"
 
+#include <cstring>
 #include <unordered_set>
 
 namespace RNS { namespace Provisioning {
 
 	// Defined in BuiltinNamespaces.cpp.
 	void register_builtin_namespaces(Provisioner& p);
+
+	// Forward declaration — definition lives next to op_get_schema below so
+	// the schema serialization logic stays grouped. Called from begin() to
+	// compute the boot-time schema hash and from op_get_schema for the wire
+	// path so the hash matches the bytes clients actually receive.
+	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry);
 
 	// ---------------------------------------------------------------------
 	// Singleton
@@ -60,6 +69,16 @@ namespace RNS { namespace Provisioning {
 		(void)storage_root;
 #endif
 		_needs_reboot = false;
+		// Hash the schema payload as it will go out on the wire. Computed
+		// once here after registration is complete so GetInfo can report
+		// it as a cache key — clients keying their local schema cache by
+		// this hash skip a full GetSchema fetch when the device's schema
+		// has not changed.
+		{
+			MsgPack::Packer hp;
+			pack_schema_payload(hp, _registry);
+			_schema_hash = Utilities::Crc::crc32(0, (const uint8_t*)hp.data(), hp.size());
+		}
 		_started = true;
 	}
 
@@ -321,14 +340,54 @@ namespace RNS { namespace Provisioning {
 	//   [ op_id (uint), seq (uint), payload ]
 	// where payload is op-specific (often a map; nil if not used).
 
-	static Bytes pack_response(opid_t op_id, seq_t seq, const std::function<void(MsgPack::Packer&)>& pack_payload) {
-		MsgPack::Packer packer;
-		packer.serialize(MsgPack::arr_size_t(3));
-		packer.serialize((opid_t)op_id);
-		packer.serialize((seq_t)seq);
-		if (pack_payload) pack_payload(packer);
-		else { MsgPack::object::nil_t n; packer.serialize(n); }
-		return Bytes(packer.data(), packer.size());
+	static Bytes pack_response(opid_t op_id, seq_t seq, bool compress, const std::function<void(MsgPack::Packer&)>& pack_payload) {
+		// Build the payload portion into a scratch packer first so we can
+		// optionally compress it before stitching it into the envelope.
+		MsgPack::Packer payload_pkt;
+		if (pack_payload) pack_payload(payload_pkt);
+		else { MsgPack::object::nil_t n; payload_pkt.serialize(n); }
+
+		// Envelope prefix: [arr-size 3, op_id, seq]. The third slot is filled
+		// below — either with the {CompressedPayload: bin} wrapper or by
+		// appending the uncompressed payload bytes verbatim.
+		MsgPack::Packer envelope;
+		envelope.serialize(MsgPack::arr_size_t(3));
+		envelope.serialize((opid_t)op_id);
+		envelope.serialize((seq_t)seq);
+
+		if (compress) {
+			Bytes compressed = Utilities::Compress::encode(
+				(const uint8_t*)payload_pkt.data(), payload_pkt.size());
+			// Wrapper bytes: map-of-1 header (1 B) + uint16 key (3 B) +
+			// bin header (2 B for <=255, 3 B otherwise) = up to 7 B. Use 8
+			// as a safe upper bound. Only emit the compressed wrapper if
+			// it nets bytes saved over the raw payload — otherwise the
+			// "compressed" envelope would actually be larger on the wire.
+			constexpr size_t WRAPPER_OVERHEAD = 8;
+			if (!compressed.empty() &&
+				compressed.size() + WRAPPER_OVERHEAD < payload_pkt.size())
+			{
+				envelope.serialize(MsgPack::map_size_t(1));
+				envelope.serialize((uint16_t)Key::CompressedPayload);
+				MsgPack::bin_t<uint8_t> bin;
+				bin.resize(compressed.size());
+				memcpy(bin.data(), compressed.data(), compressed.size());
+				envelope.serialize(bin);
+				return Bytes(envelope.data(), envelope.size());
+			}
+			// Fall through: compression unprofitable, send raw payload.
+		}
+
+		// Uncompressed path: append the scratch payload bytes verbatim onto
+		// the envelope prefix. Same wire shape as before this refactor.
+		Bytes out((const uint8_t*)envelope.data(), envelope.size());
+		out.append((const uint8_t*)payload_pkt.data(), payload_pkt.size());
+		return out;
+	}
+
+	// Convenience overload: no-compress callers (Error, Ack, internal helpers).
+	static inline Bytes pack_response(opid_t op_id, seq_t seq, const std::function<void(MsgPack::Packer&)>& pack_payload) {
+		return pack_response(op_id, seq, false, pack_payload);
 	}
 
 	Bytes Provisioner::encode_error(opid_t op_id, seq_t seq, ErrorCode code, const char* msg) {
@@ -375,17 +434,43 @@ namespace RNS { namespace Provisioning {
 		}
 	}
 
-	Bytes Provisioner::op_get_info(seq_t seq) {
-		return pack_response((opid_t)Op::GetInfo, seq, [&](MsgPack::Packer& p) {
-			p.serialize(MsgPack::map_size_t(3));
+	// Parse a request payload map for the ReqCompress flag. Used by op
+	// handlers whose request payload carries no other keys (GetSchema,
+	// GetInfo, GetCapabilities, FactoryReset, Reboot). Ops with their own
+	// payload schema (GetState, SetState, Commit, Discard) handle ReqCompress
+	// inline alongside their own keys. Consumes the payload value either way.
+	static bool parse_compress_only(void* unpacker_v) {
+		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
+		if (!up) return false;
+		if (!up->isMap()) { skip_value(*up); return false; }
+		const size_t n = up->unpackMapSize();
+		bool compress = false;
+		for (size_t i = 0; i < n; ++i) {
+			nid_t key;
+			if (!read_uint_key(*up, key)) { skip_value(*up); continue; }
+			if (key == Key::ReqCompress) {
+				if (up->isBool()) { bool v = false; up->deserialize(v); compress = v; }
+				else skip_value(*up);
+			}
+			else skip_value(*up);
+		}
+		return compress;
+	}
+
+	Bytes Provisioner::op_get_info(seq_t seq, void* unpacker_v) {
+		const bool compress = parse_compress_only(unpacker_v);
+		return pack_response((opid_t)Op::GetInfo, seq, compress, [&](MsgPack::Packer& p) {
+			p.serialize(MsgPack::map_size_t(4));
 			p.serialize((uint16_t)Key::FirmwareVersion); p.serialize("microReticulum");
 			p.serialize((uint16_t)Key::SchemaVersion);   p.serialize((nid_t)Provisioner::SCHEMA_VERSION);
 			p.serialize((uint16_t)Key::NeedsRebootInfo); p.serialize((bool)_needs_reboot);
+			p.serialize((uint16_t)Key::SchemaHash);      p.serialize((uint32_t)_schema_hash);
 		});
 	}
 
-	Bytes Provisioner::op_get_capabilities(seq_t seq) {
-		return pack_response((opid_t)Op::GetCapabilities, seq, [&](MsgPack::Packer& p) {
+	Bytes Provisioner::op_get_capabilities(seq_t seq, void* unpacker_v) {
+		const bool compress = parse_compress_only(unpacker_v);
+		return pack_response((opid_t)Op::GetCapabilities, seq, compress, [&](MsgPack::Packer& p) {
 			const auto& nss = _registry.namespaces();
 			p.serialize(MsgPack::arr_size_t(nss.size()));
 			for (const auto& ns_ptr : nss) {
@@ -440,64 +525,72 @@ namespace RNS { namespace Provisioning {
 		return n;
 	}
 
-	Bytes Provisioner::op_get_schema(seq_t seq) {
-		return pack_response((opid_t)Op::GetSchema, seq, [&](MsgPack::Packer& p) {
-			const auto& nss = _registry.namespaces();
-			p.serialize(MsgPack::arr_size_t(nss.size()));
-			for (const auto& ns_ptr : nss) {
-				const Namespace& ns = *ns_ptr;
-				// Each namespace is [id, name, parent_id_or_zero, [field-maps]].
-				// parent_id of 0 means root (no parent). Schema v2 layout —
-				// v1 clients reading the first three elements still parse
-				// the rest of the response correctly.
-				p.serialize(MsgPack::arr_size_t(4));
-				p.serialize((nid_t)ns.id());
-				p.serialize(ns.name().c_str());
-				p.serialize((nid_t)ns.parent_id());
-				const auto& fields = ns.fields();
-				p.serialize(MsgPack::arr_size_t(fields.size()));
-				for (const Field& f : fields) {
-					p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
-					p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
-					p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
-					p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
-					p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
-					p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
-					if (f.type == Type::Int && f.constraint.has_range) {
-						p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
-						p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
+	// Packs the GetSchema payload (just the namespaces array) onto `p`.
+	// Shared by op_get_schema() and the boot-time CRC32 hashing path so
+	// the hash is computed over the exact bytes clients receive.
+	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry) {
+		const auto& nss = registry.namespaces();
+		p.serialize(MsgPack::arr_size_t(nss.size()));
+		for (const auto& ns_ptr : nss) {
+			const Namespace& ns = *ns_ptr;
+			// Each namespace is [id, name, parent_id_or_zero, [field-maps]].
+			// parent_id of 0 means root (no parent). Schema v2 layout —
+			// v1 clients reading the first three elements still parse
+			// the rest of the response correctly.
+			p.serialize(MsgPack::arr_size_t(4));
+			p.serialize((nid_t)ns.id());
+			p.serialize(ns.name().c_str());
+			p.serialize((nid_t)ns.parent_id());
+			const auto& fields = ns.fields();
+			p.serialize(MsgPack::arr_size_t(fields.size()));
+			for (const Field& f : fields) {
+				p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
+				p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
+				p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
+				p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
+				p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
+				p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
+				if (f.type == Type::Int && f.constraint.has_range) {
+					p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
+					p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
+				}
+				if (f.type == Type::Float && f.constraint.has_range) {
+					p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
+					p.serialize((uint16_t)Key::FieldMaxF); p.serialize((double)f.constraint.fmax);
+				}
+				if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
+					p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
+				}
+				if (f.type == Type::Enum) {
+					if (!f.constraint.enum_values.empty()) {
+						p.serialize((uint16_t)Key::FieldEnumValues);
+						p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
+						for (fenum_t v : f.constraint.enum_values) p.serialize(v);
 					}
-					if (f.type == Type::Float && f.constraint.has_range) {
-						p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
-						p.serialize((uint16_t)Key::FieldMaxF); p.serialize((double)f.constraint.fmax);
+					if (!f.constraint.enum_labels.empty()) {
+						p.serialize((uint16_t)Key::FieldEnumLabels);
+						p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
+						for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
 					}
-					if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
-						p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
+				}
+				if (f.type == Type::BytesList) {
+					if (f.constraint.element_size > 0) {
+						p.serialize((uint16_t)Key::FieldElementSize);
+						p.serialize((uint64_t)f.constraint.element_size);
 					}
-					if (f.type == Type::Enum) {
-						if (!f.constraint.enum_values.empty()) {
-							p.serialize((uint16_t)Key::FieldEnumValues);
-							p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
-							for (fenum_t v : f.constraint.enum_values) p.serialize(v);
-						}
-						if (!f.constraint.enum_labels.empty()) {
-							p.serialize((uint16_t)Key::FieldEnumLabels);
-							p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
-							for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
-						}
-					}
-					if (f.type == Type::BytesList) {
-						if (f.constraint.element_size > 0) {
-							p.serialize((uint16_t)Key::FieldElementSize);
-							p.serialize((uint64_t)f.constraint.element_size);
-						}
-						if (f.constraint.max_count > 0) {
-							p.serialize((uint16_t)Key::FieldMaxCount);
-							p.serialize((uint64_t)f.constraint.max_count);
-						}
+					if (f.constraint.max_count > 0) {
+						p.serialize((uint16_t)Key::FieldMaxCount);
+						p.serialize((uint64_t)f.constraint.max_count);
 					}
 				}
 			}
+		}
+	}
+
+	Bytes Provisioner::op_get_schema(seq_t seq, void* unpacker_v) {
+		const bool compress = parse_compress_only(unpacker_v);
+		return pack_response((opid_t)Op::GetSchema, seq, compress, [&](MsgPack::Packer& p) {
+			pack_schema_payload(p, _registry);
 		});
 	}
 
@@ -511,7 +604,8 @@ namespace RNS { namespace Provisioning {
 		std::unordered_set<nid_t> ns_filter;
 		bool has_filter = false;
 		bool pending = false;
-		// Optional payload map: {1: [ns_filter], 2: pending}
+		bool compress = false;
+		// Optional payload map: {1: [ns_filter], 2: pending, 100: compress}
 		if (up && up->isMap()) {
 			const size_t n = up->unpackMapSize();
 			for (size_t i = 0; i < n; ++i) {
@@ -535,12 +629,16 @@ namespace RNS { namespace Provisioning {
 					if (up->isBool()) up->deserialize(pending);
 					else skip_value(*up);
 				}
+				else if (key == Key::ReqCompress) {
+					if (up->isBool()) up->deserialize(compress);
+					else skip_value(*up);
+				}
 				else skip_value(*up);
 			}
 		}
 		else if (up) skip_value(*up);
 
-		return pack_response((opid_t)Op::GetState, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::GetState, seq, compress, [&](MsgPack::Packer& p) {
 			std::vector<const Namespace*> ns_list;
 			for (const auto& ns_ptr : _registry.namespaces()) {
 				if (has_filter && ns_filter.count(ns_ptr->id()) == 0) continue;
@@ -754,15 +852,19 @@ namespace RNS { namespace Provisioning {
 		});
 	}
 
-	Bytes Provisioner::op_factory_reset(seq_t seq) {
+	Bytes Provisioner::op_factory_reset(seq_t seq, void* unpacker_v) {
+		const bool compress = parse_compress_only(unpacker_v);
 		factory_reset();
-		return pack_response((opid_t)Op::FactoryReset, seq, [&](MsgPack::Packer& p) {
+		return pack_response((opid_t)Op::FactoryReset, seq, compress, [&](MsgPack::Packer& p) {
 			p.serialize(MsgPack::map_size_t(1));
 			p.serialize((uint16_t)Key::NeedsReboot); p.serialize((bool)_needs_reboot);
 		});
 	}
 
-	Bytes Provisioner::op_reboot(seq_t seq) {
+	Bytes Provisioner::op_reboot(seq_t seq, void* unpacker_v) {
+		// Consume the payload (including any ReqCompress flag, which is moot
+		// here — the response is a plain Ack and would only grow if wrapped).
+		parse_compress_only(unpacker_v);
 		// microReticulum performs no reboot itself; if the app registered a
 		// callback, fire it. The ack is still returned either way so the
 		// client can always observe success at the wire layer.
@@ -811,16 +913,20 @@ namespace RNS { namespace Provisioning {
 		// Element 3: payload (optional). May be nil.
 		const bool has_payload = (arr_size >= 3);
 
+		// Every op handler now consumes the payload itself (so it can pick
+		// up the ReqCompress flag where applicable). A nullptr unpacker
+		// means the request had no payload element at all.
+		void* up_ptr = has_payload ? (void*)&up : nullptr;
 		switch ((Op)op_id) {
-			case Op::GetSchema:       if (has_payload) skip_value(up); return op_get_schema(seq);
-			case Op::GetInfo:         if (has_payload) skip_value(up); return op_get_info(seq);
-			case Op::GetCapabilities: if (has_payload) skip_value(up); return op_get_capabilities(seq);
-			case Op::GetState:        return op_get_state(seq, has_payload ? &up : nullptr);
-			case Op::SetState:        return op_set_state(seq, has_payload ? &up : nullptr);
-			case Op::Commit:          return op_commit(seq, has_payload ? &up : nullptr);
-			case Op::Discard:         return op_discard(seq, has_payload ? &up : nullptr);
-			case Op::FactoryReset:    if (has_payload) skip_value(up); return op_factory_reset(seq);
-			case Op::Reboot:          if (has_payload) skip_value(up); return op_reboot(seq);
+			case Op::GetSchema:       return op_get_schema(seq, up_ptr);
+			case Op::GetInfo:         return op_get_info(seq, up_ptr);
+			case Op::GetCapabilities: return op_get_capabilities(seq, up_ptr);
+			case Op::GetState:        return op_get_state(seq, up_ptr);
+			case Op::SetState:        return op_set_state(seq, up_ptr);
+			case Op::Commit:          return op_commit(seq, up_ptr);
+			case Op::Discard:         return op_discard(seq, up_ptr);
+			case Op::FactoryReset:    return op_factory_reset(seq, up_ptr);
+			case Op::Reboot:          return op_reboot(seq, up_ptr);
 			default:
 				return encode_error(op_id, seq, ErrorCode::UnknownOp, "unrecognised op id");
 		}

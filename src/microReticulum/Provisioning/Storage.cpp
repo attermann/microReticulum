@@ -21,27 +21,24 @@
 
 namespace RNS { namespace Provisioning {
 
-	fstring_t Storage::dotted_name(const Namespace& ns) const {
-		fstring_t acc = ns.name();
-		if (!_registry) return acc;
-		nid_t hop = ns.parent_id();
-		// Bounded walk — registries are small. If the chain points at a
-		// missing namespace we stop and return whatever we have so far.
-		while (hop != 0) {
-			const Namespace* p = _registry->find(hop);
-			if (!p) break;
-			acc = p->name() + "." + acc;
-			hop = p->parent_id();
-		}
-		return acc;
-	}
-
+	// Persistence file names are derived from the namespace id, not the
+	// human-readable name, so length stays bounded ("ns65535.msgpack.tmp" =
+	// 19 chars) and stays valid on the strictest embedded filesystems we
+	// target. Namespace ids are already guaranteed unique by the registry,
+	// so flattening the hierarchy in the filename is safe — parent
+	// relationships are still recorded in the serialized payload.
+	//
+	// Note: this is a storage-format break vs the prior name-based scheme.
+	// Existing on-disk files written under names like "RNode General Config
+	// .msgpack" will not be loaded by the id-based code path; devices with
+	// stale config files should erase storage or accept reverting to
+	// defaults.
 	fstring_t Storage::file_path(const Namespace& ns) const {
-		return _root + "/" + dotted_name(ns) + ".msgpack";
+		return _root + "/ns" + std::to_string(ns.id()) + ".msgpack";
 	}
 
 	fstring_t Storage::tmp_path(const Namespace& ns) const {
-		return _root + "/" + dotted_name(ns) + ".msgpack.tmp";
+		return _root + "/ns" + std::to_string(ns.id()) + ".msgpack.tmp";
 	}
 
 	bool Storage::ensure_directory() {
