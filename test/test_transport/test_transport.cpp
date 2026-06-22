@@ -438,6 +438,31 @@ void test_incoming_announce_limit() {
 	printf("test_incoming_announce_limit: END\n");
 }
 
+void test_prioritize_interfaces() {
+
+	printf("test_prioritize_interfaces: BEGIN\n");
+
+	initRNS();
+
+	// Set distinct bitrates so the sort has something to order by.
+	in_interface.bitrate(1000);
+	out_interface.bitrate(9600);
+
+	RNS::Transport::prioritize_interfaces();
+
+	const auto& ifaces = RNS::Transport::get_interfaces();
+	TEST_ASSERT_GREATER_OR_EQUAL_UINT32(2, ifaces.size());
+	// Highest bitrate must come first.
+	TEST_ASSERT_EQUAL_UINT32(9600, ifaces[0].bitrate());
+	TEST_ASSERT_EQUAL_UINT32(1000, ifaces[1].bitrate());
+
+	// Reset for any downstream tests.
+	in_interface.bitrate(0);
+	out_interface.bitrate(0);
+
+	printf("test_prioritize_interfaces: END\n");
+}
+
 void test_incoming_announce_over_limit() {
 
 	printf("test_incoming_announce_over_limit: BEGIN\n");
@@ -598,6 +623,7 @@ int runUnityTests(void) {
 
 	//RUN_TEST(test_incoming_announce_limit);
 */
+	RUN_TEST(test_prioritize_interfaces);
 	RUN_TEST(test_incoming_announce_over_limit);
 	//RUN_TEST(test_incoming_announce_stress);
 

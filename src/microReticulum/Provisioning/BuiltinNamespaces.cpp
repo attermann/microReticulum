@@ -153,7 +153,7 @@ namespace RNS { namespace Provisioning {
 				})
 				.metric_int("Queued Announces", Ns::Storage::Field::QueuedAnnounces, []() {
 					uint32_t queued_announces = 0;
-					for (auto& [interface_hash, interface] : RNS::Transport::get_interfaces()) {
+					for (auto& interface : RNS::Transport::get_interfaces()) {
 						queued_announces += interface.announce_queue().size();
 					}
 					return queued_announces;

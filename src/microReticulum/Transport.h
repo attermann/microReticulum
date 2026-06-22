@@ -74,7 +74,7 @@ namespace RNS {
 
 	public:
 
-		using InterfaceTable = std::map<Bytes, Interface>;
+		using InterfaceTable = std::vector<Interface>;
 		using DestinationTable = std::map<Bytes, Destination>;
 		using BytesList = RNS::Utilities::GenerationalSet<Bytes>;
 
@@ -334,6 +334,7 @@ namespace RNS {
 		static bool path_is_unresponsive(const Bytes& destination_hash);
 		static void handle_disovery_path_requests();   // typo preserved to match Python reference
 		static void count_traffic();   //p count_traffic_loop() in Python; called once per tick in C++'s single-loop model
+		static void prioritize_interfaces();   // Sorts _interfaces in place by bitrate descending
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);

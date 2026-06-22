@@ -381,9 +381,8 @@ DestinationEntry empty_destination_entry;
 		INFO("Transport mode is disabled");
 	}
 
-	// CBA TODO
 	// Sort interfaces according to bitrate
-	//p Transport.prioritize_interfaces()
+	prioritize_interfaces();
 
 // TODO
 /*p
@@ -606,6 +605,9 @@ DestinationEntry empty_destination_entry;
 				_traffic_last_checked = OS::time();
 			}
 
+			// Keep _interfaces ordered by bitrate descending
+			prioritize_interfaces();
+
 			// CBA Culling no longer necessary since switch to GenerationalSet<>
 			/*
 			// Cull the packet hashlist if it has reached its max size
@@ -770,7 +772,7 @@ DestinationEntry empty_destination_entry;
 							stale_paths.push_back(destination_hash);
 							DEBUGF("Path to %s timed out and was removed", destination_hash.toHex().c_str());
 						}
-						else if (_interfaces.count(attached_interface.get_hash()) == 0) {
+						else if (!find_interface_from_hash(attached_interface.get_hash())) {
 							stale_paths.push_back(destination_hash);
 							DEBUGF("Path to %s was removed since the attached interface no longer exists", destination_hash.toHex().c_str());
 						}
@@ -1121,7 +1123,7 @@ DestinationEntry empty_destination_entry;
 	else {
 		TRACE("Transport::outbound: Path to destination is unknown");
 		bool stored_hash = false;
-		for (auto& [hash, interface] : _interfaces) {
+		for (auto& interface : _interfaces) {
 			TRACEF("Transport::outbound: Checking interface %s", interface.toString().c_str());
 			if (interface.OUT()) {
 				bool should_transmit = true;
@@ -1749,7 +1751,7 @@ DestinationEntry empty_destination_entry;
 			if (packet.destination_type() == Type::Destination::PLAIN && packet.transport_type() == Type::Transport::BROADCAST) {
 				// Send to all interfaces except the one the packet was recieved on
 				if (from_local_client) {
-					for (auto& [hash, interface] : _interfaces) {
+					for (auto& interface : _interfaces) {
 						if (interface != packet.receiving_interface()) {
 							TRACEF("Transport::inbound: Broadcasting packet on %s", interface.toString().c_str());
 							transmit(interface, packet.raw());
@@ -2840,17 +2842,20 @@ DestinationEntry empty_destination_entry;
 
 /*static*/ void Transport::register_interface(Interface& interface) {
 	TRACEF("Transport: Registering interface %s %s", interface.get_hash().toHex().c_str(), interface.toString().c_str());
-	_interfaces.insert({interface.get_hash(), interface});
+	if (!find_interface_from_hash(interface.get_hash())) {
+		_interfaces.push_back(interface);
+	}
 	// CBA TODO set or add transport as listener on interface to receive incoming packets?
 }
 
 /*static*/ void Transport::deregister_interface(const Interface& interface) {
 	TRACEF("Transport: Deregistering interface %s", interface.toString().c_str());
-	auto iter = _interfaces.find(interface.get_hash());
-	if (iter != _interfaces.end()) {
-		TRACEF("Transport::deregister_interface: Found and removing interface %s", (*iter).second.toString().c_str());
-		_interfaces.erase(iter);
-	}
+	const Bytes hash = interface.get_hash();
+	_interfaces.erase(
+		std::remove_if(_interfaces.begin(), _interfaces.end(),
+			[&](const Interface& i) { return i.get_hash() == hash; }),
+		_interfaces.end()
+	);
 }
 
 /*static*/ void Transport::register_destination(Destination& destination) {
@@ -2947,21 +2952,15 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::is_interface_from_hash(const Bytes& interface_hash) {
-	auto iter = _interfaces.find(interface_hash);
-	if (iter != _interfaces.end()) {
-		return true;
-	}
-
-	return false;
+	return (bool)find_interface_from_hash(interface_hash);
 }
 
 /*static*/ Interface Transport::find_interface_from_hash(const Bytes& interface_hash) {
-	auto iter = _interfaces.find(interface_hash);
+	auto iter = std::find_if(_interfaces.begin(), _interfaces.end(),
+		[&](const Interface& i) { return i.get_hash() == interface_hash; });
 	if (iter != _interfaces.end()) {
-		//TRACEF("Transport::find_interface_from_hash: Found interface %s", (*iter).second.toString().c_str());
-		return (*iter).second;
+		return *iter;
 	}
-
 	return {Type::NONE};
 }
 
@@ -3343,6 +3342,22 @@ Deregisters an announce handler.
 	return false;
 }
 
+// Sorts _interfaces in place by bitrate descending so subsequent iteration
+// in outbound paths, announce broadcast and discovery PR fanout prefers
+// higher-bitrate interfaces. Called from start() and once per jobs() tick;
+// std::sort over a small vector (typical n <= a few) is effectively free.
+/*static*/ void Transport::prioritize_interfaces() {
+	try {
+		std::sort(_interfaces.begin(), _interfaces.end(),
+			[](const Interface& a, const Interface& b) {
+				return a.bitrate() > b.bitrate();
+			});
+	}
+	catch (const std::exception& e) {
+		ERRORF("Could not prioritize interfaces according to bitrate: %s", e.what());
+	}
+}
+
 // Refreshes interface byte-counter snapshots, per-interface current rx/tx
 // speeds, and class-level cumulative byte totals and aggregate speeds. Child
 // interfaces (those with a parent_interface) are skipped to avoid double-
@@ -3355,7 +3370,7 @@ Deregisters an announce handler.
 	double rxs = 0.0;
 	double txs = 0.0;
 
-	for (const auto& [interface_hash, interface] : _interfaces) {
+	for (const auto& interface : _interfaces) {
 		if (interface.parent_interface()) continue;
 
 		double now = OS::time();
@@ -3403,8 +3418,8 @@ Deregisters an announce handler.
 		request_path(entry._destination_hash);
 	}
 	else {
-		for (const auto& [interface_hash, interface] : _interfaces) {
-			if (interface_hash != entry._blocked_interface.get_hash()) {
+		for (const auto& interface : _interfaces) {
+			if (interface.get_hash() != entry._blocked_interface.get_hash()) {
 				request_path(entry._destination_hash, interface);
 			}
 		}
@@ -3616,15 +3631,15 @@ static Bytes remote_status_build_stats_payload() {
 
 	p.pack("interfaces");
 	p.packArraySize(static_cast<size_t>(interfaces.size()));
-	for (auto& kv : interfaces) {
-		remote_status_pack_interface(p, kv.second);
+	for (auto& iface : interfaces) {
+		remote_status_pack_interface(p, iface);
 	}
 
 	uint64_t total_rx = 0;
 	uint64_t total_tx = 0;
-	for (auto& kv : interfaces) {
-		total_rx += kv.second.rx();
-		total_tx += kv.second.tx();
+	for (auto& iface : interfaces) {
+		total_rx += iface.rx();
+		total_tx += iface.tx();
 	}
 
 	p.pack("rx");
@@ -4122,7 +4137,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 		// except the local client
 		DEBUGF("Forwarding path request from local client for destination %s%s to all other interfaces", destination_hash.toHex().c_str(), interface_str.c_str());
 		Bytes request_tag = Identity::get_random_hash();
-		for (auto& [hash, interface] : _interfaces) {
+		for (auto& interface : _interfaces) {
 			if (interface != attached_interface) {
 				request_path(destination_hash, interface, request_tag);
 			}
@@ -4146,7 +4161,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 				attached_interface
 			}});
 
-			for (auto& [hash, interface] : _interfaces) {
+			for (auto& interface : _interfaces) {
 #if RNS_SAME_INTERFACE_PATH_REQUESTS
 				// DIVERGENCE
 				// CBA EXPERIMENTAL forwarding path requests even on requestor interface in order to support
@@ -4892,7 +4907,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		destination_path_responses += destination.path_responses().size();
 	}
 	uint32_t interface_announces = 0;
-	for (auto& [interface_hash, interface] : _interfaces) {
+	for (auto& interface : _interfaces) {
 		interface_announces += interface.announce_queue().size();
 	}
 	VERBOSEF("phl: %u rcp: %u lt: %u pl: %u al: %u tun: %u", _packet_hashlist.size(), _receipts.size(), _link_table.size(), _pending_links.size(), _active_links.size(), _tunnels.size());

@@ -200,7 +200,6 @@ namespace RNS {
 		inline void FWD(bool FWD) { assert(_impl); _impl->_FWD = FWD; }
 		inline void RPT(bool RPT) { assert(_impl); _impl->_RPT = RPT; }
 		inline void name(const char* name) { assert(_impl); _impl->_name = name; }
-		inline void bitrate(uint32_t bitrate) { assert(_impl); _impl->_bitrate = bitrate; }
 		inline void online(bool online) { assert(_impl); _impl->_online = online; }
 		inline void announce_allowed_at(double announce_allowed_at) { assert(_impl); _impl->_announce_allowed_at = announce_allowed_at; }
 	public:
@@ -215,6 +214,7 @@ namespace RNS {
 		inline Type::Interface::modes mode() const { assert(_impl); return _impl->_mode; }
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }
+		inline void bitrate(uint32_t bitrate) { assert(_impl); _impl->_bitrate = bitrate; }
 		inline uint16_t HW_MTU() const { assert(_impl); return _impl->_HW_MTU; }
 		inline bool AUTOCONFIGURE_MTU() const { assert(_impl); return _impl->_AUTOCONFIGURE_MTU; }
 		inline bool FIXED_MTU() const { assert(_impl); return _impl->_FIXED_MTU; }

@@ -227,7 +227,7 @@ void Reticulum::loop() {
 			}
 
 			// Perform Interface processing
-			for (auto& [hash, interface] : Transport::get_interfaces()) {
+			for (auto& interface : Transport::get_interfaces()) {
 				const_cast<Interface&>(interface).loop();
 			}
 
