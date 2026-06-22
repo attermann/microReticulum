@@ -4616,13 +4616,20 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 // Python's serialization so cross-stack clients can ingest it.
 /*static*/ Bytes Transport::blackhole_list_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at) {
 	try {
+		// Wire format must match Python's Transport.blackholed_identities:
+		// {identity_hash: {"source": <bytes>, "until": <float>, "reason": <str>}}.
+		// The local persistence file uses a compact positional 3-array
+		// instead -- this handler is the only Python-interop surface.
 		MsgPack::Packer p;
 		p.packMapSize(_blackholed_identities.size());
 		for (const auto& [hash, entry] : _blackholed_identities) {
 			p.packBinary(hash.data(), hash.size());
-			p.packArraySize(3);
+			p.packMapSize(3);
+			p.pack("source");
 			p.packBinary(entry._source.data(), entry._source.size());
+			p.pack("until");
 			p.packFloat64(entry._until);
+			p.pack("reason");
 			p.pack(entry._reason.c_str(), entry._reason.size());
 		}
 		return Bytes(p.data(), p.size());
