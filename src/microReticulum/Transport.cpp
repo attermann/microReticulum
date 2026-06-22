@@ -2618,9 +2618,22 @@ DestinationEntry empty_destination_entry;
 				std::set<Link> active_links(_active_links);
 				for (auto& link : active_links) {
 					if (link.link_id() == packet.destination_hash()) {
-						TRACE("Transport::inbound: Packet is DATA for an active LINK");
-						packet.link(link);
-						const_cast<Link&>(link).receive(packet);
+						if (link.attached_interface() == packet.receiving_interface()) {
+							TRACE("Transport::inbound: Packet is DATA for an active LINK");
+							packet.link(link);
+							const_cast<Link&>(link).receive(packet);
+						}
+						else {
+							// In the strange and rare case that an interface is
+							// partly malfunctioning and a link-associated packet
+							// arrives on an interface that has failed sending --
+							// and transport has failed over to another path --
+							// drop the packet hash from the dedup filter so the
+							// link can still receive the packet when it finally
+							// arrives over the correct interface.
+							_packet_hashlist.erase(packet.packet_hash());
+						}
+						break;
 					}
 				}
 			}
