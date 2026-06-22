@@ -311,19 +311,26 @@ DestinationEntry empty_destination_entry;
 			NOTICEF("Enabled blackhole list publishing for transport identity %s", _identity.hash().toHex().c_str());
 		}
 
-/*p
-		//if (network_identity() && !_owner.is_connected_to_shared_instance()) {
-			//p Transport.instance_destination = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network", "instance", RNS.hexrep(Transport.network_identity.hash, delimit=False))
+		// If a network identity has been set on this transport, register two
+		// IN/SINGLE destinations under it: one specific to this instance
+		// ("network.instance.<hash>") and one shared across the named network
+		// ("network"). Both are added to the management announce rotation so
+		// peers can discover members of the network overlay.
+		//
+		// Python additionally gates this on `not is_connected_to_shared_instance`
+		// because a shared-instance master would own these destinations on the
+		// client's behalf. microReticulum does not support being a shared-instance
+		// client, so that guard collapses and we just check network_identity.
+		if (has_network_identity()) {
 			std::string instance_aspect = "network.instance." + _network_identity.hash().toHex();
 			_instance_destination = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, instance_aspect.c_str()};
-			//p Transport.network_destination  = RNS.Destination(Transport.network_identity, RNS.Destination.IN, RNS.Destination.SINGLE, Transport.APP_NAME, "network")
 			_network_destination  = {_network_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "network"};
 			_mgmt_destinations.insert(_instance_destination);
 			_mgmt_destinations.insert(_network_destination);
 			_mgmt_hashes.insert(_instance_destination.hash());
 			_mgmt_hashes.insert(_network_destination.hash());
-		//}
-*/
+			NOTICEF("Registered network identity destinations under %s", _network_identity.hash().toHex().c_str());
+		}
 	}
 	catch (const std::exception& e) {
 		ERROR("An exception occurred while starting Transport.");
