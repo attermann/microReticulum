@@ -470,7 +470,7 @@ namespace RNS { namespace Type {
 		static const uint8_t PATH_REQUEST_TIMEOUT = 15;           // Default timuout for client path requests in seconds
 		static constexpr const float PATH_REQUEST_GRACE     = 0.4;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
-		static const uint8_t PATH_REQUEST_MI      = 5;            // Minimum interval in seconds for automated path requests
+		static const uint8_t PATH_REQUEST_MI      = 20;           // Minimum interval in seconds for automated path requests
 
 		static constexpr const float LINK_TIMEOUT  = Link::STALE_TIME * 1.25;
 		static const uint16_t REVERSE_TIMEOUT      = 8*60;        // Reverse table entries are removed after 8 minutes
@@ -480,15 +480,10 @@ namespace RNS { namespace Type {
 		static const uint8_t PERSIST_RANDOM_BLOBS  = RNS_RANDOM_BLOBS_PERSIST_MAX; // Maximum number of random blobs per destination to persist to disk
 		static const uint8_t MAX_RANDOM_BLOBS      = RNS_RANDOM_BLOBS_MAX; // Maximum number of random blobs per destination to keep in memory
 
-		// CBA MCU
-		//static const uint32_t DESTINATION_TIMEOUT = 60*60*24*7;   // Destination table entries are removed if unused for one week
-		//static const uint32_t PATHFINDER_E      = 60*60*24*7; // Path expiration of one week
-		//static const uint32_t AP_PATH_TIME      = 60*60*24;   // Path expiration of one day for Access Point paths
-		//static const uint32_t ROAMING_PATH_TIME = 60*60*6;    // Path expiration of 6 hours for Roaming paths
-		static const uint32_t DESTINATION_TIMEOUT = 60*60*24*1;   // Destination table entries are removed if unused for one day
-		static const uint32_t PATHFINDER_E      = 60*60*24*1; // Path expiration of one day
-		static const uint32_t AP_PATH_TIME      = 60*60*6;   // Path expiration of 6 hours for Access Point paths
-		static const uint32_t ROAMING_PATH_TIME = 60*60*1;    // Path expiration of 1 hour for Roaming paths
+		static const uint32_t DESTINATION_TIMEOUT = 60*60*24*7;   // Destination table entries are removed if unused for one week
+		static const uint32_t PATHFINDER_E      = 60*60*24*7; // Path expiration of one week
+		static const uint32_t AP_PATH_TIME      = 60*60*24;   // Path expiration of one day for Access Point paths
+		static const uint32_t ROAMING_PATH_TIME = 60*60*6;    // Path expiration of 6 hours for Roaming paths
 
 		static const uint16_t LOCAL_CLIENT_CACHE_MAXSIZE = 512;
 	}
