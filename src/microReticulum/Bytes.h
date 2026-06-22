@@ -33,6 +33,10 @@
 #define RNS_BYTES_ALLOCATOR 1
 #endif
 
+// Forward declaration so Bytes can advertise a `to_msgpack` member without
+// dragging the full MsgPack.h into every translation unit that needs Bytes.
+namespace arduino { namespace msgpack { class Packer; } }
+
 // Finds the start of the first occurrence of the substring needle of length needlelen in the  memory  area  haystack  of length haystacklen.
 inline void* memmem(const void* haystack, size_t haystack_len, const void* needle, size_t needle_len) {
 	const unsigned char* h = (const unsigned char*)haystack;
@@ -99,6 +103,15 @@ MEM("Creating from data-move...");
 			assign(std::move(rdata));
 			MEMF("Bytes object created from data-move \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
 		}
+#if RNS_BYTES_ALLOCATOR
+		// With the container allocator enabled, Data is not a plain std::vector<uint8_t>,
+		// so additionally accept the default-allocator vector that MsgPack/ArduinoJson hand out.
+		Bytes(const std::vector<uint8_t>& data) {
+MEM("Creating from std-vector-copy...");
+			assign(data);
+			MEMF("Bytes object created from std-vector-copy \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
+		}
+#endif
 		Bytes(const uint8_t* chunk, size_t size) {
 			assign(chunk, size);
 			MEMF("Bytes object created from chunk \"%s\", this: %lu, data: %lu", toString().c_str(), this, _data.get());
@@ -405,6 +418,12 @@ MEM("Creating from data-move...");
 
 		inline std::string toString() const { if (!_data) return ""; return {(const char*)data(), size()}; }
 		std::string toHex(bool upper = false) const;
+
+		// MsgPack hook: detected by Packer's `has_to_msgpack` so that callers can
+		// `packer.serialize(bytes)` or `packer.pack(bytes)` and have the buffer
+		// emitted as a msgpack bin. Implemented in Bytes.cpp where MsgPack.h is
+		// available, so the header only carries a forward declaration of Packer.
+		void to_msgpack(arduino::msgpack::Packer& packer) const;
 		Bytes mid(size_t beginpos, size_t len) const;
 		Bytes mid(size_t beginpos) const;
 		inline Bytes left(size_t len) const { if (!_data) return NONE; if (len > size()) len = size(); return {data(), len}; }

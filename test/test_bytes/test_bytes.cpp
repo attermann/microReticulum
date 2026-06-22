@@ -649,7 +649,9 @@ void test_mid_zero_size_bytes() {
 void test_empty_collection() {
 	RNS::Bytes empty;
 	empty.clear();
-	const std::vector<uint8_t>& vec = empty.collection();
+	// collection() returns the underlying Data (vector type may differ when
+	// the container allocator is enabled, so bind generically).
+	const auto& vec = empty.collection();
 	TEST_ASSERT_EQUAL_size_t(0, vec.size());
 }
 

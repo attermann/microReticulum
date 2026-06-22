@@ -185,7 +185,7 @@ void test_register_and_lookup(void) {
 
 	// Built-ins registered automatically.
 	TEST_ASSERT_NOT_NULL(reg.find(Ns::GeneralConfig::Id));
-	TEST_ASSERT_NOT_NULL(reg.find("Reticulum"));
+	TEST_ASSERT_NOT_NULL(reg.find("uReticulum General Config"));
 	TEST_ASSERT_NOT_NULL(reg.find(Ns::TransportConfig::Id));
 
 	// Custom namespace registered explicitly.
@@ -686,8 +686,10 @@ void test_metric_not_persisted(void) {
 	TEST_ASSERT_TRUE(p.commit());
 
 	// Read the file directly and confirm the metric id is absent.
+	// Storage scheme is id-based: "ns<id>.msgpack" (see Provisioning/Storage.cpp).
 	Bytes raw;
-	size_t n = Utilities::OS::read_file((g_test_root + "/custom.msgpack").c_str(), raw);
+	const std::string custom_ns_path = g_test_root + "/ns" + std::to_string(CUSTOM_NS_ID) + ".msgpack";
+	size_t n = Utilities::OS::read_file(custom_ns_path.c_str(), raw);
 	TEST_ASSERT_GREATER_THAN(0, n);
 	MsgPack::Unpacker u; u.feed(raw.data(), raw.size());
 	TEST_ASSERT_TRUE(u.isMap());
@@ -960,7 +962,7 @@ void test_hierarchy_root_has_no_parent(void) {
 	TEST_ASSERT_EQUAL(0, reticulum->parent_id());
 }
 
-void test_hierarchy_storage_filename_is_dotted_path(void) {
+void test_hierarchy_storage_filename_is_id_based(void) {
 	Provisioner::instance().end();
 	register_custom_namespace();
 	register_hierarchy();
@@ -970,10 +972,15 @@ void test_hierarchy_storage_filename_is_dotted_path(void) {
 	TEST_ASSERT_TRUE(p.field(HIER_LORA, 1, Value((double)868e6)));
 	TEST_ASSERT_TRUE(p.commit(HIER_LORA));
 
-	// The file for the child namespace should land at the dotted path.
-	const std::string lora_path = g_test_root + "/Interfaces.LoRa.msgpack";
+	// Storage scheme is id-based: "ns<id>.msgpack". Hierarchy parent/child
+	// relationships are captured in the serialized payload, not the filename,
+	// so the LoRa child namespace lives at /ns<HIER_LORA>.msgpack — not
+	// /Interfaces.LoRa.msgpack (the old dotted-path scheme).
+	const std::string lora_path = g_test_root + "/ns" + std::to_string(HIER_LORA) + ".msgpack";
 	TEST_ASSERT_TRUE(Utilities::OS::file_exists(lora_path.c_str()));
-	// And the flat (non-dotted) name must NOT exist as a separate file.
+	// Neither the old dotted-path name nor a flat-name variant should appear.
+	const std::string dotted_path = g_test_root + "/Interfaces.LoRa.msgpack";
+	TEST_ASSERT_FALSE(Utilities::OS::file_exists(dotted_path.c_str()));
 	const std::string flat_path = g_test_root + "/LoRa.msgpack";
 	TEST_ASSERT_FALSE(Utilities::OS::file_exists(flat_path.c_str()));
 }
@@ -1114,7 +1121,8 @@ void test_unknown_field_ignored_on_load(void) {
 	TEST_ASSERT_TRUE(p.commit());
 
 	// Inject an unknown id into the file by rewriting it manually.
-	std::string path = g_test_root + "/custom.msgpack";
+	// Storage scheme is id-based ("ns<id>.msgpack"); see Provisioning/Storage.cpp.
+	std::string path = g_test_root + "/ns" + std::to_string(CUSTOM_NS_ID) + ".msgpack";
 	MsgPack::Packer packer;
 	packer.serialize(MsgPack::map_size_t(2));
 	packer.serialize((uint16_t)CUSTOM_INT);
@@ -1140,7 +1148,8 @@ void test_atomic_write_resilience(void) {
 	TEST_ASSERT_TRUE(p.commit());
 
 	// Plant a garbage .tmp (mimicking an interrupted save).
-	std::string tmp_path = g_test_root + "/custom.msgpack.tmp";
+	// Storage scheme is id-based ("ns<id>.msgpack.tmp"); see Provisioning/Storage.cpp.
+	std::string tmp_path = g_test_root + "/ns" + std::to_string(CUSTOM_NS_ID) + ".msgpack.tmp";
 	Bytes garbage("not valid msgpack");
 	Utilities::OS::write_file(tmp_path.c_str(), garbage);
 	TEST_ASSERT_TRUE(Utilities::OS::file_exists(tmp_path.c_str()));
@@ -1621,7 +1630,7 @@ int runUnityTests(void) {
 	RUN_TEST(test_command_void_not_persisted_or_replayed);
 	RUN_TEST(test_hierarchy_nested_builder_registers_all);
 	RUN_TEST(test_hierarchy_root_has_no_parent);
-	RUN_TEST(test_hierarchy_storage_filename_is_dotted_path);
+	RUN_TEST(test_hierarchy_storage_filename_is_id_based);
 	RUN_TEST(test_hierarchy_schema_emits_parent_id);
 	RUN_TEST(test_hierarchy_get_state_stays_flat);
 	RUN_TEST(test_hierarchy_unbalanced_scope_is_recovered);

@@ -14,6 +14,8 @@
 
 #include "Bytes.h"
 
+#include <MsgPack.h>
+
 using namespace RNS;
 
 /*static*/ Bytes::Data Bytes::_empty_data;
@@ -227,4 +229,12 @@ Bytes Bytes::mid(size_t beginpos) const {
 		return NONE;
 	}
 	 return {data() + beginpos, size() - beginpos};
+}
+
+void Bytes::to_msgpack(arduino::msgpack::Packer& packer) const {
+	if (_data && !_data->empty()) {
+		packer.packBinary(_data->data(), _data->size());
+	} else {
+		packer.packBinary(static_cast<const uint8_t*>(nullptr), (size_t)0);
+	}
 }
