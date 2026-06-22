@@ -474,6 +474,7 @@ namespace RNS { namespace Type {
 		static const uint8_t PATH_REQUEST_TIMEOUT = 15;           // Default timuout for client path requests in seconds
 		static const uint8_t PATH_REQUEST_GATE_TIMEOUT = 120;     // Default timeout for client path request gate control in seconds
 		static constexpr const float PATH_REQUEST_GRACE     = 0.4;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
+		static constexpr const float PATH_REQUEST_RG        = 1.5;         // Extra grace time on roaming-mode interfaces, gives better-connected peers a chance to answer first
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 20;           // Minimum interval in seconds for automated path requests
 

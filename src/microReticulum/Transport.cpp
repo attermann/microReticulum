@@ -4123,6 +4123,13 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 				else {
 					// TODO: Look at this timing
 					retransmit_timeout = now + Type::Transport::PATH_REQUEST_GRACE /*+ (RNS.rand() * Transport.PATHFINDER_RW)*/;
+
+					// If we are answering on a roaming-mode interface, wait a
+					// little longer, to allow potential more well-connected
+					// peers to answer first.
+					if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ROAMING) {
+						retransmit_timeout += Type::Transport::PATH_REQUEST_RG;
+					}
 				}
 
 				// This handles an edge case where a peer sends a past
