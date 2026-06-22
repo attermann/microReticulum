@@ -121,6 +121,8 @@ using namespace RNS::Persistence;
 // CBA MCU
 /*static*/ //float Transport::_tables_cull_interval		= 5.0;
 /*static*/ float Transport::_tables_cull_interval		= 60.0;
+/*static*/ double Transport::_traffic_last_checked		= 0.0;
+/*static*/ float Transport::_traffic_check_interval		= 1.0;
 /*static*/ double Transport::_last_mgmt_announce		= 0.0;
 /*static*/ float Transport::_mgmt_announce_interval		= 7200.0;
 /*static*/ bool Transport::_saving_path_table			= false;
@@ -158,6 +160,10 @@ using namespace RNS::Persistence;
 // CBA Stats
 /*static*/ uint32_t Transport::_packets_sent = 0;
 /*static*/ uint32_t Transport::_packets_received = 0;
+/*static*/ uint64_t Transport::_traffic_rxb = 0;
+/*static*/ uint64_t Transport::_traffic_txb = 0;
+/*static*/ double Transport::_speed_rx = 0.0;
+/*static*/ double Transport::_speed_tx = 0.0;
 /*static*/ uint32_t Transport::_announces_received = 0;
 /*static*/ uint32_t Transport::_path_requests_received = 0;
 /*static*/ uint32_t Transport::_paths_added = 0;
@@ -199,6 +205,7 @@ DestinationEntry empty_destination_entry;
 		_receipts_last_checked = OS::time();
 		_announces_last_checked = OS::time();
 		_tables_last_culled = OS::time();
+		_traffic_last_checked = OS::time();
 		_last_saved = OS::time();
 
 		// Ensure required directories exist
@@ -586,6 +593,17 @@ DestinationEntry empty_destination_entry;
 				}
 
 				_announces_last_checked = OS::time();
+			}
+
+			// Refresh per-interface and class-level traffic counters and speeds
+			if (OS::time() > (_traffic_last_checked + _traffic_check_interval)) {
+				try {
+					count_traffic();
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to count traffic: %s", e.what());
+				}
+				_traffic_last_checked = OS::time();
 			}
 
 			// CBA Culling no longer necessary since switch to GenerationalSet<>
@@ -3325,6 +3343,50 @@ Deregisters an announce handler.
 	return false;
 }
 
+// Refreshes interface byte-counter snapshots, per-interface current rx/tx
+// speeds, and class-level cumulative byte totals and aggregate speeds. Child
+// interfaces (those with a parent_interface) are skipped to avoid double-
+// counting traffic already attributed to the parent. In Python this runs as
+// a sleeping background thread (count_traffic_loop); here it is called once
+// per tick of jobs() and gated by _traffic_check_interval.
+/*static*/ void Transport::count_traffic() {
+	uint64_t rxb = 0;
+	uint64_t txb = 0;
+	double rxs = 0.0;
+	double txs = 0.0;
+
+	for (const auto& [interface_hash, interface] : _interfaces) {
+		if (interface.parent_interface()) continue;
+
+		double now = OS::time();
+		size_t irxb = interface.rxbytes();
+		size_t itxb = interface.txbytes();
+
+		if (interface.traffic_counter_ts() != 0.0) {
+			size_t rx_diff = irxb - interface.traffic_counter_rxb();
+			size_t tx_diff = itxb - interface.traffic_counter_txb();
+			double ts_diff = now  - interface.traffic_counter_ts();
+			rxb += rx_diff;
+			txb += tx_diff;
+			double crxs = 0.0;
+			double ctxs = 0.0;
+			if (ts_diff > 0) {
+				crxs = (static_cast<double>(rx_diff) * 8.0) / ts_diff;
+				ctxs = (static_cast<double>(tx_diff) * 8.0) / ts_diff;
+			}
+			interface.current_rx_speed(crxs); rxs += crxs;
+			interface.current_tx_speed(ctxs); txs += ctxs;
+		}
+
+		interface.update_traffic_counter(now, irxb, itxb);
+	}
+
+	_traffic_rxb += rxb;
+	_traffic_txb += txb;
+	_speed_rx     = rxs;
+	_speed_tx     = txs;
+}
+
 // Drains one entry from the pending discovery path requests queue if the
 // per-transmission throttle (DISCOVERY_PR_TX_THROTTLE) has elapsed. In Python
 // this runs as a sleeping background thread; here we are called once per
@@ -3479,13 +3541,13 @@ static std::string remote_status_interface_type_name(const Interface& iface) {
 // (e.g. heltec_wifi_lora_32_V4); the const-char-pointer overload produces
 // the same msgpack str wire format on all platforms.
 static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& iface) {
-	// 11 entries: name, short_name, hash, type, status, mode, clients,
-	//             bitrate, rxb, txb, announce_queue.
+	// 15 entries: name, short_name, hash, type, status, mode, clients,
+	//             bitrate, rx, rxb, tx, txb, rxs, txs, announce_queue.
 	//
 	// `clients` is accessed unguarded at rnstatus.py:429 (ifstat["clients"]),
 	// so the key MUST be present even when no meaningful value -- emit nil
 	// to signal "not a shared instance / no connected clients".
-	p.packMapSize(11);
+	p.packMapSize(15);
 
 	// Cache std::string values so .c_str() / .size() reference stable storage.
 	const std::string name_str = iface.toString();
@@ -3533,16 +3595,22 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	p.pack("txb");
 	p.serialize(static_cast<uint64_t>(iface.txbytes()));
 
+	p.pack("rxs");
+	p.packFloat64(iface.current_rx_speed());
+
+	p.pack("txs");
+	p.packFloat64(iface.current_tx_speed());
+
 	p.pack("announce_queue");
 	p.serialize(static_cast<uint32_t>(iface.announce_queue().size()));
 }
 
 // Builds the top-level stats map. Order matches Python's get_interface_stats().
-// Emits 5 keys: interfaces, rxb, txb, rxs, txs. transport_id /
+// Emits 7 keys: interfaces, rx, rxb, tx, txb, rxs, txs. transport_id /
 // transport_uptime can be added once Transport exposes them.
 static Bytes remote_status_build_stats_payload() {
 	MsgPack::Packer p;
-	p.packMapSize(5);
+	p.packMapSize(7);
 
 	auto& interfaces = Transport::get_interfaces();
 
@@ -3553,33 +3621,27 @@ static Bytes remote_status_build_stats_payload() {
 	}
 
 	uint64_t total_rx = 0;
-	uint64_t total_rxb = 0;
 	uint64_t total_tx = 0;
-	uint64_t total_txb = 0;
 	for (auto& kv : interfaces) {
 		total_rx += kv.second.rx();
-		total_rxb += kv.second.rxbytes();
-		total_txb += kv.second.tx();
-		total_txb += kv.second.txbytes();
+		total_tx += kv.second.tx();
 	}
 
 	p.pack("rx");
 	p.serialize(total_rx);
 	p.pack("rxb");
-	p.serialize(total_rxb);
+	p.serialize(Transport::traffic_rxb());
 
 	p.pack("tx");
 	p.serialize(total_tx);
 	p.pack("txb");
-	p.serialize(total_txb);
+	p.serialize(Transport::traffic_txb());
 
-	// Current rx/tx speeds: C++ Interface base does not track these yet;
-	// rnstatus renders 0 sensibly. Emit as float64 to match Python.
 	p.pack("rxs");
-	p.packFloat64(0.0);
+	p.packFloat64(Transport::speed_rx());
 
 	p.pack("txs");
-	p.packFloat64(0.0);
+	p.packFloat64(Transport::speed_tx());
 
 	return Bytes(p.data(), p.size());
 }

@@ -104,6 +104,14 @@ namespace RNS {
 		size_t _rxbytes = 0;
 		size_t _txbytes = 0;
 
+		// Per-interface traffic counter state for Transport::count_traffic().
+		// _traffic_counter_ts = 0.0 means the counter has not been initialised yet.
+		double _traffic_counter_ts    = 0.0;
+		size_t _traffic_counter_rxb   = 0;
+		size_t _traffic_counter_txb   = 0;
+		double _current_rx_speed      = 0.0;   // bits/sec
+		double _current_tx_speed      = 0.0;   // bits/sec
+
 	friend class Interface;
 	};
 
@@ -216,6 +224,19 @@ namespace RNS {
 		inline size_t tx() const { assert(_impl); return _impl->_tx; }
 		inline size_t rxbytes() const { assert(_impl); return _impl->_rxbytes; }
 		inline size_t txbytes() const { assert(_impl); return _impl->_txbytes; }
+		inline double traffic_counter_ts() const { assert(_impl); return _impl->_traffic_counter_ts; }
+		inline size_t traffic_counter_rxb() const { assert(_impl); return _impl->_traffic_counter_rxb; }
+		inline size_t traffic_counter_txb() const { assert(_impl); return _impl->_traffic_counter_txb; }
+		inline double current_rx_speed() const { assert(_impl); return _impl->_current_rx_speed; }
+		inline double current_tx_speed() const { assert(_impl); return _impl->_current_tx_speed; }
+		inline void update_traffic_counter(double ts, size_t rxb, size_t txb) const {
+			assert(_impl);
+			_impl->_traffic_counter_ts = ts;
+			_impl->_traffic_counter_rxb = rxb;
+			_impl->_traffic_counter_txb = txb;
+		}
+		inline void current_rx_speed(double speed) const { assert(_impl); _impl->_current_rx_speed = speed; }
+		inline void current_tx_speed(double speed) const { assert(_impl); _impl->_current_tx_speed = speed; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
 		inline bool is_connected_to_shared_instance() const { assert(_impl); return _impl->_is_connected_to_shared_instance; }
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }

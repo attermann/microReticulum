@@ -333,6 +333,7 @@ namespace RNS {
 		static bool mark_path_unknown_state(const Bytes& destination_hash);
 		static bool path_is_unresponsive(const Bytes& destination_hash);
 		static void handle_disovery_path_requests();   // typo preserved to match Python reference
+		static void count_traffic();   //p count_traffic_loop() in Python; called once per tick in C++'s single-loop model
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);
@@ -447,6 +448,10 @@ namespace RNS {
 
 		inline static uint32_t packets_sent() { return _packets_sent; }
 		inline static uint32_t packets_received() { return _packets_received; }
+		inline static uint64_t traffic_rxb() { return _traffic_rxb; }
+		inline static uint64_t traffic_txb() { return _traffic_txb; }
+		inline static double speed_rx() { return _speed_rx; }
+		inline static double speed_tx() { return _speed_tx; }
 		inline static uint32_t announces_received() { return _announces_received; }
 		inline static uint32_t path_requests_received() { return _path_requests_received; }
 		inline static uint32_t paths_added() { return _paths_added; }
@@ -515,6 +520,8 @@ namespace RNS {
 		static float _announces_check_interval;
 		static double _tables_last_culled;
 		static float _tables_cull_interval;
+		static double _traffic_last_checked;
+		static float _traffic_check_interval;
 		static double _last_mgmt_announce;
 		static float _mgmt_announce_interval;
 		static bool _saving_path_table;
@@ -546,6 +553,10 @@ namespace RNS {
 		// CBA Stats
 		static uint32_t _packets_sent;
 		static uint32_t _packets_received;
+		static uint64_t _traffic_rxb;	// Cumulative bytes received since startup (sums per-tick interface deltas)
+		static uint64_t _traffic_txb;	// Cumulative bytes transmitted since startup
+		static double _speed_rx;		// Current receive rate in bits/sec across all non-child interfaces
+		static double _speed_tx;		// Current transmit rate in bits/sec across all non-child interfaces
 		static uint32_t _announces_received;
 		static uint32_t _path_requests_received;
 		static uint32_t _paths_added;
