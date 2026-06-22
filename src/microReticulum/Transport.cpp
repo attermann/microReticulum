@@ -774,7 +774,7 @@ DestinationEntry empty_destination_entry;
 				try {
 					std::vector<Bytes> stale_path_requests;
 					for (const auto& [destination_hash, timestamp] : _path_requests) {
-						if (OS::time() > (timestamp + DESTINATION_TIMEOUT)) {
+						if (OS::time() > (timestamp + PATH_REQUEST_GATE_TIMEOUT)) {
 							stale_path_requests.push_back(destination_hash);
 						}
 					}
