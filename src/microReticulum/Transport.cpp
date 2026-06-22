@@ -2600,10 +2600,53 @@ DestinationEntry empty_destination_entry;
 					auto& destination = (*iter).second;
 					if (destination.type() == packet.destination_type()) {
 						TRACE("Transport::inbound: Found local destination for LINKREQUEST");
-						packet.destination(destination);
-						// CBA iterator over std::set is always const so need to make temporarily mutable
-						//destination.receive(packet);
-						destination.receive(packet);
+
+						// MTU clamping. The link request carries the initiator's
+						// proposed path MTU in its trailing LINK_MTU_SIZE bytes.
+						// If our receiving interface asks for autoconfigured or
+						// fixed MTU, clamp the path MTU down to our hardware MTU
+						// before the destination parses the link request.
+						// Matches Python Transport.py:2099-2118.
+						bool drop_packet = false;
+						uint16_t path_mtu = Link::mtu_from_lr_packet(packet);
+						Type::Link::link_mode mode = Link::mode_from_lr_packet(packet);
+						uint16_t nh_mtu = 0;
+						if (packet.receiving_interface().AUTOCONFIGURE_MTU()
+								|| packet.receiving_interface().FIXED_MTU()) {
+							nh_mtu = packet.receiving_interface().HW_MTU();
+						}
+						else {
+							nh_mtu = Type::Reticulum::MTU;
+						}
+
+						if (path_mtu > 0) {
+							const Bytes& orig = packet.data();
+							if (packet.receiving_interface().HW_MTU() == 0) {
+								// No hardware MTU known on the receiving
+								// interface; strip the trailing MTU bytes so
+								// the destination sees a plain link request.
+								if (orig.size() >= Type::Link::LINK_MTU_SIZE) {
+									packet.data(orig.left(orig.size() - Type::Link::LINK_MTU_SIZE));
+								}
+							}
+							else if (nh_mtu < path_mtu) {
+								try {
+									Bytes clamped = Link::signalling_bytes(nh_mtu, mode);
+									if (orig.size() >= Type::Link::LINK_MTU_SIZE) {
+										packet.data(orig.left(orig.size() - Type::Link::LINK_MTU_SIZE) + clamped);
+									}
+								}
+								catch (const std::exception& e) {
+									WARNINGF("Dropping link request packet to local destination: %s", e.what());
+									drop_packet = true;
+								}
+							}
+						}
+
+						if (!drop_packet) {
+							packet.destination(destination);
+							destination.receive(packet);
+						}
 					}
 				}
 			}
