@@ -87,6 +87,7 @@ using namespace RNS::Persistence;
 
 /*static*/ std::map<Bytes, Transport::PathRequestEntry> Transport::_discovery_path_requests;
 /*static*/ Transport::BytesList Transport::_discovery_pr_tags;
+/*static*/ Transport::PathStateTable Transport::_path_states;
 
 /*static*/ std::set<Destination> Transport::_control_destinations;
 /*static*/ std::set<Bytes> Transport::_control_hashes;
@@ -671,19 +672,32 @@ DestinationEntry empty_destination_entry;
 								// If the link destination was previously only 1 hop
 								// away, this likely means that it was local to one
 								// of our interfaces, and that it roamed somewhere else.
-								// In that case, try to discover a new path.
+								// In that case, try to discover a new path, and mark
+								// the old one as unresponsive.
 								else if (!path_request_throttle && hops_to(link_entry._destination_hash) == 1) {
 									DEBUGF("Trying to rediscover path for %s since an attempted link was never established, and destination was previously local to an interface on this instance", link_entry._destination_hash.toHex().c_str());
 									path_request_conditions = true;
+
+									if (Reticulum::transport_enabled()) {
+										if (link_entry._receiving_interface && link_entry._receiving_interface.mode() != Type::Interface::MODE_BOUNDARY) {
+											mark_path_unresponsive(link_entry._destination_hash);
+										}
+									}
 								}
 
-								// If the link destination was previously only 1 hop
-								// away, this likely means that it was local to one
-								// of our interfaces, and that it roamed somewhere else.
-								// In that case, try to discover a new path.
+								// If the link initiator is only 1 hop away,
+								// this likely means that network topology has
+								// changed. In that case, we try to discover a new path,
+								// and mark the old one as potentially unresponsive.
 								else if ( !path_request_throttle and lr_taken_hops == 1) {
 									DEBUGF("Trying to rediscover path for %s since an attempted link was never established, and link initiator is local to an interface on this instance", link_entry._destination_hash.toHex().c_str());
 									path_request_conditions = true;
+
+									if (Reticulum::transport_enabled()) {
+										if (link_entry._receiving_interface && link_entry._receiving_interface.mode() != Type::Interface::MODE_BOUNDARY) {
+											mark_path_unresponsive(link_entry._destination_hash);
+										}
+									}
 								}
 
 								if (path_request_conditions) {
@@ -784,6 +798,27 @@ DestinationEntry empty_destination_entry;
 				}
 				catch (const std::exception& e) {
 					ERRORF("jobs: failed to cull path requests: %s", e.what());
+				}
+
+				// Cull path state entries for destinations no longer in the path table
+				try {
+					std::vector<Bytes> stale_path_states;
+					stale_path_states.reserve(_path_states.size());
+					for (const auto& [destination_hash, state] : _path_states) {
+						DestinationEntry destination_entry;
+						if (!_new_path_table.get(destination_hash, destination_entry) || !destination_entry) {
+							stale_path_states.push_back(destination_hash);
+						}
+					}
+					for (const Bytes& destination_hash : stale_path_states) {
+						_path_states.erase(destination_hash);
+					}
+				}
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: bad_alloc - out of memory culling path states");
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to cull path states: %s", e.what());
 				}
 
 				// Cull the tunnel table
@@ -2013,6 +2048,7 @@ DestinationEntry empty_destination_entry;
 							// under all circumstances
 							//p if not random_blob in random_blobs:
 							if (random_blobs.find(random_blob) == random_blobs.end()) {
+								mark_path_unknown_state(packet.destination_hash());
 								should_add = true;
 							}
 							else {
@@ -2044,6 +2080,7 @@ DestinationEntry empty_destination_entry;
 									// TODO: Check that this ^ approach actually
 									// works under all circumstances
 									DEBUGF("Replacing destination table entry for %s with new announce due to expired path", packet.destination_hash().toHex().c_str());
+									mark_path_unknown_state(packet.destination_hash());
 									should_add = true;
 								}
 								else {
@@ -2054,6 +2091,21 @@ DestinationEntry empty_destination_entry;
 								if (announce_emitted > path_announce_emitted) {
 									if (random_blobs.find(random_blob) == random_blobs.end()) {
 										DEBUGF("Replacing destination table entry for %s with new announce, since it was more recently emitted", packet.destination_hash().toHex().c_str());
+										mark_path_unknown_state(packet.destination_hash());
+										should_add = true;
+									}
+									else {
+										should_add = false;
+									}
+								}
+
+								// If we have already heard this announce before,
+								// but the path has been marked as unresponsive
+								// by a failed communications attempt or similar,
+								// allow updating the path table to this one.
+								else if (announce_emitted == path_announce_emitted) {
+									if (path_is_unresponsive(packet.destination_hash())) {
+										DEBUGF("Replacing destination table entry for %s with new announce, since previously tried path was unresponsive", packet.destination_hash().toHex().c_str());
 										should_add = true;
 									}
 									else {
@@ -2330,6 +2382,7 @@ DestinationEntry empty_destination_entry;
 							}
 							if (_new_path_table.put(packet.destination_hash().collection(), destination_table_entry, ttl)) {
 								TRACEF("Added destination %s to path table!", packet.destination_hash().toHex().c_str());
+								mark_path_unknown_state(packet.destination_hash());
 								if (path_found) ++_paths_updated;
 								else ++_paths_added;
 							}
@@ -3215,6 +3268,41 @@ Deregisters an announce handler.
         return False
 
 */
+
+/*static*/ bool Transport::mark_path_unresponsive(const Bytes& destination_hash) {
+	DestinationEntry destination_entry;
+	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
+		_path_states[destination_hash] = STATE_UNRESPONSIVE;
+		return true;
+	}
+	return false;
+}
+
+/*static*/ bool Transport::mark_path_responsive(const Bytes& destination_hash) {
+	DestinationEntry destination_entry;
+	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
+		_path_states[destination_hash] = STATE_RESPONSIVE;
+		return true;
+	}
+	return false;
+}
+
+/*static*/ bool Transport::mark_path_unknown_state(const Bytes& destination_hash) {
+	DestinationEntry destination_entry;
+	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
+		_path_states[destination_hash] = STATE_UNKNOWN;
+		return true;
+	}
+	return false;
+}
+
+/*static*/ bool Transport::path_is_unresponsive(const Bytes& destination_hash) {
+	auto iter = _path_states.find(destination_hash);
+	if (iter != _path_states.end()) {
+		return iter->second == STATE_UNRESPONSIVE;
+	}
+	return false;
+}
 
 
 /*p

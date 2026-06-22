@@ -212,6 +212,7 @@ namespace RNS {
 			const Interface _requesting_interface = {Type::NONE};
 		};
 		using PathRequestTable = std::map<Bytes, PathRequestEntry>;
+		using PathStateTable = std::map<Bytes, uint8_t>;
 
 /*
 		// CBA TODO Analyze safety of using Inrerface references here
@@ -315,6 +316,10 @@ namespace RNS {
 		static double first_hop_timeout(const Bytes& destination_hash);
 		static double extra_link_proof_timeout(const Interface& interface);
 		static bool expire_path(const Bytes& destination_hash);
+		static bool mark_path_unresponsive(const Bytes& destination_hash);
+		static bool mark_path_responsive(const Bytes& destination_hash);
+		static bool mark_path_unknown_state(const Bytes& destination_hash);
+		static bool path_is_unresponsive(const Bytes& destination_hash);
 		//static void request_path(const Bytes& destination_hash, const Interface& on_interface = {Type::NONE}, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash, const Interface& on_interface, const Bytes& tag = {}, bool recursive = false);
 		static void request_path(const Bytes& destination_hash);
@@ -417,6 +422,7 @@ namespace RNS {
 		inline static const ReverseTable& reverse_table() { return _reverse_table; }
 		inline static const std::map<Bytes, double>& path_requests() { return _path_requests; }
 		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
+		inline static const PathStateTable& path_states() { return _path_states; }
 		inline static const std::map<Bytes, const Interface>& pending_local_path_requests() { return _pending_local_path_requests; }
 		inline static const BytesList& discovery_pr_tags() { return _discovery_pr_tags; }
 		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
@@ -456,6 +462,7 @@ namespace RNS {
 
 		static PathRequestTable _discovery_path_requests;	// A table for keeping track of path requests on behalf of other nodes
 		static BytesList _discovery_pr_tags;	// A table for keeping track of tagged path requests
+		static PathStateTable _path_states;		// A table for keeping track of path states (UNKNOWN/UNRESPONSIVE/RESPONSIVE)
 
 		// Transport control destinations are used
 		// for control purposes like path requests
