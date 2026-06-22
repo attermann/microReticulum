@@ -64,6 +64,12 @@ namespace RNS {
 		// subclasses can release resources (sockets, threads, hardware) before
 		// destruction. Default is a no-op; idempotency is the subclass's call.
 		virtual void detach() {}
+		// Stat hooks called by Transport::outbound() after a successful transmit
+		// of an announce or path-request packet. Subclasses can override to
+		// maintain per-interface frequency/burst counters (Python's oa_freq_deque
+		// and op_freq_deque equivalents). Defaults are no-ops.
+		virtual void sent_announce() {}
+		virtual void sent_path_request() {}
 
 		// CBA Virtual override method for custom interface to send outgoing data
 		virtual bool send_outgoing(const Bytes& data) = 0;
@@ -257,6 +263,8 @@ namespace RNS {
 		inline void current_tx_speed(double speed) const { assert(_impl); _impl->_current_tx_speed = speed; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
 		inline void detach() const { assert(_impl); _impl->detach(); }
+		inline void sent_announce() const { assert(_impl); _impl->sent_announce(); }
+		inline void sent_path_request() const { assert(_impl); _impl->sent_path_request(); }
 		inline bool is_connected_to_shared_instance() const { assert(_impl); return _impl->_is_connected_to_shared_instance; }
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }
 		inline HInterface parent_interface() const { assert(_impl); return _impl->_parent_interface; }

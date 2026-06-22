@@ -1364,6 +1364,16 @@ DestinationEntry empty_destination_entry;
 					// thread.start()
 
 					sent = transmit(interface, packet.raw());
+
+					// Per-interface stat hooks. Matches Python Transport.py:1323-1324.
+					if (sent) {
+						if (packet.packet_type() == Type::Packet::ANNOUNCE) {
+							interface.sent_announce();
+						}
+						if (packet.destination().type() == Type::Destination::PLAIN && packet.is_outbound_pr()) {
+							interface.sent_path_request();
+						}
+					}
 				}
 				else {
 					TRACE("Transport::outbound: Packet transmission refused");
@@ -3587,6 +3597,7 @@ will announce it.
 		}
 	}
 
+	packet.is_outbound_pr(true);
 	packet.send();
 	_path_requests[destination_hash] = OS::time();
 }

@@ -280,6 +280,8 @@ namespace RNS {
 		inline uint8_t flags() const { assert(_object); return _object->_flags; }
 		inline uint8_t hops() const { assert(_object); return _object->_hops; }
 		inline bool cached() const { assert(_object); return _object->_cached; }
+		inline bool is_outbound_pr() const { assert(_object); return _object->_is_outbound_pr; }
+		inline void is_outbound_pr(bool flag) { assert(_object); _object->_is_outbound_pr = flag; }
 		inline const Bytes& packet_hash() const { assert(_object); return _object->_packet_hash; }
 		inline const Bytes& destination_hash() const { assert(_object); return _object->_destination_hash; }
 		inline const Bytes& transport_id() const { assert(_object); return _object->_transport_id; }
@@ -367,6 +369,7 @@ namespace RNS {
 			bool _truncated = false;	// whether data was truncated
 			bool _encrypted = false;	// whether data is encrypted
 			bool _cached = false;		// whether packet has been cached
+			bool _is_outbound_pr = false;  // set by Transport::request_path before send(); used by outbound() to fire interface.sent_path_request()
 			PacketReceipt _receipt = {Type::NONE};
 
 			uint16_t _MTU = Type::Reticulum::MTU;
