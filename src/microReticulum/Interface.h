@@ -24,6 +24,7 @@
 #include <list>
 #include <memory>
 #include <cassert>
+#include <limits>
 #include <stdint.h>
 
 namespace RNS {
@@ -129,6 +130,14 @@ namespace RNS {
 		size_t _traffic_counter_txb   = 0;
 		double _current_rx_speed      = 0.0;   // bits/sec
 		double _current_tx_speed      = 0.0;   // bits/sec
+
+		// Last received-packet signal-quality stats reported by the hardware.
+		// NaN means "not present" -- interface subclasses populate these
+		// synchronously with handle_incoming(bytes), and Transport::inbound
+		// snapshots the values onto the Packet at construction time.
+		float _r_stat_rssi = std::numeric_limits<float>::quiet_NaN();
+		float _r_stat_snr  = std::numeric_limits<float>::quiet_NaN();
+		float _r_stat_q    = std::numeric_limits<float>::quiet_NaN();
 
 	friend class Interface;
 	};
@@ -253,6 +262,12 @@ namespace RNS {
 		inline size_t traffic_counter_txb() const { assert(_impl); return _impl->_traffic_counter_txb; }
 		inline double current_rx_speed() const { assert(_impl); return _impl->_current_rx_speed; }
 		inline double current_tx_speed() const { assert(_impl); return _impl->_current_tx_speed; }
+		inline float r_stat_rssi() const { assert(_impl); return _impl->_r_stat_rssi; }
+		inline void r_stat_rssi(float rssi) const { assert(_impl); _impl->_r_stat_rssi = rssi; }
+		inline float r_stat_snr() const { assert(_impl); return _impl->_r_stat_snr; }
+		inline void r_stat_snr(float snr) const { assert(_impl); _impl->_r_stat_snr = snr; }
+		inline float r_stat_q() const { assert(_impl); return _impl->_r_stat_q; }
+		inline void r_stat_q(float q) const { assert(_impl); _impl->_r_stat_q = q; }
 		inline void update_traffic_counter(double ts, size_t rxb, size_t txb) const {
 			assert(_impl);
 			_impl->_traffic_counter_ts = ts;

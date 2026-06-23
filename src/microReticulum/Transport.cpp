@@ -32,6 +32,7 @@
 #include <MsgPack.h>
 
 #include <algorithm>
+#include <cmath>
 #include <unistd.h>
 #include <time.h>
 
@@ -1670,28 +1671,19 @@ DestinationEntry empty_destination_entry;
 	packet.receiving_interface(interface);
 	packet.hops(packet.hops() + 1);
 
-// TODO
-/*p
+	// Stamp signal-quality stats from the receiving interface onto the packet.
+	// The interface subclass is expected to populate r_stat_rssi/snr/q
+	// synchronously with handle_incoming() so the values describe THIS packet.
+	// A NaN value means the interface didn't report that metric. Python keeps
+	// a class-level cache keyed by packet_hash so shared-instance clients can
+	// look up signal stats via RPC; microReticulum doesn't support being a
+	// shared-instance client, so we stamp the packet directly and skip the
+	// cache.
 	if (interface) {
-		if hasattr(interface, "r_stat_rssi"):
-			if interface.r_stat_rssi != None:
-				packet.rssi = interface.r_stat_rssi
-				if len(Transport.local_client_interfaces) > 0:
-					Transport.local_client_rssi_cache.append([packet.packet_hash, packet.rssi])
-
-					while len(Transport.local_client_rssi_cache) > Transport.LOCAL_CLIENT_CACHE_MAXSIZE:
-						Transport.local_client_rssi_cache.pop()
-
-		if hasattr(interface, "r_stat_snr"):
-			if interface.r_stat_rssi != None:
-				packet.snr = interface.r_stat_snr
-				if len(Transport.local_client_interfaces) > 0:
-					Transport.local_client_snr_cache.append([packet.packet_hash, packet.snr])
-
-					while len(Transport.local_client_snr_cache) > Transport.LOCAL_CLIENT_CACHE_MAXSIZE:
-						Transport.local_client_snr_cache.pop()
+		if (!std::isnan(interface.r_stat_rssi())) packet.rssi(interface.r_stat_rssi());
+		if (!std::isnan(interface.r_stat_snr()))  packet.snr(interface.r_stat_snr());
+		if (!std::isnan(interface.r_stat_q()))    packet.q(interface.r_stat_q());
 	}
-*/
 
 	if (_local_client_interfaces.size() > 0) {
 		if (is_local_client_interface(interface)) {

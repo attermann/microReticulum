@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <cassert>
+#include <limits>
 #include <stdint.h>
 #include <time.h>
 
@@ -282,6 +283,12 @@ namespace RNS {
 		inline bool cached() const { assert(_object); return _object->_cached; }
 		inline bool is_outbound_pr() const { assert(_object); return _object->_is_outbound_pr; }
 		inline void is_outbound_pr(bool flag) { assert(_object); _object->_is_outbound_pr = flag; }
+		inline float rssi() const { assert(_object); return _object->_rssi; }
+		inline Packet& rssi(float rssi) { assert(_object); _object->_rssi = rssi; return *this; }
+		inline float snr() const { assert(_object); return _object->_snr; }
+		inline Packet& snr(float snr) { assert(_object); _object->_snr = snr; return *this; }
+		inline float q() const { assert(_object); return _object->_q; }
+		inline Packet& q(float q) { assert(_object); _object->_q = q; return *this; }
 		inline const Bytes& packet_hash() const { assert(_object); return _object->_packet_hash; }
 		inline const Bytes& destination_hash() const { assert(_object); return _object->_destination_hash; }
 		inline const Bytes& transport_id() const { assert(_object); return _object->_transport_id; }
@@ -375,9 +382,12 @@ namespace RNS {
 			uint16_t _MTU = Type::Reticulum::MTU;
 			double _sent_at = 0;
 
-			float _rssi = 0.0;
-			float _snr = 0.0;
-			float _q = 0.0;
+			// Signal-quality stats stamped by Transport::inbound from the
+			// receiving interface at packet-construction time. NaN means
+			// the receiving interface didn't report this metric.
+			float _rssi = std::numeric_limits<float>::quiet_NaN();
+			float _snr  = std::numeric_limits<float>::quiet_NaN();
+			float _q    = std::numeric_limits<float>::quiet_NaN();
 
 			Bytes _packet_hash;
 			Bytes _ratchet_id;
