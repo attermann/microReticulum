@@ -368,6 +368,18 @@ DestinationEntry empty_destination_entry;
 		}
 #endif // RNS_USE_FS && RNS_PERSIST_PATHS
 
+#if defined(RNS_USE_FS) && defined(RNS_KNOWN_DESTINATIONS_PERSIST)
+		if (Utilities::OS::get_filesystem()) {
+			Identity::_known_store.init(Utilities::OS::get_filesystem(), "./known_store", false,
+				Identity::_known_store_segment_size, Identity::_known_store_segment_count);
+			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
+				WARNING("FileSystem is full, clearing existing known destinations store");
+				Identity::_known_store.clear();
+			}
+		}
+#endif // RNS_USE_FS && RNS_KNOWN_DESTINATIONS_PERSIST
+		Identity::_known_store.set_max_recs(Identity::_known_destinations_maxsize);
+
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
 		// Write path table back and clean caches in case any entries are invalid

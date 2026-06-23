@@ -318,7 +318,6 @@ void Reticulum::should_persist_data() {
 void Reticulum::persist_data() {
 	TRACE("Persisting transport and identity data...");
 	Transport::persist_data();
-	Identity::persist_data();
 
 	_object->_last_data_persist = OS::time();
 }
@@ -367,9 +366,6 @@ void Reticulum::clean_caches() {
 */
 
 	Transport::clean_caches();
-
-	// CBA
-	Identity::cull_known_destinations();
 #endif
 
 	_object->_last_cache_clean = OS::time();

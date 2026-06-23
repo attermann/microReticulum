@@ -114,6 +114,18 @@ namespace RNS { namespace Provisioning {
 					FF_LIVE_APPLY, (int64_t)RNS::Transport::max_pr_tags(), 1, 65535,
 					[](const Value& v) { RNS::Transport::max_pr_tags((uint16_t)v.as_int()); return true; },
 					[]() { return (int64_t)RNS::Transport::max_pr_tags(); })
+				.field_int("Known Destinations Max Size", Ns::TransportConfig::Field::KnownDestinationsMaxsize,
+					FF_LIVE_APPLY, (int64_t)RNS::Identity::known_destinations_maxsize(), 1, 65535,
+					[](const Value& v) { RNS::Identity::known_destinations_maxsize((uint16_t)v.as_int()); return true; },
+					[]() { return (int64_t)RNS::Identity::known_destinations_maxsize(); })
+				.field_int("Known Destinations Segment Size", Ns::TransportConfig::Field::KnownDestinationsSegmentSize,
+					0, (int64_t)RNS::Identity::known_store_segment_size(), 0, INT32_MAX,
+					[](const Value& v) { RNS::Identity::known_store_segment_size((uint32_t)v.as_int()); return true; },
+					[]() { return (int64_t)RNS::Identity::known_store_segment_size(); })
+				.field_int("Known Destinations Segment Count", Ns::TransportConfig::Field::KnownDestinationsSegmentCnt,
+					0, (int64_t)RNS::Identity::known_store_segment_count(), 0, 255,
+					[](const Value& v) { RNS::Identity::known_store_segment_count((uint8_t)v.as_int()); return true; },
+					[]() { return (int64_t)RNS::Identity::known_store_segment_count(); })
 				.command_void("Clear Storage", Ns::TransportConfig::Field::ClearStorage,
 					[]() { RNS::Transport::clear_storage(); return true; })
 				.end();

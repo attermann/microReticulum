@@ -45,13 +45,16 @@ namespace RNS { namespace Provisioning { namespace Ns {
 	namespace TransportConfig {
 		constexpr nid_t Id = 2;
 		namespace Field {
-			constexpr fid_t SchemaVersion		 = 0;	// reserved
-			constexpr fid_t PathTableMaxsize     = 1;
-			constexpr fid_t AnnounceTableMaxsize = 2;
-			constexpr fid_t HashlistMaxsize      = 3;
-			constexpr fid_t MaxPrTags            = 4;
-			constexpr fid_t PathTableMaxpersist  = 5;
-			constexpr fid_t ClearStorage         = 6;	// command (write-only): Transport::clear_storage()
+			constexpr fid_t SchemaVersion		         = 0;	// reserved
+			constexpr fid_t PathTableMaxsize             = 1;
+			constexpr fid_t AnnounceTableMaxsize         = 2;
+			constexpr fid_t HashlistMaxsize              = 3;
+			constexpr fid_t MaxPrTags                    = 4;
+			constexpr fid_t PathTableMaxpersist          = 5;
+			constexpr fid_t ClearStorage                 = 6;	// command (write-only): Transport::clear_storage()
+			constexpr fid_t KnownDestinationsMaxsize     = 7;
+			constexpr fid_t KnownDestinationsSegmentSize = 8;
+			constexpr fid_t KnownDestinationsSegmentCnt  = 9;
 		}
 	}
 

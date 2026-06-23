@@ -37,16 +37,28 @@ using namespace RNS::Utilities;
 #define RNS_KNOWN_DESTINATIONS_MAX 100
 #endif
 
+#ifndef RNS_KNOWN_DESTINATIONS_SEGMENT_SIZE
+#define RNS_KNOWN_DESTINATIONS_SEGMENT_SIZE 65536
+#endif
+
+#ifndef RNS_KNOWN_DESTINATIONS_SEGMENT_COUNT
+#define RNS_KNOWN_DESTINATIONS_SEGMENT_COUNT 8
+#endif
+
 #ifndef RNS_IDENTITY_ANNOUNCE_RECALL
 #define RNS_IDENTITY_ANNOUNCE_RECALL 1
 #endif
 
 
-/*static*/ Identity::IdentityTable Identity::_known_destinations;
-/*static*/ bool Identity::_saving_known_destinations = false;
-// CBA
-// CBA ACCUMULATES
 /*static*/ uint16_t Identity::_known_destinations_maxsize = RNS_KNOWN_DESTINATIONS_MAX;
+/*static*/ uint32_t Identity::_known_store_segment_size = 0;
+/*static*/ uint8_t Identity::_known_store_segment_count = 0;
+#if defined(RNS_USE_FS) && defined(RNS_KNOWN_DESTINATIONS_PERSIST)
+/*static*/ Persistence::KnownStore Identity::_known_store(RNS_KNOWN_DESTINATIONS_SEGMENT_SIZE, RNS_KNOWN_DESTINATIONS_SEGMENT_COUNT);
+#else
+/*static*/ Persistence::KnownStore Identity::_known_store;
+#endif
+/*static*/ Persistence::KnownDestinations Identity::_known_destinations(Identity::_known_store);
 
 Identity::Identity(bool create_keys /*= true*/) : _object(new Object()) {
 	if (create_keys) {
@@ -223,20 +235,9 @@ Can be used to load previously created and saved identities into Reticulum.
 	if (public_key.size() != Type::Identity::KEYSIZE/8) {
 		throw std::invalid_argument("Can't remember " + destination_hash.toHex() + ", the public key size of " + std::to_string(public_key.size()) + " is not valid.");
 	}
-	else {
-		//p _known_destinations[destination_hash] = {OS::time(), packet_hash, public_key, app_data};
-		// CBA ACCUMULATES
-		try {
-			_known_destinations.insert({destination_hash, {OS::time(), packet_hash, public_key, app_data}});
-			// CBA IMMEDIATE CULL
-			cull_known_destinations();
-		}
-		catch (const std::bad_alloc&) {
-			ERRORF("remember: bad_alloc - OUT OF MEMORY, identity not stored for %s", destination_hash.toHex().c_str());
-		}
-		catch (const std::exception& e) {
-			ERRORF("remember: exception storing identity: %s", e.what());
-		}
+	IdentityEntry entry(OS::time(), packet_hash, public_key, app_data);
+	if (!_known_destinations.put(destination_hash, entry)) {
+		ERRORF("remember: failed to store identity for %s", destination_hash.toHex().c_str());
 	}
 }
 
@@ -249,10 +250,9 @@ Recall identity for a destination hash.
 /*static*/ Identity Identity::recall(const Bytes& destination_hash) {
 	TRACE("Identity::recall...");
 
-	auto iter = _known_destinations.find(destination_hash);
-	if (iter != _known_destinations.end()) {
+	IdentityEntry identity_data;
+	if (_known_destinations.get(destination_hash, identity_data) && identity_data) {
 		TRACEF("Identity::recall: Found identity entry for destination %s", destination_hash.toHex().c_str());
-		const IdentityEntry& identity_data = (*iter).second;
 		Identity identity(false);
 		identity.load_public_key(identity_data._public_key);
 		identity.app_data(identity_data._app_data);
@@ -305,154 +305,13 @@ Recall last heard app_data for a destination hash.
 */
 /*static*/ Bytes Identity::recall_app_data(const Bytes& destination_hash) {
 	TRACE("Identity::recall_app_data...");
-	auto iter = _known_destinations.find(destination_hash);
-	if (iter != _known_destinations.end()) {
+	IdentityEntry identity_data;
+	if (_known_destinations.get(destination_hash, identity_data) && identity_data) {
 		TRACEF("Identity::recall_app_data: Found identity entry for destination %s", destination_hash.toHex().c_str());
-		const IdentityEntry& identity_data = (*iter).second;
 		return identity_data._app_data;
 	}
-	else {
-		TRACEF("Identity::recall_app_data: Unable to find identity entry for destination %s", destination_hash.toHex().c_str());
-		return {Bytes::NONE};
-	}
-}
-
-/*static*/ bool Identity::save_known_destinations() {
-	// TODO: Improve the storage method so we don't have to
-	// deserialize and serialize the entire table on every
-	// save, but the only changes. It might be possible to
-	// simply overwrite on exit now that every local client
-	// disconnect triggers a data persist.
-
-	bool success = false;
-	try {
-		if (_saving_known_destinations) {
-			double wait_interval = 0.2;
-			double wait_timeout = 5;
-			double wait_start = OS::time();
-			while (_saving_known_destinations) {
-				OS::sleep(wait_interval);
-				if (OS::time() > (wait_start + wait_timeout)) {
-					ERROR("Could not save known destinations to storage, waiting for previous save operation timed out.");
-					return false;
-				}
-			}
-		}
-
-		_saving_known_destinations = true;
-		double save_start = OS::time();
-
-		std::map<Bytes, IdentityEntry> storage_known_destinations;
-// TODO
-/*
-		if os.path.isfile(RNS.Reticulum.storagepath+"./known_destinations"):
-			try:
-				file = open(RNS.Reticulum.storagepath+"./known_destinations","rb")
-				storage_known_destinations = umsgpack.load(file)
-				file.close()
-			except:
-				pass
-*/
-
-		for (auto& [destination_hash, identity_entry] : storage_known_destinations) {
-			if (_known_destinations.find(destination_hash) == _known_destinations.end()) {
-				//_known_destinations[destination_hash] = storage_known_destinations[destination_hash];
-				//_known_destinations[destination_hash] = identity_entry;
-				// CBA ACCUMULATES
-				_known_destinations.insert({destination_hash, identity_entry});
-				// CBA IMMEDIATE CULL
-				cull_known_destinations();
-			}
-		}
-
-// TODO
-/*
-		DEBUGF("Saving %lu known destinations to storage...", _known_destinations.size());
-		file = open(RNS.Reticulum.storagepath+"./known_destinations","wb")
-		umsgpack.dump(Identity.known_destinations, file)
-		file.close()
-		DEBUGF("Saved known destinations to storage in %.3f seconds", OS::round(OS::time() - save_start, 3));
-*/
-
-		success = true;
-	}
-	catch (const std::exception& e) {
-		ERRORF("Error while saving known destinations to disk, the contained exception was: %s", e.what());
-	}
-
-	_saving_known_destinations = false;
-
-	return success;
-}
-
-/*static*/ void Identity::load_known_destinations() {
-// TODO
-/*
-	if os.path.isfile(RNS.Reticulum.storagepath+"./known_destinations"):
-		try:
-			file = open(RNS.Reticulum.storagepath+"./known_destinations","rb")
-			loaded_known_destinations = umsgpack.load(file)
-			file.close()
-
-			Identity.known_destinations = {}
-			for known_destination in loaded_known_destinations:
-				if len(known_destination) == RNS.Reticulum.TRUNCATED_HASHLENGTH//8:
-					Identity.known_destinations[known_destination] = loaded_known_destinations[known_destination]
-
-			RNS.log("Loaded "+str(len(Identity.known_destinations))+" known destination from storage", RNS.LOG_VERBOSE)
-		except:
-			RNS.log("Error loading known destinations from disk, file will be recreated on exit", RNS.LOG_ERROR)
-	else:
-		RNS.log("Destinations file does not exist, no known destinations loaded", RNS.LOG_VERBOSE)
-*/
-
-}
-
-/*static*/ void Identity::cull_known_destinations() {
-	TRACE("Identity::cull_known_destinations()");
-	if (_known_destinations.size() > _known_destinations_maxsize) {
-		try {
-			// Build lightweight (timestamp, key) index to avoid copying full IdentityEntry
-			// objects — prevents OOM on heap-constrained devices when the table is full.
-			std::vector<std::pair<double, Bytes>> sorted_keys;
-			sorted_keys.reserve(_known_destinations.size());
-			for (const auto& [key, entry] : _known_destinations) {
-				sorted_keys.emplace_back(entry._timestamp, key);
-			}
-			// Sort ascending by timestamp (oldest first)
-			std::sort(sorted_keys.begin(), sorted_keys.end());
-
-			uint16_t count = 0;
-			for (const auto& [timestamp, destination_hash] : sorted_keys) {
-				TRACEF("Identity::cull_known_destinations: Removing destination %s from known destinations", destination_hash.toHex().c_str());
-				if (_known_destinations.erase(destination_hash) < 1) {
-					WARNINGF("Failed to remove destination %s from known destinations", destination_hash.toHex().c_str());
-				}
-				++count;
-				if (_known_destinations.size() <= _known_destinations_maxsize) {
-					break;
-				}
-			}
-			DEBUGF("Removed %d path(s) from known destinations", count);
-		}
-		catch (const std::bad_alloc& e) {
-			ERROR("cull_known_destinations: bad_alloc - OUT OF MEMORY building sort index, falling back to single erase");
-			// Fallback: std::min_element does no heap allocation — erase one oldest entry
-			auto oldest = std::min_element(
-				_known_destinations.begin(), _known_destinations.end(),
-				[](const std::pair<const Bytes, IdentityEntry>& a,
-			   const std::pair<const Bytes, IdentityEntry>& b) {
-				return a.second._timestamp < b.second._timestamp;
-			}
-			);
-			if (oldest != _known_destinations.end()) {
-				_known_destinations.erase(oldest);
-			}
-		}
-		catch (const std::exception& e) {
-			ERRORF("cull_known_destinations: exception: %s", e.what());
-		}
-	}
+	TRACEF("Identity::recall_app_data: Unable to find identity entry for destination %s", destination_hash.toHex().c_str());
+	return {Bytes::NONE};
 }
 
 /*static*/ bool Identity::validate_announce(const Packet& packet, bool only_validate_signature /*= false*/) {
@@ -527,9 +386,8 @@ Recall last heard app_data for a destination hash.
 				if (destination_hash == expected_hash) {
 					// Check if we already have a public key for this destination
 					// and make sure the public key is not different.
-					auto iter = _known_destinations.find(destination_hash);
-					if (iter != _known_destinations.end()) {
-						IdentityEntry& identity_entry = (*iter).second;
+					IdentityEntry identity_entry;
+					if (_known_destinations.get(destination_hash, identity_entry) && identity_entry) {
 						if (public_key != identity_entry._public_key) {
 							// In reality, this should never occur, but in the odd case
 							// that someone manages a hash collision, we reject the announce.
@@ -584,16 +442,6 @@ Recall last heard app_data for a destination hash.
 		return false;
 	}
 	return false;
-}
-
-/*static*/ void Identity::persist_data() {
-	if (!Transport::reticulum() || !Transport::reticulum().is_connected_to_shared_instance()) {
-		save_known_destinations();
-	}
-}
-
-/*static*/ void Identity::exit_handler() {
-	persist_data();
 }
 
 /*

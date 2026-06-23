@@ -22,6 +22,7 @@
 #include "Cryptography/X25519.h"
 #include "Cryptography/Token.h"
 #include "Utilities/Memory.h"
+#include "Persistence/IdentityEntry.h"
 
 #include <map>
 #include <string>
@@ -35,30 +36,16 @@ namespace RNS {
 
 	class Identity {
 
-	private:
-		class IdentityEntry {
-		public:
-			IdentityEntry(double timestamp, const Bytes& packet_hash, const Bytes& public_key, const Bytes& app_data) :
-				_timestamp(timestamp),
-				_packet_hash(packet_hash),
-				_public_key(public_key),
-				_app_data(app_data)
-			{
-			}
-		public:
-			double _timestamp = 0;
-			Bytes _packet_hash;
-			Bytes _public_key;
-			Bytes _app_data;
-		};
-		//using IdentityTable = std::map<Bytes, IdentityEntry>;
-		using IdentityTable = std::map<Bytes, IdentityEntry, std::less<Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const Bytes, IdentityEntry>>>;
+	public:
+		using IdentityEntry = Persistence::IdentityEntry;
 
 	private:
-		static IdentityTable _known_destinations;
-		static bool _saving_known_destinations;
+		static Persistence::KnownStore _known_store;
+		static Persistence::KnownDestinations _known_destinations;
 		// CBA
 		static uint16_t _known_destinations_maxsize;
+		static uint32_t _known_store_segment_size;
+		static uint8_t _known_store_segment_count;
 
 	public:
 		Identity(bool create_keys = true);
@@ -128,10 +115,6 @@ namespace RNS {
 		static void remember(const Bytes& packet_hash, const Bytes& destination_hash, const Bytes& public_key, const Bytes& app_data = {Bytes::NONE});
 		static Identity recall(const Bytes& destination_hash);
 		static Bytes recall_app_data(const Bytes& destination_hash);
-		static bool save_known_destinations();
-		static void load_known_destinations();
-		// CBA
-		static void cull_known_destinations();
 
 		/*
 		Get a SHA-256 hash of passed data.
@@ -165,8 +148,6 @@ namespace RNS {
 		}
 
 		static bool validate_announce(const Packet& packet, bool only_validate_signature = false);
-		static void persist_data();
-		static void exit_handler();
 
 		// getters/setters
 		inline const Bytes& encryptionPrivateKey() const { assert(_object); return _object->_prv_bytes; }
@@ -182,9 +163,16 @@ namespace RNS {
 		inline const Cryptography::X25519PublicKey::Ptr pub() const { assert(_object); return _object->_pub; }
 		inline const Cryptography::Ed25519PublicKey::Ptr sig_pub() const { assert(_object); return _object->_sig_pub; }
 		inline static uint16_t known_destinations_maxsize() { return _known_destinations_maxsize; }
-		inline static void known_destinations_maxsize(uint16_t known_destinations_maxsize) { _known_destinations_maxsize = known_destinations_maxsize; }
+		inline static void known_destinations_maxsize(uint16_t known_destinations_maxsize) {
+			_known_destinations_maxsize = known_destinations_maxsize;
+			_known_store.set_max_recs(_known_destinations_maxsize);
+		}
+		inline static uint32_t known_store_segment_size() { return _known_store_segment_size; }
+		inline static void known_store_segment_size(uint32_t value) { _known_store_segment_size = value; }
+		inline static uint8_t known_store_segment_count() { return _known_store_segment_count; }
+		inline static void known_store_segment_count(uint8_t value) { _known_store_segment_count = value; }
 
-		inline static const IdentityTable& known_destinations() { return _known_destinations; }
+		inline static const Persistence::KnownDestinations& known_destinations() { return _known_destinations; }
 
 		inline std::string toString() const { if (!_object) return ""; return "{Identity:" + _object->_hash.toHex() + "}"; }
 
