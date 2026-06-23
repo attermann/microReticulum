@@ -77,6 +77,14 @@ using namespace RNS::Persistence;
 #define RNS_SAME_INTERFACE_PATH_REQUESTS 1
 #endif
 
+#ifndef RNS_REJECT_BLACKHOLED_ANNOUNCE
+#define RNS_REJECT_BLACKHOLED_ANNOUNCE 1
+#endif
+
+#ifndef RNS_BLOCK_UNRESPONSIVE_ANNOUNCE
+#define RNS_BLOCK_UNRESPONSIVE_ANNOUNCE 1
+#endif
+
 /*static*/ Transport::InterfaceTable Transport::_interfaces;
 /*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
@@ -2219,7 +2227,8 @@ DestinationEntry empty_destination_entry;
 						should_add = true;
 					}
 
-					// DIVERGENCE
+#if RNS_REJECT_BLACKHOLED_ANNOUNCE
+					// DIVERGENCE: reject announces from blackholed identities
 					// Python (Transport.py:313-337) only purges blackholed paths
 					// at three triggers: explicit blackhole_identity() call,
 					// reload_blackhole() at startup, and the 60s expiry sweep.
@@ -2235,6 +2244,7 @@ DestinationEntry empty_destination_entry;
 							should_add = false;
 						}
 					}
+#endif
 
 					if (should_add) {
 						double now = OS::time();
@@ -4023,13 +4033,18 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 		if (req.dest_hash.size() > 0) {
 			DestinationEntry destination_entry;
 			_new_path_table.get(req.dest_hash, destination_entry);
-			// DIVERGENCE: do not advertise paths we have personally marked
+#if RNS_BLOCK_UNRESPONSIVE_ANNOUNCE
+			// DIVERGENCE: not advertising unresponsive paths
+			// Do not advertise paths we have personally marked
 			// UNRESPONSIVE. See path_request() for the rationale; the same
 			// reasoning applies to remote management table queries since
 			// downstream consumers may treat the returned set as usable
 			// paths. State self-heals when a fresh announce resets it via
 			// mark_path_unknown_state.
 			if (destination_entry && !path_is_unresponsive(req.dest_hash)) {
+#else
+			if (destination_entry) {
+#endif
 				p.packArraySize(1);
 				remote_path_pack_path_entry(p, req.dest_hash, destination_entry);
 			}
@@ -4047,7 +4062,10 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			for (const auto& path : _new_path_table) {
 				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
 				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
+#if RNS_BLOCK_UNRESPONSIVE_ANNOUNCE
+				// DIVERGENCE: not advertising unresponsive paths
 				if (path_is_unresponsive(path.key)) continue;
+#endif
 				match_count++;
 				if (match_count >= 100) break;
 			}
@@ -4064,7 +4082,10 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			for (const auto& path : _new_path_table) {
 				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
 				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
+#if RNS_BLOCK_UNRESPONSIVE_ANNOUNCE
+				// DIVERGENCE: not advertising unresponsive paths
 				if (path_is_unresponsive(path.key)) continue;
+#endif
 				remote_path_pack_path_entry(p, path.key, path.value);
 				match_count++;
 				if (match_count >= 100) break;
@@ -4208,7 +4229,8 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 	else if ((Reticulum::transport_enabled() || is_from_local_client) && destination_entry) {
 		TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
 
-		// DIVERGENCE
+#if RNS_BLOCK_UNRESPONSIVE_ANNOUNCE
+		// DIVERGENCE: not advertising unresponsive paths
 		// Python (Transport.py path_request handling) does not consult
 		// path_states when answering path requests, so a node will keep
 		// advertising a path it has personally observed to be broken.
@@ -4222,6 +4244,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			DEBUGF("Not answering path request for destination %s%s, path is marked unresponsive", destination_hash.toHex().c_str(), interface_str.c_str());
 			return;
 		}
+#endif
 
 		const Packet announce_packet = destination_entry.announce_packet();
 TRACEF("announce_packet destination_hash: %s", announce_packet.destination_hash().toHex().c_str());
@@ -4372,7 +4395,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 
 			for (auto& interface : _interfaces) {
 #if RNS_SAME_INTERFACE_PATH_REQUESTS
-				// DIVERGENCE
+				// DIVERGENCE: forward path requests on same interface
 				// CBA EXPERIMENTAL forwarding path requests even on requestor interface in order to support
 				//  path-finding over LoRa mesh
 				if (true) {

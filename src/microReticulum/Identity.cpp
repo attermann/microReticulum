@@ -260,7 +260,7 @@ Recall identity for a destination hash.
 	}
 
 #if RNS_IDENTITY_ANNOUNCE_RECALL
-	// DIVERGENCE
+	// DIVERGENCE: consult path table for identity recall
 	// Since the path table stores the latest announce for each destination (which contains the needed public key etc.),
 	// the identity can be restored even if it is not cached in _known_destinations.
 	TRACEF("Identity::recall: Unable to find identity entry for destination %s, performing announce lookup...", destination_hash.toHex().c_str());
