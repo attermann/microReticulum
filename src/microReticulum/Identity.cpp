@@ -53,7 +53,7 @@ using namespace RNS::Utilities;
 /*static*/ uint16_t Identity::_known_destinations_maxsize = RNS_KNOWN_DESTINATIONS_MAX;
 /*static*/ uint32_t Identity::_known_store_segment_size = 0;
 /*static*/ uint8_t Identity::_known_store_segment_count = 0;
-#if defined(RNS_USE_FS) && defined(RNS_KNOWN_DESTINATIONS_PERSIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 /*static*/ Persistence::KnownStore Identity::_known_store(RNS_KNOWN_DESTINATIONS_SEGMENT_SIZE, RNS_KNOWN_DESTINATIONS_SEGMENT_COUNT);
 #else
 /*static*/ Persistence::KnownStore Identity::_known_store;

@@ -15,7 +15,6 @@
 #include "DestinationEntry.h"
 
 #include "../Transport.h"
-#include "../Type.h"
 
 #include <MsgPack.h>
 

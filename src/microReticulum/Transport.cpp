@@ -81,7 +81,7 @@ using namespace RNS::Persistence;
 /*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
 /*static*/ std::set<Link> Transport::_active_links;
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_HASHLIST
 /*static*/ Transport::HashlistStore Transport::_packet_hashlist(RNS_HASHLIST_SEGMENT_SIZE, RNS_HASHLIST_SEGMENT_COUNT);
 #else
 /*static*/ Transport::HashlistStore Transport::_packet_hashlist;
@@ -131,12 +131,16 @@ using namespace RNS::Persistence;
 /*static*/ float Transport::_receipts_check_interval	= 1.0;
 /*static*/ double Transport::_announces_last_checked	= 0.0;
 /*static*/ float Transport::_announces_check_interval	= 1.0;
+/*static*/ double Transport::_pending_prs_last_checked	= 0.0;
+/*static*/ float Transport::_pending_prs_check_interval	= 30.0;
 /*static*/ double Transport::_tables_last_culled		= 0.0;
 // CBA MCU
 /*static*/ //float Transport::_tables_cull_interval		= 5.0;
 /*static*/ float Transport::_tables_cull_interval		= 60.0;
 /*static*/ double Transport::_traffic_last_checked		= 0.0;
 /*static*/ float Transport::_traffic_check_interval		= 1.0;
+/*static*/ double Transport::_interface_last_jobs		= 0.0;
+/*static*/ float Transport::_interface_jobs_interval	= 5.0;
 /*static*/ double Transport::_blackhole_last_checked	= 0.0;
 /*static*/ float Transport::_blackhole_check_interval	= 60.0;
 /*static*/ double Transport::_last_mgmt_announce		= 0.0;
@@ -196,7 +200,7 @@ using namespace RNS::Persistence;
 /*static*/ uint8_t Transport::_path_store_segment_count = 0;
 /*static*/ uint32_t Transport::_hashlist_segment_size = 0;
 /*static*/ uint8_t Transport::_hashlist_segment_count = 0;
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 /*static*/ PathStore Transport::_path_store(RNS_PATH_TABLE_SEGMENT_SIZE, RNS_PATH_TABLE_SEGMENT_COUNT);
 #else
 /*static*/ PathStore Transport::_path_store;
@@ -347,7 +351,7 @@ DestinationEntry empty_destination_entry;
 
 		// Read in path table
 		//read_path_table();
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 		// CBA microStore
 		if (Utilities::OS::get_filesystem()) {
 			INFOF("FileSystem available: %lu bytes", Utilities::OS::get_filesystem().storageAvailable());
@@ -355,7 +359,8 @@ DestinationEntry empty_destination_entry;
 #if defined(ARDUINO)
 			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
 #endif
-			_path_store.init(Utilities::OS::get_filesystem(), "./path_store", false, _path_store_segment_size, _path_store_segment_count);
+			TRACE("Initializing path table store...");
+			_path_store.init(Utilities::OS::get_filesystem(), "./path_store/", false, _path_store_segment_size, _path_store_segment_count);
 			// If the filesystem is full then clear the path store since it's of no use full anyway
 			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
 				WARNING("FileSystem is full, clearing existing path store");
@@ -364,21 +369,31 @@ DestinationEntry empty_destination_entry;
 		}
 #endif // RNS_USE_FS && RNS_PERSIST_PATHS
 
-#if defined(RNS_USE_FS) && defined(RNS_KNOWN_DESTINATIONS_PERSIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 		if (Utilities::OS::get_filesystem()) {
-			Identity::_known_store.init(Utilities::OS::get_filesystem(), "./known_store", false,
+			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
+#if defined(ARDUINO)
+			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
+#endif
+			TRACE("Initializing known destinations store...");
+			Identity::_known_store.init(Utilities::OS::get_filesystem(), "./known_store/", false,
 				Identity::_known_store_segment_size, Identity::_known_store_segment_count);
 			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
 				WARNING("FileSystem is full, clearing existing known destinations store");
 				Identity::_known_store.clear();
 			}
 		}
-#endif // RNS_USE_FS && RNS_KNOWN_DESTINATIONS_PERSIST
+#endif // RNS_USE_FS && RNS_PERSIST_KNOWN_DESTINATIONS
 		Identity::_known_store.set_max_recs(Identity::_known_destinations_maxsize);
 
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_HASHLIST
 		if (Utilities::OS::get_filesystem()) {
-			_packet_hashlist.init(Utilities::OS::get_filesystem(), "./hashlist_store", false,
+			// CBA Must pass time offset into microStore for accurate timestamps on devices without a real-time clock
+#if defined(ARDUINO)
+			microStore::set_time_offset(Utilities::OS::getTimeOffset() / 1000);
+#endif
+			TRACE("Initializing packet hashlist store...");
+			_packet_hashlist.init(Utilities::OS::get_filesystem(), "./hashlist_store/", false,
 				_hashlist_segment_size, _hashlist_segment_count);
 			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
 				WARNING("FileSystem is full, clearing existing packet hashlist store");
@@ -628,65 +643,50 @@ DestinationEntry empty_destination_entry;
 				_announces_last_checked = OS::time();
 			}
 
-			// Refresh per-interface and class-level traffic counters and speeds
-			if (OS::time() > (_traffic_last_checked + _traffic_check_interval)) {
-				try {
-					count_traffic();
-				}
-				catch (const std::exception& e) {
-					ERRORF("jobs: failed to count traffic: %s", e.what());
-				}
-				_traffic_last_checked = OS::time();
-			}
-
-			// Expire blackhole entries whose 'until' timestamp has passed
-			if (OS::time() > (_blackhole_last_checked + _blackhole_check_interval)) {
-				try {
-					std::vector<Bytes> stale_blackholes;
-					double now = OS::time();
-					for (const auto& [identity_hash, entry] : _blackholed_identities) {
-						if (entry._until > 0.0 && now > entry._until) {
-							stale_blackholes.push_back(identity_hash);
-						}
-					}
-					for (const Bytes& identity_hash : stale_blackholes) {
-						_blackholed_identities.erase(identity_hash);
-					}
-					if (!stale_blackholes.empty()) {
-						VERBOSEF("Removed %zu expired blackhole entries", stale_blackholes.size());
-					}
-				}
-				catch (const std::exception& e) {
-					ERRORF("jobs: failed to expire blackhole entries: %s", e.what());
-				}
-				_blackhole_last_checked = OS::time();
-			}
-
-			// Keep _interfaces ordered by bitrate descending
-			prioritize_interfaces();
-
-			// CBA Culling no longer necessary since switch to GenerationalSet<>
-			/*
 			// Cull the packet hashlist if it has reached its max size
-			if (_packet_hashlist.size() > _hashlist_maxsize) {
-				std::set<Bytes>::iterator iter = _packet_hashlist.begin();
-				std::advance(iter, _packet_hashlist.size() - _hashlist_maxsize);
-				_packet_hashlist.erase(_packet_hashlist.begin(), iter);
+			// CBA microStore
+			// CBA Culling no longer necessary since switch to microStore
+
+			// Cull invalidated path requests
+			if (OS::time() > (_pending_prs_last_checked + _pending_prs_check_interval)) {
+				std::vector<Bytes> stale_local_prs;
+				for (auto& [destination_hash, interface] : _pending_local_path_requests) {
+					if (!find_interface_from_hash(destination_hash)) {
+						stale_local_prs.push_back(destination_hash);
+					}
+				}
+				for (auto& destination_hash : stale_local_prs) {
+					_pending_local_path_requests.erase(destination_hash);
+				}
+
+				_pending_prs_last_checked = OS::time();
 			}
 
 			// Cull the path request tags list if it has reached its max size
-			if (_discovery_pr_tags.size() > _max_pr_tags) {
-				std::set<Bytes>::iterator iter = _discovery_pr_tags.begin();
-				std::advance(iter, _discovery_pr_tags.size() - _max_pr_tags);
-				_discovery_pr_tags.erase(_discovery_pr_tags.begin(), iter);
-			}
-			*/
+			// CBA Culling no longer necessary since switch to GenerationalSet<>
 
 			if (OS::time() > (_tables_last_culled + _tables_cull_interval)) {
 
-				// CBA Disabled following since we're calling immediately after adding to path table now
-				// Cull the path table if it has reached its max size
-				//cull_path_table();
+                // Remove unneeded path state entries
+				try {
+					std::vector<Bytes> stale_path_states;
+					stale_path_states.reserve(_path_states.size());
+					for (const auto& [destination_hash, state] : _path_states) {
+						DestinationEntry destination_entry;
+						if (!_new_path_table.get(destination_hash, destination_entry) || !destination_entry) {
+							stale_path_states.push_back(destination_hash);
+						}
+					}
+					for (const Bytes& destination_hash : stale_path_states) {
+						_path_states.erase(destination_hash);
+					}
+				}
+				catch (const std::bad_alloc&) {
+					ERROR("jobs: bad_alloc - out of memory culling path states");
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to cull path states: %s", e.what());
+				}
 
 				// Cull the reverse table according to timeout
 				try {
@@ -804,45 +804,25 @@ DestinationEntry empty_destination_entry;
 					ERRORF("jobs: failed to cull link table: %s", e.what());
 				}
 
-				// CBA microStore
-				// Path expiry handled internally by microStore
-/*
 				// Cull the path table
-				DEBUG("Culling path table...");
-				try {
-					std::vector<Bytes> stale_paths;
-					stale_paths.reserve(_path_table.size());
-					for (auto& [destination_hash, destination_entry] : _path_table) {
-						const Interface& attached_interface = destination_entry.receiving_interface();
-						double destination_expiry;
-						if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ACCESS_POINT) {
-							destination_expiry = destination_entry._timestamp + AP_PATH_TIME;
-						}
-						else if (attached_interface && attached_interface.mode() == Type::Interface::MODE_ROAMING) {
-							destination_expiry = destination_entry._timestamp + ROAMING_PATH_TIME;
-						}
-						else {
-							destination_expiry = destination_entry._timestamp + DESTINATION_TIMEOUT;
-						}
+				// CBA microStore
+				// CBA Culling of path table no longer necessary since switch to microStore
 
-						if (OS::time() > destination_expiry) {
-							stale_paths.push_back(destination_hash);
-							DEBUGF("Path to %s timed out and was removed", destination_hash.toHex().c_str());
-						}
-						else if (!find_interface_from_hash(attached_interface.get_hash())) {
-							stale_paths.push_back(destination_hash);
-							DEBUGF("Path to %s was removed since the attached interface no longer exists", destination_hash.toHex().c_str());
+                // Cull the pending path requests table
+				try {
+					std::vector<Bytes> stale_path_requests;
+					for (const auto& [destination_hash, timestamp] : _path_requests) {
+						if (OS::time() > (timestamp + PATH_REQUEST_GATE_TIMEOUT)) {
+							stale_path_requests.push_back(destination_hash);
 						}
 					}
-					remove_paths(stale_paths);
-				}
-				catch (const std::bad_alloc&) {
-					ERROR("jobs: bad_alloc - out of memory culling path table");
+					for (const Bytes& destination_hash : stale_path_requests) {
+						_path_requests.erase(destination_hash);
+					}
 				}
 				catch (const std::exception& e) {
-					ERRORF("jobs: failed to cull path table: %s", e.what());
+					ERRORF("jobs: failed to cull path requests: %s", e.what());
 				}
-*/
 
 				// Cull the pending discovery path requests table
 				try {
@@ -861,43 +841,6 @@ DestinationEntry empty_destination_entry;
 				}
 				catch (const std::exception& e) {
 					ERRORF("jobs: failed to cull discovery path requests: %s", e.what());
-				}
-
-				// Cull the path requests table
-				try {
-					std::vector<Bytes> stale_path_requests;
-					for (const auto& [destination_hash, timestamp] : _path_requests) {
-						if (OS::time() > (timestamp + PATH_REQUEST_GATE_TIMEOUT)) {
-							stale_path_requests.push_back(destination_hash);
-						}
-					}
-					for (const Bytes& destination_hash : stale_path_requests) {
-						_path_requests.erase(destination_hash);
-					}
-				}
-				catch (const std::exception& e) {
-					ERRORF("jobs: failed to cull path requests: %s", e.what());
-				}
-
-				// Cull path state entries for destinations no longer in the path table
-				try {
-					std::vector<Bytes> stale_path_states;
-					stale_path_states.reserve(_path_states.size());
-					for (const auto& [destination_hash, state] : _path_states) {
-						DestinationEntry destination_entry;
-						if (!_new_path_table.get(destination_hash, destination_entry) || !destination_entry) {
-							stale_path_states.push_back(destination_hash);
-						}
-					}
-					for (const Bytes& destination_hash : stale_path_states) {
-						_path_states.erase(destination_hash);
-					}
-				}
-				catch (const std::bad_alloc&) {
-					ERROR("jobs: bad_alloc - out of memory culling path states");
-				}
-				catch (const std::exception& e) {
-					ERRORF("jobs: failed to cull path states: %s", e.what());
 				}
 
 				// Cull the tunnel table
@@ -943,6 +886,60 @@ DestinationEntry empty_destination_entry;
 //#endif
 
 				_tables_last_culled = OS::time();
+			}
+
+            // Check expired blackhole entries
+			if (OS::time() > (_blackhole_last_checked + _blackhole_check_interval)) {
+				try {
+					std::vector<Bytes> stale_blackholes;
+					double now = OS::time();
+					for (const auto& [identity_hash, entry] : _blackholed_identities) {
+						if (entry._until > 0.0 && now > entry._until) {
+							stale_blackholes.push_back(identity_hash);
+						}
+					}
+					for (const Bytes& identity_hash : stale_blackholes) {
+						_blackholed_identities.erase(identity_hash);
+					}
+					if (!stale_blackholes.empty()) {
+						VERBOSEF("Removed %zu expired blackhole entries", stale_blackholes.size());
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to expire blackhole entries: %s", e.what());
+				}
+				_blackhole_last_checked = OS::time();
+			}
+
+			// Refresh per-interface and class-level traffic counters and speeds
+			if (OS::time() > (_traffic_last_checked + _traffic_check_interval)) {
+				try {
+					count_traffic();
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed to count traffic: %s", e.what());
+				}
+				_traffic_last_checked = OS::time();
+			}
+
+            // Run interface-related jobs
+			if (OS::time() > (_interface_last_jobs + _interface_jobs_interval)) {
+				prioritize_interfaces();
+				// TODO
+/*
+				try {
+					for (auto& interface : _interfaces) {
+						interface.should_ingress_limit();
+						interface.should_ingress_limit_pr();
+						interface.process_held_announces();
+						if (interface.phy_keepalive()) interface.send_keepalive();
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("Error while processing held per-interface announces: %s", e.what());
+				}
+*/
+				_interface_last_jobs = OS::time();
 			}
 
 			// CBA Periodically persist data
@@ -3133,7 +3130,7 @@ Deregisters an announce handler.
 // the packet cache.
 /*static*/ bool Transport::cache_packet(const Packet& packet, bool force_cache /*= false*/) {
 	//TRACEF("Checking to see if packet %s should be cached", packet.get_hash().toHex().c_str());
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	if (should_cache_packet(packet) || force_cache) {
 		TRACEF("Saving packet %s to storage", packet.get_hash().toHex().c_str());
 		try {
@@ -3150,7 +3147,7 @@ Deregisters an announce handler.
 }
 
 /*static*/ bool Transport::is_cached_packet(const Bytes& packet_hash) {
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	try {
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
@@ -3165,7 +3162,7 @@ Deregisters an announce handler.
 
 /*static*/ Packet Transport::get_cached_packet(const Bytes& packet_hash) {
 	TRACEF("Loading packet %s from cache storage", packet_hash.toHex().c_str());
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	try {
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
@@ -3184,7 +3181,7 @@ Deregisters an announce handler.
 
 /*static*/ bool Transport::clear_cached_packet(const Bytes& packet_hash) {
 	TRACEF("Clearing packet %s from cache storage", packet_hash.toHex().c_str());
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	try {
 		char packet_cache_path[Type::Reticulum::FILEPATH_MAXSIZE];
 		snprintf(packet_cache_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/%s", Reticulum::_cachepath, packet_hash.toHex().c_str());
@@ -4761,7 +4758,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 
 /*static*/ bool Transport::read_path_table() {
 	DEBUG("Transport::read_path_table");
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	char destination_table_path[Type::Reticulum::FILEPATH_MAXSIZE];
 	snprintf(destination_table_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/destination_table", Reticulum::_storagepath);
 	if (!_owner.is_connected_to_shared_instance() && OS::file_exists(destination_table_path)) {
@@ -4855,7 +4852,7 @@ TRACEF("Transport::read_path_table: buffer size %d bytes", Persistence::_buffer.
 	}
 
 	bool success = false;
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	if (_saving_path_table) {
 		double wait_interval = 0.2;
 		double wait_timeout = 5;
@@ -5010,7 +5007,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 /*static*/ void Transport::read_tunnel_table() {
 	DEBUG("Transport::read_tunnel_table");
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 // TODO
 /*p
 		tunnel_table_path = RNS.Reticulum.storagepath+"/tunnels"
@@ -5066,7 +5063,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 }
 
 /*static*/ void Transport::write_tunnel_table() {
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 // TODO
 /*p
 	if not Transport.owner.is_connected_to_shared_instance:
@@ -5157,7 +5154,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	cleaning_caches = true;
 
 	TRACE("Transport::clean_caches()");
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	// CBA Remove cached packets no longer in path list
 	std::list<std::string> remove_list;
 	OS::list_directory(Reticulum::_cachepath, [&remove_list](const char* file_name) {
@@ -5190,7 +5187,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 /*static*/ void Transport::clear_storage() {
 	TRACE("Transport::clear_storage()");
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 	try {
 		char file_path[Type::Reticulum::FILEPATH_MAXSIZE];
 
@@ -5496,7 +5493,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 			uint16_t count = 0;
 			for (const auto& [timestamp, destination_hash] : sorted_keys) {
 				TRACEF("Transport::cull_path_table: Removing destination %s from path table", destination_hash.toHex().c_str());
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 				// CBA microStore
 				//auto& destination_entry = get_path(destination_hash);
 				DestinationEntry destination_entry;

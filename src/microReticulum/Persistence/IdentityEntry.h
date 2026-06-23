@@ -15,9 +15,10 @@
 #pragma once
 
 #include "../Bytes.h"
+#include "../Type.h"
 #include "../Utilities/Memory.h"
 
-#if defined(RNS_USE_FS) && defined(RNS_KNOWN_DESTINATIONS_PERSIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 #include <microStore/FileStore.h>
 #else
 #include <microStore/HeapStore.h>
@@ -61,7 +62,7 @@ public:
 #endif
 };
 
-#if defined(RNS_USE_FS) && defined(RNS_KNOWN_DESTINATIONS_PERSIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 using KnownStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
 #else
 using KnownStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;

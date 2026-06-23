@@ -16,6 +16,7 @@
 
 #include "Transport.h"
 #include "Log.h"
+#include "Type.h"
 #include "Utilities/Memory.h"
 
 #ifdef RNS_USE_PROVISIONING
@@ -326,7 +327,7 @@ void Reticulum::clean_caches() {
 	TRACE("Cleaning resource and packet caches...");
 	double now = OS::time();
 
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 /*
 	// Clean resource caches
 	for (auto& filename : OS::list_directory(resourcepath) {

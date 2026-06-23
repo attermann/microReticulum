@@ -23,7 +23,9 @@ This API is dependent on the following external libraries:
 
 - `-DRNS_MEM_LOG` Used to enable logging of low-level memory operations for debug purposes
 - `-DRNS_USE_FS` Used to enable use of file system by RNS for persistence
-- `-DRNS_PERSIST_PATHS` Used to enable persistence of RNS paths in file system (also requires `-DRNS_USE_FS`)
+- `-DRNS_PERSIST_PATHS=0` Used to disable persistence of RNS paths in file system (enabled by default)
+- `-DRNS_PERSIST_KNOWN_DESTINATIONS=0` Used to disable persistence of RNS known destinations in file system (enabled by default)
+- `-DRNS_PERSIST_HASHLIST=0` Used to disable persistence of RNS packet hashlist in file system (enabled by default)
 - `-DRNS_USE_PROVISIONING` Used to enable the Provisioning subsystem (auto-started from `Reticulum::start()`). Disk persistence within the subsystem is additionally gated on `-DRNS_USE_FS`. Without this flag, none of the provisioning code is linked into the final binary &mdash; see the [Provisioning](#provisioning) section below.
 
 ## Memory Management Build Options

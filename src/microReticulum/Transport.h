@@ -21,7 +21,7 @@
 #include "Utilities/GenerationalSet.h"
 #include "Persistence/DestinationEntry.h"
 
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_HASHLIST
 #include <microStore/FileStore.h>
 #else
 #include <microStore/HeapStore.h>
@@ -83,7 +83,7 @@ namespace RNS {
 		using InterfaceTable = std::vector<Interface>;
 		using DestinationTable = std::map<Bytes, Destination>;
 		using BytesList = RNS::Utilities::GenerationalSet<Bytes>;
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+#if defined(RNS_USE_FS) && RNS_PERSIST_HASHLIST
 		using HashlistStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
 #else
 		using HashlistStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
@@ -556,10 +556,14 @@ namespace RNS {
 		static float _receipts_check_interval;
 		static double _announces_last_checked;
 		static float _announces_check_interval;
+		static double _pending_prs_last_checked;
+		static float _pending_prs_check_interval;
 		static double _tables_last_culled;
 		static float _tables_cull_interval;
 		static double _traffic_last_checked;
 		static float _traffic_check_interval;
+		static double _interface_last_jobs;
+		static float _interface_jobs_interval;
 		static double _blackhole_last_checked;
 		static float _blackhole_check_interval;
 		static double _last_mgmt_announce;

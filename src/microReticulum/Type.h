@@ -59,6 +59,21 @@
 #define RNS_QUEUED_DISCOVERY_PRS_MAX 32
 #endif
 
+// RNS_PERSIST_PATHS enabled by default
+#ifndef RNS_PERSIST_PATHS
+#define RNS_PERSIST_PATHS 1
+#endif
+
+// RNS_PERSIST_KNOWN_DESTINATIONS enabled by default
+#ifndef RNS_PERSIST_KNOWN_DESTINATIONS
+#define RNS_PERSIST_KNOWN_DESTINATIONS 1
+#endif
+
+// RNS_PERSIST_HASHLIST enabled by default
+#ifndef RNS_PERSIST_HASHLIST
+#define RNS_PERSIST_HASHLIST 1
+#endif
+
 
 namespace RNS { namespace Type {
 
