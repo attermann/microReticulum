@@ -61,6 +61,14 @@ using namespace RNS::Persistence;
 #define RNS_HASHLIST_MAX 100
 #endif
 
+#ifndef RNS_HASHLIST_SEGMENT_SIZE
+#define RNS_HASHLIST_SEGMENT_SIZE 32768
+#endif
+
+#ifndef RNS_HASHLIST_SEGMENT_COUNT
+#define RNS_HASHLIST_SEGMENT_COUNT 2
+#endif
+
 #ifndef RNS_PR_TAGS_MAX
 #define RNS_PR_TAGS_MAX	 32
 #endif
@@ -73,7 +81,11 @@ using namespace RNS::Persistence;
 /*static*/ Transport::DestinationTable Transport::_destinations;
 /*static*/ std::set<Link> Transport::_pending_links;
 /*static*/ std::set<Link> Transport::_active_links;
-/*static*/ Transport::BytesList Transport::_packet_hashlist;
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+/*static*/ Transport::HashlistStore Transport::_packet_hashlist(RNS_HASHLIST_SEGMENT_SIZE, RNS_HASHLIST_SEGMENT_COUNT);
+#else
+/*static*/ Transport::HashlistStore Transport::_packet_hashlist;
+#endif
 /*static*/ std::list<PacketReceipt> Transport::_receipts;
 
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
@@ -182,6 +194,8 @@ using namespace RNS::Persistence;
 // CBA microStore
 /*static*/ uint32_t Transport::_path_store_segment_size = 0;
 /*static*/ uint8_t Transport::_path_store_segment_count = 0;
+/*static*/ uint32_t Transport::_hashlist_segment_size = 0;
+/*static*/ uint8_t Transport::_hashlist_segment_count = 0;
 #if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
 /*static*/ PathStore Transport::_path_store(RNS_PATH_TABLE_SEGMENT_SIZE, RNS_PATH_TABLE_SEGMENT_COUNT);
 #else
@@ -197,9 +211,9 @@ DestinationEntry empty_destination_entry;
 
 	_jobs_running = true;
 
-	// Wire size caps into the GenerationalSet containers (no-op if already set
-	// via hashlist_maxsize()/max_pr_tags() setters before start()).
-	_packet_hashlist.max_size(_hashlist_maxsize);
+	// Wire size caps (no-op if already set via hashlist_maxsize()/max_pr_tags()
+	// setters before start()).
+	_packet_hashlist.set_max_recs(_hashlist_maxsize);
 	_discovery_pr_tags.max_size(_max_pr_tags);
 
 	try {
@@ -244,24 +258,6 @@ DestinationEntry empty_destination_entry;
 				ERRORF("Failed to check for transport identity, the contained exception was: %s", e.what());
 			}
 		}
-
-// TODO
-/*
-		// Load packet hashlist
-		packet_hashlist_path = Reticulum::storagepath + "/packet_hashlist";
-		if (!owner.is_connected_to_shared_instance()) {
-			if (os.path.isfile(packet_hashlist_path)) {
-				try {
-					//p file = open(packet_hashlist_path, "rb")
-					//p Transport.packet_hashlist = umsgpack.unpackb(file.read())
-					//p file.close()
-				}
-				catch (const std::exception& e) {
-					ERRORF("Could not load packet hashlist from storage, the contained exception was: %s", e.what());
-				}
-			}
-		}
-*/
 
 		// Create transport-specific destination for path request
 		Destination path_request_destination({Type::NONE}, Type::Destination::IN, Type::Destination::PLAIN, APP_NAME, "path.request");
@@ -379,6 +375,17 @@ DestinationEntry empty_destination_entry;
 		}
 #endif // RNS_USE_FS && RNS_KNOWN_DESTINATIONS_PERSIST
 		Identity::_known_store.set_max_recs(Identity::_known_destinations_maxsize);
+
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+		if (Utilities::OS::get_filesystem()) {
+			_packet_hashlist.init(Utilities::OS::get_filesystem(), "./hashlist_store", false,
+				_hashlist_segment_size, _hashlist_segment_count);
+			if (Utilities::OS::get_filesystem().storageAvailable() > 0 && Utilities::OS::get_filesystem().storageAvailable() < 1024) {
+				WARNING("FileSystem is full, clearing existing packet hashlist store");
+				_packet_hashlist.clear();
+			}
+		}
+#endif // RNS_USE_FS && RNS_PERSIST_HASHLIST
 
 		// CBA The following write and clean is very resource intensive so skip at startup
 		// and let a later (optimized) scheduled write and clean take care of it.
@@ -1365,7 +1372,7 @@ DestinationEntry empty_destination_entry;
 					TRACE("Transport::outbound: Packet transmission allowed");
 					if (!stored_hash) {
 						// CBA ACCUMULATES
-						_packet_hashlist.insert(packet.packet_hash());
+						_packet_hashlist.put(packet.packet_hash().data(), (uint8_t)packet.packet_hash().size(), nullptr, 0);
 						stored_hash = true;
 					}
 
@@ -1479,7 +1486,7 @@ DestinationEntry empty_destination_entry;
 		}
 	}
 
-	if (!_packet_hashlist.contains(packet.packet_hash())) {
+	if (!_packet_hashlist.exists(packet.packet_hash().data(), (uint8_t)packet.packet_hash().size())) {
 		TRACE("Transport::packet_filter: packet not previously seen");
 		return true;
 	}
@@ -1556,7 +1563,7 @@ DestinationEntry empty_destination_entry;
 		}
 	}
 
-	if (!_packet_hashlist.contains(packet.packet_hash())) {
+	if (!_packet_hashlist.exists(packet.packet_hash().data(), (uint8_t)packet.packet_hash().size())) {
 		TRACE("Transport::packet_filter: packet not previously seen");
 		return true;
 	}
@@ -1738,7 +1745,7 @@ DestinationEntry empty_destination_entry;
 		}
 		if (remember_packet_hash) {
 			// CBA ACCUMULATES
-			_packet_hashlist.insert(packet.packet_hash());
+			_packet_hashlist.put(packet.packet_hash().data(), (uint8_t)packet.packet_hash().size(), nullptr, 0);
 		}
 
 		// CBA Currently this packet cache is a noop since it's not forced
@@ -2040,7 +2047,7 @@ DestinationEntry empty_destination_entry;
 						transmit(outbound_interface, new_raw);
 						link_entry._timestamp = OS::time();
 						// Deferred hashlist insertion for link transport packets
-						_packet_hashlist.insert(packet.packet_hash());
+						_packet_hashlist.put(packet.packet_hash().data(), (uint8_t)packet.packet_hash().size(), nullptr, 0);
 					}
 					else {
 						//p pass
@@ -2678,7 +2685,7 @@ DestinationEntry empty_destination_entry;
 							// drop the packet hash from the dedup filter so the
 							// link can still receive the packet when it finally
 							// arrives over the correct interface.
-							_packet_hashlist.erase(packet.packet_hash());
+							_packet_hashlist.remove(packet.packet_hash().data(), (uint8_t)packet.packet_hash().size());
 						}
 						break;
 					}
@@ -4749,44 +4756,6 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 	}
 }
 
-/*static*/ void Transport::write_packet_hashlist() {
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
-// TODO
-/*p
-	if not Transport.owner.is_connected_to_shared_instance:
-		if hasattr(Transport, "saving_packet_hashlist"):
-			wait_interval = 0.2
-			wait_timeout = 5
-			wait_start = time.time()
-			while Transport.saving_packet_hashlist:
-				time.sleep(wait_interval)
-				if time.time() > wait_start+wait_timeout:
-					RNS.log("Could not save packet hashlist to storage, waiting for previous save operation timed out.", RNS.LOG_ERROR)
-					return False
-
-		try:
-			Transport.saving_packet_hashlist = True
-			save_start = time.time()
-
-			if not RNS.Reticulum.transport_enabled():
-				Transport.packet_hashlist = []
-			else:
-				RNS.log("Saving packet hashlist to storage...", RNS.LOG_DEBUG)
-
-			packet_hashlist_path = RNS.Reticulum.storagepath+"/packet_hashlist"
-			file = open(packet_hashlist_path, "wb")
-			file.write(umsgpack.packb(Transport.packet_hashlist))
-			file.close()
-
-			DEBUGF("Saved packet hashlist in %.3f seconds", OS::round(time.time() - save_start))
-
-		except Exception as e:
-			RNS.log("Could not save packet hashlist to storage, the contained exception was: "+str(e), RNS.LOG_ERROR)
-
-		Transport.saving_packet_hashlist = False
-*/
-#endif
-}
 
 //#define CUSTOM 1
 
@@ -5174,7 +5143,6 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 /*static*/ void Transport::persist_data() {
 	TRACE("Transport::persist_data()");
-	write_packet_hashlist();
 	write_path_table();
 	write_tunnel_table();
 }
@@ -5231,18 +5199,14 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 			OS::remove_file(file_path);
 		}
 
-		snprintf(file_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/packet_hashlist", Reticulum::_storagepath);
-		if (OS::file_exists(file_path)) {
-			OS::remove_file(file_path);
-		}
-
 		snprintf(file_path, Type::Reticulum::FILEPATH_MAXSIZE, "%s/tunnels", Reticulum::_storagepath);
 		if (OS::file_exists(file_path)) {
 			OS::remove_file(file_path);
 		}
 
-		// Clear the microStore-backed path store (removes its segment files on disk)
+		// Clear the microStore-backed stores (removes their segment files on disk)
 		_path_store.clear();
+		_packet_hashlist.clear();
 
 		// Remove cached announce packets
 		if (OS::directory_exists(Reticulum::_cachepath)) {

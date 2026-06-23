@@ -126,6 +126,14 @@ namespace RNS { namespace Provisioning {
 					0, (int64_t)RNS::Identity::known_store_segment_count(), 0, 255,
 					[](const Value& v) { RNS::Identity::known_store_segment_count((uint8_t)v.as_int()); return true; },
 					[]() { return (int64_t)RNS::Identity::known_store_segment_count(); })
+				.field_int("Hashlist Segment Size", Ns::TransportConfig::Field::HashlistSegmentSize,
+					0, (int64_t)RNS::Transport::hashlist_segment_size(), 0, INT32_MAX,
+					[](const Value& v) { RNS::Transport::hashlist_segment_size((uint32_t)v.as_int()); return true; },
+					[]() { return (int64_t)RNS::Transport::hashlist_segment_size(); })
+				.field_int("Hashlist Segment Count", Ns::TransportConfig::Field::HashlistSegmentCount,
+					0, (int64_t)RNS::Transport::hashlist_segment_count(), 0, 255,
+					[](const Value& v) { RNS::Transport::hashlist_segment_count((uint8_t)v.as_int()); return true; },
+					[]() { return (int64_t)RNS::Transport::hashlist_segment_count(); })
 				.command_void("Clear Storage", Ns::TransportConfig::Field::ClearStorage,
 					[]() { RNS::Transport::clear_storage(); return true; })
 				.end();

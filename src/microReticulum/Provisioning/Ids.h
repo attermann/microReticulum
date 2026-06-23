@@ -55,6 +55,8 @@ namespace RNS { namespace Provisioning { namespace Ns {
 			constexpr fid_t KnownDestinationsMaxsize     = 7;
 			constexpr fid_t KnownDestinationsSegmentSize = 8;
 			constexpr fid_t KnownDestinationsSegmentCnt  = 9;
+			constexpr fid_t HashlistSegmentSize          = 10;
+			constexpr fid_t HashlistSegmentCount         = 11;
 		}
 	}
 

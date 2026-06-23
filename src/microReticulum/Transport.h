@@ -21,6 +21,12 @@
 #include "Utilities/GenerationalSet.h"
 #include "Persistence/DestinationEntry.h"
 
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+#include <microStore/FileStore.h>
+#else
+#include <microStore/HeapStore.h>
+#endif
+
 #include <map>
 #include <vector>
 #include <list>
@@ -77,6 +83,11 @@ namespace RNS {
 		using InterfaceTable = std::vector<Interface>;
 		using DestinationTable = std::map<Bytes, Destination>;
 		using BytesList = RNS::Utilities::GenerationalSet<Bytes>;
+#if defined(RNS_USE_FS) && defined(RNS_PERSIST_HASHLIST)
+		using HashlistStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+#else
+		using HashlistStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+#endif
 
 		class Callbacks {
 		public:
@@ -374,7 +385,6 @@ namespace RNS {
 		static void shared_connection_reappeared();
 		static void drop_announce_queues();
 		static uint64_t announce_emitted(const Packet& packet);
-		static void write_packet_hashlist();
 		static bool read_path_table();
 		static bool write_path_table();
 		static void read_tunnel_table();
@@ -421,8 +431,12 @@ namespace RNS {
 		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
 		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) {
 			_hashlist_maxsize = hashlist_maxsize;
-			_packet_hashlist.max_size(hashlist_maxsize);
+			_packet_hashlist.set_max_recs(hashlist_maxsize);
 		}
+		inline static uint32_t hashlist_segment_size() { return _hashlist_segment_size; }
+		inline static void hashlist_segment_size(uint32_t value) { _hashlist_segment_size = value; }
+		inline static uint8_t hashlist_segment_count() { return _hashlist_segment_count; }
+		inline static void hashlist_segment_count(uint8_t value) { _hashlist_segment_count = value; }
 		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
 		inline static void max_pr_tags(uint16_t max_pr_tags) {
 			_max_pr_tags = max_pr_tags;
@@ -465,7 +479,7 @@ namespace RNS {
 		inline static const BytesList& discovery_pr_tags() { return _discovery_pr_tags; }
 		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
 		inline static const std::set<Bytes>& control_hashes() { return _control_hashes; }
-		inline static const BytesList& packet_hashlist() { return _packet_hashlist; }
+		inline static const HashlistStore& packet_hashlist() { return _packet_hashlist; }
 		inline static const std::list<PacketReceipt>& receipts() { return _receipts; }
 		inline static const TunnelTable& tunnels() { return _tunnels; }
 
@@ -489,7 +503,7 @@ namespace RNS {
 		// CBA TODO: Reconsider using std::set for enforcing uniqueness. Maybe consider std::map keyed on hash instead
 		static std::set<Link> _pending_links;		// Links that are being established
 		static std::set<Link> _active_links;		// Links that are active
-		static BytesList _packet_hashlist;	    // A list of packet hashes for duplicate detection
+		static HashlistStore _packet_hashlist;  // Set of packet hashes for duplicate detection
 		static std::list<PacketReceipt> _receipts;	// Receipts of all outgoing packets for proof processing
 
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
@@ -600,6 +614,9 @@ namespace RNS {
 		static uint8_t _path_store_segment_count;
 		static PathStore _path_store;
 		static NewPathTable _new_path_table;
+
+		static uint32_t _hashlist_segment_size;
+		static uint8_t _hashlist_segment_count;
 	};
 
 	template <typename M, typename S> 
