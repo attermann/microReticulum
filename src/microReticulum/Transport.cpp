@@ -4023,7 +4023,13 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 		if (req.dest_hash.size() > 0) {
 			DestinationEntry destination_entry;
 			_new_path_table.get(req.dest_hash, destination_entry);
-			if (destination_entry) {
+			// DIVERGENCE: do not advertise paths we have personally marked
+			// UNRESPONSIVE. See path_request() for the rationale; the same
+			// reasoning applies to remote management table queries since
+			// downstream consumers may treat the returned set as usable
+			// paths. State self-heals when a fresh announce resets it via
+			// mark_path_unknown_state.
+			if (destination_entry && !path_is_unresponsive(req.dest_hash)) {
 				p.packArraySize(1);
 				remote_path_pack_path_entry(p, req.dest_hash, destination_entry);
 			}
@@ -4041,6 +4047,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			for (const auto& path : _new_path_table) {
 				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
 				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
+				if (path_is_unresponsive(path.key)) continue;
 				match_count++;
 				if (match_count >= 100) break;
 			}
@@ -4057,6 +4064,7 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 			for (const auto& path : _new_path_table) {
 				if (req.dest_hash.size() > 0 && path.key != req.dest_hash) continue;
 				if (req.max_hops_present && path.value._hops > req.max_hops) continue;
+				if (path_is_unresponsive(path.key)) continue;
 				remote_path_pack_path_entry(p, path.key, path.value);
 				match_count++;
 				if (match_count >= 100) break;
@@ -4199,6 +4207,22 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
     //p elif (RNS.Reticulum.transport_enabled() or is_from_local_client) and (destination_hash in Transport.destination_table):
 	else if ((Reticulum::transport_enabled() || is_from_local_client) && destination_entry) {
 		TRACEF("Transport::path_request_handler: entry found for destination %s", destination_hash.toHex().c_str());
+
+		// DIVERGENCE
+		// Python (Transport.py path_request handling) does not consult
+		// path_states when answering path requests, so a node will keep
+		// advertising a path it has personally observed to be broken.
+		// We filter here: if we have marked this path UNRESPONSIVE via a
+		// failed link attempt (see jobs() link-table teardown), do not
+		// poison the requester with a path we already know is bad. A
+		// fresh same-generation announce resets the state to UNKNOWN
+		// (see mark_path_unknown_state call after _new_path_table.put),
+		// so the filter self-heals.
+		if (path_is_unresponsive(destination_hash)) {
+			DEBUGF("Not answering path request for destination %s%s, path is marked unresponsive", destination_hash.toHex().c_str(), interface_str.c_str());
+			return;
+		}
+
 		const Packet announce_packet = destination_entry.announce_packet();
 TRACEF("announce_packet destination_hash: %s", announce_packet.destination_hash().toHex().c_str());
 TRACEF("announce_packet hops: %u", announce_packet.hops());
