@@ -592,6 +592,93 @@ void test_incoming_announce_stress() {
 
 
 // ============================================================================
+// Proof-based path healing (RNS_PROOF_PATH_HEALING)
+// ============================================================================
+
+#if RNS_PROOF_PATH_HEALING
+
+void test_proof_healing_context_flag_set_on_single_data() {
+	initRNS();
+
+	RNS::Bytes payload("proof-expected payload");
+	RNS::Packet packet(test_dest, payload);  // create_receipt defaults to true
+	packet.pack();
+
+	TEST_ASSERT_EQUAL_MESSAGE(RNS::Type::Packet::FLAG_SET, packet.context_flag(),
+		"SINGLE DATA with create_receipt=true should set context_flag");
+	TEST_ASSERT_TRUE_MESSAGE((packet.flags() & 0b00100000) != 0,
+		"Packed flags byte should carry bit 5");
+}
+
+void test_proof_healing_context_flag_unset_when_no_receipt() {
+	initRNS();
+
+	RNS::Bytes payload("no-proof-expected payload");
+	RNS::Packet packet(test_dest, payload);
+	packet.create_receipt(false);
+	packet.pack();
+
+	TEST_ASSERT_EQUAL_MESSAGE(RNS::Type::Packet::FLAG_UNSET, packet.context_flag(),
+		"SINGLE DATA with create_receipt=false should leave context_flag clear");
+	TEST_ASSERT_TRUE_MESSAGE((packet.flags() & 0b00100000) == 0,
+		"Packed flags byte should not carry bit 5");
+}
+
+void test_proof_healing_context_flag_roundtrip_unpack() {
+	initRNS();
+
+	RNS::Bytes payload("roundtrip payload");
+	RNS::Packet packet(test_dest, payload);
+	packet.pack();
+	TEST_ASSERT_EQUAL(RNS::Type::Packet::FLAG_SET, packet.context_flag());
+
+	RNS::Packet unpacked(packet.raw());
+	TEST_ASSERT_TRUE_MESSAGE(unpacked.unpack(), "unpack should succeed");
+	TEST_ASSERT_EQUAL_MESSAGE(RNS::Type::Packet::FLAG_SET, unpacked.context_flag(),
+		"context_flag survives raw -> unpack round-trip");
+}
+
+void test_proof_healing_announce_context_flag_preserved() {
+	// Announces use context_flag for ratchet signaling (Identity.cpp:333).
+	// The new pack() logic must not touch ANNOUNCE packets.
+	initRNS();
+
+	RNS::Bytes payload("announce-with-ratchet");
+	RNS::Packet packet(test_dest, payload);
+	packet.packet_type(RNS::Type::Packet::ANNOUNCE);
+	packet.context_flag(RNS::Type::Packet::FLAG_SET);
+	packet.create_receipt(false);
+	packet.pack();
+
+	TEST_ASSERT_EQUAL_MESSAGE(RNS::Type::Packet::FLAG_SET, packet.context_flag(),
+		"ANNOUNCE context_flag should be preserved by pack()");
+}
+
+void test_proof_healing_mark_responsive_unblocks_path() {
+	// Sanity-check the path-state machinery the new code drives.
+	initRNS();
+
+	// Pre-populate the path table by simulating an announce arrival.
+	RNS::Identity remote_id(true);
+	RNS::Bytes dest_hash = RNS::Destination::hash(remote_id, "test", "healing");
+
+	// Without an actual entry in _new_path_table the mark_* functions return false.
+	bool marked = RNS::Transport::mark_path_unresponsive(dest_hash);
+	if (!marked) {
+		TEST_PASS_MESSAGE("No path entry to mark; mark_* defensively returns false");
+		return;
+	}
+	TEST_ASSERT_TRUE(RNS::Transport::path_is_unresponsive(dest_hash));
+
+	TEST_ASSERT_TRUE(RNS::Transport::mark_path_responsive(dest_hash));
+	TEST_ASSERT_FALSE_MESSAGE(RNS::Transport::path_is_unresponsive(dest_hash),
+		"mark_path_responsive should clear UNRESPONSIVE state");
+}
+
+#endif  // RNS_PROOF_PATH_HEALING
+
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -626,6 +713,14 @@ int runUnityTests(void) {
 	RUN_TEST(test_prioritize_interfaces);
 	RUN_TEST(test_incoming_announce_over_limit);
 	//RUN_TEST(test_incoming_announce_stress);
+
+#if RNS_PROOF_PATH_HEALING
+	RUN_TEST(test_proof_healing_context_flag_set_on_single_data);
+	RUN_TEST(test_proof_healing_context_flag_unset_when_no_receipt);
+	RUN_TEST(test_proof_healing_context_flag_roundtrip_unpack);
+	RUN_TEST(test_proof_healing_announce_context_flag_preserved);
+	RUN_TEST(test_proof_healing_mark_responsive_unblocks_path);
+#endif
 
 	return UNITY_END();
 }

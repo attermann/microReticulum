@@ -21,6 +21,12 @@
 #include "Utilities/GenerationalSet.h"
 #include "Persistence/DestinationEntry.h"
 
+// DIVERGENCE: set in Transport.h (not Transport.cpp) so callers in Packet.cpp
+// can also gate on the same symbol.
+#ifndef RNS_PROOF_PATH_HEALING
+#define RNS_PROOF_PATH_HEALING 1
+#endif
+
 #if defined(RNS_USE_FS) && RNS_PERSIST_HASHLIST
 #include <microStore/FileStore.h>
 #else
@@ -202,10 +208,25 @@ namespace RNS {
 				_timestamp(timestamp)
 			{
 			}
+			// DIVERGENCE: proof-expectation tracking for SINGLE DATA path healing
+			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp,
+				const Bytes& destination_hash, bool expects_proof, double proof_timeout) :
+				_receiving_interface(receiving_interface),
+				_outbound_interface(outbound_interface),
+				_timestamp(timestamp),
+				_destination_hash(destination_hash),
+				_expects_proof(expects_proof),
+				_proof_timeout(proof_timeout)
+			{
+			}
 		public:
 			Interface _receiving_interface = {Type::NONE};
 			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
+			Bytes _destination_hash;
+			bool _expects_proof = false;
+			bool _proof_seen = false;
+			double _proof_timeout = 0;
 		};
 		using ReverseTable = std::map<Bytes, ReverseEntry>;
 

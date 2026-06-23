@@ -318,6 +318,18 @@ void Packet::pack() {
 	}
 	_object->_destination_hash = _object->_destination.hash();
 
+#if RNS_PROOF_PATH_HEALING
+	// DIVERGENCE: signal proof expectation to transport nodes by setting
+	// context_flag on SINGLE DATA packets that will produce a PacketReceipt.
+	if (_object->_packet_type == DATA
+	    && _object->_destination.type() == Type::Destination::SINGLE
+	    && _object->_create_receipt
+	    && _object->_context_flag == FLAG_UNSET) {
+		_object->_context_flag = FLAG_SET;
+		_object->_flags = get_packed_flags();
+	}
+#endif
+
 	_object->_header.clear();
 	_object->_encrypted = false;
 
@@ -911,6 +923,11 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 				//z _object->_proof_packet = proof_packet;
 				//z link.last_proof(_object->_concluded_at);
 
+#if RNS_PROOF_PATH_HEALING
+				// DIVERGENCE: heal path table on successful link proof.
+				Transport::mark_path_responsive(_object->_destination.hash());
+#endif
+
 				if (_object->_callbacks._delivery) {
 					try {
 						_object->_callbacks._delivery(*this);
@@ -973,6 +990,11 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 				_object->_concluded_at = OS::time();
 				//z _object->_proof_packet = proof_packet;
 
+#if RNS_PROOF_PATH_HEALING
+				// DIVERGENCE: heal path table on successful SINGLE DATA proof.
+				Transport::mark_path_responsive(_object->_destination.hash());
+#endif
+
 				if (_object->_callbacks._delivery) {
 					try {
 						_object->_callbacks._delivery(*this);
@@ -1004,6 +1026,11 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 			_object->_concluded_at = OS::time();
 			//z _object->_proof_packet = proof_packet;
 
+#if RNS_PROOF_PATH_HEALING
+			// DIVERGENCE: heal path table on successful SINGLE DATA implicit proof.
+			Transport::mark_path_responsive(_object->_destination.hash());
+#endif
+
 			if (_object->_callbacks._delivery) {
 				try {
 					_object->_callbacks._delivery(*this);
@@ -1032,6 +1059,10 @@ void PacketReceipt::check_timeout() {
 		}
 		else {
 			_object->_status = FAILED;
+#if RNS_PROOF_PATH_HEALING
+			// DIVERGENCE: demote path to UNRESPONSIVE when an expected proof times out.
+			Transport::mark_path_unresponsive(_object->_destination.hash());
+#endif
 		}
 
 		_object->_concluded_at = Utilities::OS::time();

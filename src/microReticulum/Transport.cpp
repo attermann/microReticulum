@@ -700,7 +700,18 @@ DestinationEntry empty_destination_entry;
 				try {
 					std::vector<Bytes> stale_reverse_entries;
 					stale_reverse_entries.reserve(_reverse_table.size());
-					for (const auto& [packet_hash, reverse_entry] : _reverse_table) {
+					for (auto& [packet_hash, reverse_entry] : _reverse_table) {
+#if RNS_PROOF_PATH_HEALING
+						// DIVERGENCE: demote path to UNRESPONSIVE if an expected proof
+						// never arrived within the per-hop proof timeout. _proof_seen
+						// debounces so we only mark once per reverse entry.
+						if (reverse_entry._expects_proof
+						    && !reverse_entry._proof_seen
+						    && OS::time() > reverse_entry._proof_timeout) {
+							mark_path_unresponsive(reverse_entry._destination_hash);
+							reverse_entry._proof_seen = true;
+						}
+#endif
 						if (OS::time() > (reverse_entry._timestamp + REVERSE_TIMEOUT)) {
 							stale_reverse_entries.push_back(packet_hash);
 						}
@@ -1897,7 +1908,12 @@ DestinationEntry empty_destination_entry;
 						else if (remaining_hops == 1) {
 							// Strip transport headers and transmit
 							//new_flags = (RNS.Packet.HEADER_1) << 6 | (Transport.BROADCAST) << 4 | (packet.flags & 0b00001111)
+#if RNS_PROOF_PATH_HEALING
+							// DIVERGENCE: also preserve context_flag (bit 5) so transport nodes downstream can see the proof-expectation signal
+							uint8_t new_flags = (Type::Packet::HEADER_1) << 6 | (Type::Transport::BROADCAST) << 4 | (packet.flags() & 0b00100000) | (packet.flags() & 0b00001111);
+#else
 							uint8_t new_flags = (Type::Packet::HEADER_1) << 6 | (Type::Transport::BROADCAST) << 4 | (packet.flags() & 0b00001111);
+#endif
 							//new_raw = struct.pack("!B", new_flags)
 							new_raw << new_flags;
 							//new_raw += struct.pack("!B", packet.hops)
@@ -1971,11 +1987,29 @@ DestinationEntry empty_destination_entry;
 						}
 						else {
 							TRACE("Transport::inbound: Packet is next-hop other type");
+#if RNS_PROOF_PATH_HEALING
+							// DIVERGENCE: record proof expectation for SINGLE DATA packets so we can
+							// promote/demote the path state based on proof receipt or timeout.
+							double now = OS::time();
+							bool expects_proof = (packet.context_flag() == Type::Packet::FLAG_SET
+								&& packet.packet_type() == Type::Packet::DATA
+								&& packet.destination_type() == Type::Destination::SINGLE);
+							double proof_timeout = now + Type::Link::ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, remaining_hops);
+							ReverseEntry reverse_entry(
+								packet.receiving_interface(),
+								outbound_interface,
+								now,
+								packet.destination_hash(),
+								expects_proof,
+								proof_timeout
+							);
+#else
 							ReverseEntry reverse_entry(
 								packet.receiving_interface(),
 								outbound_interface,
 								OS::time()
 							);
+#endif
 							// CBA ACCUMULATES
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
 						}
@@ -2835,7 +2869,8 @@ DestinationEntry empty_destination_entry;
 
 				// Check if this proof needs to be transported
 				if ((Reticulum::transport_enabled() || from_local_client || proof_for_local_client) && _reverse_table.find(packet.destination_hash()) != _reverse_table.end()) {
-					ReverseEntry reverse_entry = (*_reverse_table.find(packet.destination_hash())).second;
+					auto reverse_iter = _reverse_table.find(packet.destination_hash());
+					ReverseEntry& reverse_entry = reverse_iter->second;
 					if (packet.receiving_interface() == reverse_entry._outbound_interface) {
 						TRACEF("Proof received on correct interface, transporting it via %s", reverse_entry._receiving_interface.toString().c_str());
 						//p new_raw = packet.raw[0:1]
@@ -2848,6 +2883,13 @@ DestinationEntry empty_destination_entry;
 						//p new_raw += packet.raw[2:]
 						new_raw << packet.raw().mid(2);
 						transmit(reverse_entry._receiving_interface, new_raw);
+#if RNS_PROOF_PATH_HEALING
+						// DIVERGENCE: heal path when an expected proof returns successfully.
+						if (reverse_entry._expects_proof && !reverse_entry._proof_seen) {
+							mark_path_responsive(reverse_entry._destination_hash);
+							reverse_entry._proof_seen = true;
+						}
+#endif
 					}
 					else {
 						DEBUG("Proof received on wrong interface, not transporting it.");
