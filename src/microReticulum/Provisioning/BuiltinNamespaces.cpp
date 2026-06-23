@@ -114,6 +114,10 @@ namespace RNS { namespace Provisioning {
 					FF_LIVE_APPLY, (int64_t)RNS::Transport::max_pr_tags(), 1, 65535,
 					[](const Value& v) { RNS::Transport::max_pr_tags((uint16_t)v.as_int()); return true; },
 					[]() { return (int64_t)RNS::Transport::max_pr_tags(); })
+				.field_int("Known Destinations Max Size", Ns::TransportConfig::Field::KnownDestinationsMaxsize,
+					FF_LIVE_APPLY, (int64_t)RNS::Identity::known_destinations_maxsize(), 1, 65535,
+					[](const Value& v) { RNS::Identity::known_destinations_maxsize((uint16_t)v.as_int()); return true; },
+					[]() { return (int64_t)RNS::Identity::known_destinations_maxsize(); })
 				.command_void("Clear Storage", Ns::TransportConfig::Field::ClearStorage,
 					[]() { RNS::Transport::clear_storage(); return true; })
 				.end();
@@ -123,6 +127,8 @@ namespace RNS { namespace Provisioning {
 		if (!p.registry().find(Ns::Storage::Id)) {
 			p.register_namespace("uReticulum Storage", Ns::Storage::Id)
 				.metric_int("Paths", Ns::Storage::Field::Paths, []() { return RNS::Transport::new_path_table().size(); })
+				.metric_int("Known Destinations", Ns::Storage::Field::KnownDestinations, []() { return RNS::Identity::known_destinations().size(); })
+				.metric_int("Packet Hashes", Ns::Storage::Field::PacketHashes, []() { return RNS::Transport::packet_hashlist().size(); })
 				.metric_int("Destinations", Ns::Storage::Field::Destinations, []() { return RNS::Transport::destinations().size(); })
 				.metric_int("Announces", Ns::Storage::Field::Announces, []() { return RNS::Transport::announce_table().size(); })
 				.metric_int("Held Announces", Ns::Storage::Field::HeldAnnounces, []() { return RNS::Transport::held_announces().size(); })
@@ -134,7 +140,6 @@ namespace RNS { namespace Provisioning {
 				.metric_int("Control Destinations", Ns::Storage::Field::ControlDestinations, []() { return RNS::Transport::control_destinations().size(); })
 				.metric_int("Control Hashes", Ns::Storage::Field::ControlHashes, []() { return RNS::Transport::control_hashes().size(); })
 
-				.metric_int("Packet Hashes", Ns::Storage::Field::PacketHashes, []() { return RNS::Transport::packet_hashlist().size(); })
 				.metric_int("Reverse Hashes", Ns::Storage::Field::ReverseHashes, []() { return RNS::Transport::reverse_table().size(); })
 				.metric_int("Receipts", Ns::Storage::Field::Receipts, []() { return RNS::Transport::receipts().size(); })
 
@@ -143,7 +148,6 @@ namespace RNS { namespace Provisioning {
 				.metric_int("Active Links", Ns::Storage::Field::ActiveLinks, []() { return RNS::Transport::active_links().size(); })
 				.metric_int("Tunnels", Ns::Storage::Field::Tunnels, []() { return RNS::Transport::tunnels().size(); })
 
-				.metric_int("Known Destinations", Ns::Storage::Field::KnownDestinations, []() { return RNS::Identity::known_destinations().size(); })
 				.metric_int("Destination Path Responses", Ns::Storage::Field::DestinationPathResponses, []() {
 					uint32_t destination_path_responses = 0;
 					for (auto& [destination_hash, destination] : RNS::Transport::destinations()) {
@@ -153,7 +157,7 @@ namespace RNS { namespace Provisioning {
 				})
 				.metric_int("Queued Announces", Ns::Storage::Field::QueuedAnnounces, []() {
 					uint32_t queued_announces = 0;
-					for (auto& [interface_hash, interface] : RNS::Transport::get_interfaces()) {
+					for (auto& interface : RNS::Transport::get_interfaces()) {
 						queued_announces += interface.announce_queue().size();
 					}
 					return queued_announces;
@@ -163,16 +167,22 @@ namespace RNS { namespace Provisioning {
 		}
 
 		// Metrics
-		if (!p.registry().find(Ns::Metrics::Id)) {
-			p.register_namespace("uReticulum Metrics", Ns::Metrics::Id)
-				.metric_int("Packets Sent", Ns::Metrics::Field::PacketsSent, []() { return RNS::Transport::packets_sent(); })
-				.metric_int("Packets Received", Ns::Metrics::Field::PacketsReceived, []() { return RNS::Transport::packets_received(); })
-				.metric_int("Announces Received", Ns::Metrics::Field::AnnouncesReceived, []() { return RNS::Transport::announces_received(); })
-				.metric_int("Path Requests Received", Ns::Metrics::Field::PathRequestsReceived, []() { return RNS::Transport::path_requests_received(); })
-				.metric_int("Paths Added", Ns::Metrics::Field::PathsAdded, []() { return RNS::Transport::paths_added(); })
-				.metric_int("Paths Updated", Ns::Metrics::Field::PathsUpdated, []() { return RNS::Transport::paths_updated(); })
-				.metric_int("Paths Failed", Ns::Metrics::Field::PathsFailed, []() { return RNS::Transport::paths_failed(); })
-
+		if (!p.registry().find(Ns::Info::Id)) {
+			p.register_namespace("uReticulum Info", Ns::Info::Id)
+				.register_namespace("Addresses", Ns::Info::Addresses::Id)
+					.metric_bytes("Transport Identity", Ns::Info::Addresses::Field::TransportIdentity, []() { return RNS::Transport::identity() ? RNS::Transport::identity().hash() : RNS::Bytes{}; })
+					.metric_bytes("Probe Destination", Ns::Info::Addresses::Field::ProbeDestination, []() { return RNS::Transport::probe_destination() ? RNS::Transport::probe_destination().hash() : RNS::Bytes{}; })
+					.metric_bytes("Mgmt Destination", Ns::Info::Addresses::Field::MgmtDestination, []() { return RNS::Transport::remote_management_destination() ? RNS::Transport::remote_management_destination().hash() : RNS::Bytes{}; })
+					.end()
+				.register_namespace("Metrics", Ns::Info::Metrics::Id)
+					.metric_int("Packets Sent", Ns::Info::Metrics::Field::PacketsSent, []() { return RNS::Transport::packets_sent(); })
+					.metric_int("Packets Received", Ns::Info::Metrics::Field::PacketsReceived, []() { return RNS::Transport::packets_received(); })
+					.metric_int("Announces Received", Ns::Info::Metrics::Field::AnnouncesReceived, []() { return RNS::Transport::announces_received(); })
+					.metric_int("Path Requests Received", Ns::Info::Metrics::Field::PathRequestsReceived, []() { return RNS::Transport::path_requests_received(); })
+					.metric_int("Paths Added", Ns::Info::Metrics::Field::PathsAdded, []() { return RNS::Transport::paths_added(); })
+					.metric_int("Paths Updated", Ns::Info::Metrics::Field::PathsUpdated, []() { return RNS::Transport::paths_updated(); })
+					.metric_int("Paths Failed", Ns::Info::Metrics::Field::PathsFailed, []() { return RNS::Transport::paths_failed(); })
+					.end()
 				.end();
 		}
 

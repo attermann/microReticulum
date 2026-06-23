@@ -17,9 +17,10 @@
 #include "../Interface.h"
 #include "../Packet.h"
 #include "../Bytes.h"
+#include "../Type.h"
 
 // CBA microStore
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 #include <microStore/FileStore.h>
 #else
 #include <microStore/HeapStore.h>
@@ -27,7 +28,7 @@
 #include <microStore/TypedStore.h>
 #include <microStore/Codec.h>
 
-#include <set>
+#include <vector>
 #include <map>
 
 namespace RNS { namespace Persistence {
@@ -35,7 +36,7 @@ namespace RNS { namespace Persistence {
 class DestinationEntry {
 public:
 	DestinationEntry() {}
-	DestinationEntry(double timestamp, const RNS::Bytes& received_from, uint8_t announce_hops, double expires, const std::set<RNS::Bytes>& random_blobs, const Interface& receiving_interface, const Packet& announce_packet) :
+	DestinationEntry(double timestamp, const RNS::Bytes& received_from, uint8_t announce_hops, double expires, const std::vector<RNS::Bytes>& random_blobs, const Interface& receiving_interface, const Packet& announce_packet) :
 		_timestamp(timestamp),
 		_received_from(received_from),
 		_hops(announce_hops),
@@ -63,7 +64,7 @@ public:
 	RNS::Bytes _received_from;
 	uint8_t _hops = 0;
 	double _expires = 0;
-	std::set<RNS::Bytes> _random_blobs;
+	std::vector<RNS::Bytes> _random_blobs;   // Oldest at front, newest at back; capped at MAX_RANDOM_BLOBS in callers
 	Interface _receiving_interface = {Type::NONE};
 	Packet _announce_packet = {Type::NONE};
 public:
@@ -89,7 +90,7 @@ public:
 //using PathTable = std::map<RNS::Bytes, DestinationEntry>;
 using PathTable = std::map<RNS::Bytes, DestinationEntry, std::less<RNS::Bytes>, Utilities::Memory::ContainerAllocator<std::pair<const RNS::Bytes, DestinationEntry>>>;
 
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 using PathStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
 #else
 using PathStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;

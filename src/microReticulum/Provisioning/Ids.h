@@ -37,7 +37,7 @@ namespace RNS { namespace Provisioning { namespace Ns {
 			constexpr fid_t CleanInterval           = 7;
 			constexpr fid_t RemoteManagementAllowed = 8;	// BytesList of 16-byte dest hashes
 			constexpr fid_t TransportIdentity       = 9;	// Bytes (64) — private key; SECRET
-			constexpr fid_t ClearStorage            = 10;	// command (write-only): wipe persisted provisioning files
+			constexpr fid_t ClearStorage            = 100;	// command (write-only): wipe persisted provisioning files
 		}
 	}
 
@@ -45,13 +45,14 @@ namespace RNS { namespace Provisioning { namespace Ns {
 	namespace TransportConfig {
 		constexpr nid_t Id = 2;
 		namespace Field {
-			constexpr fid_t SchemaVersion		 = 0;	// reserved
-			constexpr fid_t PathTableMaxsize     = 1;
-			constexpr fid_t AnnounceTableMaxsize = 2;
-			constexpr fid_t HashlistMaxsize      = 3;
-			constexpr fid_t MaxPrTags            = 4;
-			constexpr fid_t PathTableMaxpersist  = 5;
-			constexpr fid_t ClearStorage         = 6;	// command (write-only): Transport::clear_storage()
+			constexpr fid_t SchemaVersion		         = 0;	// reserved
+			constexpr fid_t PathTableMaxsize             = 1;
+			constexpr fid_t AnnounceTableMaxsize         = 2;
+			constexpr fid_t HashlistMaxsize              = 3;
+			constexpr fid_t MaxPrTags                    = 4;
+			constexpr fid_t PathTableMaxpersist          = 5;
+			constexpr fid_t KnownDestinationsMaxsize     = 6;
+			constexpr fid_t ClearStorage                 = 100;	// command (write-only): Transport::clear_storage()
 		}
 	}
 
@@ -88,19 +89,34 @@ namespace RNS { namespace Provisioning { namespace Ns {
 	}
 
 	// Metrics namespace - usage counts
-	namespace Metrics {
+	namespace Info {
 		constexpr nid_t Id = 60;
 		namespace Field {
-			constexpr fid_t SchemaVersion		     = 0;	// reserved
-			constexpr fid_t PacketsSent              = 1;
-			constexpr fid_t PacketsReceived          = 2;
-			constexpr fid_t AnnouncesSent            = 3;
-			constexpr fid_t AnnouncesReceived        = 4;
-			constexpr fid_t PathRequestSent          = 5;
-			constexpr fid_t PathRequestsReceived     = 6;
-			constexpr fid_t PathsAdded               = 7;
-			constexpr fid_t PathsUpdated             = 8;
-			constexpr fid_t PathsFailed              = 9;
+			constexpr fid_t SchemaVersion                = 0;	// reserved
+		}
+		namespace Addresses {
+			constexpr nid_t Id = 61;
+			namespace Field {
+				constexpr fid_t SchemaVersion            = 0;	// reserved
+				constexpr fid_t TransportIdentity        = 1;
+				constexpr fid_t ProbeDestination         = 2;
+				constexpr fid_t MgmtDestination          = 3;
+			}
+		}
+		namespace Metrics {
+			constexpr nid_t Id = 62;
+			namespace Field {
+				constexpr fid_t SchemaVersion            = 0;	// reserved
+				constexpr fid_t PacketsSent              = 1;
+				constexpr fid_t PacketsReceived          = 2;
+				constexpr fid_t AnnouncesSent            = 3;
+				constexpr fid_t AnnouncesReceived        = 4;
+				constexpr fid_t PathRequestSent          = 5;
+				constexpr fid_t PathRequestsReceived     = 6;
+				constexpr fid_t PathsAdded               = 7;
+				constexpr fid_t PathsUpdated             = 8;
+				constexpr fid_t PathsFailed              = 9;
+			}
 		}
 	}
 

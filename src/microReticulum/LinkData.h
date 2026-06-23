@@ -26,6 +26,7 @@
 #include "Type.h"
 #include "Cryptography/Token.h"
 
+#include <limits>
 #include <set>
 
 namespace RNS {
@@ -64,9 +65,12 @@ namespace RNS {
 		uint16_t _rx = 0;
 		uint16_t _txbytes = 0;
 		uint16_t _rxbytes = 0;
-		float _rssi = 0.0;
-		float _snr = 0.0;
-		float _q = 0.0;
+		// Last received-packet signal-quality stats snapshotted from Packet
+		// in Link::receive(). NaN means the source packet didn't carry that
+		// metric (e.g., received over a non-radio interface).
+		float _rssi = std::numeric_limits<float>::quiet_NaN();
+		float _snr  = std::numeric_limits<float>::quiet_NaN();
+		float _q    = std::numeric_limits<float>::quiet_NaN();
 		uint8_t _traffic_timeout_factor = Type::Link::TRAFFIC_TIMEOUT_FACTOR;
 		uint16_t _keepalive_timeout_factor = Type::Link::KEEPALIVE_TIMEOUT_FACTOR;
 		uint16_t _keepalive = Type::Link::KEEPALIVE;

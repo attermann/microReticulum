@@ -24,6 +24,7 @@
 #include <list>
 #include <memory>
 #include <cassert>
+#include <limits>
 #include <stdint.h>
 
 namespace RNS {
@@ -60,6 +61,16 @@ namespace RNS {
 		virtual bool start() { return true; }
 		virtual void stop() {}
 		virtual void loop() {}
+		// Called by Transport::detach_interfaces() during clean shutdown so
+		// subclasses can release resources (sockets, threads, hardware) before
+		// destruction. Default is a no-op; idempotency is the subclass's call.
+		virtual void detach() {}
+		// Stat hooks called by Transport::outbound() after a successful transmit
+		// of an announce or path-request packet. Subclasses can override to
+		// maintain per-interface frequency/burst counters (Python's oa_freq_deque
+		// and op_freq_deque equivalents). Defaults are no-ops.
+		virtual void sent_announce() {}
+		virtual void sent_path_request() {}
 
 		// CBA Virtual override method for custom interface to send outgoing data
 		virtual bool send_outgoing(const Bytes& data) = 0;
@@ -91,6 +102,14 @@ namespace RNS {
 		bool _FIXED_MTU = false;
 		double _announce_allowed_at = 0;
 		float _announce_cap = 0.0;
+		// Announce rate-limit configuration. 0 (target) means disabled; a positive
+		// target is the minimum interval (seconds) between announces from a given
+		// destination before that destination accumulates rate violations. After
+		// _announce_rate_grace consecutive violations, the destination is blocked
+		// for _announce_rate_target + _announce_rate_penalty seconds.
+		float _announce_rate_target  = 0.0;
+		uint8_t _announce_rate_grace = 0;
+		float _announce_rate_penalty = 0.0;
 		std::list<AnnounceEntry> _announce_queue;
 		bool _is_connected_to_shared_instance = false;
 		bool _is_local_shared_instance = false;
@@ -103,6 +122,22 @@ namespace RNS {
 		size_t _tx = 0;
 		size_t _rxbytes = 0;
 		size_t _txbytes = 0;
+
+		// Per-interface traffic counter state for Transport::count_traffic().
+		// _traffic_counter_ts = 0.0 means the counter has not been initialised yet.
+		double _traffic_counter_ts    = 0.0;
+		size_t _traffic_counter_rxb   = 0;
+		size_t _traffic_counter_txb   = 0;
+		double _current_rx_speed      = 0.0;   // bits/sec
+		double _current_tx_speed      = 0.0;   // bits/sec
+
+		// Last received-packet signal-quality stats reported by the hardware.
+		// NaN means "not present" -- interface subclasses populate these
+		// synchronously with handle_incoming(bytes), and Transport::inbound
+		// snapshots the values onto the Packet at construction time.
+		float _r_stat_rssi = std::numeric_limits<float>::quiet_NaN();
+		float _r_stat_snr  = std::numeric_limits<float>::quiet_NaN();
+		float _r_stat_q    = std::numeric_limits<float>::quiet_NaN();
 
 	friend class Interface;
 	};
@@ -192,7 +227,6 @@ namespace RNS {
 		inline void FWD(bool FWD) { assert(_impl); _impl->_FWD = FWD; }
 		inline void RPT(bool RPT) { assert(_impl); _impl->_RPT = RPT; }
 		inline void name(const char* name) { assert(_impl); _impl->_name = name; }
-		inline void bitrate(uint32_t bitrate) { assert(_impl); _impl->_bitrate = bitrate; }
 		inline void online(bool online) { assert(_impl); _impl->_online = online; }
 		inline void announce_allowed_at(double announce_allowed_at) { assert(_impl); _impl->_announce_allowed_at = announce_allowed_at; }
 	public:
@@ -207,6 +241,13 @@ namespace RNS {
 		inline Type::Interface::modes mode() const { assert(_impl); return _impl->_mode; }
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }
+		inline void bitrate(uint32_t bitrate) { assert(_impl); _impl->_bitrate = bitrate; }
+		inline float announce_rate_target() const { assert(_impl); return _impl->_announce_rate_target; }
+		inline void announce_rate_target(float seconds) { assert(_impl); _impl->_announce_rate_target = seconds; }
+		inline uint8_t announce_rate_grace() const { assert(_impl); return _impl->_announce_rate_grace; }
+		inline void announce_rate_grace(uint8_t violations) { assert(_impl); _impl->_announce_rate_grace = violations; }
+		inline float announce_rate_penalty() const { assert(_impl); return _impl->_announce_rate_penalty; }
+		inline void announce_rate_penalty(float seconds) { assert(_impl); _impl->_announce_rate_penalty = seconds; }
 		inline uint16_t HW_MTU() const { assert(_impl); return _impl->_HW_MTU; }
 		inline bool AUTOCONFIGURE_MTU() const { assert(_impl); return _impl->_AUTOCONFIGURE_MTU; }
 		inline bool FIXED_MTU() const { assert(_impl); return _impl->_FIXED_MTU; }
@@ -216,7 +257,29 @@ namespace RNS {
 		inline size_t tx() const { assert(_impl); return _impl->_tx; }
 		inline size_t rxbytes() const { assert(_impl); return _impl->_rxbytes; }
 		inline size_t txbytes() const { assert(_impl); return _impl->_txbytes; }
+		inline double traffic_counter_ts() const { assert(_impl); return _impl->_traffic_counter_ts; }
+		inline size_t traffic_counter_rxb() const { assert(_impl); return _impl->_traffic_counter_rxb; }
+		inline size_t traffic_counter_txb() const { assert(_impl); return _impl->_traffic_counter_txb; }
+		inline double current_rx_speed() const { assert(_impl); return _impl->_current_rx_speed; }
+		inline double current_tx_speed() const { assert(_impl); return _impl->_current_tx_speed; }
+		inline float r_stat_rssi() const { assert(_impl); return _impl->_r_stat_rssi; }
+		inline void r_stat_rssi(float rssi) const { assert(_impl); _impl->_r_stat_rssi = rssi; }
+		inline float r_stat_snr() const { assert(_impl); return _impl->_r_stat_snr; }
+		inline void r_stat_snr(float snr) const { assert(_impl); _impl->_r_stat_snr = snr; }
+		inline float r_stat_q() const { assert(_impl); return _impl->_r_stat_q; }
+		inline void r_stat_q(float q) const { assert(_impl); _impl->_r_stat_q = q; }
+		inline void update_traffic_counter(double ts, size_t rxb, size_t txb) const {
+			assert(_impl);
+			_impl->_traffic_counter_ts = ts;
+			_impl->_traffic_counter_rxb = rxb;
+			_impl->_traffic_counter_txb = txb;
+		}
+		inline void current_rx_speed(double speed) const { assert(_impl); _impl->_current_rx_speed = speed; }
+		inline void current_tx_speed(double speed) const { assert(_impl); _impl->_current_tx_speed = speed; }
 		inline std::list<AnnounceEntry>& announce_queue() const { assert(_impl); return _impl->_announce_queue; }
+		inline void detach() const { assert(_impl); _impl->detach(); }
+		inline void sent_announce() const { assert(_impl); _impl->sent_announce(); }
+		inline void sent_path_request() const { assert(_impl); _impl->sent_path_request(); }
 		inline bool is_connected_to_shared_instance() const { assert(_impl); return _impl->_is_connected_to_shared_instance; }
 		inline bool is_local_shared_instance() const { assert(_impl); return _impl->_is_local_shared_instance; }
 		inline HInterface parent_interface() const { assert(_impl); return _impl->_parent_interface; }

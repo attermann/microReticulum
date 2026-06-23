@@ -15,148 +15,130 @@
 #include "DestinationEntry.h"
 
 #include "../Transport.h"
-#include "../Type.h"
+
+#include <MsgPack.h>
 
 using namespace RNS;
 using namespace RNS::Persistence;
 
+// Encodes a DestinationEntry as a 7-element MsgPack array:
+//   [timestamp, hops, expires, received_from, random_blobs, receiving_interface, announce_packet]
+//
+// random_blobs is itself an array of length-prefixed binary blobs, tail-trimmed
+// to PERSIST_RANDOM_BLOBS to bound on-disk size. Adding new fields in the future
+// is a matter of bumping the outer array length and appending; old decoders see
+// the extra elements as trailing array members they can ignore.
 /*static*/ std::vector<uint8_t> microStore::Codec<DestinationEntry>::encode(const DestinationEntry& entry) {
 
 	// If invalid/empty entry then return empty
 	if (!entry) return {};
 
-	std::vector<uint8_t> out;
-
-	auto write = [&](const void* ptr, size_t len)
-	{
-		const uint8_t* p=(const uint8_t*)ptr;
-		out.insert(out.end(), p, p+len);
-	};
+	MsgPack::Packer p;
+	p.packArraySize(7);
 
 	// timestamp
-//TRACEF("Writing %lu byte timestamp: %f", sizeof(entry._timestamp), entry._timestamp);
-	write(&entry._timestamp, sizeof(entry._timestamp));
+	p.packFloat64(entry._timestamp);
 
 	// hops
-//TRACEF("Writing %lu byte hops: %u", sizeof(entry._hops), entry._hops);
-	write(&entry._hops, sizeof(entry._hops));
+	p.serialize(entry._hops);
 
 	// expires
-//TRACEF("Writing %lu byte expires: %f", sizeof(entry._expires), entry._expires);
-	write(&entry._expires, sizeof(entry._expires));
+	p.packFloat64(entry._expires);
 
 	// received_from
-//TRACEF("Writing %lu byte received_from", entry._received_from.collection().size());
-	out.insert(out.end(), entry._received_from.collection().begin(), entry._received_from.collection().end());
+	p.packBinary(entry._received_from.data(), entry._received_from.size());
 
-	// random_blobs
-	uint16_t blob_count = entry._random_blobs.size();
-//TRACEF("Writing %lu byte blob_count: %u", sizeof(blob_count), blob_count);
-	write(&blob_count, sizeof(blob_count));
-	for (auto& blob : entry._random_blobs) {
-		uint16_t blob_size = blob.collection().size();
-//TRACEF("Writing %lu byte blob_size: %u", sizeof(blob_size), blob_size);
-		write(&blob_size, sizeof(blob_size));
-//TRACEF("Writing %lu byte blob", blob.collection().size());
-		out.insert(out.end(), blob.collection().begin(), blob.collection().end());
+	// random_blobs -- write only the tail-newest PERSIST_RANDOM_BLOBS entries
+	const size_t persist_cap = Type::Transport::PERSIST_RANDOM_BLOBS;
+	const size_t total_blobs = entry._random_blobs.size();
+	const size_t persist_n   = (total_blobs > persist_cap) ? persist_cap : total_blobs;
+	const size_t start_idx   = total_blobs - persist_n;
+	p.packArraySize(persist_n);
+	for (size_t i = start_idx; i < total_blobs; i++) {
+		const auto& blob = entry._random_blobs[i];
+		p.packBinary(blob.data(), blob.size());
 	}
 
-	// receiving_interface
+	// receiving_interface (hash only; the live Interface is re-bound on decode)
 	Bytes interface_hash(entry._receiving_interface.get_hash());
-//TRACEF("Writing %lu byte receiving_interface hash", interface_hash.collection().size());
-	out.insert(out.end(), interface_hash.collection().begin(), interface_hash.collection().end());
+	p.packBinary(interface_hash.data(), interface_hash.size());
 
-	// announce_packet
-	uint16_t packet_size = entry._announce_packet.raw().size();
-//TRACEF("Writing %lu byte packet_size: %u", sizeof(packet_size), packet_size);
-	write(&packet_size, sizeof(packet_size));
-//TRACEF("Writing %lu byte packet", entry._announce_packet.raw().collection().size());
-	out.insert(out.end(), entry._announce_packet.raw().collection().begin(), entry._announce_packet.raw().collection().end());
+	// announce_packet (raw bytes, including header)
+	const Bytes& raw = entry._announce_packet.raw();
+	p.packBinary(raw.data(), raw.size());
 
-//TRACEF("Encoded %lu byte DestinationEntry", out.size());
-
-	return out;
+	return std::vector<uint8_t>(p.data(), p.data() + p.size());
 }
 
 /*static*/ bool microStore::Codec<DestinationEntry>::decode(const std::vector<uint8_t>& data, DestinationEntry& entry)
 {
-	size_t pos = 0;
+	if (data.empty()) return false;
 
-//TRACEF("Decoding %lu byte DestinationEntry", data.size());
+	MsgPack::Unpacker u;
+	u.feed(data.data(), data.size());
 
-	auto read=[&](void* dst, size_t len)->bool
-	{
-		if(pos+len > data.size()) return false;
-		memcpy(dst, &data[pos], len);
-		pos+=len;
-		return true;
-	};
+	if (!u.isArray()) return false;
+	const size_t n = u.unpackArraySize();
+	if (n < 7) return false;
 
 	// timestamp
-	if(!read(&entry._timestamp, sizeof(entry._timestamp))) return false;
-//TRACEF("Read %lu byte timestamp: %f", sizeof(entry._timestamp), entry._timestamp);
+	if (!u.deserialize(entry._timestamp)) return false;
 
 	// hops
-	if(!read(&entry._hops, sizeof(entry._hops))) return false;
-//TRACEF("Read %lu byte hops: %u", sizeof(entry._hops), entry._hops);
+	if (!u.deserialize(entry._hops)) return false;
 
 	// expires
-	if(!read(&entry._expires, sizeof(entry._expires))) return false;
-//TRACEF("Read %lu byte expires: %f", sizeof(entry._expires), entry._expires);
+	if (!u.deserialize(entry._expires)) return false;
 
 	// received_from
-	if(!read((void*)entry._received_from.writable(Type::Reticulum::DESTINATION_LENGTH), Type::Reticulum::DESTINATION_LENGTH)) return false;
-	entry._received_from.resize(Type::Reticulum::DESTINATION_LENGTH);
-//TRACEF("Read %lu byte received_from", entry._received_from.size());
-
-	// random_blobs
-	uint16_t blob_count;
-	if(!read(&blob_count, sizeof(blob_count))) return false;
-//TRACEF("Read %lu byte blob_count: %u", sizeof(blob_count), blob_count);
-	for (int i = 0; i < blob_count; i++) {
-		uint16_t blob_size;
-		if(!read(&blob_size, sizeof(blob_size))) return false;
-//TRACEF("Read %lu byte blob_size: %u", sizeof(blob_size), blob_size);
-		Bytes blob(blob_size);
-		if(!read((void*)blob.writable(blob_size), blob_size)) return false;
-		blob.resize(blob_size);
-		entry._random_blobs.insert(blob);
-//TRACEF("Read %lu byte blob", blob.size());
+	{
+		MsgPack::bin_t<uint8_t> b;
+		if (!u.deserialize(b)) return false;
+		entry._received_from = Bytes(b.data(), b.size());
 	}
 
-	// receiving_interface
-	Bytes interface_hash(Type::Reticulum::HASHLENGTH/8);
-	if(!read((void*)interface_hash.writable(Type::Reticulum::HASHLENGTH/8), Type::Reticulum::HASHLENGTH/8)) return false;
-	interface_hash.resize(Type::Reticulum::HASHLENGTH/8);
-//TRACEF("Read %lu byte interface_hash", interface_hash.size());
-	entry._receiving_interface = Transport::find_interface_from_hash(interface_hash);
-	if (!entry._receiving_interface) {
-		WARNINGF("Path Interface %s not found", interface_hash.toHex().c_str());
+	// random_blobs
+	{
+		if (!u.isArray()) return false;
+		const size_t blob_n = u.unpackArraySize();
+		entry._random_blobs.clear();
+		entry._random_blobs.reserve(blob_n);
+		for (size_t i = 0; i < blob_n; i++) {
+			MsgPack::bin_t<uint8_t> b;
+			if (!u.deserialize(b)) return false;
+			entry._random_blobs.push_back(Bytes(b.data(), b.size()));
+		}
+	}
+
+	// receiving_interface (rebind to live Interface by hash)
+	{
+		MsgPack::bin_t<uint8_t> b;
+		if (!u.deserialize(b)) return false;
+		Bytes interface_hash(b.data(), b.size());
+		entry._receiving_interface = Transport::find_interface_from_hash(interface_hash);
+		if (!entry._receiving_interface) {
+			WARNINGF("Path Interface %s not found", interface_hash.toHex().c_str());
+		}
 	}
 
 	// announce_packet
-	uint16_t packet_size;
-	if(!read(&packet_size, sizeof(packet_size))) return false;
-//TRACEF("Read %lu byte packet_size: %u", sizeof(packet_size), packet_size);
-	Bytes packet_data(packet_size);
-	if(!read((void*)packet_data.writable(packet_size), packet_size)) return false;
-	packet_data.resize(packet_size);
-	if (packet_data.size() > 0) {
-		entry._announce_packet = Packet(packet_data);
+	{
+		MsgPack::bin_t<uint8_t> b;
+		if (!u.deserialize(b)) return false;
+		Bytes packet_data(b.data(), b.size());
+		if (packet_data.size() > 0) {
+			entry._announce_packet = Packet(packet_data);
+		}
 	}
-//TRACEF("Read %lu byte packet", packet_data.size());
 
 	if (entry._announce_packet) {
 		// Announce packet is cached in packed state
 		// so we need to unpack it before accessing.
-//TRACE("Unpacking packet...");
 		if (entry._announce_packet.unpack()) {
-//TRACEF("Packet: %s", entry._announce_packet.debugString().c_str());
 			// We increase the hops, since reading a packet
 			// from cache is equivalent to receiving it again
-			// over an interface. It is cached with it's non-
+			// over an interface. It is cached with its non-
 			// increased hop-count.
-//TRACE("Incrementing packet hop count...");
 			entry._announce_packet.hops(entry._announce_packet.hops() + 1);
 		}
 	}

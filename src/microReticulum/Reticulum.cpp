@@ -16,6 +16,7 @@
 
 #include "Transport.h"
 #include "Log.h"
+#include "Type.h"
 #include "Utilities/Memory.h"
 
 #ifdef RNS_USE_PROVISIONING
@@ -46,6 +47,7 @@ using namespace RNS::Utilities;
 /*static*/ bool Reticulum::__remote_management_enabled = false;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
+/*static*/ bool Reticulum::__publish_blackhole_enabled = false;
 /*static*/ bool Reticulum::panic_on_interface_error = false;
 
 /*static*/ uint16_t Reticulum::_persist_interval = PERSIST_INTERVAL;
@@ -227,7 +229,7 @@ void Reticulum::loop() {
 			}
 
 			// Perform Interface processing
-			for (auto& [hash, interface] : Transport::get_interfaces()) {
+			for (auto& interface : Transport::get_interfaces()) {
 				const_cast<Interface&>(interface).loop();
 			}
 
@@ -317,7 +319,6 @@ void Reticulum::should_persist_data() {
 void Reticulum::persist_data() {
 	TRACE("Persisting transport and identity data...");
 	Transport::persist_data();
-	Identity::persist_data();
 
 	_object->_last_data_persist = OS::time();
 }
@@ -326,7 +327,7 @@ void Reticulum::clean_caches() {
 	TRACE("Cleaning resource and packet caches...");
 	double now = OS::time();
 
-#if defined(RNS_USE_FS) && defined(RNS_PERSIST_PATHS)
+#if defined(RNS_USE_FS) && RNS_PERSIST_PATHS
 /*
 	// Clean resource caches
 	for (auto& filename : OS::list_directory(resourcepath) {
@@ -366,9 +367,6 @@ void Reticulum::clean_caches() {
 */
 
 	Transport::clean_caches();
-
-	// CBA
-	Identity::cull_known_destinations();
 #endif
 
 	_object->_last_cache_clean = OS::time();

@@ -51,7 +51,7 @@ void testSerializeDestinationTable() {
 	received.assignHex("deadbeef");
 	RNS::Bytes blob;
 	blob.assignHex("b10bb10b");
-	std::set<RNS::Bytes> blobs({received, blob});
+	std::vector<RNS::Bytes> blobs({received, blob});
 	RNS::Persistence::DestinationEntry entry_one;
 	entry_one._timestamp = 1.0;
 	entry_one._received_from = received;

@@ -31,6 +31,7 @@
 #include <MsgPack.h>
 
 #include <math.h>
+#include <cmath>
 
 #include <algorithm>
 
@@ -1161,6 +1162,14 @@ void Link::receive(const Packet& packet) {
 			}
 			_object->_rx += 1;
 			_object->_rxbytes += packet.data().size();
+
+			// Snapshot per-packet signal-quality stats onto the link's
+			// "last received" fields so consumers can read link.rssi/snr/q
+			// without holding the original Packet. NaN means the source
+			// packet (or its receiving interface) didn't carry that metric.
+			if (!std::isnan(packet.rssi())) _object->_rssi = packet.rssi();
+			if (!std::isnan(packet.snr()))  _object->_snr  = packet.snr();
+			if (!std::isnan(packet.q()))    _object->_q    = packet.q();
 			if (_object->_status == STALE) {
 				_object->_status = Type::Link::ACTIVE;
 			}
