@@ -3690,13 +3690,20 @@ static std::string remote_status_interface_type_name(const Interface& iface) {
 // (e.g. heltec_wifi_lora_32_V4); the const-char-pointer overload produces
 // the same msgpack str wire format on all platforms.
 static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& iface) {
-	// 15 entries: name, short_name, hash, type, status, mode, clients,
-	//             bitrate, rx, rxb, tx, txb, rxs, txs, announce_queue.
+	// 18 entries: name, short_name, hash, type, status, mode, clients,
+	//             bitrate, rx, rxb, tx, txb, rxs, txs, rssi, snr, q,
+	//             announce_queue.
 	//
 	// `clients` is accessed unguarded at rnstatus.py:429 (ifstat["clients"]),
 	// so the key MUST be present even when no meaningful value -- emit nil
 	// to signal "not a shared instance / no connected clients".
-	p.packMapSize(15);
+	//
+	// rssi / snr / q are a microReticulum-specific extension Python's
+	// get_interface_stats doesn't emit. Forward-compatible -- Python clients
+	// ignore unknown keys; clients that look for them get the receiving
+	// interface's last reported signal-quality stats, with nil for "not
+	// reported by this interface" (e.g. non-radio interfaces such as UDP).
+	p.packMapSize(18);
 
 	// Cache std::string values so .c_str() / .size() reference stable storage.
 	const std::string name_str = iface.toString();
@@ -3749,6 +3756,27 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 
 	p.pack("txs");
 	p.packFloat64(iface.current_tx_speed());
+
+	p.pack("rssi");
+	if (std::isnan(iface.r_stat_rssi())) {
+		p.packNil();
+	} else {
+		p.packFloat64(static_cast<double>(iface.r_stat_rssi()));
+	}
+
+	p.pack("snr");
+	if (std::isnan(iface.r_stat_snr())) {
+		p.packNil();
+	} else {
+		p.packFloat64(static_cast<double>(iface.r_stat_snr()));
+	}
+
+	p.pack("q");
+	if (std::isnan(iface.r_stat_q())) {
+		p.packNil();
+	} else {
+		p.packFloat64(static_cast<double>(iface.r_stat_q()));
+	}
 
 	p.pack("announce_queue");
 	p.serialize(static_cast<uint32_t>(iface.announce_queue().size()));
