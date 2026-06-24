@@ -3337,7 +3337,9 @@ Deregisters an announce handler.
 	//DIVERGENCE: drop any neighbor_stats entry keyed by this destination.
 	// For hops==0 paths the destination IS the neighbor; for hops>0 the
 	// erase is a no-op since the destination is not a direct neighbor.
-	_neighbor_stats.erase(destination_hash);
+	if (_neighbor_stats.erase(destination_hash) > 0) {
+		DEBUGF("Neighbor probe: dropped stats for %s (path removed)", destination_hash.toHex().c_str());
+	}
 #endif
 	// CBA microStore
 	return _new_path_table.remove(destination_hash.collection());
@@ -5615,7 +5617,9 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 				//DIVERGENCE: drop any neighbor_stats entry tied to this
 				// culled destination. For hops==0 paths the destination
 				// hash equals the neighbor; for others this is a no-op.
-				_neighbor_stats.erase(destination_hash);
+				if (_neighbor_stats.erase(destination_hash) > 0) {
+					DEBUGF("Neighbor probe: dropped stats for %s (path-table cull)", destination_hash.toHex().c_str());
+				}
 #endif
 				if (_path_table.erase(destination_hash) < 1) {
 					WARNINGF("Failed to remove destination %s from path table", destination_hash.toHex().c_str());
@@ -5717,9 +5721,16 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 // ignore.
 /*static*/ void Transport::_record_neighbor_packet(const Bytes& next_hop) {
 	if (next_hop.empty()) return;
-	auto& stat = _neighbor_stats[next_hop];
+	auto it = _neighbor_stats.find(next_hop);
+	const bool is_new = (it == _neighbor_stats.end());
+	auto& stat = is_new ? _neighbor_stats[next_hop] : it->second;
 	stat.packets_forwarded += 1;
 	stat.last_packet_at = OS::time();
+	if (is_new) {
+		DEBUGF("Neighbor probe: tracking new direct neighbor %s", next_hop.toHex().c_str());
+	}
+	TRACEF("Neighbor probe: packet_forwarded[%s] -> %u (proofs=%u)",
+	       next_hop.toHex().c_str(), stat.packets_forwarded, stat.proofs_received);
 }
 
 /*static*/ void Transport::_record_neighbor_proof(const Bytes& next_hop) {
@@ -5728,6 +5739,8 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	if (it == _neighbor_stats.end()) return;
 	it->second.proofs_received += 1;
 	it->second.last_proof_at = OS::time();
+	TRACEF("Neighbor probe: proof_received[%s] -> %u (forwarded=%u)",
+	       next_hop.toHex().c_str(), it->second.proofs_received, it->second.packets_forwarded);
 }
 
 //DIVERGENCE: per-jobs-tick scan of neighbor stats. Builds a snapshot
@@ -5751,22 +5764,57 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 		// twice the suspicion window, drop accumulated counters so the
 		// next traffic burst evaluates suspicion from a clean baseline
 		// instead of carrying stale history forward indefinitely.
-		if ((now - stat.last_packet_at) > 2.0 * Type::Transport::NEIGHBOR_SUSPICION_WINDOW) {
+		if ((now - stat.last_packet_at) > 2.0 * Type::Transport::NEIGHBOR_SUSPICION_WINDOW
+		    && (stat.packets_forwarded != 0 || stat.proofs_received != 0))
+		{
+			VERBOSEF("Neighbor probe: resetting stale stats for idle neighbor %s (idle=%.0fs, prior fwd=%u proofs=%u)",
+			         neighbor_hash.toHex().c_str(),
+			         now - stat.last_packet_at,
+			         stat.packets_forwarded,
+			         stat.proofs_received);
 			stat.packets_forwarded = 0;
 			stat.proofs_received = 0;
 		}
 
 		// idle — nothing has been forwarded recently
-		if ((now - stat.last_packet_at) > Type::Transport::NEIGHBOR_SUSPICION_WINDOW) continue;
+		if ((now - stat.last_packet_at) > Type::Transport::NEIGHBOR_SUSPICION_WINDOW) {
+			TRACEF("Neighbor probe: skip %s — idle", neighbor_hash.toHex().c_str());
+			continue;
+		}
 		// insufficient activity — avoid trigger-happy probing on light traffic
-		if (stat.packets_forwarded < Type::Transport::NEIGHBOR_SUSPICION_MIN_PKTS) continue;
+		if (stat.packets_forwarded < Type::Transport::NEIGHBOR_SUSPICION_MIN_PKTS) {
+			TRACEF("Neighbor probe: skip %s — only %u packets forwarded (need %u)",
+			       neighbor_hash.toHex().c_str(),
+			       stat.packets_forwarded,
+			       (unsigned)Type::Transport::NEIGHBOR_SUSPICION_MIN_PKTS);
+			continue;
+		}
 		// recent proof returned — neighbor looks healthy
-		if (stat.last_proof_at > stat.last_packet_at - GRACE) continue;
+		if (stat.last_proof_at > stat.last_packet_at - GRACE) {
+			TRACEF("Neighbor probe: skip %s — recent proof (fwd=%u proofs=%u)",
+			       neighbor_hash.toHex().c_str(),
+			       stat.packets_forwarded,
+			       stat.proofs_received);
+			continue;
+		}
 		// already probing
-		if (stat.probe_pending) continue;
+		if (stat.probe_pending) {
+			TRACEF("Neighbor probe: skip %s — probe already pending", neighbor_hash.toHex().c_str());
+			continue;
+		}
 		// per-neighbor probe rate limit
-		if ((now - stat.last_probe_at) < Type::Transport::NEIGHBOR_PROBE_RATELIMIT) continue;
+		if ((now - stat.last_probe_at) < Type::Transport::NEIGHBOR_PROBE_RATELIMIT) {
+			TRACEF("Neighbor probe: skip %s — rate-limited (%.0fs since last probe)",
+			       neighbor_hash.toHex().c_str(),
+			       now - stat.last_probe_at);
+			continue;
+		}
 
+		INFOF("Neighbor probe: classifying %s as suspicious (forwarded=%u proofs=%u age=%.0fs)",
+		      neighbor_hash.toHex().c_str(),
+		      stat.packets_forwarded,
+		      stat.proofs_received,
+		      now - stat.last_packet_at);
 		to_probe.push_back(neighbor_hash);
 	}
 
@@ -5782,16 +5830,18 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 /*static*/ void Transport::_dispatch_neighbor_probe(const Bytes& neighbor_hash) {
 	Identity neighbor_identity = Identity::recall(neighbor_hash);
 	if (!neighbor_identity) {
-		DEBUGF("Neighbor probe: identity not recallable for %s", neighbor_hash.toHex().c_str());
+		DEBUGF("Neighbor probe: skipping %s — identity not yet known (announce not received?)",
+		       neighbor_hash.toHex().c_str());
 		return;
 	}
 
 	Bytes probe_dest_hash = Destination::hash(neighbor_identity, Type::Transport::APP_NAME, "probe");
 	if (!_new_path_table.exists(probe_dest_hash)) {
-		DEBUGF("Neighbor probe: no path to probe destination %s for neighbor %s",
-		       probe_dest_hash.toHex().c_str(), neighbor_hash.toHex().c_str());
+		DEBUGF("Neighbor probe: skipping %s — no path to its probe destination %s (peer may have probe responder disabled)",
+		       neighbor_hash.toHex().c_str(), probe_dest_hash.toHex().c_str());
 		if (Reticulum::neighbor_probing_path_request_fallback_enabled()) {
-			DEBUGF("Neighbor probe: requesting path for %s (fallback enabled)", probe_dest_hash.toHex().c_str());
+			INFOF("Neighbor probe: requesting path for probe destination %s (fallback enabled)",
+			      probe_dest_hash.toHex().c_str());
 			request_path(probe_dest_hash);
 		}
 		return;
@@ -5823,8 +5873,11 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	stat.pending_probe_hash = receipt.truncated_hash();
 	stat.last_probe_at = OS::time();
 
-	DEBUGF("Neighbor probe: dispatched to %s via probe destination %s",
-	       neighbor_hash.toHex().c_str(), probe_dest_hash.toHex().c_str());
+	INFOF("Neighbor probe: sending symmetry probe to %s (probe dest %s, %u-byte payload, timeout %us)",
+	      neighbor_hash.toHex().c_str(),
+	      probe_dest_hash.toHex().c_str(),
+	      (unsigned)Type::Transport::NEIGHBOR_PROBE_PAYLOAD_SIZE,
+	      (unsigned)Type::Transport::NEIGHBOR_PROBE_TIMEOUT);
 }
 
 //DIVERGENCE: probe-delivered outcome — neighbor confirmed reciprocally
@@ -5840,13 +5893,35 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 
 	uint32_t marked = 0;
+	uint32_t promoted = 0;  // transitions from UNRESPONSIVE -> RESPONSIVE
 	for (const auto& path : _new_path_table) {
 		if (path.value._received_from == neighbor_hash) {
-			if (mark_path_responsive(path.key)) ++marked;
+			// Peek at the current state to detect actual transitions.
+			uint8_t prior = STATE_UNKNOWN;
+			auto sit = _path_states.find(path.key);
+			if (sit != _path_states.end()) prior = sit->second;
+			if (mark_path_responsive(path.key)) {
+				++marked;
+				if (prior == STATE_UNRESPONSIVE) {
+					++promoted;
+					VERBOSEF("Neighbor probe: path %s via %s promoted UNRESPONSIVE -> RESPONSIVE",
+					         path.key.toHex().c_str(), neighbor_hash.toHex().c_str());
+				}
+				else {
+					TRACEF("Neighbor probe: path %s via %s marked RESPONSIVE (prior state %u)",
+					       path.key.toHex().c_str(), neighbor_hash.toHex().c_str(), (unsigned)prior);
+				}
+			}
 		}
 	}
-	INFOF("Neighbor %s passed symmetry probe; marked %u paths responsive",
-	      neighbor_hash.toHex().c_str(), marked);
+	if (promoted > 0) {
+		NOTICEF("Neighbor probe: %s passed symmetry probe; %u of %u paths promoted from UNRESPONSIVE",
+		        neighbor_hash.toHex().c_str(), promoted, marked);
+	}
+	else {
+		INFOF("Neighbor probe: %s passed symmetry probe; %u paths confirmed RESPONSIVE",
+		      neighbor_hash.toHex().c_str(), marked);
+	}
 }
 
 //DIVERGENCE: probe-timed-out outcome — neighbor's receive side is
@@ -5861,13 +5936,28 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 
 	uint32_t marked = 0;
+	uint32_t demoted = 0;  // transitions from non-UNRESPONSIVE -> UNRESPONSIVE
 	for (const auto& path : _new_path_table) {
 		if (path.value._received_from == neighbor_hash) {
-			if (mark_path_unresponsive(path.key)) ++marked;
+			uint8_t prior = STATE_UNKNOWN;
+			auto sit = _path_states.find(path.key);
+			if (sit != _path_states.end()) prior = sit->second;
+			if (mark_path_unresponsive(path.key)) {
+				++marked;
+				if (prior != STATE_UNRESPONSIVE) {
+					++demoted;
+					VERBOSEF("Neighbor probe: path %s via %s demoted %s -> UNRESPONSIVE",
+					         path.key.toHex().c_str(), neighbor_hash.toHex().c_str(),
+					         (prior == STATE_RESPONSIVE) ? "RESPONSIVE" : "UNKNOWN");
+				}
+				else {
+					TRACEF("Neighbor probe: path %s via %s already UNRESPONSIVE", path.key.toHex().c_str(), neighbor_hash.toHex().c_str());
+				}
+			}
 		}
 	}
-	INFOF("Neighbor %s failed symmetry probe; demoted %u paths to unresponsive",
-	      neighbor_hash.toHex().c_str(), marked);
+	NOTICEF("Neighbor probe: %s failed symmetry probe; %u of %u paths newly demoted to UNRESPONSIVE",
+	        neighbor_hash.toHex().c_str(), demoted, marked);
 }
 #endif
 
