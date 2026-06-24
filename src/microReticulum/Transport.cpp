@@ -1140,6 +1140,11 @@ DestinationEntry empty_destination_entry;
 				sent = transmit(outbound_interface, new_raw);
 				//_path_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
+#if RNS_NEIGHBOR_PROBING
+				//DIVERGENCE: count packets forwarded through this
+				// neighbor for passive liveness inference.
+				if (sent) _record_neighbor_packet(destination_entry._received_from);
+#endif
 			}
 		}
 
@@ -1171,6 +1176,11 @@ DestinationEntry empty_destination_entry;
 				sent = transmit(outbound_interface, new_raw);
 				//Transport.destination_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
+#if RNS_NEIGHBOR_PROBING
+				//DIVERGENCE: count packets forwarded through this
+				// neighbor for passive liveness inference.
+				if (sent) _record_neighbor_packet(destination_entry._received_from);
+#endif
 			}
 		}
 
@@ -1180,6 +1190,12 @@ DestinationEntry empty_destination_entry;
 		else {
 			TRACE("Transport::outbound: Sending packet over directly connected interface...");
 			sent = transmit(outbound_interface, packet.raw());
+#if RNS_NEIGHBOR_PROBING
+			//DIVERGENCE: count directly-delivered packets toward this
+			// neighbor; for hops==0 paths _received_from is the neighbor
+			// itself.
+			if (sent) _record_neighbor_packet(destination_entry._received_from);
+#endif
 		}
 	}
 	// If we don't have a known path for the destination, we'll
@@ -5653,6 +5669,19 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 	return count;
 }
+
+#if RNS_NEIGHBOR_PROBING
+//DIVERGENCE: stats helper for passive neighbor-liveness inference.
+// Called from the outbound() transmit sites. Empty next_hop means we
+// don't know which neighbor to attribute the event to (e.g. broadcast
+// or local-only destination); silently ignore those.
+/*static*/ void Transport::_record_neighbor_packet(const Bytes& next_hop) {
+	if (next_hop.empty()) return;
+	auto& stat = _neighbor_stats[next_hop];
+	stat.packets_forwarded += 1;
+	stat.last_packet_at = OS::time();
+}
+#endif
 
 /*static*/ uint16_t Transport::remove_links(const std::vector<Bytes>& hashes) {
 	uint16_t count = 0;

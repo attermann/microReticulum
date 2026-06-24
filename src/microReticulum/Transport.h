@@ -442,6 +442,13 @@ namespace RNS {
 		static uint16_t remove_discovery_path_requests(const std::vector<Bytes>& hashes);
 		static uint16_t remove_tunnels(const std::vector<Bytes>& hashes);
 
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: per-neighbor stats helper for passive liveness
+		// inference. Runs after a successful outbound transmit to count
+		// packets forwarded through each direct neighbor.
+		static void _record_neighbor_packet(const Bytes& next_hop);
+#endif
+
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
 		static Packet find_announce_packet_from_hash(const Bytes& destination_hash);
 
