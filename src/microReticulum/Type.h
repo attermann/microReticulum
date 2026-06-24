@@ -33,6 +33,15 @@
 #endif
 #endif
 
+//DIVERGENCE: Master feature flag for passive neighbor-liveness inference
+// + targeted probe confirmation. The Python reference plan implements the
+// same feature on the Transport side; the C++ port adds it ahead of (or
+// alongside) that work. Default on; set -DRNS_NEIGHBOR_PROBING=0 in
+// build_flags to compile the feature out entirely.
+#ifndef RNS_NEIGHBOR_PROBING
+#define RNS_NEIGHBOR_PROBING 1
+#endif
+
 #ifndef RNS_QUEUED_ANNOUNCES_MAX
 #define RNS_QUEUED_ANNOUNCES_MAX 20
 #endif
