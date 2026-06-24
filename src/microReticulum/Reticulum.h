@@ -58,6 +58,15 @@ namespace RNS {
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
 		static bool __publish_blackhole_enabled;
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: runtime toggles for passive neighbor-liveness
+		// inference and its optional path-request fallback. The Python
+		// reference plan parses these from the [reticulum] INI block;
+		// microReticulum has no INI parser, so they're exposed as static
+		// accessors only.
+		static bool __neighbor_probing_enabled;
+		static bool __neighbor_probing_path_request_fallback_enabled;
+#endif
 		static bool panic_on_interface_error;
 
 		static uint16_t _persist_interval;
@@ -168,6 +177,21 @@ namespace RNS {
 
 		inline static bool probe_destination_enabled() { return __allow_probes; }
 		inline static void probe_destination_enabled(bool allow_probes) { __allow_probes = allow_probes; }
+
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: master toggle for passive neighbor-liveness
+		// inference. Effective only when transport_enabled() is also
+		// true; the local side typically also wants
+		// probe_destination_enabled() so peers can probe it reciprocally.
+		inline static bool neighbor_probing_enabled() { return __neighbor_probing_enabled; }
+		inline static void neighbor_probing_enabled(bool v) { __neighbor_probing_enabled = v; }
+
+		//DIVERGENCE: opt-in fallback that issues a path request when a
+		// suspect neighbor's probe destination isn't in the path table.
+		// Off by default.
+		inline static bool neighbor_probing_path_request_fallback_enabled() { return __neighbor_probing_path_request_fallback_enabled; }
+		inline static void neighbor_probing_path_request_fallback_enabled(bool v) { __neighbor_probing_path_request_fallback_enabled = v; }
+#endif
 
 		// getters/setters
 		inline bool is_connected_to_shared_instance() const { assert(_object); return _object->_is_connected_to_shared_instance; }

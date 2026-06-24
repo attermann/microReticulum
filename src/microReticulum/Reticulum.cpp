@@ -48,6 +48,12 @@ using namespace RNS::Utilities;
 /*static*/ bool Reticulum::__use_implicit_proof = true;
 /*static*/ bool Reticulum::__allow_probes = false;
 /*static*/ bool Reticulum::__publish_blackhole_enabled = false;
+#if RNS_NEIGHBOR_PROBING
+//DIVERGENCE: passive neighbor-probing defaults — feature on, path-request
+// fallback off. Effective only when transport_enabled() is also true.
+/*static*/ bool Reticulum::__neighbor_probing_enabled = true;
+/*static*/ bool Reticulum::__neighbor_probing_path_request_fallback_enabled = false;
+#endif
 /*static*/ bool Reticulum::panic_on_interface_error = false;
 
 /*static*/ uint16_t Reticulum::_persist_interval = PERSIST_INTERVAL;

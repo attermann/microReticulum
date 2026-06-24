@@ -228,6 +228,28 @@ namespace RNS {
 		};
 		using ReverseTable = std::map<Bytes, ReverseEntry>;
 
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: per-direct-neighbor stats for passive liveness
+		// inference. Window-relative counters that get reset on
+		// successful probe completion or after extended idleness. The
+		// Python reference plan stores these as indexed lists in a dict;
+		// the C++ port uses a named-member struct.
+		struct NeighborStat {
+			uint32_t packets_forwarded   = 0;
+			uint32_t proofs_received     = 0;
+			double   last_packet_at      = 0;
+			double   last_proof_at       = 0;
+			double   last_probe_at       = 0;
+			bool     probe_pending       = false;
+			Bytes    pending_probe_hash;   // truncated hash of in-flight probe packet
+		};
+		using NeighborStatsTable = std::map<
+			Bytes, NeighborStat,
+			std::less<Bytes>,
+			Utilities::Memory::ContainerAllocator<std::pair<const Bytes, NeighborStat>>
+		>;
+#endif
+
 		// CBA TODO Analyze safety of using Inrerface references here
 		class PathRequestEntry {
 		public:
@@ -489,6 +511,11 @@ namespace RNS {
 		inline static const AnnounceTable& announce_table() { return _announce_table; }
 		inline static const AnnounceTable& held_announces() { return _held_announces; }
 		inline static const ReverseTable& reverse_table() { return _reverse_table; }
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: read-only accessor for the per-neighbor liveness
+		// stats — useful for diagnostics and tests.
+		inline static const NeighborStatsTable& neighbor_stats() { return _neighbor_stats; }
+#endif
 		inline static const std::map<Bytes, double>& path_requests() { return _path_requests; }
 		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
 		inline static const PathStateTable& path_states() { return _path_states; }
@@ -528,6 +555,11 @@ namespace RNS {
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
 		static PathTable _path_table;			// A lookup table containing the next hop to a given destination
 		static ReverseTable _reverse_table;		// A lookup table for storing packet hashes used to return proofs and replies
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: per-direct-neighbor counters for passive liveness
+		// inference. In-memory only; ephemeral state, not microStore-backed.
+		static NeighborStatsTable _neighbor_stats;
+#endif
 		static LinkTable _link_table;			// A lookup table containing hops for links
 		static AnnounceTable _held_announces;	// A table containing temporarily held announce-table entries
 		static TunnelTable _tunnels;			// A table storing tunnels to other transport instances

@@ -502,6 +502,18 @@ namespace RNS { namespace Type {
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 20;           // Minimum interval in seconds for automated path requests
 
+#if RNS_NEIGHBOR_PROBING
+		//DIVERGENCE: tunables for passive neighbor-liveness inference
+		// + targeted probe confirmation. The Python reference plan keeps
+		// these as module-level constants in Transport.py; the C++ port
+		// places them alongside the existing Transport timing constants.
+		static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 60;   // seconds in which we expect either no forwarding or some proof return
+		static const uint8_t  NEIGHBOR_SUSPICION_MIN_PKTS = 5;    // min forwarded packets before suspicion fires (avoid triggering on light traffic)
+		static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 60;   // min seconds between probes per neighbor
+		static const uint8_t  NEIGHBOR_PROBE_TIMEOUT      = 15;   // seconds before a probe is considered failed
+		static const uint8_t  NEIGHBOR_PROBE_PAYLOAD_SIZE = 16;   // bytes of random payload in a probe
+#endif
+
 		static const uint8_t MAX_QUEUED_DISCOVERY_PRS = RNS_QUEUED_DISCOVERY_PRS_MAX;   // Max amount of queued discovery path requests
 		static constexpr const float DISCOVERY_PR_TX_THROTTLE = 0.5;                   // Min interval in seconds between throttled discovery PR transmissions
 

@@ -99,6 +99,10 @@ using namespace RNS::Persistence;
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
 /*static*/ PathTable Transport::_path_table;
 /*static*/ std::map<Bytes, Transport::ReverseEntry> Transport::_reverse_table;
+#if RNS_NEIGHBOR_PROBING
+//DIVERGENCE: in-memory neighbor stats for passive liveness inference.
+/*static*/ Transport::NeighborStatsTable Transport::_neighbor_stats;
+#endif
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
 /*static*/ Transport::AnnounceTable Transport::_held_announces;
 /*static*/ std::set<HAnnounceHandler> Transport::_announce_handlers;
