@@ -57,8 +57,7 @@ namespace RNS {
 		public:
 			using delivery = void(*)(const PacketReceipt& packet_receipt);
 			using timeout = void(*)(const PacketReceipt& packet_receipt);
-#if RNS_NEIGHBOR_PROBING
-			//DIVERGENCE: std::function-based handler variants added to let
+			// New std::function-based handler variants added to let
 			// neighbor-probe outcome callbacks capture neighbor_hash by
 			// value. The Python reference already supports captured state
 			// via closures; the C++ port previously exposed only plain
@@ -67,14 +66,11 @@ namespace RNS {
 			// out-of-tree firmware.
 			using delivery_handler = std::function<void(const PacketReceipt& packet_receipt)>;
 			using timeout_handler  = std::function<void(const PacketReceipt& packet_receipt)>;
-#endif
 		public:
 			delivery _delivery = nullptr;
 			timeout _timeout = nullptr;
-#if RNS_NEIGHBOR_PROBING
 			delivery_handler _delivery_fn;
 			timeout_handler  _timeout_fn;
-#endif
 		friend class PacketReceipt;
 		};
 
@@ -113,37 +109,31 @@ namespace RNS {
 		// :param timeout: The timeout in seconds.
 		inline void set_timeout(int16_t timeout) { assert(_object); _object->_timeout = timeout; }
 
+		// Deprecated function-pointer setter retained for source compat
+		// with existing firmware; new code should use set_delivery_handler
+		// which accepts a std::function (capture-friendly).
 		/*
 		Sets a function that gets called if a successfull delivery has been proven.
 
 		:param callback: A *callable* with the signature *callback(packet_receipt)*
 		*/
-#if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: function-pointer setter retained for source compat
-		// with existing firmware; new code should use set_delivery_handler
-		// which accepts a std::function (capture-friendly).
 		RNS_DEPRECATED("use set_delivery_handler (std::function)")
-#endif
 		inline void set_delivery_callback(Callbacks::delivery callback) {
 			assert(_object);
 			_object->_callbacks._delivery = callback;
 		}
-
 		/*
 		Sets a function that gets called if the delivery times out.
 
 		:param callback: A *callable* with the signature *callback(packet_receipt)*
 		*/
-#if RNS_NEIGHBOR_PROBING
 		RNS_DEPRECATED("use set_timeout_handler (std::function)")
-#endif
 		inline void set_timeout_callback(Callbacks::timeout callback) {
 			assert(_object);
 			_object->_callbacks._timeout = callback;
 		}
 
-#if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: std::function-based setters accept callables with
+		// New std::function-based setters accept callables with
 		// captured state (e.g. lambdas closing over neighbor_hash). The
 		// dispatcher in Packet.cpp prefers the handler over the legacy
 		// function-pointer if both are set.
@@ -155,7 +145,6 @@ namespace RNS {
 			assert(_object);
 			_object->_callbacks._timeout_fn = std::move(handler);
 		}
-#endif
 
 		// getters
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }

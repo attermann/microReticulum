@@ -911,8 +911,7 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 				//z _object->_proof_packet = proof_packet;
 				//z link.last_proof(_object->_concluded_at);
 
-#if RNS_NEIGHBOR_PROBING
-				//DIVERGENCE: prefer std::function handler over legacy
+				// Prefer std::function handler over legacy
 				// function-pointer callback so capture-bearing handlers
 				// (e.g. neighbor-probe outcomes) are invoked first.
 				if (_object->_callbacks._delivery_fn) {
@@ -924,9 +923,7 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 						ERRORF("The contained exception was: %s", e.what());
 					}
 				}
-				else
-#endif
-				if (_object->_callbacks._delivery) {
+				else if (_object->_callbacks._delivery) {
 					try {
 						_object->_callbacks._delivery(*this);
 					}
@@ -988,8 +985,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 				_object->_concluded_at = OS::time();
 				//z _object->_proof_packet = proof_packet;
 
-#if RNS_NEIGHBOR_PROBING
-				//DIVERGENCE: prefer std::function handler over legacy
+				// Prefer std::function handler over legacy
 				// function-pointer callback.
 				if (_object->_callbacks._delivery_fn) {
 					try {
@@ -999,9 +995,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 						ERRORF("Error while executing proof validated handler. The contained exception was: %s", e.what());
 					}
 				}
-				else
-#endif
-				if (_object->_callbacks._delivery) {
+				else if (_object->_callbacks._delivery) {
 					try {
 						_object->_callbacks._delivery(*this);
 					}
@@ -1032,8 +1026,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 			_object->_concluded_at = OS::time();
 			//z _object->_proof_packet = proof_packet;
 
-#if RNS_NEIGHBOR_PROBING
-			//DIVERGENCE: prefer std::function handler over legacy
+			// Prefer std::function handler over legacy
 			// function-pointer callback.
 			if (_object->_callbacks._delivery_fn) {
 				try {
@@ -1043,9 +1036,7 @@ bool PacketReceipt::validate_proof(const Bytes& proof, const Packet& proof_packe
 					ERRORF("Error while executing proof validated handler. The contained exception was: %s", e.what());
 				}
 			}
-			else
-#endif
-			if (_object->_callbacks._delivery) {
+			else if (_object->_callbacks._delivery) {
 				try {
 					_object->_callbacks._delivery(*this);
 				}
@@ -1081,8 +1072,7 @@ void PacketReceipt::check_timeout() {
 		// timeout callback from a background thread; the C++ port has no
 		// thread runtime here, so the dispatch was left as a //z stub
 		// and never fired. Invoke synchronously instead.
-#if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: prefer std::function handler over legacy
+		// Prefer std::function handler over legacy
 		// function-pointer callback so capture-bearing handlers fire.
 		if (_object->_callbacks._timeout_fn) {
 			try {
@@ -1092,9 +1082,7 @@ void PacketReceipt::check_timeout() {
 				ERRORF("Error while executing timeout handler. The contained exception was: %s", e.what());
 			}
 		}
-		else
-#endif
-		if (_object->_callbacks._timeout) {
+		else if (_object->_callbacks._timeout) {
 			try {
 				_object->_callbacks._timeout(*this);
 			}

@@ -197,7 +197,7 @@ namespace RNS {
 		class ReverseEntry {
 		public:
 #if RNS_NEIGHBOR_PROBING
-			//DIVERGENCE: extra _next_hop field added so returning proofs
+			// DIVERGENCE: extra _next_hop field added so returning proofs
 			// can be attributed to the forwarding neighbor for passive
 			// liveness inference. The Python reference plan extends its
 			// reverse_table list with IDX_RT_NEXT_HOP; the C++ port uses
@@ -229,7 +229,7 @@ namespace RNS {
 		using ReverseTable = std::map<Bytes, ReverseEntry>;
 
 #if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: per-direct-neighbor stats for passive liveness
+		// DIVERGENCE: per-direct-neighbor stats for passive liveness
 		// inference. Window-relative counters that get reset on
 		// successful probe completion or after extended idleness. The
 		// Python reference plan stores these as indexed lists in a dict;
@@ -443,7 +443,7 @@ namespace RNS {
 		static uint16_t remove_tunnels(const std::vector<Bytes>& hashes);
 
 #if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: per-neighbor stats and probe helpers for passive
+		// DIVERGENCE: per-neighbor stats and probe helpers for passive
 		// liveness inference. _record_* hooks update counters from
 		// existing transport paths; _scan_neighbor_stats runs from
 		// jobs(); _dispatch_neighbor_probe sends a probe to a neighbor's
@@ -527,7 +527,7 @@ namespace RNS {
 		inline static const AnnounceTable& held_announces() { return _held_announces; }
 		inline static const ReverseTable& reverse_table() { return _reverse_table; }
 #if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: read-only accessor for the per-neighbor liveness
+		// DIVERGENCE: read-only accessor for the per-neighbor liveness
 		// stats — useful for diagnostics and tests.
 		inline static const NeighborStatsTable& neighbor_stats() { return _neighbor_stats; }
 #endif
@@ -571,7 +571,7 @@ namespace RNS {
 		static PathTable _path_table;			// A lookup table containing the next hop to a given destination
 		static ReverseTable _reverse_table;		// A lookup table for storing packet hashes used to return proofs and replies
 #if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: per-direct-neighbor counters for passive liveness
+		// DIVERGENCE: per-direct-neighbor counters for passive liveness
 		// inference. In-memory only; ephemeral state, not microStore-backed.
 		static NeighborStatsTable _neighbor_stats;
 #endif

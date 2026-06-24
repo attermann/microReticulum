@@ -33,13 +33,21 @@
 #endif
 #endif
 
-//DIVERGENCE: Master feature flag for passive neighbor-liveness inference
+// DIVERGENCE: Master feature flag for passive neighbor-liveness inference
 // + targeted probe confirmation. The Python reference plan implements the
 // same feature on the Transport side; the C++ port adds it ahead of (or
 // alongside) that work. Default on; set -DRNS_NEIGHBOR_PROBING=0 in
 // build_flags to compile the feature out entirely.
 #ifndef RNS_NEIGHBOR_PROBING
 #define RNS_NEIGHBOR_PROBING 1
+#endif
+
+// DIVERGENCE: Opt-in fallback that issues a path request when a
+// suspect neighbor's probe destination isn't in the path table.
+// Off by default.; set -DRNS_NEIGHBOR_PATH_REQUEST=1 in
+// build_flags to enable the feature.
+#ifndef RNS_NEIGHBOR_PATH_REQUEST
+#define RNS_NEIGHBOR_PATH_REQUEST 0
 #endif
 
 #ifndef RNS_QUEUED_ANNOUNCES_MAX
@@ -503,7 +511,7 @@ namespace RNS { namespace Type {
 		static const uint8_t PATH_REQUEST_MI      = 20;           // Minimum interval in seconds for automated path requests
 
 #if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: tunables for passive neighbor-liveness inference
+		// DIVERGENCE: tunables for passive neighbor-liveness inference
 		// + targeted probe confirmation. The Python reference plan keeps
 		// these as module-level constants in Transport.py; the C++ port
 		// places them alongside the existing Transport timing constants.

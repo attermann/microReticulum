@@ -100,7 +100,7 @@ using namespace RNS::Persistence;
 /*static*/ PathTable Transport::_path_table;
 /*static*/ std::map<Bytes, Transport::ReverseEntry> Transport::_reverse_table;
 #if RNS_NEIGHBOR_PROBING
-//DIVERGENCE: in-memory neighbor stats for passive liveness inference.
+// DIVERGENCE: in-memory neighbor stats for passive liveness inference.
 /*static*/ Transport::NeighborStatsTable Transport::_neighbor_stats;
 #endif
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
@@ -901,17 +901,19 @@ DestinationEntry empty_destination_entry;
 			}
 
 #if RNS_NEIGHBOR_PROBING
-			//DIVERGENCE: passive neighbor-liveness scan — runs every
+			// DIVERGENCE: passive neighbor-liveness scan — runs every
 			// jobs() tick; per-neighbor rate limits inside the scan
 			// keep probe traffic bounded. Effective only when transport
 			// is enabled, neighbor probing is on, and we ourselves are
 			// reachable as a probe responder so peers can verify us
 			// reciprocally.
+			// CBA TODO Determine if we actually need to gate on probe_destination_enabled() here
 			if (Reticulum::transport_enabled()
 				&& Reticulum::neighbor_probing_enabled()
 				&& Reticulum::probe_destination_enabled())
 			{
 				try {
+					TRACE("Neighbor probe: Scanning neighbor stats...");
 					_scan_neighbor_stats();
 				}
 				catch (const std::exception& e) {
@@ -1161,7 +1163,7 @@ DestinationEntry empty_destination_entry;
 				//_path_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
 #if RNS_NEIGHBOR_PROBING
-				//DIVERGENCE: count packets forwarded through this
+				// DIVERGENCE: count packets forwarded through this
 				// neighbor for passive liveness inference.
 				if (sent) _record_neighbor_packet(destination_entry._received_from);
 #endif
@@ -1197,7 +1199,7 @@ DestinationEntry empty_destination_entry;
 				//Transport.destination_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
 #if RNS_NEIGHBOR_PROBING
-				//DIVERGENCE: count packets forwarded through this
+				// DIVERGENCE: count packets forwarded through this
 				// neighbor for passive liveness inference.
 				if (sent) _record_neighbor_packet(destination_entry._received_from);
 #endif
@@ -1211,7 +1213,7 @@ DestinationEntry empty_destination_entry;
 			TRACE("Transport::outbound: Sending packet over directly connected interface...");
 			sent = transmit(outbound_interface, packet.raw());
 #if RNS_NEIGHBOR_PROBING
-			//DIVERGENCE: count directly-delivered packets toward this
+			// DIVERGENCE: count directly-delivered packets toward this
 			// neighbor; for hops==0 paths _received_from is the neighbor
 			// itself.
 			if (sent) _record_neighbor_packet(destination_entry._received_from);
@@ -2016,7 +2018,7 @@ DestinationEntry empty_destination_entry;
 								outbound_interface,
 								OS::time()
 #if RNS_NEIGHBOR_PROBING
-								//DIVERGENCE: record next_hop so a returning
+								// DIVERGENCE: record next_hop so a returning
 								// proof can be attributed to this neighbor for
 								// passive liveness inference.
 								, next_hop
@@ -2895,7 +2897,7 @@ DestinationEntry empty_destination_entry;
 						new_raw << packet.raw().mid(2);
 						transmit(reverse_entry._receiving_interface, new_raw);
 #if RNS_NEIGHBOR_PROBING
-						//DIVERGENCE: credit the forwarding neighbor with a
+						// DIVERGENCE: credit the forwarding neighbor with a
 						// returning proof for passive liveness inference.
 						_record_neighbor_proof(reverse_entry._next_hop);
 #endif
@@ -3334,7 +3336,7 @@ Deregisters an announce handler.
 	return true;
 */
 #if RNS_NEIGHBOR_PROBING
-	//DIVERGENCE: drop any neighbor_stats entry keyed by this destination.
+	// DIVERGENCE: drop any neighbor_stats entry keyed by this destination.
 	// For hops==0 paths the destination IS the neighbor; for hops>0 the
 	// erase is a no-op since the destination is not a direct neighbor.
 	if (_neighbor_stats.erase(destination_hash) > 0) {
@@ -5614,7 +5616,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 				}
 #endif
 #if RNS_NEIGHBOR_PROBING
-				//DIVERGENCE: drop any neighbor_stats entry tied to this
+				// DIVERGENCE: drop any neighbor_stats entry tied to this
 				// culled destination. For hops==0 paths the destination
 				// hash equals the neighbor; for others this is a no-op.
 				if (_neighbor_stats.erase(destination_hash) > 0) {
@@ -5712,7 +5714,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 }
 
 #if RNS_NEIGHBOR_PROBING
-//DIVERGENCE: stats helpers for passive neighbor-liveness inference.
+// DIVERGENCE: stats helpers for passive neighbor-liveness inference.
 // _record_neighbor_packet is called from the outbound() transmit sites.
 // _record_neighbor_proof is called when a returning proof is forwarded
 // back through the reverse_table, attributing the proof to the
@@ -5743,7 +5745,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	       next_hop.toHex().c_str(), it->second.proofs_received, it->second.packets_forwarded);
 }
 
-//DIVERGENCE: per-jobs-tick scan of neighbor stats. Builds a snapshot
+// DIVERGENCE: per-jobs-tick scan of neighbor stats. Builds a snapshot
 // list of probe candidates to avoid any risk of iterator invalidation
 // if a probe dispatch (and its synchronous side-effects) touches the
 // stats map.
@@ -5823,7 +5825,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 }
 
-//DIVERGENCE: targeted probe to a suspect neighbor's existing
+// DIVERGENCE: targeted probe to a suspect neighbor's existing
 // probe_destination. The receiver side already exists when peers run
 // with probe_destination_enabled() — we just send a Packet and listen
 // for its proof via std::function handlers that capture neighbor_hash.
@@ -5839,11 +5841,11 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	if (!_new_path_table.exists(probe_dest_hash)) {
 		DEBUGF("Neighbor probe: skipping %s — no path to its probe destination %s (peer may have probe responder disabled)",
 		       neighbor_hash.toHex().c_str(), probe_dest_hash.toHex().c_str());
-		if (Reticulum::neighbor_probing_path_request_fallback_enabled()) {
-			INFOF("Neighbor probe: requesting path for probe destination %s (fallback enabled)",
-			      probe_dest_hash.toHex().c_str());
-			request_path(probe_dest_hash);
-		}
+#if RNS_NEIGHBOR_PATH_REQUEST
+		INFOF("Neighbor probe: requesting path for probe destination %s (fallback enabled)",
+				probe_dest_hash.toHex().c_str());
+		request_path(probe_dest_hash);
+#endif
 		return;
 	}
 
@@ -5880,7 +5882,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	      (unsigned)Type::Transport::NEIGHBOR_PROBE_TIMEOUT);
 }
 
-//DIVERGENCE: probe-delivered outcome — neighbor confirmed reciprocally
+// DIVERGENCE: probe-delivered outcome — neighbor confirmed reciprocally
 // reachable. Reset the suspicion window and mark every path going
 // through this neighbor as responsive so any prior demotion is undone.
 /*static*/ void Transport::_neighbor_probe_delivered(const PacketReceipt& /*receipt*/, const Bytes& neighbor_hash) {
@@ -5924,7 +5926,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 }
 
-//DIVERGENCE: probe-timed-out outcome — neighbor's receive side is
+// DIVERGENCE: probe-timed-out outcome — neighbor's receive side is
 // likely down. Demote every path going through this neighbor; existing
 // announce-replacement logic will swap them back in when (and if) a
 // fresh announce arrives over a working route.
