@@ -3333,6 +3333,12 @@ Deregisters an announce handler.
 	}
 	return true;
 */
+#if RNS_NEIGHBOR_PROBING
+	//DIVERGENCE: drop any neighbor_stats entry keyed by this destination.
+	// For hops==0 paths the destination IS the neighbor; for hops>0 the
+	// erase is a no-op since the destination is not a direct neighbor.
+	_neighbor_stats.erase(destination_hash);
+#endif
 	// CBA microStore
 	return _new_path_table.remove(destination_hash.collection());
 }
@@ -5605,6 +5611,12 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 					}
 				}
 #endif
+#if RNS_NEIGHBOR_PROBING
+				//DIVERGENCE: drop any neighbor_stats entry tied to this
+				// culled destination. For hops==0 paths the destination
+				// hash equals the neighbor; for others this is a no-op.
+				_neighbor_stats.erase(destination_hash);
+#endif
 				if (_path_table.erase(destination_hash) < 1) {
 					WARNINGF("Failed to remove destination %s from path table", destination_hash.toHex().c_str());
 				}
@@ -5731,9 +5743,18 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	constexpr double GRACE = 5.0;
 
 	std::vector<Bytes> to_probe;
-	for (const auto& kv : _neighbor_stats) {
+	for (auto& kv : _neighbor_stats) {
 		const Bytes& neighbor_hash = kv.first;
-		const NeighborStat& stat = kv.second;
+		NeighborStat& stat = kv.second;
+
+		// Sliding-window reset approximation: if we've been idle past
+		// twice the suspicion window, drop accumulated counters so the
+		// next traffic burst evaluates suspicion from a clean baseline
+		// instead of carrying stale history forward indefinitely.
+		if ((now - stat.last_packet_at) > 2.0 * Type::Transport::NEIGHBOR_SUSPICION_WINDOW) {
+			stat.packets_forwarded = 0;
+			stat.proofs_received = 0;
+		}
 
 		// idle — nothing has been forwarded recently
 		if ((now - stat.last_packet_at) > Type::Transport::NEIGHBOR_SUSPICION_WINDOW) continue;
