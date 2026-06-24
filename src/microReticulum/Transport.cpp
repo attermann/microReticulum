@@ -2874,6 +2874,11 @@ DestinationEntry empty_destination_entry;
 						//p new_raw += packet.raw[2:]
 						new_raw << packet.raw().mid(2);
 						transmit(reverse_entry._receiving_interface, new_raw);
+#if RNS_NEIGHBOR_PROBING
+						//DIVERGENCE: credit the forwarding neighbor with a
+						// returning proof for passive liveness inference.
+						_record_neighbor_proof(reverse_entry._next_hop);
+#endif
 					}
 					else {
 						DEBUG("Proof received on wrong interface, not transporting it.");
@@ -5671,15 +5676,26 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 }
 
 #if RNS_NEIGHBOR_PROBING
-//DIVERGENCE: stats helper for passive neighbor-liveness inference.
-// Called from the outbound() transmit sites. Empty next_hop means we
-// don't know which neighbor to attribute the event to (e.g. broadcast
-// or local-only destination); silently ignore those.
+//DIVERGENCE: stats helpers for passive neighbor-liveness inference.
+// _record_neighbor_packet is called from the outbound() transmit sites.
+// _record_neighbor_proof is called when a returning proof is forwarded
+// back through the reverse_table, attributing the proof to the
+// neighbor that originally forwarded the matching packet. Empty
+// next_hop means we don't know which neighbor to credit; silently
+// ignore.
 /*static*/ void Transport::_record_neighbor_packet(const Bytes& next_hop) {
 	if (next_hop.empty()) return;
 	auto& stat = _neighbor_stats[next_hop];
 	stat.packets_forwarded += 1;
 	stat.last_packet_at = OS::time();
+}
+
+/*static*/ void Transport::_record_neighbor_proof(const Bytes& next_hop) {
+	if (next_hop.empty()) return;
+	auto it = _neighbor_stats.find(next_hop);
+	if (it == _neighbor_stats.end()) return;
+	it->second.proofs_received += 1;
+	it->second.last_proof_at = OS::time();
 }
 #endif
 
