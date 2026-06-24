@@ -924,7 +924,7 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 				//z link.last_proof(_object->_concluded_at);
 
 #if RNS_PROOF_PATH_HEALING
-				// DIVERGENCE: heal path table on successful link proof.
+				// DIVERGENCE: heal path table on successful LINK proof.
 				Transport::mark_path_responsive(_object->_destination.hash());
 #endif
 

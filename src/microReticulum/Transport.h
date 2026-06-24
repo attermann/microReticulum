@@ -208,6 +208,7 @@ namespace RNS {
 				_timestamp(timestamp)
 			{
 			}
+#if RNS_PROOF_PATH_HEALING
 			// DIVERGENCE: proof-expectation tracking for SINGLE DATA path healing
 			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp,
 				const Bytes& destination_hash, bool expects_proof, double proof_timeout) :
@@ -219,14 +220,17 @@ namespace RNS {
 				_proof_timeout(proof_timeout)
 			{
 			}
+#endif
 		public:
 			Interface _receiving_interface = {Type::NONE};
 			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
+#if RNS_PROOF_PATH_HEALING
 			Bytes _destination_hash;
 			bool _expects_proof = false;
 			bool _proof_seen = false;
 			double _proof_timeout = 0;
+#endif
 		};
 		using ReverseTable = std::map<Bytes, ReverseEntry>;
 
