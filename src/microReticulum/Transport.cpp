@@ -1975,6 +1975,12 @@ DestinationEntry empty_destination_entry;
 								packet.receiving_interface(),
 								outbound_interface,
 								OS::time()
+#if RNS_NEIGHBOR_PROBING
+								//DIVERGENCE: record next_hop so a returning
+								// proof can be attributed to this neighbor for
+								// passive liveness inference.
+								, next_hop
+#endif
 							);
 							// CBA ACCUMULATES
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});

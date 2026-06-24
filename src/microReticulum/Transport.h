@@ -196,16 +196,35 @@ namespace RNS {
 		// CBA TODO Analyze safety of using Inrerface references here
 		class ReverseEntry {
 		public:
+#if RNS_NEIGHBOR_PROBING
+			//DIVERGENCE: extra _next_hop field added so returning proofs
+			// can be attributed to the forwarding neighbor for passive
+			// liveness inference. The Python reference plan extends its
+			// reverse_table list with IDX_RT_NEXT_HOP; the C++ port uses
+			// named members instead. Parameter defaults to {} so call
+			// sites that have not yet been updated keep working.
+			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp, const Bytes& next_hop = {}) :
+				_receiving_interface(receiving_interface),
+				_outbound_interface(outbound_interface),
+				_timestamp(timestamp),
+				_next_hop(next_hop)
+			{
+			}
+#else
 			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp) :
 				_receiving_interface(receiving_interface),
 				_outbound_interface(outbound_interface),
 				_timestamp(timestamp)
 			{
 			}
+#endif
 		public:
 			Interface _receiving_interface = {Type::NONE};
 			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
+#if RNS_NEIGHBOR_PROBING
+			Bytes _next_hop;
+#endif
 		};
 		using ReverseTable = std::map<Bytes, ReverseEntry>;
 
