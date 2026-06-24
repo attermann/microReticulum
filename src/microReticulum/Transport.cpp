@@ -201,6 +201,15 @@ using namespace RNS::Persistence;
 /*static*/ uint32_t Transport::_paths_added = 0;
 /*static*/ uint32_t Transport::_paths_updated = 0;
 /*static*/ uint32_t Transport::_paths_failed = 0;
+/*static*/ uint32_t Transport::_paths_responsive = 0;
+/*static*/ uint32_t Transport::_paths_unresponsive = 0;
+/*static*/ uint32_t Transport::_paths_unknown = 0;
+#if RNS_NEIGHBOR_PROBING
+/*static*/ uint32_t Transport::_probes_received = 0;
+/*static*/ uint32_t Transport::_probes_sent = 0;
+/*static*/ uint32_t Transport::_probes_skipped = 0;
+/*static*/ uint32_t Transport::_probes_failed = 0;
+#endif
 /*static*/ size_t Transport::_last_memory = 0;
 /*static*/ size_t Transport::_last_psram = 0;
 /*static*/ size_t Transport::_last_flash = 0;
@@ -429,6 +438,7 @@ DestinationEntry empty_destination_entry;
 			_probe_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "probe"};
 			_probe_destination.accepts_links(false);
 			_probe_destination.set_proof_strategy(Type::Destination::PROVE_ALL);
+			_probe_destination.set_packet_callback(probe_request_handler);
 			DEBUGF("Created probe responder destination %s", _probe_destination.hash().toHex().c_str());
 			//_probe_destination.announce();
 			_mgmt_destinations.insert(_probe_destination);
@@ -913,7 +923,7 @@ DestinationEntry empty_destination_entry;
 				&& Reticulum::probe_destination_enabled())
 			{
 				try {
-					TRACE("Neighbor probe: Scanning neighbor stats...");
+					//TRACE("Neighbor probe: Scanning neighbor stats...");
 					_scan_neighbor_stats();
 				}
 				catch (const std::exception& e) {
@@ -3531,6 +3541,7 @@ Deregisters an announce handler.
 	DestinationEntry destination_entry;
 	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
 		_path_states[destination_hash] = STATE_UNRESPONSIVE;
+		++_paths_unresponsive;
 		return true;
 	}
 	return false;
@@ -3540,6 +3551,7 @@ Deregisters an announce handler.
 	DestinationEntry destination_entry;
 	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
 		_path_states[destination_hash] = STATE_RESPONSIVE;
+		++_paths_responsive;
 		return true;
 	}
 	return false;
@@ -3549,6 +3561,7 @@ Deregisters an announce handler.
 	DestinationEntry destination_entry;
 	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
 		_path_states[destination_hash] = STATE_UNKNOWN;
+		++_paths_unknown;
 		return true;
 	}
 	return false;
@@ -4240,6 +4253,11 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 	}
 }
 
+/*static*/ void Transport::probe_request_handler(const Bytes& data, const Packet& packet) {
+	++_probes_received;
+	TRACE("Transport::probe_request_handler");
+}
+
 /*static*/ void Transport::path_request(const Bytes& destination_hash, bool is_from_local_client, const Interface& attached_interface, const Bytes& requestor_transport_id /*= {}*/, const Bytes& tag /*= {}*/) {
 	TRACE("Transport::path_request");
 	bool should_search_for_unknown = false;
@@ -4461,7 +4479,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 				//  path-finding over LoRa mesh
 				if (true) {
 #else
-				//if (interface != attached_interface) {
+				if (interface != attached_interface) {
 #endif
 					TRACEF("Transport::path_request: requesting path on interface %s", interface.toString().c_str());
 					// Use the previously extracted tag from this path request
@@ -5832,6 +5850,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 /*static*/ void Transport::_dispatch_neighbor_probe(const Bytes& neighbor_hash) {
 	Identity neighbor_identity = Identity::recall(neighbor_hash);
 	if (!neighbor_identity) {
+		++_probes_skipped;
 		DEBUGF("Neighbor probe: skipping %s — identity not yet known (announce not received?)",
 		       neighbor_hash.toHex().c_str());
 		return;
@@ -5839,6 +5858,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 
 	Bytes probe_dest_hash = Destination::hash(neighbor_identity, Type::Transport::APP_NAME, "probe");
 	if (!_new_path_table.exists(probe_dest_hash)) {
+		++_probes_skipped;
 		DEBUGF("Neighbor probe: skipping %s — no path to its probe destination %s (peer may have probe responder disabled)",
 		       neighbor_hash.toHex().c_str(), probe_dest_hash.toHex().c_str());
 #if RNS_NEIGHBOR_PATH_REQUEST
@@ -5875,7 +5895,8 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	stat.pending_probe_hash = receipt.truncated_hash();
 	stat.last_probe_at = OS::time();
 
-	INFOF("Neighbor probe: sending symmetry probe to %s (probe dest %s, %u-byte payload, timeout %us)",
+	++_probes_sent;
+	INFOF("Neighbor probe: sent symmetry probe to %s (probe dest %s, %u-byte payload, timeout %us)",
 	      neighbor_hash.toHex().c_str(),
 	      probe_dest_hash.toHex().c_str(),
 	      (unsigned)Type::Transport::NEIGHBOR_PROBE_PAYLOAD_SIZE,
@@ -5958,6 +5979,7 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 			}
 		}
 	}
+	++_probes_failed;
 	NOTICEF("Neighbor probe: %s failed symmetry probe; %u of %u paths newly demoted to UNRESPONSIVE",
 	        neighbor_hash.toHex().c_str(), demoted, marked);
 }

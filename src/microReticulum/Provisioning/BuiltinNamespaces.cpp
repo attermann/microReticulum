@@ -182,6 +182,15 @@ namespace RNS { namespace Provisioning {
 					.metric_int("Paths Added", Ns::Info::Metrics::Field::PathsAdded, []() { return RNS::Transport::paths_added(); })
 					.metric_int("Paths Updated", Ns::Info::Metrics::Field::PathsUpdated, []() { return RNS::Transport::paths_updated(); })
 					.metric_int("Paths Failed", Ns::Info::Metrics::Field::PathsFailed, []() { return RNS::Transport::paths_failed(); })
+					.metric_int("Paths Unresponsive", Ns::Info::Metrics::Field::PathsUnresponsive, []() { return RNS::Transport::paths_responsive(); })
+					.metric_int("Paths Responsive", Ns::Info::Metrics::Field::PathsResponsive, []() { return RNS::Transport::paths_unresponsive(); })
+					.metric_int("Paths Unknown", Ns::Info::Metrics::Field::PathsUnknown, []() { return RNS::Transport::paths_unknown(); })
+#if RNS_NEIGHBOR_PROBING
+					.metric_int("Probes Received", Ns::Info::Metrics::Field::ProbesReceived, []() { return RNS::Transport::probes_received(); })
+					.metric_int("Probes Sent", Ns::Info::Metrics::Field::ProbesSent, []() { return RNS::Transport::probes_sent(); })
+					.metric_int("Probes Skipped", Ns::Info::Metrics::Field::ProbesSkipped, []() { return RNS::Transport::probes_skipped(); })
+					.metric_int("Probes Failed", Ns::Info::Metrics::Field::ProbesFailed, []() { return RNS::Transport::probes_failed(); })
+#endif
 					.end()
 				.end();
 		}

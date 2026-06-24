@@ -416,6 +416,7 @@ namespace RNS {
 #if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
 		static Bytes remote_provision_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
 #endif
+		static void probe_request_handler(const Bytes& data, const Packet& packet);
 		static void path_request_handler(const Bytes& data, const Packet& packet);
 		static void path_request(const Bytes& destination_hash, bool is_from_local_client, const Interface& attached_interface, const Bytes& requestor_transport_id = {}, const Bytes& tag = {});
 		static bool from_local_client(const Packet& packet);
@@ -555,6 +556,15 @@ namespace RNS {
 		inline static uint32_t paths_added() { return _paths_added; }
 		inline static uint32_t paths_updated() { return _paths_updated; }
 		inline static uint32_t paths_failed() { return _paths_failed; }
+		inline static uint32_t paths_responsive() { return _paths_responsive; }
+		inline static uint32_t paths_unresponsive() { return _paths_unresponsive; }
+		inline static uint32_t paths_unknown() { return _paths_unknown; }
+#if RNS_NEIGHBOR_PROBING
+		inline static uint32_t probes_received() { return _probes_received; }
+		inline static uint32_t probes_sent() { return _probes_sent; }
+		inline static uint32_t probes_skipped() { return _probes_skipped; }
+		inline static uint32_t probes_failed() { return _probes_failed; }
+#endif
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
@@ -672,6 +682,15 @@ namespace RNS {
 		static uint32_t _paths_added;
 		static uint32_t _paths_updated;
 		static uint32_t _paths_failed;
+		static uint32_t _paths_responsive;
+		static uint32_t _paths_unresponsive;
+		static uint32_t _paths_unknown;
+#if RNS_NEIGHBOR_PROBING
+		static uint32_t _probes_received;
+		static uint32_t _probes_sent;
+		static uint32_t _probes_skipped;
+		static uint32_t _probes_failed;
+#endif
 		static size_t _last_memory;
 		static size_t _last_psram;
 		static size_t _last_flash;

@@ -116,6 +116,13 @@ namespace RNS { namespace Provisioning { namespace Ns {
 				constexpr fid_t PathsAdded               = 7;
 				constexpr fid_t PathsUpdated             = 8;
 				constexpr fid_t PathsFailed              = 9;
+				constexpr fid_t PathsUnresponsive        = 10;
+				constexpr fid_t PathsResponsive          = 11;
+				constexpr fid_t PathsUnknown             = 12;
+				constexpr fid_t ProbesReceived           = 13;
+				constexpr fid_t ProbesSent               = 14;
+				constexpr fid_t ProbesSkipped            = 15;
+				constexpr fid_t ProbesFailed             = 16;
 			}
 		}
 	}
