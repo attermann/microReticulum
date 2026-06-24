@@ -592,6 +592,39 @@ void test_incoming_announce_stress() {
 
 
 // ============================================================================
+// PacketReceipt std::function handler (capture-bearing) — Commit 1
+// ============================================================================
+
+#if RNS_NEIGHBOR_PROBING
+void test_receipt_timeout_handler_capture() {
+	initRNS();
+
+	bool timeout_fired = false;  // local, captured by reference
+
+	RNS::Identity remote_id(true);
+	RNS::Destination unreachable_dest(remote_id, RNS::Type::Destination::OUT,
+		RNS::Type::Destination::SINGLE, "test", "unreachable_handler");
+
+	RNS::Bytes payload("Timeout via std::function handler");
+	RNS::Packet packet(unreachable_dest, payload);
+	packet.send();
+	RNS::PacketReceipt receipt = packet.receipt();
+	receipt.set_timeout(1);
+	receipt.set_timeout_handler([&timeout_fired](const RNS::PacketReceipt& r) {
+		timeout_fired = true;
+	});
+
+	for (int i = 0; i < 5; i++) {
+		RNS::Utilities::OS::sleep(0.5);
+		test_reticulum.loop();
+	}
+
+	TEST_ASSERT_TRUE_MESSAGE(timeout_fired,
+		"Captured-state timeout handler should have fired after timeout");
+}
+#endif
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -626,6 +659,10 @@ int runUnityTests(void) {
 	RUN_TEST(test_prioritize_interfaces);
 	RUN_TEST(test_incoming_announce_over_limit);
 	//RUN_TEST(test_incoming_announce_stress);
+
+#if RNS_NEIGHBOR_PROBING
+	RUN_TEST(test_receipt_timeout_handler_capture);
+#endif
 
 	return UNITY_END();
 }

@@ -99,6 +99,10 @@ using namespace RNS::Persistence;
 /*static*/ Transport::AnnounceTable Transport::_announce_table;
 /*static*/ PathTable Transport::_path_table;
 /*static*/ std::map<Bytes, Transport::ReverseEntry> Transport::_reverse_table;
+#if RNS_NEIGHBOR_PROBING
+// DIVERGENCE: in-memory neighbor stats for passive liveness inference.
+/*static*/ Transport::NeighborStatsTable Transport::_neighbor_stats;
+#endif
 /*static*/ std::map<Bytes, Transport::LinkEntry> Transport::_link_table;
 /*static*/ Transport::AnnounceTable Transport::_held_announces;
 /*static*/ std::set<HAnnounceHandler> Transport::_announce_handlers;
@@ -197,6 +201,15 @@ using namespace RNS::Persistence;
 /*static*/ uint32_t Transport::_paths_added = 0;
 /*static*/ uint32_t Transport::_paths_updated = 0;
 /*static*/ uint32_t Transport::_paths_failed = 0;
+/*static*/ uint32_t Transport::_paths_responsive = 0;
+/*static*/ uint32_t Transport::_paths_unresponsive = 0;
+/*static*/ uint32_t Transport::_paths_unknown = 0;
+#if RNS_NEIGHBOR_PROBING
+/*static*/ uint32_t Transport::_probes_received = 0;
+/*static*/ uint32_t Transport::_probes_sent = 0;
+/*static*/ uint32_t Transport::_probes_skipped = 0;
+/*static*/ uint32_t Transport::_probes_failed = 0;
+#endif
 /*static*/ size_t Transport::_last_memory = 0;
 /*static*/ size_t Transport::_last_psram = 0;
 /*static*/ size_t Transport::_last_flash = 0;
@@ -425,6 +438,7 @@ DestinationEntry empty_destination_entry;
 			_probe_destination = {_identity, Type::Destination::IN, Type::Destination::SINGLE, APP_NAME, "probe"};
 			_probe_destination.accepts_links(false);
 			_probe_destination.set_proof_strategy(Type::Destination::PROVE_ALL);
+			_probe_destination.set_packet_callback(probe_request_handler);
 			DEBUGF("Created probe responder destination %s", _probe_destination.hash().toHex().c_str());
 			//_probe_destination.announce();
 			_mgmt_destinations.insert(_probe_destination);
@@ -896,6 +910,28 @@ DestinationEntry empty_destination_entry;
 				_tables_last_culled = OS::time();
 			}
 
+#if RNS_NEIGHBOR_PROBING
+			// DIVERGENCE: passive neighbor-liveness scan — runs every
+			// jobs() tick; per-neighbor rate limits inside the scan
+			// keep probe traffic bounded. Effective only when transport
+			// is enabled, neighbor probing is on, and we ourselves are
+			// reachable as a probe responder so peers can verify us
+			// reciprocally.
+			// CBA TODO Determine if we actually need to gate on probe_destination_enabled() here
+			if (Reticulum::transport_enabled()
+				&& Reticulum::neighbor_probing_enabled()
+				&& Reticulum::probe_destination_enabled())
+			{
+				try {
+					//TRACE("Neighbor probe: Scanning neighbor stats...");
+					_scan_neighbor_stats();
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed during neighbor stats scan: %s", e.what());
+				}
+			}
+#endif
+
             // Check expired blackhole entries
 			if (OS::time() > (_blackhole_last_checked + _blackhole_check_interval)) {
 				try {
@@ -1136,6 +1172,11 @@ DestinationEntry empty_destination_entry;
 				sent = transmit(outbound_interface, new_raw);
 				//_path_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
+#if RNS_NEIGHBOR_PROBING
+				// DIVERGENCE: count packets forwarded through this
+				// neighbor for passive liveness inference.
+				if (sent) _record_neighbor_packet(destination_entry._received_from);
+#endif
 			}
 		}
 
@@ -1167,6 +1208,11 @@ DestinationEntry empty_destination_entry;
 				sent = transmit(outbound_interface, new_raw);
 				//Transport.destination_table[packet.destination_hash][0] = time.time()
 				destination_entry._timestamp = OS::time();
+#if RNS_NEIGHBOR_PROBING
+				// DIVERGENCE: count packets forwarded through this
+				// neighbor for passive liveness inference.
+				if (sent) _record_neighbor_packet(destination_entry._received_from);
+#endif
 			}
 		}
 
@@ -1176,6 +1222,12 @@ DestinationEntry empty_destination_entry;
 		else {
 			TRACE("Transport::outbound: Sending packet over directly connected interface...");
 			sent = transmit(outbound_interface, packet.raw());
+#if RNS_NEIGHBOR_PROBING
+			// DIVERGENCE: count directly-delivered packets toward this
+			// neighbor; for hops==0 paths _received_from is the neighbor
+			// itself.
+			if (sent) _record_neighbor_packet(destination_entry._received_from);
+#endif
 		}
 	}
 	// If we don't have a known path for the destination, we'll
@@ -1975,6 +2027,12 @@ DestinationEntry empty_destination_entry;
 								packet.receiving_interface(),
 								outbound_interface,
 								OS::time()
+#if RNS_NEIGHBOR_PROBING
+								// DIVERGENCE: record next_hop so a returning
+								// proof can be attributed to this neighbor for
+								// passive liveness inference.
+								, next_hop
+#endif
 							);
 							// CBA ACCUMULATES
 							_reverse_table.insert({packet.getTruncatedHash(), reverse_entry});
@@ -2848,6 +2906,11 @@ DestinationEntry empty_destination_entry;
 						//p new_raw += packet.raw[2:]
 						new_raw << packet.raw().mid(2);
 						transmit(reverse_entry._receiving_interface, new_raw);
+#if RNS_NEIGHBOR_PROBING
+						// DIVERGENCE: credit the forwarding neighbor with a
+						// returning proof for passive liveness inference.
+						_record_neighbor_proof(reverse_entry._next_hop);
+#endif
 					}
 					else {
 						DEBUG("Proof received on wrong interface, not transporting it.");
@@ -3282,6 +3345,14 @@ Deregisters an announce handler.
 	}
 	return true;
 */
+#if RNS_NEIGHBOR_PROBING
+	// DIVERGENCE: drop any neighbor_stats entry keyed by this destination.
+	// For hops==0 paths the destination IS the neighbor; for hops>0 the
+	// erase is a no-op since the destination is not a direct neighbor.
+	if (_neighbor_stats.erase(destination_hash) > 0) {
+		DEBUGF("Neighbor probe: dropped stats for %s (path removed)", destination_hash.toHex().c_str());
+	}
+#endif
 	// CBA microStore
 	return _new_path_table.remove(destination_hash.collection());
 }
@@ -3470,6 +3541,7 @@ Deregisters an announce handler.
 	DestinationEntry destination_entry;
 	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
 		_path_states[destination_hash] = STATE_UNRESPONSIVE;
+		++_paths_unresponsive;
 		return true;
 	}
 	return false;
@@ -3479,6 +3551,7 @@ Deregisters an announce handler.
 	DestinationEntry destination_entry;
 	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
 		_path_states[destination_hash] = STATE_RESPONSIVE;
+		++_paths_responsive;
 		return true;
 	}
 	return false;
@@ -3488,6 +3561,7 @@ Deregisters an announce handler.
 	DestinationEntry destination_entry;
 	if (_new_path_table.get(destination_hash, destination_entry) && destination_entry) {
 		_path_states[destination_hash] = STATE_UNKNOWN;
+		++_paths_unknown;
 		return true;
 	}
 	return false;
@@ -4179,6 +4253,11 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 	}
 }
 
+/*static*/ void Transport::probe_request_handler(const Bytes& data, const Packet& packet) {
+	++_probes_received;
+	TRACE("Transport::probe_request_handler");
+}
+
 /*static*/ void Transport::path_request(const Bytes& destination_hash, bool is_from_local_client, const Interface& attached_interface, const Bytes& requestor_transport_id /*= {}*/, const Bytes& tag /*= {}*/) {
 	TRACE("Transport::path_request");
 	bool should_search_for_unknown = false;
@@ -4400,7 +4479,7 @@ TRACEF("announce_packet str: %s", announce_packet.toString().c_str());
 				//  path-finding over LoRa mesh
 				if (true) {
 #else
-				//if (interface != attached_interface) {
+				if (interface != attached_interface) {
 #endif
 					TRACEF("Transport::path_request: requesting path on interface %s", interface.toString().c_str());
 					// Use the previously extracted tag from this path request
@@ -5554,6 +5633,14 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 					}
 				}
 #endif
+#if RNS_NEIGHBOR_PROBING
+				// DIVERGENCE: drop any neighbor_stats entry tied to this
+				// culled destination. For hops==0 paths the destination
+				// hash equals the neighbor; for others this is a no-op.
+				if (_neighbor_stats.erase(destination_hash) > 0) {
+					DEBUGF("Neighbor probe: dropped stats for %s (path-table cull)", destination_hash.toHex().c_str());
+				}
+#endif
 				if (_path_table.erase(destination_hash) < 1) {
 					WARNINGF("Failed to remove destination %s from path table", destination_hash.toHex().c_str());
 				}
@@ -5643,6 +5730,260 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	}
 	return count;
 }
+
+#if RNS_NEIGHBOR_PROBING
+// DIVERGENCE: stats helpers for passive neighbor-liveness inference.
+// _record_neighbor_packet is called from the outbound() transmit sites.
+// _record_neighbor_proof is called when a returning proof is forwarded
+// back through the reverse_table, attributing the proof to the
+// neighbor that originally forwarded the matching packet. Empty
+// next_hop means we don't know which neighbor to credit; silently
+// ignore.
+/*static*/ void Transport::_record_neighbor_packet(const Bytes& next_hop) {
+	if (next_hop.empty()) return;
+	auto it = _neighbor_stats.find(next_hop);
+	const bool is_new = (it == _neighbor_stats.end());
+	auto& stat = is_new ? _neighbor_stats[next_hop] : it->second;
+	stat.packets_forwarded += 1;
+	stat.last_packet_at = OS::time();
+	if (is_new) {
+		DEBUGF("Neighbor probe: tracking new direct neighbor %s", next_hop.toHex().c_str());
+	}
+	TRACEF("Neighbor probe: packet_forwarded[%s] -> %u (proofs=%u)",
+	       next_hop.toHex().c_str(), stat.packets_forwarded, stat.proofs_received);
+}
+
+/*static*/ void Transport::_record_neighbor_proof(const Bytes& next_hop) {
+	if (next_hop.empty()) return;
+	auto it = _neighbor_stats.find(next_hop);
+	if (it == _neighbor_stats.end()) return;
+	it->second.proofs_received += 1;
+	it->second.last_proof_at = OS::time();
+	TRACEF("Neighbor probe: proof_received[%s] -> %u (forwarded=%u)",
+	       next_hop.toHex().c_str(), it->second.proofs_received, it->second.packets_forwarded);
+}
+
+// DIVERGENCE: per-jobs-tick scan of neighbor stats. Builds a snapshot
+// list of probe candidates to avoid any risk of iterator invalidation
+// if a probe dispatch (and its synchronous side-effects) touches the
+// stats map.
+/*static*/ void Transport::_scan_neighbor_stats() {
+	if (_neighbor_stats.empty()) return;
+
+	const double now = OS::time();
+	// Grace seconds: a recent proof received slightly before the most
+	// recent forwarded packet still indicates a healthy neighbor.
+	constexpr double GRACE = 5.0;
+
+	std::vector<Bytes> to_probe;
+	for (auto& kv : _neighbor_stats) {
+		const Bytes& neighbor_hash = kv.first;
+		NeighborStat& stat = kv.second;
+
+		// Sliding-window reset approximation: if we've been idle past
+		// twice the suspicion window, drop accumulated counters so the
+		// next traffic burst evaluates suspicion from a clean baseline
+		// instead of carrying stale history forward indefinitely.
+		if ((now - stat.last_packet_at) > 2.0 * Type::Transport::NEIGHBOR_SUSPICION_WINDOW
+		    && (stat.packets_forwarded != 0 || stat.proofs_received != 0))
+		{
+			VERBOSEF("Neighbor probe: resetting stale stats for idle neighbor %s (idle=%.0fs, prior fwd=%u proofs=%u)",
+			         neighbor_hash.toHex().c_str(),
+			         now - stat.last_packet_at,
+			         stat.packets_forwarded,
+			         stat.proofs_received);
+			stat.packets_forwarded = 0;
+			stat.proofs_received = 0;
+		}
+
+		// idle — nothing has been forwarded recently
+		if ((now - stat.last_packet_at) > Type::Transport::NEIGHBOR_SUSPICION_WINDOW) {
+			TRACEF("Neighbor probe: skip %s — idle", neighbor_hash.toHex().c_str());
+			continue;
+		}
+		// insufficient activity — avoid trigger-happy probing on light traffic
+		if (stat.packets_forwarded < Type::Transport::NEIGHBOR_SUSPICION_MIN_PKTS) {
+			TRACEF("Neighbor probe: skip %s — only %u packets forwarded (need %u)",
+			       neighbor_hash.toHex().c_str(),
+			       stat.packets_forwarded,
+			       (unsigned)Type::Transport::NEIGHBOR_SUSPICION_MIN_PKTS);
+			continue;
+		}
+		// recent proof returned — neighbor looks healthy
+		if (stat.last_proof_at > stat.last_packet_at - GRACE) {
+			TRACEF("Neighbor probe: skip %s — recent proof (fwd=%u proofs=%u)",
+			       neighbor_hash.toHex().c_str(),
+			       stat.packets_forwarded,
+			       stat.proofs_received);
+			continue;
+		}
+		// already probing
+		if (stat.probe_pending) {
+			TRACEF("Neighbor probe: skip %s — probe already pending", neighbor_hash.toHex().c_str());
+			continue;
+		}
+		// per-neighbor probe rate limit
+		if ((now - stat.last_probe_at) < Type::Transport::NEIGHBOR_PROBE_RATELIMIT) {
+			TRACEF("Neighbor probe: skip %s — rate-limited (%.0fs since last probe)",
+			       neighbor_hash.toHex().c_str(),
+			       now - stat.last_probe_at);
+			continue;
+		}
+
+		INFOF("Neighbor probe: classifying %s as suspicious (forwarded=%u proofs=%u age=%.0fs)",
+		      neighbor_hash.toHex().c_str(),
+		      stat.packets_forwarded,
+		      stat.proofs_received,
+		      now - stat.last_packet_at);
+		to_probe.push_back(neighbor_hash);
+	}
+
+	for (const Bytes& neighbor_hash : to_probe) {
+		_dispatch_neighbor_probe(neighbor_hash);
+	}
+}
+
+// DIVERGENCE: targeted probe to a suspect neighbor's existing
+// probe_destination. The receiver side already exists when peers run
+// with probe_destination_enabled() — we just send a Packet and listen
+// for its proof via std::function handlers that capture neighbor_hash.
+/*static*/ void Transport::_dispatch_neighbor_probe(const Bytes& neighbor_hash) {
+	Identity neighbor_identity = Identity::recall(neighbor_hash);
+	if (!neighbor_identity) {
+		++_probes_skipped;
+		DEBUGF("Neighbor probe: skipping %s — identity not yet known (announce not received?)",
+		       neighbor_hash.toHex().c_str());
+		return;
+	}
+
+	Bytes probe_dest_hash = Destination::hash(neighbor_identity, Type::Transport::APP_NAME, "probe");
+	if (!_new_path_table.exists(probe_dest_hash)) {
+		++_probes_skipped;
+		DEBUGF("Neighbor probe: skipping %s — no path to its probe destination %s (peer may have probe responder disabled)",
+		       neighbor_hash.toHex().c_str(), probe_dest_hash.toHex().c_str());
+#if RNS_NEIGHBOR_PATH_REQUEST
+		INFOF("Neighbor probe: requesting path for probe destination %s (fallback enabled)",
+				probe_dest_hash.toHex().c_str());
+		request_path(probe_dest_hash);
+#endif
+		return;
+	}
+
+	Destination probe_dest(neighbor_identity,
+	                       Type::Destination::OUT,
+	                       Type::Destination::SINGLE,
+	                       Type::Transport::APP_NAME,
+	                       "probe");
+	Bytes payload = Cryptography::random(Type::Transport::NEIGHBOR_PROBE_PAYLOAD_SIZE);
+	Packet probe(probe_dest, payload);
+	probe.send();
+	PacketReceipt receipt = probe.receipt();
+	receipt.set_timeout(Type::Transport::NEIGHBOR_PROBE_TIMEOUT);
+
+	// Capture neighbor_hash by value so the outcome handlers know which
+	// stats entry to update when fired.
+	Bytes nh = neighbor_hash;
+	receipt.set_delivery_handler([nh](const PacketReceipt& r) {
+		Transport::_neighbor_probe_delivered(r, nh);
+	});
+	receipt.set_timeout_handler([nh](const PacketReceipt& r) {
+		Transport::_neighbor_probe_timed_out(r, nh);
+	});
+
+	auto& stat = _neighbor_stats[neighbor_hash];
+	stat.probe_pending = true;
+	stat.pending_probe_hash = receipt.truncated_hash();
+	stat.last_probe_at = OS::time();
+
+	++_probes_sent;
+	INFOF("Neighbor probe: sent symmetry probe to %s (probe dest %s, %u-byte payload, timeout %us)",
+	      neighbor_hash.toHex().c_str(),
+	      probe_dest_hash.toHex().c_str(),
+	      (unsigned)Type::Transport::NEIGHBOR_PROBE_PAYLOAD_SIZE,
+	      (unsigned)Type::Transport::NEIGHBOR_PROBE_TIMEOUT);
+}
+
+// DIVERGENCE: probe-delivered outcome — neighbor confirmed reciprocally
+// reachable. Reset the suspicion window and mark every path going
+// through this neighbor as responsive so any prior demotion is undone.
+/*static*/ void Transport::_neighbor_probe_delivered(const PacketReceipt& /*receipt*/, const Bytes& neighbor_hash) {
+	auto it = _neighbor_stats.find(neighbor_hash);
+	if (it != _neighbor_stats.end()) {
+		it->second.probe_pending = false;
+		it->second.pending_probe_hash = Bytes();
+		it->second.packets_forwarded = 0;
+		it->second.proofs_received = 0;
+	}
+
+	uint32_t marked = 0;
+	uint32_t promoted = 0;  // transitions from UNRESPONSIVE -> RESPONSIVE
+	for (const auto& path : _new_path_table) {
+		if (path.value._received_from == neighbor_hash) {
+			// Peek at the current state to detect actual transitions.
+			uint8_t prior = STATE_UNKNOWN;
+			auto sit = _path_states.find(path.key);
+			if (sit != _path_states.end()) prior = sit->second;
+			if (mark_path_responsive(path.key)) {
+				++marked;
+				if (prior == STATE_UNRESPONSIVE) {
+					++promoted;
+					VERBOSEF("Neighbor probe: path %s via %s promoted UNRESPONSIVE -> RESPONSIVE",
+					         path.key.toHex().c_str(), neighbor_hash.toHex().c_str());
+				}
+				else {
+					TRACEF("Neighbor probe: path %s via %s marked RESPONSIVE (prior state %u)",
+					       path.key.toHex().c_str(), neighbor_hash.toHex().c_str(), (unsigned)prior);
+				}
+			}
+		}
+	}
+	if (promoted > 0) {
+		NOTICEF("Neighbor probe: %s passed symmetry probe; %u of %u paths promoted from UNRESPONSIVE",
+		        neighbor_hash.toHex().c_str(), promoted, marked);
+	}
+	else {
+		INFOF("Neighbor probe: %s passed symmetry probe; %u paths confirmed RESPONSIVE",
+		      neighbor_hash.toHex().c_str(), marked);
+	}
+}
+
+// DIVERGENCE: probe-timed-out outcome — neighbor's receive side is
+// likely down. Demote every path going through this neighbor; existing
+// announce-replacement logic will swap them back in when (and if) a
+// fresh announce arrives over a working route.
+/*static*/ void Transport::_neighbor_probe_timed_out(const PacketReceipt& /*receipt*/, const Bytes& neighbor_hash) {
+	auto it = _neighbor_stats.find(neighbor_hash);
+	if (it != _neighbor_stats.end()) {
+		it->second.probe_pending = false;
+		it->second.pending_probe_hash = Bytes();
+	}
+
+	uint32_t marked = 0;
+	uint32_t demoted = 0;  // transitions from non-UNRESPONSIVE -> UNRESPONSIVE
+	for (const auto& path : _new_path_table) {
+		if (path.value._received_from == neighbor_hash) {
+			uint8_t prior = STATE_UNKNOWN;
+			auto sit = _path_states.find(path.key);
+			if (sit != _path_states.end()) prior = sit->second;
+			if (mark_path_unresponsive(path.key)) {
+				++marked;
+				if (prior != STATE_UNRESPONSIVE) {
+					++demoted;
+					VERBOSEF("Neighbor probe: path %s via %s demoted %s -> UNRESPONSIVE",
+					         path.key.toHex().c_str(), neighbor_hash.toHex().c_str(),
+					         (prior == STATE_RESPONSIVE) ? "RESPONSIVE" : "UNKNOWN");
+				}
+				else {
+					TRACEF("Neighbor probe: path %s via %s already UNRESPONSIVE", path.key.toHex().c_str(), neighbor_hash.toHex().c_str());
+				}
+			}
+		}
+	}
+	++_probes_failed;
+	NOTICEF("Neighbor probe: %s failed symmetry probe; %u of %u paths newly demoted to UNRESPONSIVE",
+	        neighbor_hash.toHex().c_str(), demoted, marked);
+}
+#endif
 
 /*static*/ uint16_t Transport::remove_links(const std::vector<Bytes>& hashes) {
 	uint16_t count = 0;

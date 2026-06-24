@@ -33,6 +33,23 @@
 #endif
 #endif
 
+// DIVERGENCE: Master feature flag for passive neighbor-liveness inference
+// + targeted probe confirmation. The Python reference plan implements the
+// same feature on the Transport side; the C++ port adds it ahead of (or
+// alongside) that work. Default on; set -DRNS_NEIGHBOR_PROBING=0 in
+// build_flags to compile the feature out entirely.
+#ifndef RNS_NEIGHBOR_PROBING
+#define RNS_NEIGHBOR_PROBING 1
+#endif
+
+// DIVERGENCE: Opt-in fallback that issues a path request when a
+// suspect neighbor's probe destination isn't in the path table.
+// Off by default.; set -DRNS_NEIGHBOR_PATH_REQUEST=1 in
+// build_flags to enable the feature.
+#ifndef RNS_NEIGHBOR_PATH_REQUEST
+#define RNS_NEIGHBOR_PATH_REQUEST 0
+#endif
+
 #ifndef RNS_QUEUED_ANNOUNCES_MAX
 #define RNS_QUEUED_ANNOUNCES_MAX 20
 #endif
@@ -492,6 +509,18 @@ namespace RNS { namespace Type {
 		static constexpr const float PATH_REQUEST_RG        = 1.5;         // Extra grace time on roaming-mode interfaces, gives better-connected peers a chance to answer first
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
 		static const uint8_t PATH_REQUEST_MI      = 20;           // Minimum interval in seconds for automated path requests
+
+#if RNS_NEIGHBOR_PROBING
+		// DIVERGENCE: tunables for passive neighbor-liveness inference
+		// + targeted probe confirmation. The Python reference plan keeps
+		// these as module-level constants in Transport.py; the C++ port
+		// places them alongside the existing Transport timing constants.
+		static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 60;   // seconds in which we expect either no forwarding or some proof return
+		static const uint8_t  NEIGHBOR_SUSPICION_MIN_PKTS = 5;    // min forwarded packets before suspicion fires (avoid triggering on light traffic)
+		static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 60;   // min seconds between probes per neighbor
+		static const uint8_t  NEIGHBOR_PROBE_TIMEOUT      = 15;   // seconds before a probe is considered failed
+		static const uint8_t  NEIGHBOR_PROBE_PAYLOAD_SIZE = 16;   // bytes of random payload in a probe
+#endif
 
 		static const uint8_t MAX_QUEUED_DISCOVERY_PRS = RNS_QUEUED_DISCOVERY_PRS_MAX;   // Max amount of queued discovery path requests
 		static constexpr const float DISCOVERY_PR_TX_THROTTLE = 0.5;                   // Min interval in seconds between throttled discovery PR transmissions

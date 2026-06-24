@@ -196,18 +196,59 @@ namespace RNS {
 		// CBA TODO Analyze safety of using Inrerface references here
 		class ReverseEntry {
 		public:
+#if RNS_NEIGHBOR_PROBING
+			// DIVERGENCE: extra _next_hop field added so returning proofs
+			// can be attributed to the forwarding neighbor for passive
+			// liveness inference. The Python reference plan extends its
+			// reverse_table list with IDX_RT_NEXT_HOP; the C++ port uses
+			// named members instead. Parameter defaults to {} so call
+			// sites that have not yet been updated keep working.
+			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp, const Bytes& next_hop = {}) :
+				_receiving_interface(receiving_interface),
+				_outbound_interface(outbound_interface),
+				_timestamp(timestamp),
+				_next_hop(next_hop)
+			{
+			}
+#else
 			ReverseEntry(const Interface& receiving_interface, const Interface& outbound_interface, double timestamp) :
 				_receiving_interface(receiving_interface),
 				_outbound_interface(outbound_interface),
 				_timestamp(timestamp)
 			{
 			}
+#endif
 		public:
 			Interface _receiving_interface = {Type::NONE};
 			const Interface _outbound_interface = {Type::NONE};
 			double _timestamp = 0;
+#if RNS_NEIGHBOR_PROBING
+			Bytes _next_hop;
+#endif
 		};
 		using ReverseTable = std::map<Bytes, ReverseEntry>;
+
+#if RNS_NEIGHBOR_PROBING
+		// DIVERGENCE: per-direct-neighbor stats for passive liveness
+		// inference. Window-relative counters that get reset on
+		// successful probe completion or after extended idleness. The
+		// Python reference plan stores these as indexed lists in a dict;
+		// the C++ port uses a named-member struct.
+		struct NeighborStat {
+			uint32_t packets_forwarded   = 0;
+			uint32_t proofs_received     = 0;
+			double   last_packet_at      = 0;
+			double   last_proof_at       = 0;
+			double   last_probe_at       = 0;
+			bool     probe_pending       = false;
+			Bytes    pending_probe_hash;   // truncated hash of in-flight probe packet
+		};
+		using NeighborStatsTable = std::map<
+			Bytes, NeighborStat,
+			std::less<Bytes>,
+			Utilities::Memory::ContainerAllocator<std::pair<const Bytes, NeighborStat>>
+		>;
+#endif
 
 		// CBA TODO Analyze safety of using Inrerface references here
 		class PathRequestEntry {
@@ -375,6 +416,7 @@ namespace RNS {
 #if defined(RNS_ENABLE_REMOTE_PROVISIONING) && defined(RNS_USE_PROVISIONING)
 		static Bytes remote_provision_handler(const Bytes& path, const Bytes& data, const Bytes& request_id, const Bytes& link_id, const Identity& remote_identity, double requested_at);
 #endif
+		static void probe_request_handler(const Bytes& data, const Packet& packet);
 		static void path_request_handler(const Bytes& data, const Packet& packet);
 		static void path_request(const Bytes& destination_hash, bool is_from_local_client, const Interface& attached_interface, const Bytes& requestor_transport_id = {}, const Bytes& tag = {});
 		static bool from_local_client(const Packet& packet);
@@ -400,6 +442,21 @@ namespace RNS {
 		static uint16_t remove_paths(const std::vector<Bytes>& hashes);
 		static uint16_t remove_discovery_path_requests(const std::vector<Bytes>& hashes);
 		static uint16_t remove_tunnels(const std::vector<Bytes>& hashes);
+
+#if RNS_NEIGHBOR_PROBING
+		// DIVERGENCE: per-neighbor stats and probe helpers for passive
+		// liveness inference. _record_* hooks update counters from
+		// existing transport paths; _scan_neighbor_stats runs from
+		// jobs(); _dispatch_neighbor_probe sends a probe to a neighbor's
+		// built-in probe destination; the *_probe_delivered/timed_out
+		// helpers are invoked by the receipt's std::function handlers.
+		static void _record_neighbor_packet(const Bytes& next_hop);
+		static void _record_neighbor_proof(const Bytes& next_hop);
+		static void _scan_neighbor_stats();
+		static void _dispatch_neighbor_probe(const Bytes& neighbor_hash);
+		static void _neighbor_probe_delivered(const PacketReceipt& receipt, const Bytes& neighbor_hash);
+		static void _neighbor_probe_timed_out(const PacketReceipt& receipt, const Bytes& neighbor_hash);
+#endif
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);
 		static Packet find_announce_packet_from_hash(const Bytes& destination_hash);
@@ -470,6 +527,11 @@ namespace RNS {
 		inline static const AnnounceTable& announce_table() { return _announce_table; }
 		inline static const AnnounceTable& held_announces() { return _held_announces; }
 		inline static const ReverseTable& reverse_table() { return _reverse_table; }
+#if RNS_NEIGHBOR_PROBING
+		// DIVERGENCE: read-only accessor for the per-neighbor liveness
+		// stats — useful for diagnostics and tests.
+		inline static const NeighborStatsTable& neighbor_stats() { return _neighbor_stats; }
+#endif
 		inline static const std::map<Bytes, double>& path_requests() { return _path_requests; }
 		inline static const PathRequestTable& discovery_path_requests() { return _discovery_path_requests; }
 		inline static const PathStateTable& path_states() { return _path_states; }
@@ -494,6 +556,15 @@ namespace RNS {
 		inline static uint32_t paths_added() { return _paths_added; }
 		inline static uint32_t paths_updated() { return _paths_updated; }
 		inline static uint32_t paths_failed() { return _paths_failed; }
+		inline static uint32_t paths_responsive() { return _paths_responsive; }
+		inline static uint32_t paths_unresponsive() { return _paths_unresponsive; }
+		inline static uint32_t paths_unknown() { return _paths_unknown; }
+#if RNS_NEIGHBOR_PROBING
+		inline static uint32_t probes_received() { return _probes_received; }
+		inline static uint32_t probes_sent() { return _probes_sent; }
+		inline static uint32_t probes_skipped() { return _probes_skipped; }
+		inline static uint32_t probes_failed() { return _probes_failed; }
+#endif
 
 	private:
 		// CBA MUST use references to interfaces here in order for virtul overrides for send/receive to work
@@ -509,6 +580,11 @@ namespace RNS {
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
 		static PathTable _path_table;			// A lookup table containing the next hop to a given destination
 		static ReverseTable _reverse_table;		// A lookup table for storing packet hashes used to return proofs and replies
+#if RNS_NEIGHBOR_PROBING
+		// DIVERGENCE: per-direct-neighbor counters for passive liveness
+		// inference. In-memory only; ephemeral state, not microStore-backed.
+		static NeighborStatsTable _neighbor_stats;
+#endif
 		static LinkTable _link_table;			// A lookup table containing hops for links
 		static AnnounceTable _held_announces;	// A table containing temporarily held announce-table entries
 		static TunnelTable _tunnels;			// A table storing tunnels to other transport instances
@@ -606,6 +682,15 @@ namespace RNS {
 		static uint32_t _paths_added;
 		static uint32_t _paths_updated;
 		static uint32_t _paths_failed;
+		static uint32_t _paths_responsive;
+		static uint32_t _paths_unresponsive;
+		static uint32_t _paths_unknown;
+#if RNS_NEIGHBOR_PROBING
+		static uint32_t _probes_received;
+		static uint32_t _probes_sent;
+		static uint32_t _probes_skipped;
+		static uint32_t _probes_failed;
+#endif
 		static size_t _last_memory;
 		static size_t _last_psram;
 		static size_t _last_flash;
