@@ -443,12 +443,18 @@ namespace RNS {
 		static uint16_t remove_tunnels(const std::vector<Bytes>& hashes);
 
 #if RNS_NEIGHBOR_PROBING
-		//DIVERGENCE: per-neighbor stats helpers for passive liveness
-		// inference. _record_neighbor_packet runs after a successful
-		// outbound transmit; _record_neighbor_proof runs after a returning
-		// proof is forwarded back via the reverse_table.
+		//DIVERGENCE: per-neighbor stats and probe helpers for passive
+		// liveness inference. _record_* hooks update counters from
+		// existing transport paths; _scan_neighbor_stats runs from
+		// jobs(); _dispatch_neighbor_probe sends a probe to a neighbor's
+		// built-in probe destination; the *_probe_delivered/timed_out
+		// helpers are invoked by the receipt's std::function handlers.
 		static void _record_neighbor_packet(const Bytes& next_hop);
 		static void _record_neighbor_proof(const Bytes& next_hop);
+		static void _scan_neighbor_stats();
+		static void _dispatch_neighbor_probe(const Bytes& neighbor_hash);
+		static void _neighbor_probe_delivered(const PacketReceipt& receipt, const Bytes& neighbor_hash);
+		static void _neighbor_probe_timed_out(const PacketReceipt& receipt, const Bytes& neighbor_hash);
 #endif
 
 		static Destination find_destination_from_hash(const Bytes& destination_hash);

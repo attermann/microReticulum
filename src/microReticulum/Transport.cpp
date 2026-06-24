@@ -900,6 +900,26 @@ DestinationEntry empty_destination_entry;
 				_tables_last_culled = OS::time();
 			}
 
+#if RNS_NEIGHBOR_PROBING
+			//DIVERGENCE: passive neighbor-liveness scan — runs every
+			// jobs() tick; per-neighbor rate limits inside the scan
+			// keep probe traffic bounded. Effective only when transport
+			// is enabled, neighbor probing is on, and we ourselves are
+			// reachable as a probe responder so peers can verify us
+			// reciprocally.
+			if (Reticulum::transport_enabled()
+				&& Reticulum::neighbor_probing_enabled()
+				&& Reticulum::probe_destination_enabled())
+			{
+				try {
+					_scan_neighbor_stats();
+				}
+				catch (const std::exception& e) {
+					ERRORF("jobs: failed during neighbor stats scan: %s", e.what());
+				}
+			}
+#endif
+
             // Check expired blackhole entries
 			if (OS::time() > (_blackhole_last_checked + _blackhole_check_interval)) {
 				try {
@@ -5696,6 +5716,137 @@ TRACEF("Transport::write_path_table: buffer size %lu bytes", Persistence::_buffe
 	if (it == _neighbor_stats.end()) return;
 	it->second.proofs_received += 1;
 	it->second.last_proof_at = OS::time();
+}
+
+//DIVERGENCE: per-jobs-tick scan of neighbor stats. Builds a snapshot
+// list of probe candidates to avoid any risk of iterator invalidation
+// if a probe dispatch (and its synchronous side-effects) touches the
+// stats map.
+/*static*/ void Transport::_scan_neighbor_stats() {
+	if (_neighbor_stats.empty()) return;
+
+	const double now = OS::time();
+	// Grace seconds: a recent proof received slightly before the most
+	// recent forwarded packet still indicates a healthy neighbor.
+	constexpr double GRACE = 5.0;
+
+	std::vector<Bytes> to_probe;
+	for (const auto& kv : _neighbor_stats) {
+		const Bytes& neighbor_hash = kv.first;
+		const NeighborStat& stat = kv.second;
+
+		// idle — nothing has been forwarded recently
+		if ((now - stat.last_packet_at) > Type::Transport::NEIGHBOR_SUSPICION_WINDOW) continue;
+		// insufficient activity — avoid trigger-happy probing on light traffic
+		if (stat.packets_forwarded < Type::Transport::NEIGHBOR_SUSPICION_MIN_PKTS) continue;
+		// recent proof returned — neighbor looks healthy
+		if (stat.last_proof_at > stat.last_packet_at - GRACE) continue;
+		// already probing
+		if (stat.probe_pending) continue;
+		// per-neighbor probe rate limit
+		if ((now - stat.last_probe_at) < Type::Transport::NEIGHBOR_PROBE_RATELIMIT) continue;
+
+		to_probe.push_back(neighbor_hash);
+	}
+
+	for (const Bytes& neighbor_hash : to_probe) {
+		_dispatch_neighbor_probe(neighbor_hash);
+	}
+}
+
+//DIVERGENCE: targeted probe to a suspect neighbor's existing
+// probe_destination. The receiver side already exists when peers run
+// with probe_destination_enabled() — we just send a Packet and listen
+// for its proof via std::function handlers that capture neighbor_hash.
+/*static*/ void Transport::_dispatch_neighbor_probe(const Bytes& neighbor_hash) {
+	Identity neighbor_identity = Identity::recall(neighbor_hash);
+	if (!neighbor_identity) {
+		DEBUGF("Neighbor probe: identity not recallable for %s", neighbor_hash.toHex().c_str());
+		return;
+	}
+
+	Bytes probe_dest_hash = Destination::hash(neighbor_identity, Type::Transport::APP_NAME, "probe");
+	if (!_new_path_table.exists(probe_dest_hash)) {
+		DEBUGF("Neighbor probe: no path to probe destination %s for neighbor %s",
+		       probe_dest_hash.toHex().c_str(), neighbor_hash.toHex().c_str());
+		if (Reticulum::neighbor_probing_path_request_fallback_enabled()) {
+			DEBUGF("Neighbor probe: requesting path for %s (fallback enabled)", probe_dest_hash.toHex().c_str());
+			request_path(probe_dest_hash);
+		}
+		return;
+	}
+
+	Destination probe_dest(neighbor_identity,
+	                       Type::Destination::OUT,
+	                       Type::Destination::SINGLE,
+	                       Type::Transport::APP_NAME,
+	                       "probe");
+	Bytes payload = Cryptography::random(Type::Transport::NEIGHBOR_PROBE_PAYLOAD_SIZE);
+	Packet probe(probe_dest, payload);
+	probe.send();
+	PacketReceipt receipt = probe.receipt();
+	receipt.set_timeout(Type::Transport::NEIGHBOR_PROBE_TIMEOUT);
+
+	// Capture neighbor_hash by value so the outcome handlers know which
+	// stats entry to update when fired.
+	Bytes nh = neighbor_hash;
+	receipt.set_delivery_handler([nh](const PacketReceipt& r) {
+		Transport::_neighbor_probe_delivered(r, nh);
+	});
+	receipt.set_timeout_handler([nh](const PacketReceipt& r) {
+		Transport::_neighbor_probe_timed_out(r, nh);
+	});
+
+	auto& stat = _neighbor_stats[neighbor_hash];
+	stat.probe_pending = true;
+	stat.pending_probe_hash = receipt.truncated_hash();
+	stat.last_probe_at = OS::time();
+
+	DEBUGF("Neighbor probe: dispatched to %s via probe destination %s",
+	       neighbor_hash.toHex().c_str(), probe_dest_hash.toHex().c_str());
+}
+
+//DIVERGENCE: probe-delivered outcome — neighbor confirmed reciprocally
+// reachable. Reset the suspicion window and mark every path going
+// through this neighbor as responsive so any prior demotion is undone.
+/*static*/ void Transport::_neighbor_probe_delivered(const PacketReceipt& /*receipt*/, const Bytes& neighbor_hash) {
+	auto it = _neighbor_stats.find(neighbor_hash);
+	if (it != _neighbor_stats.end()) {
+		it->second.probe_pending = false;
+		it->second.pending_probe_hash = Bytes();
+		it->second.packets_forwarded = 0;
+		it->second.proofs_received = 0;
+	}
+
+	uint32_t marked = 0;
+	for (const auto& path : _new_path_table) {
+		if (path.value._received_from == neighbor_hash) {
+			if (mark_path_responsive(path.key)) ++marked;
+		}
+	}
+	INFOF("Neighbor %s passed symmetry probe; marked %u paths responsive",
+	      neighbor_hash.toHex().c_str(), marked);
+}
+
+//DIVERGENCE: probe-timed-out outcome — neighbor's receive side is
+// likely down. Demote every path going through this neighbor; existing
+// announce-replacement logic will swap them back in when (and if) a
+// fresh announce arrives over a working route.
+/*static*/ void Transport::_neighbor_probe_timed_out(const PacketReceipt& /*receipt*/, const Bytes& neighbor_hash) {
+	auto it = _neighbor_stats.find(neighbor_hash);
+	if (it != _neighbor_stats.end()) {
+		it->second.probe_pending = false;
+		it->second.pending_probe_hash = Bytes();
+	}
+
+	uint32_t marked = 0;
+	for (const auto& path : _new_path_table) {
+		if (path.value._received_from == neighbor_hash) {
+			if (mark_path_unresponsive(path.key)) ++marked;
+		}
+	}
+	INFOF("Neighbor %s failed symmetry probe; demoted %u paths to unresponsive",
+	      neighbor_hash.toHex().c_str(), marked);
 }
 #endif
 
