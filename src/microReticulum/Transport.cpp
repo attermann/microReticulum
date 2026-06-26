@@ -694,8 +694,7 @@ DestinationEntry empty_destination_entry;
 					std::vector<Bytes> stale_path_states;
 					stale_path_states.reserve(_path_states.size());
 					for (const auto& [destination_hash, state] : _path_states) {
-						DestinationEntry destination_entry;
-						if (!_new_path_table.get(destination_hash, destination_entry) || !destination_entry) {
+						if (!_new_path_table.exists(destination_hash)) {
 							stale_path_states.push_back(destination_hash);
 						}
 					}
