@@ -7,3 +7,4 @@ build
 time_offset
 transport_identity
 path_store*
+.DS_Store
