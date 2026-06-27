@@ -515,9 +515,11 @@ namespace RNS { namespace Type {
 		// + targeted probe confirmation. The Python reference plan keeps
 		// these as module-level constants in Transport.py; the C++ port
 		// places them alongside the existing Transport timing constants.
-		static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 60;   // seconds in which we expect either no forwarding or some proof return
+		//static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 60;   // seconds in which we expect either no forwarding or some proof return
+		static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 300;   // seconds in which we expect either no forwarding or some proof return
 		static const uint8_t  NEIGHBOR_SUSPICION_MIN_PKTS = 5;    // min forwarded packets before suspicion fires (avoid triggering on light traffic)
-		static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 60;   // min seconds between probes per neighbor
+		//static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 60;   // min seconds between probes per neighbor
+		static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 300;   // min seconds between probes per neighbor
 		static const uint8_t  NEIGHBOR_PROBE_TIMEOUT      = 15;   // seconds before a probe is considered failed
 		static const uint8_t  NEIGHBOR_PROBE_PAYLOAD_SIZE = 16;   // bytes of random payload in a probe
 #endif
