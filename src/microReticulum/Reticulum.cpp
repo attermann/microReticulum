@@ -550,7 +550,7 @@ void Reticulum::get_packet_q(const Bytes& packet_hash) const {
 		char time_offset_path[FILEPATH_MAXSIZE];
 		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
 		uint64_t offset = OS::ltime();
-		DEBUGF("Writing time offset of %llu to file %s", offset, time_offset_path);
+		TRACEF("Writing time offset of %llu to file %s", offset, time_offset_path);
 		Bytes buf((uint8_t*)&offset, sizeof(offset));
 		OS::write_file(time_offset_path, buf);
 		return true;

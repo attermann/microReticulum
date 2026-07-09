@@ -130,7 +130,7 @@ using namespace RNS::Persistence;
 			entry._announce_packet = Packet(packet_data);
 		}
 	}
-
+	// re-hydrate announce_packet
 	if (entry._announce_packet) {
 		// Announce packet is cached in packed state
 		// so we need to unpack it before accessing.
@@ -141,6 +141,8 @@ using namespace RNS::Persistence;
 			// increased hop-count.
 			entry._announce_packet.hops(entry._announce_packet.hops() + 1);
 		}
+		// re-assign original receiving interface (if it still exists)
+		entry._announce_packet.receiving_interface(entry._receiving_interface);
 	}
 
 	return true;

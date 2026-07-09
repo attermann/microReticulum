@@ -135,9 +135,9 @@ namespace RNS {
 		// NaN means "not present" -- interface subclasses populate these
 		// synchronously with handle_incoming(bytes), and Transport::inbound
 		// snapshots the values onto the Packet at construction time.
-		float _r_stat_rssi = std::numeric_limits<float>::quiet_NaN();
-		float _r_stat_snr  = std::numeric_limits<float>::quiet_NaN();
-		float _r_stat_q    = std::numeric_limits<float>::quiet_NaN();
+		float _r_stat_rssi = Type::NaN<float>;
+		float _r_stat_snr  = Type::NaN<float>;
+		float _r_stat_q    = Type::NaN<float>;
 
 	friend class Interface;
 	};

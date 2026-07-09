@@ -68,9 +68,9 @@ namespace RNS {
 		// Last received-packet signal-quality stats snapshotted from Packet
 		// in Link::receive(). NaN means the source packet didn't carry that
 		// metric (e.g., received over a non-radio interface).
-		float _rssi = std::numeric_limits<float>::quiet_NaN();
-		float _snr  = std::numeric_limits<float>::quiet_NaN();
-		float _q    = std::numeric_limits<float>::quiet_NaN();
+		float _rssi = Type::NaN<float>;
+		float _snr  = Type::NaN<float>;
+		float _q    = Type::NaN<float>;
 		uint8_t _traffic_timeout_factor = Type::Link::TRAFFIC_TIMEOUT_FACTOR;
 		uint16_t _keepalive_timeout_factor = Type::Link::KEEPALIVE_TIMEOUT_FACTOR;
 		uint16_t _keepalive = Type::Link::KEEPALIVE;

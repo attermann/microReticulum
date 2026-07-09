@@ -256,10 +256,10 @@ namespace RNS { namespace Provisioning {
 					.end();
 			}
 			b.register_namespace("Default Allocator", Ns::Allocator::DefaultAllocator::Id)
-				.metric_int("Active", Ns::Allocator::DefaultAllocator::Field::Active, []() { return RNS::Utilities::Memory::default_allocator_alloc() - RNS::Utilities::Memory::default_allocator_alloc(); })
+				.metric_int("Active", Ns::Allocator::DefaultAllocator::Field::Active, []() { return RNS::Utilities::Memory::default_allocator_alloc() - RNS::Utilities::Memory::default_allocator_free(); })
 				.end();
 			b.register_namespace("Container Allocator", Ns::Allocator::ContainerAllocator::Id)
-				.metric_int("Active", Ns::Allocator::ContainerAllocator::Field::Active, []() { return RNS::Utilities::Memory::container_allocator_alloc() - RNS::Utilities::Memory::container_allocator_alloc(); })
+				.metric_int("Active", Ns::Allocator::ContainerAllocator::Field::Active, []() { return RNS::Utilities::Memory::container_allocator_alloc() - RNS::Utilities::Memory::container_allocator_free(); })
 				.end();
 
 			b.end();

@@ -25,7 +25,6 @@
 #include <memory>
 #include <cassert>
 #include <functional>
-#include <limits>
 #include <stdint.h>
 #include <time.h>
 
@@ -414,9 +413,9 @@ namespace RNS {
 			// Signal-quality stats stamped by Transport::inbound from the
 			// receiving interface at packet-construction time. NaN means
 			// the receiving interface didn't report this metric.
-			float _rssi = std::numeric_limits<float>::quiet_NaN();
-			float _snr  = std::numeric_limits<float>::quiet_NaN();
-			float _q    = std::numeric_limits<float>::quiet_NaN();
+			float _rssi = Type::NaN<float>;
+			float _snr  = Type::NaN<float>;
+			float _q    = Type::NaN<float>;
 
 			Bytes _packet_hash;
 			Bytes _ratchet_id;

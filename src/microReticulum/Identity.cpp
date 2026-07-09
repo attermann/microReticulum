@@ -396,25 +396,26 @@ Recall last heard app_data for a destination hash.
 							return false;
 						}
 					}
-
-					remember(packet.get_hash(), destination_hash, public_key, app_data);
-					//p del announced_identity
+					else {
+						// DIVERGENCE: To lessen flash wear, only adding known destination if it's not already known
+						// NOTE: A side-effect of this is timestamp will not be updated and record may expire sooner
+						remember(packet.get_hash(), destination_hash, public_key, app_data);
+					}
 
 					std::string signal_str;
-// TODO
-/*
-					if packet.rssi != None or packet.snr != None:
-						signal_str = " ["
-						if packet.rssi != None:
-							signal_str += "RSSI "+str(packet.rssi)+"dBm"
-							if packet.snr != None:
-								signal_str += ", "
-						if packet.snr != None:
-							signal_str += "SNR "+str(packet.snr)+"dB"
-						signal_str += "]"
-					else:
-						signal_str = ""
-*/
+					if (!Type::isNan(packet.rssi()) or !Type::isNan(packet.snr())) {
+						signal_str = " [";
+						if (!Type::isNan(packet.rssi())) {
+							signal_str += "RSSI "+std::to_string(packet.rssi())+"dBm";
+							if (!Type::isNan(packet.snr())) {
+								signal_str += ", ";
+							}
+						}
+						if (!Type::isNan(packet.snr())) {
+							signal_str += "SNR "+std::to_string(packet.snr())+"dB";
+						}
+						signal_str += "]";
+					}
 
 					if (packet.transport_id()) {
 						TRACEF("Valid announce for %s %d hops away, received via %s on %s%s", destination_hash.toHex().c_str(), packet.hops(), packet.transport_id().toHex().c_str(), packet.receiving_interface().toString().c_str(), signal_str.c_str());
@@ -572,10 +573,16 @@ bool Identity::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	if (_object->_pub) {
 		try {
-			TRACEF("Identity::validate: Verifying signature: %s against message: %s", signature.toHex().c_str(), message.toHex().c_str());
-			return _object->_sig_pub->verify(signature, message);
+			//TRACEF("Identity::validate: Verifying signature: %s against message: %s", signature.toHex().c_str(), message.toHex().c_str());
+			if (_object->_sig_pub->verify(signature, message)) {
+				TRACE("Identity::validate: Signature validated");
+				return true;
+			}
+			TRACE("Identity::validate: Signature validation failed");
+			return false;
 		}
 		catch (const std::exception& e) {
+			TRACEF("Identity::validate: Signature validation failed with exception: %s", e.what());
 			return false;
 		}
 	}

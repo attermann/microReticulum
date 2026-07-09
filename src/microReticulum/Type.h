@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <math.h>
+#include <limits>
 
 // [[deprecated(msg)]] requires C++14. Fall back to GCC/Clang's attribute
 // syntax under C++11 so the native (gnu++11) build still compiles. Defined
@@ -93,6 +94,14 @@
 
 
 namespace RNS { namespace Type {
+
+	// Shortened version of NaN
+	template <typename T>
+	constexpr T NaN = std::numeric_limits<T>::quiet_NaN();
+	template <typename T>
+	constexpr bool isNan(T val) {
+		return std::isnan(val);
+	}
 
 	// generic empty object constructor type
 	enum NoneConstructor {
@@ -518,8 +527,8 @@ namespace RNS { namespace Type {
 		//static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 60;   // seconds in which we expect either no forwarding or some proof return
 		static const uint16_t NEIGHBOR_SUSPICION_WINDOW   = 300;   // seconds in which we expect either no forwarding or some proof return
 		static const uint8_t  NEIGHBOR_SUSPICION_MIN_PKTS = 5;    // min forwarded packets before suspicion fires (avoid triggering on light traffic)
-		//static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 60;   // min seconds between probes per neighbor
-		static const uint8_t  NEIGHBOR_PROBE_RATELIMIT    = 300;   // min seconds between probes per neighbor
+		//static const uint16_t  NEIGHBOR_PROBE_RATELIMIT    = 60;   // min seconds between probes per neighbor
+		static const uint16_t  NEIGHBOR_PROBE_RATELIMIT    = 300;   // min seconds between probes per neighbor
 		static const uint8_t  NEIGHBOR_PROBE_TIMEOUT      = 15;   // seconds before a probe is considered failed
 		static const uint8_t  NEIGHBOR_PROBE_PAYLOAD_SIZE = 16;   // bytes of random payload in a probe
 #endif

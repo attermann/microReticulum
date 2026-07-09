@@ -1144,10 +1144,6 @@ void Link::get_channel() {
 	return _object->_channel
 */
 
-/*
-void Link::receive(const Packet& packet) {
-}
-*/
 void Link::receive(const Packet& packet) {
 	assert(_object);
 	_object->_watchdog_lock = true;
@@ -1167,9 +1163,9 @@ void Link::receive(const Packet& packet) {
 			// "last received" fields so consumers can read link.rssi/snr/q
 			// without holding the original Packet. NaN means the source
 			// packet (or its receiving interface) didn't carry that metric.
-			if (!std::isnan(packet.rssi())) _object->_rssi = packet.rssi();
-			if (!std::isnan(packet.snr()))  _object->_snr  = packet.snr();
-			if (!std::isnan(packet.q()))    _object->_q    = packet.q();
+			if (!Type::isNan(packet.rssi())) _object->_rssi = packet.rssi();
+			if (!Type::isNan(packet.snr()))  _object->_snr  = packet.snr();
+			if (!Type::isNan(packet.q()))    _object->_q    = packet.q();
 			if (_object->_status == STALE) {
 				_object->_status = Type::Link::ACTIVE;
 			}
@@ -1507,6 +1503,9 @@ void Link::receive(const Packet& packet) {
 					break;
 				}
 */
+				default:
+					WARNINGF("Link %s received DATA packet with UNKNOWN context!", hash().toHex().c_str());
+					break;
 				}
 			}
 			else if (packet.packet_type() == Type::Packet::PROOF) {

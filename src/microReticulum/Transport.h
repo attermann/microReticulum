@@ -84,10 +84,11 @@ namespace RNS {
 		using DestinationTable = std::map<Bytes, Destination>;
 		using BytesList = RNS::Utilities::GenerationalSet<Bytes>;
 #if defined(RNS_USE_FS) && RNS_PERSIST_HASHLIST
-		using HashlistStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+		using BytesStore = microStore::BasicFileStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
 #else
-		using HashlistStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
+		using BytesStore = microStore::BasicHeapStore<Utilities::Memory::ContainerAllocator<uint8_t>>;
 #endif
+		using PersistedBytesList = microStore::TypedKeyStore<Bytes, PathStore>;
 
 		class Callbacks {
 		public:
@@ -353,6 +354,7 @@ namespace RNS {
 		static void jobs();
 		static bool transmit(Interface& interface, const Bytes& raw);
 		static bool outbound(Packet& packet);
+		static void add_packet_hash(const Bytes& packet_hash);
 		static bool packet_filter(const Packet& packet);
 		//static void inbound(const Bytes& raw, const Interface& interface = {Type::NONE});
 		static void inbound(const Bytes& raw, const Interface& interface);
@@ -453,7 +455,9 @@ namespace RNS {
 		static void _record_neighbor_packet(const Bytes& next_hop);
 		static void _record_neighbor_proof(const Bytes& next_hop);
 		static void _scan_neighbor_stats();
-		static void _dispatch_neighbor_probe(const Bytes& neighbor_hash);
+		static bool _dispatch_neighbor_probe(const Bytes& neighbor_hash);
+		static void _validate_neighbor(const Bytes& neighbor_hash);
+		static void _invalidate_neighbor(const Bytes& neighbor_hash);
 		static void _neighbor_probe_delivered(const PacketReceipt& receipt, const Bytes& neighbor_hash);
 		static void _neighbor_probe_timed_out(const PacketReceipt& receipt, const Bytes& neighbor_hash);
 #endif
@@ -488,7 +492,7 @@ namespace RNS {
 		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
 		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) {
 			_hashlist_maxsize = hashlist_maxsize;
-			_packet_hashlist.set_max_recs(hashlist_maxsize);
+			_packet_hash_store.set_max_recs(hashlist_maxsize);
 		}
 		inline static uint32_t hashlist_segment_size() { return _hashlist_segment_size; }
 		inline static void hashlist_segment_size(uint32_t value) { _hashlist_segment_size = value; }
@@ -541,7 +545,7 @@ namespace RNS {
 		inline static const BytesList& discovery_pr_tags() { return _discovery_pr_tags; }
 		inline static const std::set<Destination>& control_destinations() { return _control_destinations; }
 		inline static const std::set<Bytes>& control_hashes() { return _control_hashes; }
-		inline static const HashlistStore& packet_hashlist() { return _packet_hashlist; }
+		inline static const PersistedBytesList& packet_hashlist() { return _packet_hashlist; }
 		inline static const std::list<PacketReceipt>& receipts() { return _receipts; }
 		inline static const TunnelTable& tunnels() { return _tunnels; }
 
@@ -574,7 +578,8 @@ namespace RNS {
 		// CBA TODO: Reconsider using std::set for enforcing uniqueness. Maybe consider std::map keyed on hash instead
 		static std::set<Link> _pending_links;		// Links that are being established
 		static std::set<Link> _active_links;		// Links that are active
-		static HashlistStore _packet_hashlist;  // Set of packet hashes for duplicate detection
+		static BytesStore _packet_hash_store;
+		static PersistedBytesList _packet_hashlist;  // Set of packet hashes for duplicate detection
 		static std::list<PacketReceipt> _receipts;	// Receipts of all outgoing packets for proof processing
 
 		static AnnounceTable _announce_table;	// A table for storing announces currently waiting to be retransmitted
