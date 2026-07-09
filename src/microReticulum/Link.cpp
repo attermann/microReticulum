@@ -168,6 +168,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		_object->_initiator = true;
 		_object->_expected_hops = Transport::hops_to(_object->_destination.hash());
 		_object->_establishment_timeout = Reticulum::get_instance().get_first_hop_timeout(destination.hash());
+		_object->_establishment_timeout += ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, Transport::hops_to(destination.hash()));
 		_object->_prv     = Cryptography::X25519PrivateKey::generate();
 		_object->_sig_prv = Cryptography::Ed25519PrivateKey::generate();
 	}
