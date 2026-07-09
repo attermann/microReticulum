@@ -68,9 +68,9 @@ rns_fetch(arxcontainer   RNS_ARXCONTAINER_SOURCE_DIR   https://github.com/hideak
 rns_fetch(arxtypetraits  RNS_ARXTYPETRAITS_SOURCE_DIR  https://github.com/hideakitai/ArxTypeTraits.git v0.3.2)
 rns_fetch(debuglog       RNS_DEBUGLOG_SOURCE_DIR       https://github.com/hideakitai/DebugLog.git v0.8.4)
 # Crypto and microStore have no upstream tags suitable for pinning, so pin commit SHAs.
-# Refresh by running `git ls-remote <url> HEAD` and updating the hex below.
-rns_fetch(crypto         RNS_CRYPTO_SOURCE_DIR         https://github.com/attermann/Crypto.git)
-rns_fetch(microstore     RNS_MICROSTORE_SOURCE_DIR     https://github.com/attermann/microStore.git)
+# Refresh by running `git ls-remote <url> HEAD` and updating the tag below.
+rns_fetch(crypto         RNS_CRYPTO_SOURCE_DIR         https://github.com/attermann/Crypto.git master)
+rns_fetch(microstore     RNS_MICROSTORE_SOURCE_DIR     https://github.com/attermann/microStore.git master)
 
 # -----------------------------------------------------------------------------
 # Third-party targets that don't ship CMakeLists.txt
