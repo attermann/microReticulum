@@ -1167,8 +1167,9 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	else TRACE("Transport::outbound: packet transport=n/a");
 	TRACEF("Transport::outbound: packet hash=%s", packet.packet_hash().toHex().c_str());
 
+	if (_jobs_running) DEBUG("Transport::outbound: jobs still running!");
 	while (_jobs_running) {
-		TRACE("Transport::outbound: sleeping...");
+		//TRACE("Transport::outbound: sleeping...");
 		OS::sleep(0.0005);
 	}
 	_jobs_locked = true;
@@ -1773,6 +1774,7 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	}
 */
 
+	if (_jobs_running) DEBUG("Transport::inbound: jobs still running!");
 	while (_jobs_running) {
 		TRACE("Transport::inbound: sleeping...");
 		OS::sleep(0.0005);

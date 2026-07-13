@@ -163,10 +163,7 @@ namespace RNS {
 		inline const Cryptography::X25519PublicKey::Ptr pub() const { assert(_object); return _object->_pub; }
 		inline const Cryptography::Ed25519PublicKey::Ptr sig_pub() const { assert(_object); return _object->_sig_pub; }
 		inline static uint16_t known_destinations_maxsize() { return _known_destinations_maxsize; }
-		inline static void known_destinations_maxsize(uint16_t known_destinations_maxsize) {
-			_known_destinations_maxsize = known_destinations_maxsize;
-			_known_store.set_max_recs(_known_destinations_maxsize);
-		}
+		inline static void known_destinations_maxsize(uint16_t known_destinations_maxsize) { _known_destinations_maxsize = known_destinations_maxsize; _known_store.set_max_recs(_known_destinations_maxsize); }
 		inline static uint32_t known_store_segment_size() { return _known_store_segment_size; }
 		inline static void known_store_segment_size(uint32_t value) { _known_store_segment_size = value; }
 		inline static uint8_t known_store_segment_count() { return _known_store_segment_count; }

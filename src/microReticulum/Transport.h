@@ -490,19 +490,13 @@ namespace RNS {
 		inline static uint16_t announce_table_maxsize() { return _announce_table_maxsize; }
 		inline static void announce_table_maxsize(uint16_t announce_table_maxsize) { _announce_table_maxsize = announce_table_maxsize; }
 		inline static uint16_t hashlist_maxsize() { return _hashlist_maxsize; }
-		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) {
-			_hashlist_maxsize = hashlist_maxsize;
-			_packet_hash_store.set_max_recs(hashlist_maxsize);
-		}
+		inline static void hashlist_maxsize(uint16_t hashlist_maxsize) { _hashlist_maxsize = hashlist_maxsize; _packet_hash_store.set_max_recs(hashlist_maxsize); }
 		inline static uint32_t hashlist_segment_size() { return _hashlist_segment_size; }
 		inline static void hashlist_segment_size(uint32_t value) { _hashlist_segment_size = value; }
 		inline static uint8_t hashlist_segment_count() { return _hashlist_segment_count; }
 		inline static void hashlist_segment_count(uint8_t value) { _hashlist_segment_count = value; }
 		inline static uint16_t max_pr_tags() { return _max_pr_tags; }
-		inline static void max_pr_tags(uint16_t max_pr_tags) {
-			_max_pr_tags = max_pr_tags;
-			_discovery_pr_tags.max_size(max_pr_tags);
-		}
+		inline static void max_pr_tags(uint16_t max_pr_tags) { _max_pr_tags = max_pr_tags; _discovery_pr_tags.max_size(max_pr_tags); }
 		// Deprecated max persist since moving to microStore
 		RNS_DEPRECATED("path_table_maxpersist no longer supported, use only path_table_maxsize")
 		inline static uint16_t path_table_maxpersist() { return _path_table_maxpersist; }
