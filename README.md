@@ -186,18 +186,21 @@ pio test -f test_msgpack -e native17
 Build a single environment (board):
 ```
 pio run -e ttgo-t-beam
+pio run -e heltec-wireless-tracker-v2
 pio run -e wiscore_rak4631
 ```
 
 Build and upload a single environment (board):
 ```
 pio run -e ttgo-t-beam -t upload
+pio run -e heltec-wireless-tracker-v2 -t upload
 pio run -e wiscore_rak4631 -t upload
 ```
 
 Build and package a single environment (board):
 ```
 pio run -e ttgo-t-beam -t package
+pio run -e heltec-wireless-tracker-v2 -t package
 pio run -e wiscore_rak4631 -t package
 ```
 

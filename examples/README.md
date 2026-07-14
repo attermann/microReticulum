@@ -72,3 +72,20 @@ Build and upload to a connected board:
 ```
 pio run -e ttgo-t-beam -t upload
 ```
+
+### Heltec Wireless Tracker V2
+
+The Tracker V2 environment uses the board's onboard SX1262 and KCT8103L RF
+front end. Attach a suitable LoRa antenna before transmitting. The example's
+radio frequency is currently set to 915 MHz in
+`common/lora_interface/LoRaInterface.h`; change it there if your hardware and
+local band plan require another frequency.
+
+From the repository root, build and upload the transport example with:
+
+```
+cd examples/lora_transport
+pio run -e heltec-wireless-tracker-v2
+pio run -e heltec-wireless-tracker-v2 -t upload
+pio device monitor -b 115200
+```

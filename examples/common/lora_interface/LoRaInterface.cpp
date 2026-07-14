@@ -58,12 +58,50 @@
 #define RADIO_FEM_CE                2    // LORA_PA_CSD:    FEM chip enable  (active HIGH)
 #define RADIO_PA_MODE              46    // LORA_PA_CPS:    PA mode HIGH=TX, LOW=RX
 
+#elif defined(BOARD_HELTEC_TRACKER_V2)
+// Heltec Wireless Tracker V2.3 — ESP32-S3FN8 + SX1262 + KCT8103L FEM
+// RadioLib Module(cs, irq=DIO1, rst, busy)
+#define RADIO_SCLK_PIN               9
+#define RADIO_MISO_PIN              11
+#define RADIO_MOSI_PIN              10
+#define RADIO_CS_PIN                 8
+#define RADIO_DIO1_PIN              14   // IRQ
+#define RADIO_RST_PIN               12
+#define RADIO_BUSY_PIN              13
+// KCT8103L front-end controls; SX1262 DIO2 is wired to the FEM CPS input
+#define RADIO_PA_POWER               7   // VFEM regulator enable (active HIGH)
+#define RADIO_PA_CSD                 4   // FEM chip enable (active HIGH)
+#define RADIO_PA_CTX                 5   // HIGH=TX, LOW=RX
+
 #endif
 
 using namespace RNS;
 
 static inline bool    isSplitPacket(uint8_t h)  { return (h & LoRaInterface::HEADER_SPLIT)   != 0; }
 static inline uint8_t packetSequence(uint8_t h) { return  h & LoRaInterface::HEADER_SEQ_MASK;      }
+
+#if defined(BOARD_HELTEC_TRACKER_V2)
+// The Tracker V2's KCT8103L adds substantial gain after the SX1262. Convert
+// requested antenna output power to SX1262 power using Heltec's V2.3 table.
+static int trackerV2RadioPower(int requestedPower) {
+	static const uint8_t paGain[] = {
+		14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+		14, 13, 13, 13, 12, 12, 11, 10, 9, 8, 7
+	};
+
+	for (size_t radioPower = 0; radioPower < sizeof(paGain); ++radioPower) {
+		if ((int)radioPower + paGain[radioPower] > requestedPower ||
+		    radioPower == sizeof(paGain) - 1) {
+			int adjustedPower = requestedPower - paGain[radioPower];
+			if (adjustedPower > 22) adjustedPower = 22;
+			if (adjustedPower < -9) adjustedPower = -9;
+			return adjustedPower;
+		}
+	}
+
+	return -9;
+}
+#endif
 
 /*
 @staticmethod
@@ -163,8 +201,31 @@ bool LoRaInterface::start() {
 	int state = chip->begin(frequency, bandwidth, spreading, coding,
 	                        RADIOLIB_SX126X_SYNC_WORD_PRIVATE, power, 20, 1.8, false);
 
+#elif defined(BOARD_HELTEC_TRACKER_V2)
+	// Heltec Wireless Tracker V2.3 — ESP32-S3FN8 + SX1262 + KCT8103L, 1.8V TCXO
+	SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+	// Power the front end and select its receive path before starting the radio.
+	pinMode(RADIO_PA_POWER, OUTPUT);
+	pinMode(RADIO_PA_CSD, OUTPUT);
+	pinMode(RADIO_PA_CTX, OUTPUT);
+	digitalWrite(RADIO_PA_POWER, HIGH);
+	delay(1);
+	digitalWrite(RADIO_PA_CSD, HIGH);
+	delay(1);
+	digitalWrite(RADIO_PA_CTX, LOW);
+	delay(1);
+	_pa_mode_pin = RADIO_PA_CTX;
+	_module = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN, SPI);
+	SX1262* chip = new SX1262(_module);
+	_radio = chip;
+	// DIO2 drives the KCT8103L CPS input for antenna-path switching.
+	chip->setDio2AsRfSwitch(true);
+	int state = chip->begin(frequency, bandwidth, spreading, coding,
+	                        RADIOLIB_SX126X_SYNC_WORD_PRIVATE,
+	                        trackerV2RadioPower(power), 20, 1.8, false);
+
 #else
-	#error "Unsupported board: define BOARD_TBEAM, BOARD_LORA32_V21, BOARD_RAK4631, BOARD_HELTEC_V3, or BOARD_HELTEC_V4"
+	#error "Unsupported board: define BOARD_TBEAM, BOARD_LORA32_V21, BOARD_RAK4631, BOARD_HELTEC_V3, BOARD_HELTEC_V4, or BOARD_HELTEC_TRACKER_V2"
 	int state = RADIOLIB_ERR_UNKNOWN;
 #endif
 
@@ -190,6 +251,10 @@ void LoRaInterface::stop() {
 	if (_radio) {
 		_radio->standby();
 	}
+#if defined(BOARD_HELTEC_TRACKER_V2)
+	digitalWrite(RADIO_PA_CSD, LOW);
+	digitalWrite(RADIO_PA_POWER, LOW);
+#endif
 #endif
 
 	_online = false;
@@ -262,10 +327,10 @@ void LoRaInterface::loop() {
 				txBuf[0] = rand_nibble;
 				memcpy(txBuf + 1, data.data(), data.size());
 
-				// V4: switch FEM to TX mode before transmitting
+				// Boards with an external FEM: select TX mode before transmitting
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
 				int state = _radio->transmit(txBuf, 1 + data.size());
-				// V4: return FEM to RX mode, then re-arm receive
+				// Return the FEM to RX mode, then re-arm receive
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 				if (state != RADIOLIB_ERR_NONE) {
 					ERRORF("LoRaInterface: transmit failed, code %d", state);
@@ -280,10 +345,10 @@ void LoRaInterface::loop() {
 				txBuf[0] = split_hdr;
 				memcpy(txBuf + 1, data.data(), LORA_MAX_PAYLOAD);
 
-				// V4: switch FEM to TX mode before transmitting
+				// Boards with an external FEM: select TX mode before transmitting
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
 				int state = _radio->transmit(txBuf, 1 + LORA_MAX_PAYLOAD);
-				// V4: return FEM to RX mode, then re-arm receive
+				// Return the FEM to RX mode, then re-arm receive
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 				if (state != RADIOLIB_ERR_NONE) {
 					ERRORF("LoRaInterface: transmit part 1 failed, code %d", state);
@@ -295,10 +360,10 @@ void LoRaInterface::loop() {
 				txBuf[0] = split_hdr;
 				memcpy(txBuf + 1, data.data() + LORA_MAX_PAYLOAD, remainder);
 
-				// V4: switch FEM to TX mode before transmitting
+				// Boards with an external FEM: select TX mode before transmitting
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, HIGH); }
 				state = _radio->transmit(txBuf, 1 + remainder);
-				// V4: return FEM to RX mode, then re-arm receive
+				// Return the FEM to RX mode, then re-arm receive
 				if (_pa_mode_pin >= 0) { digitalWrite(_pa_mode_pin, LOW); }
 				if (state != RADIOLIB_ERR_NONE) {
 					ERRORF("LoRaInterface: transmit part 2 failed, code %d", state);
