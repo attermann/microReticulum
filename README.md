@@ -370,3 +370,17 @@ Use of nrf52840 based boards as a transport node will necessitate the use of ext
 
 Please open an Issue if you have trouble building ior using the API, and feel free to start a new Discussion for anything else.
 
+## Contributing
+
+Contributions to **microReticulum** are welcome and appreciated.
+
+Before opening an issue or submitting a pull request, please read the project's **[CONTRIBUTING.md](CONTRIBUTING.md)** guide. It describes the expectations for bug reports, feature requests, coding standards, testing, and pull requests.
+
+In particular, contributors are asked to:
+
+- Clearly identify the problem being solved before describing the proposed solution.
+- Keep pull requests focused on a **single logical concern**.
+- Test changes thoroughly, including on **all affected platforms** when modifying shared code.
+- Update documentation when introducing user-visible changes.
+
+Following these guidelines helps streamline reviews, improve software quality, and make it easier to integrate contributions.
