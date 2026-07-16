@@ -406,13 +406,13 @@ Recall last heard app_data for a destination hash.
 					if (!Type::isNan(packet.rssi()) or !Type::isNan(packet.snr())) {
 						signal_str = " [";
 						if (!Type::isNan(packet.rssi())) {
-							signal_str += "RSSI "+std::to_string(packet.rssi())+"dBm";
+							signal_str += "RSSI "+std::to_string((int)packet.rssi())+"dBm";
 							if (!Type::isNan(packet.snr())) {
 								signal_str += ", ";
 							}
 						}
 						if (!Type::isNan(packet.snr())) {
-							signal_str += "SNR "+std::to_string(packet.snr())+"dB";
+							signal_str += "SNR "+std::to_string((int)packet.snr())+"dB";
 						}
 						signal_str += "]";
 					}
