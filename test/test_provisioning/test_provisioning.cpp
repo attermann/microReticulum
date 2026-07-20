@@ -1400,6 +1400,54 @@ void test_wire_set_state_then_commit(void) {
 	TEST_ASSERT_EQUAL(1, g_live_int_setter_count);
 }
 
+void test_wire_commit_reports_storage_error(void) {
+	// Point storage at a regular file so ensure_directory()/save_namespace()
+	// cannot create namespace files beneath it. The wire Commit response must
+	// report StorageError instead of claiming that the change was durable.
+	Provisioner::instance().end();
+	register_custom_namespace();
+	const std::string blocked_root = g_test_root + "/not_a_directory";
+	FILE* blocker = fopen(blocked_root.c_str(), "wb");
+	TEST_ASSERT_NOT_NULL(blocker);
+	fputs("block", blocker);
+	fclose(blocker);
+	Provisioner::instance().begin(blocked_root.c_str());
+
+	auto& p = Provisioner::instance();
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)88)));
+	Bytes req = make_request((uint8_t)Op::Commit, 2, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n;
+		pk.serialize(n);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u;
+	u.feed(resp.data(), resp.size());
+	TEST_ASSERT_TRUE(u.isArray());
+	TEST_ASSERT_EQUAL_size_t(3, u.unpackArraySize());
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::Error, op);
+	TEST_ASSERT_EQUAL_UINT64(2, seq);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n = u.unpackMapSize();
+	bool found_storage_error = false;
+	for (size_t i = 0; i < n; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (key == Key::ErrorCodeKey) {
+			int64_t code = 0; u.deserialize(code);
+			found_storage_error = code == (int64_t)ErrorCode::StorageError;
+		}
+		else if (u.isStr()) {
+			MsgPack::str_t ignored; u.deserialize(ignored);
+		}
+		else {
+			int64_t ignored = 0; u.deserialize(ignored);
+		}
+	}
+	TEST_ASSERT_TRUE(found_storage_error);
+}
+
 void test_wire_set_state_constraint_error(void) {
 	fresh_provisioning(g_test_root);
 	auto& p = Provisioner::instance();
@@ -1648,6 +1696,7 @@ int runUnityTests(void) {
 	RUN_TEST(test_on_commit_callback_scoped_per_namespace);
 	RUN_TEST(test_wire_get_info);
 	RUN_TEST(test_wire_set_state_then_commit);
+	RUN_TEST(test_wire_commit_reports_storage_error);
 	RUN_TEST(test_wire_set_state_constraint_error);
 	RUN_TEST(test_wire_get_capabilities);
 	RUN_TEST(test_wire_factory_reset);

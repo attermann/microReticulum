@@ -530,7 +530,11 @@ void Reticulum::get_packet_q(const Bytes& packet_hash) const {
 			Bytes buf;
 			if (OS::read_file(time_offset_path, buf) == 8) {
 				uint64_t offset = *(uint64_t*)buf.data();
-				DEBUGF("Read time offset of %llu from file", offset);
+				DEBUGF(
+					"Read time offset 0x%08lx%08lx from file",
+					(unsigned long)(offset >> 32),
+					(unsigned long)(offset & 0xFFFFFFFFULL)
+				);
 				OS::setTimeOffset(offset);
 				return true;
 			}
@@ -550,7 +554,12 @@ void Reticulum::get_packet_q(const Bytes& packet_hash) const {
 		char time_offset_path[FILEPATH_MAXSIZE];
 		snprintf(time_offset_path, FILEPATH_MAXSIZE, "%s/time_offset", _storagepath);
 		uint64_t offset = OS::ltime();
-		TRACEF("Writing time offset of %llu to file %s", offset, time_offset_path);
+		TRACEF(
+			"Writing time offset 0x%08lx%08lx to file %s",
+			(unsigned long)(offset >> 32),
+			(unsigned long)(offset & 0xFFFFFFFFULL),
+			time_offset_path
+		);
 		Bytes buf((uint8_t*)&offset, sizeof(offset));
 		OS::write_file(time_offset_path, buf);
 		return true;
