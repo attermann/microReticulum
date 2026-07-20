@@ -530,6 +530,11 @@ void Reticulum::get_packet_q(const Bytes& packet_hash) const {
 			Bytes buf;
 			if (OS::read_file(time_offset_path, buf) == 8) {
 				uint64_t offset = *(uint64_t*)buf.data();
+				// CBA Set a reasonable limit of persisted time
+				if (offset > 4294967295) {
+					WARNINGF("Discarding potentially corrupt time offset of %llu read from file", offset);
+					return false;
+				}
 				DEBUGF("Read time offset of %llu from file", offset);
 				OS::setTimeOffset(offset);
 				return true;
