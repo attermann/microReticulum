@@ -19,15 +19,19 @@ This guide is for developers building **clients** that talk to a microReticulum 
    - [`COMMIT`](#commit-op--6)
    - [`DISCARD`](#discard-op--7)
    - [`FACTORY_RESET`](#factory_reset-op--8)
+   - [`REBOOT`](#reboot-op--9)
    - [`ERROR` response](#error-response-op--101)
-6. [Field types](#field-types)
-7. [Field flags](#field-flags)
-8. [Field schema entry](#field-schema-entry)
-9. [Hierarchical namespaces](#hierarchical-namespaces)
-10. [Error code reference](#error-code-reference)
-11. [Built-in namespaces and fields](#built-in-namespaces-and-fields)
-12. [Recommended client lifecycle](#recommended-client-lifecycle)
-13. [Wire wire-format quick reference](#wire-format-quick-reference)
+6. [PriorHash cache short-circuit](#priorhash-cache-short-circuit)
+7. [IncludeState round-trip elimination](#includestate-round-trip-elimination)
+8. [Response compression](#response-compression)
+9. [Field types](#field-types)
+10. [Field flags](#field-flags)
+11. [Field schema entry](#field-schema-entry)
+12. [Hierarchical namespaces](#hierarchical-namespaces)
+13. [Error code reference](#error-code-reference)
+14. [Built-in namespaces and fields](#built-in-namespaces-and-fields)
+15. [Recommended client lifecycle](#recommended-client-lifecycle)
+16. [Wire format quick reference](#wire-format-quick-reference)
 
 ---
 
@@ -68,6 +72,7 @@ If the device receives a request before `Provisioner::begin()` has run (the firm
 | `COMMIT`            | 6   | request → response |
 | `DISCARD`           | 7   | request → response |
 | `FACTORY_RESET`     | 8   | request → response |
+| `REBOOT`            | 9   | request → response |
 | `ACK`               | 100 | (reserved) |
 | `ERROR`             | 101 | response only |
 
@@ -84,13 +89,15 @@ The schema version is reported by `GET_INFO` (key `SchemaVersion`, see below). C
 
 Clients should branch on `SchemaVersion` from `GET_INFO`. A v1-only client that reads only the first three array elements of a v2 response will still get id/name/fields and can render a flat list (just without the hierarchy).
 
+`SchemaVersion` describes the `GET_SCHEMA` response layout only. The request/response shapes of the other ops (`GET_STATE`, `SET_STATE`, `COMMIT`, `GET_CAPABILITIES`) are documented per-op below.
+
 ## Operation reference
 
 ### `GET_INFO` (op = 2)
 
 Probe device version and reboot state. Always safe to call before anything else.
 
-**Request payload**: `nil`.
+**Request payload**: `nil`, or an options map with `ReqCompress` (see [Response compression](#response-compression)).
 
 **Response payload**: a map.
 
@@ -99,24 +106,49 @@ Probe device version and reboot state. Always safe to call before anything else.
 | 1 (`FirmwareVersion`) | `str` | Free-form firmware identifier (currently always `"microReticulum"` from the library; firmware can override). |
 | 2 (`SchemaVersion`)   | `uint16` | See [Schema versioning](#schema-versioning). |
 | 3 (`NeedsRebootInfo`) | `bool` | `true` if the device has committed any `FF_REBOOT_REQUIRED` field since boot. Sticky until reboot or factory reset. |
+| 4 (`SchemaHash`)      | `uint32` | CRC32 over the serialized `GET_SCHEMA` response bytes. Clients cache the schema keyed by this hash so subsequent connections skip the full fetch when the device's schema hasn't changed. |
 
 ### `GET_CAPABILITIES` (op = 3)
 
-List the namespace ids that the device exposes. Use this to detect optional/extended namespaces without fetching the full schema.
+Fetch the namespace hierarchy map — one entry per namespace, with just enough metadata for the client to render the top-level navigation and decide which schemas need to be fetched. Combined with `GET_SCHEMA`'s namespace-filter support, this powers lazy per-namespace schema loading.
 
-**Request payload**: `nil`.
+**Request payload**: `nil`, or an options map with `ReqCompress`.
 
-**Response payload**: an array of `uint16` namespace ids, in registration order.
+**Response payload**: a MsgPack array of per-namespace map entries.
+
+Each entry is a map:
+
+| Key | Value type | Meaning |
+|---|---|---|
+| 1 (`NsId`)          | `uint16` | Canonical namespace id. |
+| 2 (`NsName`)        | `str`    | Human-readable name (may be empty). |
+| 4 (`NsParent`)      | `uint16` | Parent namespace id, or `0` for root. |
+| 5 (`NsFieldCount`)  | `uint64` | Number of fields the namespace exposes. Handy for UI placeholders. |
+| 6 (`NsSchemaHash`)  | `uint32` | CRC32 over just this namespace's `GET_SCHEMA` entry. Lets clients cache each namespace's schema independently. |
+
+Namespaces appear in registration order (same order as they'd appear in `GET_SCHEMA`).
+
+Example:
 
 ```
-[ 1, 2, 100, 101, 102 ]
+[
+  { 1:1,   2:"Reticulum",  4:0,   5:9,  6:0xa3f2c8d1 },
+  { 1:2,   2:"Transport",  4:0,   5:5,  6:0x1e5b90c4 },
+  { 1:100, 2:"Interfaces", 4:0,   5:0,  6:0x00000000 },
+  { 1:101, 2:"LoRa",       4:100, 5:12, 6:0x7f2a1e63 }
+]
 ```
 
 ### `GET_SCHEMA` (op = 1)
 
-Fetch the full field schema. Clients call this once per session (or whenever the schema version changes) to build a UI.
+Fetch the full field schema. Clients typically call this once per session (or per changed namespace, when combined with `GET_CAPABILITIES`) to build a UI.
 
-**Request payload**: `nil`. (Future versions may add a namespace filter.)
+**Request payload**: `nil` for a full-schema fetch, or an options map:
+
+| Key | Value type | Meaning |
+|---|---|---|
+| 1 (`NamespaceFilter`) | array of `uint16` | Only return schema entries for these namespace ids. If absent, returns all namespaces. |
+| 100 (`ReqCompress`)   | `bool` | See [Response compression](#response-compression). |
 
 **Response payload**: a MsgPack array of **namespace entries**. Each entry is a 4-element array:
 
@@ -145,48 +177,75 @@ Example (truncated):
 
 Read current values. Excludes [`FF_SECRET`](#field-flags) and [`FF_WRITE_ONLY`](#field-flags) fields.
 
-**Request payload**: optional map. If present:
+**Request payload**: `nil` for "all namespaces, working only," or an options map:
 
 | Key | Value type | Meaning |
 |---|---|---|
 | 1 (`NamespaceFilter`) | array of `uint16` | Only return state for these namespace ids. If absent, returns all namespaces. |
-| 2 (`Pending`)         | `bool` | If `true`, returned values overlay any uncommitted draft on top of working state. Default `false` (committed state only). |
+| 2 (`Draft`)           | `bool` | If `true`, the server includes drafts alongside working in the same response. Draft entries are sparse — only namespaces/fields that actually hold drafts appear. Default `false` (working only). |
+| 4 (`PriorHash`)       | `uint32` | Optional CRC32 the client received from a previous `GET_STATE` response for the same scope. Enables the server-side cache short-circuit; see [PriorHash cache short-circuit](#priorhash-cache-short-circuit). |
+| 100 (`ReqCompress`)   | `bool` | See [Response compression](#response-compression). |
 
-If the payload is absent or `nil`, the response covers every namespace, with no draft overlay.
+**Response payload**: a map. On a normal (cache-miss) response:
 
-**Response payload**: a MsgPack map keyed by `uint16` namespace id, each value being a map keyed by `uint16` field id, each value being the field's typed value.
+| Key | Value type | Meaning |
+|---|---|---|
+| 1 (`Values`)  | map | `{ ns_id: { field_id: value, ... }, ... }` — the working state. |
+| 2 (`Drafts`)  | map (optional) | Sparse `{ ns_id: { field_id: draft_value, ... }, ... }`. Only present when the request set `Draft: true` **and** at least one in-scope namespace has drafts. |
+| 3 (`Hash`)    | `uint32` | CRC32 over the content that would be returned for this exact request/scope (Values + Drafts, excluding the Hash entry itself). Client can echo this back as `PriorHash` on the next request. |
+
+On a cache hit (client's `PriorHash` matched):
+
+| Key | Value type | Meaning |
+|---|---|---|
+| 4 (`Unchanged`) | `bool` | Always `true`. No `Values`/`Drafts`/`Hash` accompany this response — the client should reuse the cached body it received the last time it saw this Hash. |
+
+Response state is **flat by namespace id** even when namespaces are hierarchical — see [Hierarchical namespaces](#hierarchical-namespaces). Each namespace's fields appear under its own id; the parent doesn't contain the children's fields.
+
+Namespaces that have only secret/write-only/none-valued fields are omitted from `Values`.
+
+Example (working + drafts response):
 
 ```
 {
-  1: {                       # Reticulum namespace
-    1: true,                 # transport_enabled
-    6: 300,                  # persist_interval
-    7: 900                   # clean_interval
+  1: {                                    # Values
+    1: { 1: true, 6: 300 },               #   Reticulum
+    101: { 1: 915000000.0 }               #   LoRa (child ns)
   },
-  101: {                     # LoRa namespace
-    1: 915000000.0           # frequency
-  }
+  2: {                                    # Drafts (sparse)
+    1: { 6: 600 }                         #   only Reticulum.persist_interval has a draft
+  },
+  3: 0x1e5b90c4                           # Hash
 }
 ```
 
-State is **flat by namespace id** even when namespaces are hierarchical — see [Hierarchical namespaces](#hierarchical-namespaces). Each namespace's fields appear under its own id; the parent doesn't contain the children's fields in the response.
+Example (cache hit):
 
-Namespaces that have only secret/write-only/none-valued fields are omitted from the response.
+```
+{ 4: true }
+```
 
 ### `SET_STATE` (op = 5)
 
 Stage one or more field changes into the device's **draft layer**. Drafts are RAM-only — they don't take effect on the runtime, don't get persisted, and disappear on reboot unless [committed](#commit-op--6).
 
-**Request payload**: a map keyed by `uint16` namespace id, each value a map keyed by `uint16` field id, each value the field's typed value.
+**Request payload**: a request envelope.
+
+| Key | Value type | Meaning |
+|---|---|---|
+| 3 (`State`)         | map | Required. `{ ns_id: { field_id: value, ... }, ... }` — the fields to stage. |
+| 5 (`IncludeState`)  | `bool` | Optional. If `true`, the response includes `PostOpValues` + `PostOpDrafts` + `PostOpHash` for the namespaces touched by the request. See [IncludeState round-trip elimination](#includestate-round-trip-elimination). |
+| 100 (`ReqCompress`) | `bool` | See [Response compression](#response-compression). |
+
+Example request payload:
 
 ```
 {
-  1: {                       # Reticulum
-    1: false                 # transport_enabled = false (draft)
+  3: {                                    # State
+    1: { 1: false },                      #   Reticulum.transport_enabled = false
+    101: { 1: 868000000.0 }               #   LoRa.frequency = 868 MHz
   },
-  101: {                     # LoRa
-    1: 868000000.0           # frequency draft
-  }
+  5: true                                 # IncludeState — return updated values in the response
 }
 ```
 
@@ -196,11 +255,14 @@ Every value is validated against the field's declared [type](#field-types) and [
 
 | Key | Value type | Meaning |
 |---|---|---|
-| 1 (`Applied`)        | `uint64` | Count of fields successfully staged into draft. |
-| 2 (`DraftHasReboot`) | `bool`   | `true` if the current draft (across all namespaces) touches any `FF_REBOOT_REQUIRED` field. UI affordance: show "you'll need to reboot to apply these changes". |
-| 3 (`FieldErrors`)    | array (optional, only present on partial failure) | One entry per rejected field. |
+| 1 (`Applied`)         | `uint64` | Count of fields successfully staged into draft. |
+| 2 (`DraftHasReboot`)  | `bool`   | `true` if the current draft (across all namespaces) touches any `FF_REBOOT_REQUIRED` field. UI affordance: show "you'll need to reboot to apply these changes". |
+| 3 (`FieldErrors`)     | array (optional, only present on partial failure) | One entry per rejected field. |
+| 4 (`PostOpValues`)    | map (optional, only when `IncludeState: true`) | `{ ns_id: { field_id: value, ... }, ... }` — the working state for the touched namespaces. Working is unchanged by `SET_STATE`; the map is returned so the client can refresh its cache in one round-trip. |
+| 5 (`PostOpDrafts`)    | map (optional, only when `IncludeState: true` **and** at least one touched namespace has drafts) | Sparse `{ ns_id: { field_id: draft_value, ... }, ... }`. Reflects `set_draft` dedup logic (a value that matches the current working is not staged as a draft). |
+| 6 (`PostOpHash`)      | `uint32` (only when `IncludeState: true`) | CRC32 over the PostOpValues + PostOpDrafts content. Byte-equivalent to what `GET_STATE` with the same scope + `Draft: true` would produce, so the client can prime the `PriorHash` cache. |
 
-Each `FieldErrors` entry is itself a 3-element array:
+Each `FieldErrors` entry is a 3-element array:
 
 ```
 [ ns_id (uint16), field_id (uint16), error_code (uint16) ]
@@ -217,18 +279,31 @@ Promote the draft layer to the working layer:
 - `FF_WRITE_ONLY` commands: setter fires immediately; the value is consumed and not retained.
 - All non-`FF_READ_ONLY`, non-`FF_WRITE_ONLY` fields' working values are persisted to per-namespace files on flash (if `RNS_USE_FS` is enabled in the firmware).
 
-**Request payload**: optional array of namespace ids to commit. If absent, all namespaces with drafts are committed.
+**Request payload**: `nil` for "commit all", or an options map:
+
+| Key | Value type | Meaning |
+|---|---|---|
+| 1 (`NamespaceFilter`) | array of `uint16` | Only commit drafts for these namespaces. |
+| 5 (`IncludeState`)    | `bool` | Optional. If `true`, the response includes `PostOpValues` + `PostOpHash` for the committed namespaces. See [IncludeState round-trip elimination](#includestate-round-trip-elimination). |
+| 100 (`ReqCompress`)   | `bool` | See [Response compression](#response-compression). |
+
+Example request payload (commit two namespaces, return the new state):
 
 ```
-[ 1, 101 ]    # commit Reticulum and LoRa only
+{
+  1: [1, 101],                            # NamespaceFilter — commit Reticulum + LoRa
+  5: true                                 # IncludeState
+}
 ```
 
 **Response payload**: a map.
 
 | Key | Value type | Meaning |
 |---|---|---|
-| 1 (`Applied`)     | `uint64` | Count of fields whose drafts were promoted. |
-| 2 (`NeedsReboot`) | `bool`   | `true` if any committed field has `FF_REBOOT_REQUIRED` set. Sticky from the moment of commit until a real device reboot. Distinct from `DraftHasReboot` in `SET_STATE` responses (which tracks pending drafts). |
+| 1 (`Applied`)      | `uint64` | Count of fields whose drafts were promoted. |
+| 2 (`NeedsReboot`)  | `bool`   | `true` if any committed field has `FF_REBOOT_REQUIRED` set. Sticky from the moment of commit until a real device reboot. Distinct from `DraftHasReboot` in `SET_STATE` responses (which tracks pending drafts). |
+| 4 (`PostOpValues`) | map (optional, only when `IncludeState: true`) | `{ ns_id: { field_id: value, ... }, ... }` — the post-commit working state for the committed namespaces. Drafts are gone (they were promoted or discarded), so there is no `PostOpDrafts`. |
+| 6 (`PostOpHash`)   | `uint32` (only when `IncludeState: true`) | CRC32 over `PostOpValues`. Client can prime the `GET_STATE` PriorHash cache with this hash for the same scope + `Draft: false`. |
 
 After a successful commit, the draft layer is cleared for the affected namespaces.
 
@@ -248,7 +323,7 @@ Throw away the current draft without persisting or applying.
 
 Delete every persisted namespace file from flash and reset all working values to their declared defaults. Setters are fired with default values so the runtime reverts immediately for `FF_LIVE_APPLY` fields. `needs_reboot` is cleared.
 
-**Request payload**: `nil`.
+**Request payload**: `nil`, or an options map with `ReqCompress`.
 
 **Response payload**: a map.
 
@@ -262,7 +337,7 @@ Integrations may register an `on_factory_reset` callback to extend the operation
 
 Ask the firmware to reboot. microReticulum itself performs no reboot — it dispatches to an `on_reboot` callback registered by the integration. If the integration registered a callback the device is expected to actually reboot (usually scheduled, so the response can be sent first); if no callback is registered the op is a successful no-op.
 
-**Request payload**: `nil`.
+**Request payload**: `nil`, or an options map with `ReqCompress`.
 
 **Response payload**: none. The response envelope is a successful ack `[op=9, seq]` with no payload element. Clients should not depend on receiving the response, since the device may be mid-reboot by the time it would have been sent.
 
@@ -277,6 +352,41 @@ Returned in place of the normal response when the engine cannot service the requ
 | 1 (`ErrorCodeKey`) | `uint16` | See [Error code reference](#error-code-reference). |
 | 2 (`ErrorMessage`) | `str` (optional) | Free-form diagnostic. Don't show verbatim; map by code. |
 
+## PriorHash cache short-circuit
+
+`GET_STATE` responses always carry a `Hash` (CRC32 over the response body content, excluding the Hash entry itself). Clients can echo that hash back on the next `GET_STATE` with the **same scope** as `PriorHash`. When it matches the server's computed hash for the current state, the server replies with a minimal `{ Unchanged: true }` body instead of re-sending the full Values/Drafts payload.
+
+**Cache key.** The hash is a pure function of the content the server would emit for a given `(NamespaceFilter, Draft)` combination. The client's cache key must therefore include both. A hash returned for `Draft: false, filter=[1,2]` is not comparable to a hash returned for `Draft: true, filter=[1,2]` or for `filter=[1]`.
+
+**When the cache hits.** For static-config namespaces the hash rarely changes between polls — only after `SET_STATE`, `COMMIT`, `DISCARD`, or `FACTORY_RESET`. Metric-heavy namespaces (fields with `FF_READ_ONLY` and a live getter, e.g. current RSSI) drift continuously and almost always miss — the response comes back with fresh Values as usual, so there's no cost besides the client's wasted PriorHash.
+
+**Invalidation.** After any `SET_STATE`/`COMMIT`/`DISCARD`/`FACTORY_RESET`/`REBOOT`, discard cached hashes. `SET_STATE` and `COMMIT` with `IncludeState: true` return a fresh `PostOpHash` the client can use to re-prime the cache without a follow-up `GET_STATE`.
+
+## IncludeState round-trip elimination
+
+`SET_STATE` and `COMMIT` optionally return the post-op state (working, and for `SET_STATE` also drafts) in the same response body. This saves a follow-up `GET_STATE` round-trip after a save or commit — a big win over LoRa where every request/response transaction carries fixed encryption and framing overhead in addition to the payload.
+
+- Set `IncludeState: true` in the request envelope to opt in.
+- The response gains `PostOpValues` (working state for touched/committed namespaces), and for `SET_STATE`, `PostOpDrafts` (sparse — only namespaces/fields that hold drafts).
+- The response also gains `PostOpHash` — a CRC32 over the PostOpValues + PostOpDrafts content, byte-equivalent to what a follow-up `GET_STATE` with the same scope would produce. Prime your `PriorHash` cache with it.
+- **Scope of the returned state:** `SET_STATE` returns state for the namespaces referenced by the request's `State` map. `COMMIT` returns state for namespaces in the request's `NamespaceFilter` (if provided), otherwise for namespaces that actually had drafts at commit time.
+
+Older firmware that predates this optimization ignores `IncludeState` and simply doesn't include the PostOp keys in the response; clients should treat their absence as a fallback signal to fetch state separately.
+
+## Response compression
+
+For bulky responses (`GET_SCHEMA`, `GET_STATE` with many fields, `GET_CAPABILITIES`), the client can request that the server compress the response using **heatshrink** (LZSS-family, window=9 bits, lookahead=4 bits — matching the firmware's build flags).
+
+- Set `ReqCompress: true` (key 100) in the request options map.
+- The server compresses only if the compressed body + wrapper is smaller than the raw payload. Otherwise it emits the uncompressed response as usual, so clients must handle both shapes.
+- **Compressed responses** carry a single-key map body:
+
+  ```
+  { 101 (CompressedPayload): <bin of heatshrink-encoded MsgPack> }
+  ```
+
+  Decode by heatshrink-decompressing the `bin` payload and then re-decoding it as MsgPack — the decoded bytes are the exact response payload the server would have emitted uncompressed.
+
 ## Field types
 
 Wire types are intentionally a tight subset that maps cleanly to Python, JavaScript, and embedded C++.
@@ -290,8 +400,9 @@ Wire types are intentionally a tight subset that maps cleanly to Python, JavaScr
 | 5 | `BYTES`     | `bin`                  | `bytes` | `Uint8Array`          | Opaque binary blob. Render as hex by default. |
 | 6 | `ENUM`      | positive int on wire   | `int`   | `Number`              | Schema carries the value list and labels; render as a dropdown. |
 | 7 | `BYTES_LIST`| array of `bin`         | `list[bytes]` | `Array<Uint8Array>` | Variable-length list of binary blobs, often a set of fixed-size hashes. |
+| 8 | `VOID`      | `nil`                  | `None`  | `null`                | Argument-less command marker (write-only fields whose setter takes no value). |
 
-`None` / `nil` values are **not** valid field values — a field is either present with a typed value or absent from a state response.
+`None` / `nil` values are **not** valid field values on the wire for typed fields — a field is either present with a typed value or absent from a state response. `VOID` is a distinct type used specifically for argument-less commands (`command_void`).
 
 ## Field flags
 
@@ -314,7 +425,7 @@ UI rendering recipes:
 | `FF_READ_ONLY`                           | Read-only display (text, gauge, status badge). Refresh via periodic `GET_STATE`. |
 | `FF_LIVE_APPLY | FF_SECRET`              | Write-only password-style input. Never echoes the current value. |
 | `FF_REBOOT_REQUIRED | FF_SECRET`         | Same as above, but accompanied by a "reboot required" warning after commit. |
-| `FF_WRITE_ONLY`                          | Action button. If the field has an integer/float/string argument, present an input alongside. |
+| `FF_WRITE_ONLY`                          | Action button. If the field has an integer/float/string argument, present an input alongside. For `VOID` fields (no argument), just the button. |
 
 ## Field schema entry
 
@@ -380,7 +491,7 @@ schema = [
 #   └─ UDP
 ```
 
-`GET_STATE` responses remain **flat** — each namespace's values appear under its own id at the top level. A parent namespace can carry its own fields independently of its children.
+`GET_STATE` responses remain **flat** — each namespace's values appear under its own id inside `Values` at the top level. A parent namespace can carry its own fields independently of its children.
 
 Parent ids are stable across firmware releases per the same rules as namespace ids. Once a namespace is published, its parent doesn't change.
 
@@ -444,51 +555,76 @@ Reserved ids:
 A typical session for a configuration UI:
 
 1. **Connect** to the device via your transport. Verify the link.
-2. **`GET_INFO`** — confirm `SchemaVersion` is one you support and read `needs_reboot`.
-3. **`GET_CAPABILITIES`** (optional) — quick sanity check that expected namespaces exist before fetching the full schema.
-4. **`GET_SCHEMA`** — fetch once per session; cache by `SchemaVersion`. Build the namespace tree (parent_id) and field metadata.
-5. **`GET_STATE`** — fetch current values. Render the UI.
-6. As the user edits fields, send **`SET_STATE`** for each change (or batch them). Inspect `DraftHasReboot` and `FieldErrors` in each response.
-7. When the user clicks "Save" / "Apply", send **`COMMIT`**. Inspect `NeedsReboot`.
-8. If `NeedsReboot` is now `true`, prompt the user to reboot. The library doesn't reboot the device itself — that's the firmware/app's responsibility.
-9. For commands (`FF_WRITE_ONLY`), the sequence is `SET_STATE` (argument) → `COMMIT` (triggers the setter). The next `GET_STATE` will not include the command field.
-10. For metrics (`FF_READ_ONLY`), poll `GET_STATE` at whatever interval your UI needs.
+2. **`GET_INFO`** — confirm `SchemaVersion` is one you support and read `needs_reboot` and `SchemaHash`.
+3. **`GET_CAPABILITIES`** — fetch the namespace hierarchy with per-namespace schema hashes. Cheap; renders the top-level navigation.
+4. **`GET_SCHEMA`** with `NamespaceFilter` — for each namespace whose `NsSchemaHash` isn't already in your localStorage/session cache, fetch just those. Cache per-namespace by `(ns_id, schemaHash)`.
+5. **`GET_STATE`** — fetch current values (with `Draft: true` if the UI needs to show pending changes). Cache the returned `Hash` per `(scope, Draft)` combination.
+6. On subsequent polls of the same scope: send the cached `Hash` back as `PriorHash`. On cache hit the response is a tiny `{ Unchanged: true }` — reuse your cached body.
+7. As the user edits fields, send **`SET_STATE`** with `IncludeState: true` and the `State` map. Parse `PostOpValues` + `PostOpDrafts` from the response to refresh the panel without a follow-up `GET_STATE`. Inspect `DraftHasReboot` and `FieldErrors`.
+8. When the user clicks "Save" / "Apply", send **`COMMIT`** with `IncludeState: true`. Parse `PostOpValues` to refresh the working view; inspect `NeedsReboot`.
+9. If `NeedsReboot` is now `true`, prompt the user to reboot. Send **`REBOOT`** (op 9) if they agree. The library doesn't reboot the device itself — that's the firmware/app's responsibility.
+10. For commands (`FF_WRITE_ONLY`), the sequence is `SET_STATE` (argument, or `nil` for `VOID` commands) → `COMMIT` (triggers the setter). The next `GET_STATE` will not include the command field.
+11. For metrics (`FF_READ_ONLY`), poll `GET_STATE` at whatever interval your UI needs. `PriorHash` won't help here — live-metric hashes drift on every read.
 
-## Wire-format quick reference
+## Wire format quick reference
 
 ```
 Envelope (always):       [op_id, seq, payload]
 
-GET_INFO request:        [2, seq, nil]
-GET_INFO response:       [2, seq, {1: "fw_version", 2: schema_ver, 3: needs_reboot}]
+GET_INFO request:        [2, seq, nil | {100: compress?}]
+GET_INFO response:       [2, seq, {1: "fw_version", 2: schema_ver, 3: needs_reboot, 4: schema_hash}]
 
-GET_CAPABILITIES req:    [3, seq, nil]
-GET_CAPABILITIES resp:   [3, seq, [ns_id, ns_id, ...]]
+GET_CAPABILITIES req:    [3, seq, nil | {100: compress?}]
+GET_CAPABILITIES resp:   [3, seq, [
+                            {1: ns_id, 2: ns_name, 4: parent_id, 5: field_count, 6: schema_hash},
+                            ...
+                         ]]
 
-GET_SCHEMA request:      [1, seq, nil]
+GET_SCHEMA request:      [1, seq, nil | {1: [ns_ids?], 100: compress?}]
 GET_SCHEMA response:     [1, seq, [
                             [ns_id, ns_name, parent_id, [field_map, field_map, ...]],
                             ...
                          ]]
 
-GET_STATE request:       [4, seq, {1: [ns_ids?], 2: pending_bool?}]
-                         (payload optional; nil OK)
-GET_STATE response:      [4, seq, {ns_id: {field_id: value, ...}, ...}]
+GET_STATE request:       [4, seq, nil | {1: [ns_ids?], 2: draft?, 4: prior_hash?, 100: compress?}]
+GET_STATE response (miss):
+                         [4, seq, {1: {ns_id: {fid: value, ...}, ...},   # Values
+                                   2: {ns_id: {fid: value, ...}, ...}?,  # Drafts (optional)
+                                   3: hash}]                             # Hash
+GET_STATE response (hit):
+                         [4, seq, {4: true}]                             # Unchanged
 
-SET_STATE request:       [5, seq, {ns_id: {field_id: value, ...}, ...}]
-SET_STATE response:      [5, seq, {1: applied, 2: draft_has_reboot, 3: [[ns,f,code], ...]?}]
+SET_STATE request:       [5, seq, {3: {ns_id: {fid: value, ...}, ...},   # State (required)
+                                   5: include_state?,
+                                   100: compress?}]
+SET_STATE response:      [5, seq, {1: applied,
+                                   2: draft_has_reboot,
+                                   3: [[ns,f,code], ...]?,               # FieldErrors (optional)
+                                   4: {ns_id: {fid: value, ...}, ...}?,  # PostOpValues (optional)
+                                   5: {ns_id: {fid: value, ...}, ...}?,  # PostOpDrafts (optional)
+                                   6: hash?}]                            # PostOpHash (optional)
 
-COMMIT request:          [6, seq, [ns_id, ns_id, ...]?]
-                         (array optional; nil = commit all)
-COMMIT response:         [6, seq, {1: applied, 2: needs_reboot}]
+COMMIT request:          [6, seq, nil | {1: [ns_ids?], 5: include_state?, 100: compress?}]
+COMMIT response:         [6, seq, {1: applied,
+                                   2: needs_reboot,
+                                   4: {ns_id: {fid: value, ...}, ...}?,  # PostOpValues (optional)
+                                   6: hash?}]                            # PostOpHash (optional)
 
 DISCARD request:         [7, seq, [ns_id, ns_id, ...]?]
 DISCARD response:        [7, seq, {1: applied}]
 
-FACTORY_RESET request:   [8, seq, nil]
+FACTORY_RESET request:   [8, seq, nil | {100: compress?}]
 FACTORY_RESET response:  [8, seq, {2: needs_reboot_false}]
 
+REBOOT request:          [9, seq, nil | {100: compress?}]
+REBOOT response:         [9, seq]                                        # no payload — device may be mid-reboot
+
 ERROR response:          [101, seq, {1: error_code, 2: "message"?}]
+
+COMPRESSED response:     the payload is replaced by a single-entry map
+                         {101 (CompressedPayload): <bin>} whose value
+                         is a heatshrink-encoded MsgPack blob that
+                         decompresses to the raw payload above.
 ```
 
 ---

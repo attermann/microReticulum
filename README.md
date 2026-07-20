@@ -117,7 +117,7 @@ RNS::Bytes response = RNS::Provisioning::Provisioner::instance().handle_message(
 send_to_transport(response);
 ```
 
-Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, and `FACTORY_RESET`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/microReticulum/Provisioning/Ops.h` for op-id and key constants.
+Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, `FACTORY_RESET`, and `REBOOT`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/microReticulum/Provisioning/Ops.h` for op-id and key constants, and [`docs/provisioning_client_guide.md`](docs/provisioning_client_guide.md) for the full wire format (per-op request/response shapes, `Draft`/`IncludeState`/`PriorHash` round-trip optimizations, and heatshrink-compressed responses).
 
 ### Manual operations (no wire)
 

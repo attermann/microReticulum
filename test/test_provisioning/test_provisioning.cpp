@@ -175,6 +175,51 @@ static Bytes make_request(uint8_t op, uint64_t seq, F&& pack_payload) {
 	return Bytes(p.data(), p.size());
 }
 
+// Consume one msgpack value at the unpacker's current cursor. Type dispatch
+// mirrors what the server-side skip_value does, but Unity-safe and header-
+// only so any wire test can use it.
+static void t_skip_value(MsgPack::Unpacker& u) {
+	if (u.isNil())                              { MsgPack::object::nil_t n; u.deserialize(n); }
+	else if (u.isBool())                        { bool b; u.deserialize(b); }
+	else if (u.isUInt() || u.isInt())           { int64_t iv; u.deserialize(iv); }
+	else if (u.isFloat32() || u.isFloat64())    { double d; u.deserialize(d); }
+	else if (u.isStr())                         { MsgPack::str_t s; u.deserialize(s); }
+	else if (u.isBin())                         { MsgPack::bin_t<uint8_t> b; u.deserialize(b); }
+	else if (u.isArray()) {
+		const size_t n = u.unpackArraySize();
+		for (size_t i = 0; i < n; ++i) t_skip_value(u);
+	}
+	else if (u.isMap()) {
+		const size_t n = u.unpackMapSize();
+		for (size_t i = 0; i < n; ++i) { t_skip_value(u); t_skip_value(u); }
+	}
+}
+
+// Consumes the GetState response envelope up to (but not including) the
+// contents of the Values sub-map. Returns the number of namespaces in
+// Values with the cursor positioned to read (ns_id, ns_field_map) pairs.
+//
+// Assumes Values is the first entry in the body — matches the server's
+// current emission order. Callers that need to inspect Drafts/Hash/Unchanged
+// (which follow Values) re-parse the response from scratch; the helper
+// short-circuits at Values to keep the common path simple.
+static size_t enter_get_state_values(MsgPack::Unpacker& u, uint8_t expected_op,
+	uint64_t* seq_out = nullptr)
+{
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	TEST_ASSERT_EQUAL(expected_op, op);
+	uint64_t seq = 0; u.deserialize(seq);
+	if (seq_out) *seq_out = seq;
+	TEST_ASSERT_TRUE(u.isMap());
+	u.unpackMapSize();
+
+	int64_t key = 0; u.deserialize(key);
+	TEST_ASSERT_EQUAL(Key::Values, key);
+	TEST_ASSERT_TRUE(u.isMap());
+	return u.unpackMapSize();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -607,15 +652,10 @@ void test_transport_identity_excluded_from_get_state(void) {
 	});
 	Bytes resp = p.handle_message(req);
 
-	// Parse: response is [op, seq, payload-map { ns_id -> { field_id -> value } }]
+	// Parse: response body = { Values: { ns_id -> { field_id -> value } }, Hash: ... }
 	MsgPack::Unpacker u;
 	u.feed(resp.data(), resp.size());
-	u.unpackArraySize();
-	uint8_t op = 0; u.deserialize(op);
-	uint64_t seq = 0; u.deserialize(seq);
-	TEST_ASSERT_EQUAL((uint8_t)Op::GetState, op);
-	TEST_ASSERT_TRUE(u.isMap());
-	const size_t n_ns = u.unpackMapSize();
+	const size_t n_ns = enter_get_state_values(u, (uint8_t)Op::GetState);
 	TEST_ASSERT_EQUAL_size_t(1, n_ns);
 
 	int64_t ns_id_raw = 0; u.deserialize(ns_id_raw);
@@ -794,13 +834,10 @@ void test_command_excluded_from_get_state(void) {
 	Bytes resp = p.handle_message(req);
 
 	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
-	u.unpackArraySize();
-	uint8_t op = 0; u.deserialize(op);
-	uint64_t seq = 0; u.deserialize(seq);
-	TEST_ASSERT_TRUE(u.isMap());
-	const size_t n_ns = u.unpackMapSize();
+	const size_t n_ns = enter_get_state_values(u, (uint8_t)Op::GetState);
 	TEST_ASSERT_EQUAL_size_t(1, n_ns);
 	int64_t ns_id_raw = 0; u.deserialize(ns_id_raw);
+	(void)ns_id_raw;
 	TEST_ASSERT_TRUE(u.isMap());
 	const size_t n_fields = u.unpackMapSize();
 
@@ -871,7 +908,9 @@ void test_command_void_wire_set_state_with_nil(void) {
 	auto& p = Provisioner::instance();
 
 	Bytes set_req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
-		// Payload is the bare {ns_id: {field_id: value}} map.
+		// Payload is a request envelope { State: { ns_id: { fid: value } } }.
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::State);
 		pk.serialize(MsgPack::map_size_t(1));
 		pk.serialize((uint16_t)CUSTOM_NS_ID);
 		pk.serialize(MsgPack::map_size_t(1));
@@ -1069,11 +1108,7 @@ void test_hierarchy_get_state_stays_flat(void) {
 	Bytes resp = p.handle_message(req);
 
 	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
-	u.unpackArraySize();
-	uint8_t op; u.deserialize(op);
-	uint64_t seq; u.deserialize(seq);
-	TEST_ASSERT_TRUE(u.isMap());
-	const size_t n_ns = u.unpackMapSize();
+	const size_t n_ns = enter_get_state_values(u, (uint8_t)Op::GetState);
 	TEST_ASSERT_EQUAL_size_t(1, n_ns);
 	int64_t top_key = 0; u.deserialize(top_key);
 	TEST_ASSERT_EQUAL(HIER_LORA, top_key);   // leaf id at top — NOT parent id
@@ -1374,8 +1409,10 @@ void test_wire_set_state_then_commit(void) {
 	fresh_provisioning(g_test_root);
 	auto& p = Provisioner::instance();
 
-	// SetState: { CUSTOM_NS_ID: { CUSTOM_INT: 88 } }
+	// SetState envelope: { State: { CUSTOM_NS_ID: { CUSTOM_INT: 88 } } }
 	Bytes req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::State);
 		pk.serialize(MsgPack::map_size_t(1));
 		pk.serialize((uint16_t)CUSTOM_NS_ID);
 		pk.serialize(MsgPack::map_size_t(1));
@@ -1405,6 +1442,8 @@ void test_wire_set_state_constraint_error(void) {
 	auto& p = Provisioner::instance();
 
 	Bytes req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::State);
 		pk.serialize(MsgPack::map_size_t(1));
 		pk.serialize((uint16_t)CUSTOM_NS_ID);
 		pk.serialize(MsgPack::map_size_t(1));
@@ -1466,6 +1505,613 @@ void test_wire_get_capabilities(void) {
 	TEST_ASSERT_TRUE(u.isArray());
 	const size_t cap = u.unpackArraySize();
 	TEST_ASSERT_GREATER_OR_EQUAL(3, cap);	// reticulum + transport + identity + custom
+
+	// Each entry is a map { NsId, NsName, NsParent, NsFieldCount, NsSchemaHash }.
+	// Walk them all and prove the custom namespace's per-ns hash matches what
+	// Namespace::schema_hash() reports directly — the wire and the in-memory
+	// cache must agree.
+	bool found_custom = false;
+	uint32_t wire_custom_hash = 0;
+	uint64_t wire_custom_fcount = 0;
+	for (size_t i = 0; i < cap; ++i) {
+		TEST_ASSERT_TRUE(u.isMap());
+		const size_t nkeys = u.unpackMapSize();
+		int64_t ns_id = 0;
+		std::string ns_name;
+		int64_t ns_parent = -1;
+		int64_t fcount = -1;
+		int64_t schema_hash = -1;
+		for (size_t j = 0; j < nkeys; ++j) {
+			int64_t key = 0; u.deserialize(key);
+			if (key == Key::NsId)              { u.deserialize(ns_id); }
+			else if (key == Key::NsName)       { MsgPack::str_t s; u.deserialize(s); ns_name = std::string(s.c_str()); }
+			else if (key == Key::NsParent)     { u.deserialize(ns_parent); }
+			else if (key == Key::NsFieldCount) { u.deserialize(fcount); }
+			else if (key == Key::NsSchemaHash) { u.deserialize(schema_hash); }
+			else                               { t_skip_value(u); }
+		}
+		if ((uint16_t)ns_id == CUSTOM_NS_ID) {
+			found_custom = true;
+			wire_custom_hash = (uint32_t)schema_hash;
+			wire_custom_fcount = (uint64_t)fcount;
+			TEST_ASSERT_EQUAL(0, ns_parent);	// custom ns is a root
+			TEST_ASSERT_EQUAL_STRING("custom", ns_name.c_str());
+		}
+	}
+	TEST_ASSERT_TRUE(found_custom);
+	TEST_ASSERT_GREATER_THAN(0, wire_custom_fcount);
+	// The wire hash must match what schema_hash() reports in memory.
+	const Namespace* ns = p.registry().find((uint16_t)CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+	TEST_ASSERT_EQUAL_UINT32(ns->schema_hash(), wire_custom_hash);
+	TEST_ASSERT_EQUAL_UINT64(ns->fields().size(), wire_custom_fcount);
+}
+
+// ---------------------------------------------------------------------------
+// New wire tests for the split/hashed GetState and filtered GetSchema
+// ---------------------------------------------------------------------------
+
+// GetState without Draft flag, no drafts staged: body has Values and Hash,
+// no Drafts key.
+void test_wire_get_state_working_no_draft(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::GetState, op);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t body_entries = u.unpackMapSize();
+
+	bool saw_values = false, saw_hash = false, saw_drafts = false;
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (key == Key::Values)      { saw_values = true; t_skip_value(u); }
+		else if (key == Key::Hash)   { saw_hash = true;   int64_t h; u.deserialize(h); TEST_ASSERT_NOT_EQUAL(0, h); }
+		else if (key == Key::Drafts) { saw_drafts = true; t_skip_value(u); }
+		else                         { t_skip_value(u); }
+	}
+	TEST_ASSERT_TRUE(saw_values);
+	TEST_ASSERT_TRUE(saw_hash);
+	TEST_ASSERT_FALSE(saw_drafts);
+	(void)p;
+}
+
+// GetState WITHOUT the Draft flag, drafts staged: response still holds only
+// working values. Drafts must not leak into the response when the client
+// didn't ask for them.
+void test_wire_get_state_working_with_draft(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)77)));
+
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	const size_t n_ns = enter_get_state_values(u, (uint8_t)Op::GetState);
+	TEST_ASSERT_EQUAL_size_t(1, n_ns);
+	// Confirm the working value (not the draft) is returned.
+	int64_t ns_id = 0; u.deserialize(ns_id);
+	TEST_ASSERT_EQUAL(CUSTOM_NS_ID, ns_id);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t n_f = u.unpackMapSize();
+	bool int_seen = false;
+	for (size_t i = 0; i < n_f; ++i) {
+		int64_t fid = 0; u.deserialize(fid);
+		if (fid == CUSTOM_INT) {
+			int64_t v = 0; u.deserialize(v);
+			int_seen = true;
+			TEST_ASSERT_EQUAL_INT64(5, v);	// working, not draft (77)
+		}
+		else t_skip_value(u);
+	}
+	TEST_ASSERT_TRUE(int_seen);
+
+	// Re-parse to verify Drafts key is absent.
+	MsgPack::Unpacker u2; u2.feed(resp.data(), resp.size());
+	u2.unpackArraySize();
+	uint8_t op2 = 0; u2.deserialize(op2);
+	uint64_t seq2 = 0; u2.deserialize(seq2);
+	TEST_ASSERT_TRUE(u2.isMap());
+	const size_t body_entries = u2.unpackMapSize();
+	bool saw_drafts = false;
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u2.deserialize(key);
+		if (key == Key::Drafts) saw_drafts = true;
+		t_skip_value(u2);
+	}
+	TEST_ASSERT_FALSE(saw_drafts);
+}
+
+// GetState with Draft: true and a draft staged. Body carries Values (working
+// state) AND Drafts (sparse map of the drafted fields), delivered in one
+// round-trip. The Drafts map is scoped to namespaces that actually have
+// drafts and contains only the drafted fields (not the full working set).
+void test_wire_get_state_merged_with_drafts(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)77)));
+
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(2));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+		pk.serialize((uint16_t)Key::Draft);
+		pk.serialize((bool)true);
+	});
+	Bytes resp = p.handle_message(req);
+
+	// First pass: walk the whole body checking both Values and Drafts keys.
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::GetState, op);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t body_entries = u.unpackMapSize();
+
+	bool saw_values = false, saw_drafts = false, saw_hash = false;
+	int64_t working_int = -1, draft_int = -1;
+	int64_t drafts_ns_id = -1;
+	size_t drafts_field_count = 0;
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (key == Key::Values) {
+			saw_values = true;
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nns = u.unpackMapSize();
+			TEST_ASSERT_EQUAL_size_t(1, nns);
+			int64_t nsid = 0; u.deserialize(nsid);
+			TEST_ASSERT_EQUAL(CUSTOM_NS_ID, nsid);
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nf = u.unpackMapSize();
+			for (size_t j = 0; j < nf; ++j) {
+				int64_t fid = 0; u.deserialize(fid);
+				if (fid == CUSTOM_INT) { u.deserialize(working_int); }
+				else t_skip_value(u);
+			}
+		}
+		else if (key == Key::Drafts) {
+			saw_drafts = true;
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nns = u.unpackMapSize();
+			TEST_ASSERT_EQUAL_size_t(1, nns);
+			u.deserialize(drafts_ns_id);
+			TEST_ASSERT_TRUE(u.isMap());
+			drafts_field_count = u.unpackMapSize();
+			for (size_t j = 0; j < drafts_field_count; ++j) {
+				int64_t fid = 0; u.deserialize(fid);
+				if (fid == CUSTOM_INT) u.deserialize(draft_int);
+				else t_skip_value(u);
+			}
+		}
+		else if (key == Key::Hash) {
+			saw_hash = true;
+			int64_t h = 0; u.deserialize(h);
+			TEST_ASSERT_NOT_EQUAL(0, h);
+		}
+		else t_skip_value(u);
+	}
+	TEST_ASSERT_TRUE(saw_values);
+	TEST_ASSERT_TRUE(saw_drafts);
+	TEST_ASSERT_TRUE(saw_hash);
+	TEST_ASSERT_EQUAL_INT64(5,  working_int);	// working value untouched
+	TEST_ASSERT_EQUAL_INT64(77, draft_int);		// draft value
+	TEST_ASSERT_EQUAL_INT64(CUSTOM_NS_ID, drafts_ns_id);
+	TEST_ASSERT_EQUAL_size_t(1, drafts_field_count);	// only CUSTOM_INT is drafted
+}
+
+// Draft: true with no drafts staged: server omits the Drafts key entirely
+// (same on-wire shape as a working-only response).
+void test_wire_get_state_draft_flag_empty(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(2));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+		pk.serialize((uint16_t)Key::Draft);
+		pk.serialize((bool)true);
+	});
+	Bytes resp = p.handle_message(req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t body_entries = u.unpackMapSize();
+	bool saw_drafts = false;
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (key == Key::Drafts) saw_drafts = true;
+		t_skip_value(u);
+	}
+	TEST_ASSERT_FALSE(saw_drafts);
+	(void)p;
+}
+
+// PriorHash cache hit: the second identical GetState request carrying the
+// first response's Hash gets { Unchanged: true }.
+void test_wire_get_state_prior_hash_hit(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	auto make_req = [](uint32_t prior_hash, bool with_prior) {
+		return make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+			pk.serialize(MsgPack::map_size_t(with_prior ? 2 : 1));
+			pk.serialize((uint16_t)Key::NamespaceFilter);
+			pk.serialize(MsgPack::arr_size_t(1));
+			pk.serialize((uint16_t)CUSTOM_NS_ID);
+			if (with_prior) {
+				pk.serialize((uint16_t)Key::PriorHash);
+				pk.serialize((uint32_t)prior_hash);
+			}
+		});
+	};
+
+	// First: no prior hash — server returns full body + Hash. Full-body
+	// pass to extract Hash and confirm the body wasn't the Unchanged form.
+	Bytes resp1 = p.handle_message(make_req(0, false));
+	uint32_t hash1 = 0;
+	bool unchanged1 = false;
+	{
+		MsgPack::Unpacker u; u.feed(resp1.data(), resp1.size());
+		u.unpackArraySize();
+		uint8_t op; u.deserialize(op);
+		uint64_t seq; u.deserialize(seq);
+		TEST_ASSERT_TRUE(u.isMap());
+		const size_t body_entries = u.unpackMapSize();
+		for (size_t i = 0; i < body_entries; ++i) {
+			int64_t key = 0; u.deserialize(key);
+			if (key == Key::Hash)           { int64_t h = 0; u.deserialize(h); hash1 = (uint32_t)h; }
+			else if (key == Key::Unchanged) { u.deserialize(unchanged1); }
+			else                            { t_skip_value(u); }
+		}
+	}
+	TEST_ASSERT_NOT_EQUAL(0, hash1);
+	TEST_ASSERT_FALSE(unchanged1);
+
+	// Second: send hash1 as PriorHash — server short-circuits to Unchanged.
+	Bytes resp2 = p.handle_message(make_req(hash1, true));
+	bool unchanged2 = false;
+	{
+		MsgPack::Unpacker u; u.feed(resp2.data(), resp2.size());
+		u.unpackArraySize();
+		uint8_t op = 0; u.deserialize(op);
+		uint64_t seq = 0; u.deserialize(seq);
+		TEST_ASSERT_TRUE(u.isMap());
+		const size_t body_entries = u.unpackMapSize();
+		TEST_ASSERT_EQUAL_size_t(1, body_entries);
+		int64_t key = 0; u.deserialize(key);
+		TEST_ASSERT_EQUAL(Key::Unchanged, key);
+		u.deserialize(unchanged2);
+	}
+	TEST_ASSERT_TRUE(unchanged2);
+}
+
+// PriorHash cache miss after a commit: the same prior hash no longer
+// matches, and the server returns a fresh Hash different from the first.
+void test_wire_get_state_prior_hash_miss_after_commit(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	auto do_fetch = [&](uint32_t prior, bool with_prior, uint32_t& hash_out, bool& unchanged_out) {
+		Bytes req = make_request((uint8_t)Op::GetState, 1, [&](MsgPack::Packer& pk) {
+			pk.serialize(MsgPack::map_size_t(with_prior ? 2 : 1));
+			pk.serialize((uint16_t)Key::NamespaceFilter);
+			pk.serialize(MsgPack::arr_size_t(1));
+			pk.serialize((uint16_t)CUSTOM_NS_ID);
+			if (with_prior) {
+				pk.serialize((uint16_t)Key::PriorHash);
+				pk.serialize((uint32_t)prior);
+			}
+		});
+		Bytes resp = p.handle_message(req);
+		hash_out = 0; unchanged_out = false;
+		MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+		u.unpackArraySize();
+		uint8_t op; u.deserialize(op);
+		uint64_t seq; u.deserialize(seq);
+		TEST_ASSERT_TRUE(u.isMap());
+		const size_t body_entries = u.unpackMapSize();
+		for (size_t i = 0; i < body_entries; ++i) {
+			int64_t key = 0; u.deserialize(key);
+			if (key == Key::Hash)           { int64_t h = 0; u.deserialize(h); hash_out = (uint32_t)h; }
+			else if (key == Key::Unchanged) { u.deserialize(unchanged_out); }
+			else                            { t_skip_value(u); }
+		}
+	};
+
+	uint32_t hash1 = 0; bool unchanged1 = false;
+	do_fetch(0, false, hash1, unchanged1);
+	TEST_ASSERT_NOT_EQUAL(0, hash1);
+	TEST_ASSERT_FALSE(unchanged1);
+
+	// Mutate committed state.
+	TEST_ASSERT_TRUE(p.field(CUSTOM_NS_ID, CUSTOM_INT, Value((int64_t)42)));
+	TEST_ASSERT_TRUE(p.commit());
+
+	// Same prior hash — now stale.
+	uint32_t hash2 = 0; bool unchanged2 = false;
+	do_fetch(hash1, true, hash2, unchanged2);
+	TEST_ASSERT_FALSE(unchanged2);
+	TEST_ASSERT_NOT_EQUAL(0, hash2);
+	TEST_ASSERT_NOT_EQUAL(hash1, hash2);
+}
+
+// GetSchema with NamespaceFilter must return only the requested namespaces
+// (in registry order); the unfiltered case still returns everything.
+void test_wire_get_schema_filtered(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	// Full fetch: baseline count.
+	Bytes req_full = make_request((uint8_t)Op::GetSchema, 1, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n; pk.serialize(n);
+	});
+	Bytes resp_full = p.handle_message(req_full);
+	size_t full_count = 0;
+	{
+		MsgPack::Unpacker u; u.feed(resp_full.data(), resp_full.size());
+		u.unpackArraySize();
+		uint8_t op; u.deserialize(op);
+		uint64_t seq; u.deserialize(seq);
+		TEST_ASSERT_TRUE(u.isArray());
+		full_count = u.unpackArraySize();
+	}
+	TEST_ASSERT_GREATER_THAN(1, full_count);
+
+	// Filtered fetch: exactly one namespace requested.
+	Bytes req_filt = make_request((uint8_t)Op::GetSchema, 2, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::NamespaceFilter);
+		pk.serialize(MsgPack::arr_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+	});
+	Bytes resp_filt = p.handle_message(req_filt);
+	MsgPack::Unpacker u; u.feed(resp_filt.data(), resp_filt.size());
+	u.unpackArraySize();
+	uint8_t op; u.deserialize(op);
+	uint64_t seq; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::GetSchema, op);
+	TEST_ASSERT_TRUE(u.isArray());
+	const size_t filt_count = u.unpackArraySize();
+	TEST_ASSERT_EQUAL_size_t(1, filt_count);
+
+	// The single entry is a 4-tuple [id, name, parent, fields].
+	u.unpackArraySize();
+	int64_t ns_id = 0; u.deserialize(ns_id);
+	TEST_ASSERT_EQUAL(CUSTOM_NS_ID, ns_id);
+}
+
+// SetState with IncludeState: true returns the updated Values + Drafts + Hash
+// so the client can refresh the panel without a follow-up GetState round-trip.
+// SetState changes drafts only — Values reflects working (unchanged), Drafts
+// carries the newly-staged entries.
+void test_wire_set_state_include_state(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	Bytes set_req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(2));
+		pk.serialize((uint16_t)Key::State);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_INT);
+		pk.serialize((int64_t)88);
+		pk.serialize((uint16_t)Key::IncludeState);
+		pk.serialize((bool)true);
+	});
+	Bytes resp = p.handle_message(set_req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::SetState, op);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t body_entries = u.unpackMapSize();
+
+	int64_t applied = -1;
+	bool saw_values = false, saw_drafts = false, saw_hash = false;
+	int64_t working_int = -1, draft_int = -1;
+	bool saw_applied = false;
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (key == Key::Applied && !saw_applied) { u.deserialize(applied); saw_applied = true; }
+		else if (key == Key::PostOpHash)         { saw_hash = true; int64_t h; u.deserialize(h); TEST_ASSERT_NOT_EQUAL(0, h); }
+		else if (key == Key::PostOpValues) {
+			saw_values = true;
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nns = u.unpackMapSize();
+			TEST_ASSERT_EQUAL_size_t(1, nns);
+			int64_t nsid = 0; u.deserialize(nsid);
+			TEST_ASSERT_EQUAL(CUSTOM_NS_ID, nsid);
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nf = u.unpackMapSize();
+			for (size_t j = 0; j < nf; ++j) {
+				int64_t fid = 0; u.deserialize(fid);
+				if (fid == CUSTOM_INT) u.deserialize(working_int);
+				else t_skip_value(u);
+			}
+		}
+		else if (key == Key::PostOpDrafts) {
+			saw_drafts = true;
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nns = u.unpackMapSize();
+			TEST_ASSERT_EQUAL_size_t(1, nns);	// only the touched namespace with drafts
+			int64_t nsid = 0; u.deserialize(nsid);
+			TEST_ASSERT_EQUAL(CUSTOM_NS_ID, nsid);
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nf = u.unpackMapSize();
+			TEST_ASSERT_EQUAL_size_t(1, nf);	// only CUSTOM_INT is drafted
+			int64_t fid = 0; u.deserialize(fid);
+			TEST_ASSERT_EQUAL(CUSTOM_INT, fid);
+			u.deserialize(draft_int);
+		}
+		else t_skip_value(u);
+	}
+	TEST_ASSERT_EQUAL_INT64(1, applied);
+	TEST_ASSERT_TRUE(saw_values);
+	TEST_ASSERT_TRUE(saw_drafts);
+	TEST_ASSERT_TRUE(saw_hash);
+	TEST_ASSERT_EQUAL_INT64(5,  working_int);	// working unchanged
+	TEST_ASSERT_EQUAL_INT64(88, draft_int);		// draft staged
+	(void)p;
+}
+
+// Commit with IncludeState: true returns the post-commit Values plus a Hash,
+// eliminating the follow-up GetState round-trip. Verify the applied value
+// shows up in Values and Hash is present.
+void test_wire_commit_include_state(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	// Stage a draft via SetState.
+	Bytes set_req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::State);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_INT);
+		pk.serialize((int64_t)88);
+	});
+	(void)p.handle_message(set_req);
+
+	// Commit with IncludeState=true.
+	Bytes commit_req = make_request((uint8_t)Op::Commit, 2, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::IncludeState);
+		pk.serialize((bool)true);
+	});
+	Bytes resp = p.handle_message(commit_req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_EQUAL((uint8_t)Op::Commit, op);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t body_entries = u.unpackMapSize();
+
+	int64_t applied = -1;
+	bool needs_reboot = false;
+	bool saw_values = false, saw_hash = false;
+	int64_t applied_value = -1;
+	// Commit response uses PostOpValues/PostOpHash slots (distinct from
+	// Applied's slot 1, which happens to numerically equal Key::Values).
+	bool saw_applied = false;
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (key == Key::Applied && !saw_applied) { u.deserialize(applied); saw_applied = true; }
+		else if (key == Key::NeedsReboot)        { u.deserialize(needs_reboot); }
+		else if (key == Key::PostOpHash)         { saw_hash = true; int64_t h; u.deserialize(h); TEST_ASSERT_NOT_EQUAL(0, h); }
+		else if (key == Key::PostOpValues) {
+			saw_values = true;
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nns = u.unpackMapSize();
+			TEST_ASSERT_EQUAL_size_t(1, nns);	// only the namespace that had a draft
+			int64_t nsid = 0; u.deserialize(nsid);
+			TEST_ASSERT_EQUAL(CUSTOM_NS_ID, nsid);
+			TEST_ASSERT_TRUE(u.isMap());
+			const size_t nf = u.unpackMapSize();
+			for (size_t j = 0; j < nf; ++j) {
+				int64_t fid = 0; u.deserialize(fid);
+				if (fid == CUSTOM_INT) u.deserialize(applied_value);
+				else t_skip_value(u);
+			}
+		}
+		else t_skip_value(u);
+	}
+	TEST_ASSERT_EQUAL_INT64(1, applied);
+	TEST_ASSERT_FALSE(needs_reboot);
+	TEST_ASSERT_TRUE(saw_values);
+	TEST_ASSERT_TRUE(saw_hash);
+	TEST_ASSERT_EQUAL_INT64(88, applied_value);	// value the client just committed
+	(void)p;
+}
+
+// Commit without IncludeState returns just {Applied, NeedsReboot} — the
+// pre-Phase-3 shape. Verify no Values or Hash leak in.
+void test_wire_commit_without_include_state(void) {
+	fresh_provisioning(g_test_root);
+	auto& p = Provisioner::instance();
+
+	Bytes set_req = make_request((uint8_t)Op::SetState, 1, [&](MsgPack::Packer& pk) {
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)Key::State);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_NS_ID);
+		pk.serialize(MsgPack::map_size_t(1));
+		pk.serialize((uint16_t)CUSTOM_INT);
+		pk.serialize((int64_t)88);
+	});
+	(void)p.handle_message(set_req);
+
+	Bytes commit_req = make_request((uint8_t)Op::Commit, 2, [](MsgPack::Packer& pk) {
+		MsgPack::object::nil_t n; pk.serialize(n);
+	});
+	Bytes resp = p.handle_message(commit_req);
+
+	MsgPack::Unpacker u; u.feed(resp.data(), resp.size());
+	u.unpackArraySize();
+	uint8_t op = 0; u.deserialize(op);
+	uint64_t seq = 0; u.deserialize(seq);
+	TEST_ASSERT_TRUE(u.isMap());
+	const size_t body_entries = u.unpackMapSize();
+	TEST_ASSERT_EQUAL_size_t(2, body_entries);	// exactly Applied + NeedsReboot
+	bool saw_values = false, saw_hash = false;
+	// Skip the first two entries (Applied, NeedsReboot); we're looking for
+	// any PostOpValues/PostOpHash entries beyond them.
+	for (size_t i = 0; i < body_entries; ++i) {
+		int64_t key = 0; u.deserialize(key);
+		if (i >= 2) {
+			if (key == Key::PostOpValues) saw_values = true;
+			else if (key == Key::PostOpHash) saw_hash = true;
+		}
+		t_skip_value(u);
+	}
+	TEST_ASSERT_FALSE(saw_values);
+	TEST_ASSERT_FALSE(saw_hash);
+	(void)p;
+}
+
+// Per-namespace schema hash must be stable across begin() cycles as long as
+// the schema itself is unchanged. Sanity check against silent hash drift.
+void test_namespace_schema_hash_stable(void) {
+	fresh_provisioning(g_test_root);
+	const Namespace* ns = Provisioner::instance().registry().find((uint16_t)CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns);
+	const uint32_t hash_boot_1 = ns->schema_hash();
+	TEST_ASSERT_NOT_EQUAL(0, hash_boot_1);
+
+	// Full re-init: end(), re-register the exact same schema, begin() again.
+	fresh_provisioning(g_test_root);
+	const Namespace* ns2 = Provisioner::instance().registry().find((uint16_t)CUSTOM_NS_ID);
+	TEST_ASSERT_NOT_NULL(ns2);
+	TEST_ASSERT_EQUAL_UINT32(hash_boot_1, ns2->schema_hash());
 }
 
 void test_wire_factory_reset(void) {
@@ -1650,6 +2296,17 @@ int runUnityTests(void) {
 	RUN_TEST(test_wire_set_state_then_commit);
 	RUN_TEST(test_wire_set_state_constraint_error);
 	RUN_TEST(test_wire_get_capabilities);
+	RUN_TEST(test_wire_set_state_include_state);
+	RUN_TEST(test_wire_get_state_working_no_draft);
+	RUN_TEST(test_wire_get_state_working_with_draft);
+	RUN_TEST(test_wire_get_state_merged_with_drafts);
+	RUN_TEST(test_wire_get_state_draft_flag_empty);
+	RUN_TEST(test_wire_get_state_prior_hash_hit);
+	RUN_TEST(test_wire_get_state_prior_hash_miss_after_commit);
+	RUN_TEST(test_wire_get_schema_filtered);
+	RUN_TEST(test_wire_commit_include_state);
+	RUN_TEST(test_wire_commit_without_include_state);
+	RUN_TEST(test_namespace_schema_hash_stable);
 	RUN_TEST(test_wire_factory_reset);
 	RUN_TEST(test_wire_reboot);
 	RUN_TEST(test_wire_reboot_no_callback_still_acks);
