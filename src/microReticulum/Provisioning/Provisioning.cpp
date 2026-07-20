@@ -27,11 +27,12 @@ namespace RNS { namespace Provisioning {
 	// Defined in BuiltinNamespaces.cpp.
 	void register_builtin_namespaces(Provisioner& p);
 
-	// Forward declaration — definition lives next to op_get_schema below so
+	// Forward declarations — definitions live next to op_get_schema below so
 	// the schema serialization logic stays grouped. Called from begin() to
-	// compute the boot-time schema hash and from op_get_schema for the wire
-	// path so the hash matches the bytes clients actually receive.
+	// compute the boot-time schema hashes and from op_get_schema for the
+	// wire path so the hashes match the bytes clients actually receive.
 	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry);
+	static void pack_namespace_schema(MsgPack::Packer& p, const Namespace& ns);
 
 	// ---------------------------------------------------------------------
 	// Singleton
@@ -73,7 +74,14 @@ namespace RNS { namespace Provisioning {
 		// once here after registration is complete so GetInfo can report
 		// it as a cache key — clients keying their local schema cache by
 		// this hash skip a full GetSchema fetch when the device's schema
-		// has not changed.
+		// has not changed. Per-namespace hashes are also cached so lazy
+		// per-namespace schema fetches (via GetCapabilities + filtered
+		// GetSchema) can validate individual namespaces by hash.
+		for (const auto& ns_ptr : _registry.namespaces()) {
+			MsgPack::Packer nhp;
+			pack_namespace_schema(nhp, *ns_ptr);
+			ns_ptr->schema_hash(Utilities::Crc::crc32(0, (const uint8_t*)nhp.data(), nhp.size()));
+		}
 		{
 			MsgPack::Packer hp;
 			pack_schema_payload(hp, _registry);
@@ -211,11 +219,7 @@ namespace RNS { namespace Provisioning {
 			// commit". The callback may revert (clear_draft) or amend
 			// (set_draft) drafts, so we re-collect the id list after it
 			// returns to honour those edits.
-			bool has_any_draft = false;
-			for (const Field& f : ns.fields()) {
-				if (ns.has_draft(f.id)) { has_any_draft = true; break; }
-			}
-			if (has_any_draft && ns.has_on_commit()) {
+			if (ns.has_any_draft() && ns.has_on_commit()) {
 				try { ns.on_commit_callback()(ns); }
 				catch (const std::exception& e) {
 					ERRORF("Provisioning::commit: on_commit callback for namespace %u threw: %s",
@@ -469,12 +473,24 @@ namespace RNS { namespace Provisioning {
 	}
 
 	Bytes Provisioner::op_get_capabilities(seq_t seq, void* unpacker_v) {
+		// Returns an array describing every registered namespace — the "map"
+		// clients use at connect time to discover the namespace hierarchy and
+		// decide which schemas need to be fetched. Each entry is a small map
+		// keyed by the Ns* constants in Ops.h. The per-namespace schema hash
+		// lets clients cache each namespace's schema independently and skip
+		// re-fetching when only some namespaces have changed.
 		const bool compress = parse_compress_only(unpacker_v);
 		return pack_response((opid_t)Op::GetCapabilities, seq, compress, [&](MsgPack::Packer& p) {
 			const auto& nss = _registry.namespaces();
 			p.serialize(MsgPack::arr_size_t(nss.size()));
 			for (const auto& ns_ptr : nss) {
-				p.serialize((nid_t)ns_ptr->id());
+				const Namespace& ns = *ns_ptr;
+				p.serialize(MsgPack::map_size_t(5));
+				p.serialize((uint16_t)Key::NsId);          p.serialize((nid_t)ns.id());
+				p.serialize((uint16_t)Key::NsName);        p.serialize(ns.name().c_str());
+				p.serialize((uint16_t)Key::NsParent);      p.serialize((nid_t)ns.parent_id());
+				p.serialize((uint16_t)Key::NsFieldCount);  p.serialize((uint64_t)ns.fields().size());
+				p.serialize((uint16_t)Key::NsSchemaHash);  p.serialize((uint32_t)ns.schema_hash());
 			}
 		});
 	}
@@ -525,87 +541,80 @@ namespace RNS { namespace Provisioning {
 		return n;
 	}
 
-	// Packs the GetSchema payload (just the namespaces array) onto `p`.
-	// Shared by op_get_schema() and the boot-time CRC32 hashing path so
-	// the hash is computed over the exact bytes clients receive.
-	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry) {
-		const auto& nss = registry.namespaces();
-		p.serialize(MsgPack::arr_size_t(nss.size()));
-		for (const auto& ns_ptr : nss) {
-			const Namespace& ns = *ns_ptr;
-			// Each namespace is [id, name, parent_id_or_zero, [field-maps]].
-			// parent_id of 0 means root (no parent). Schema v2 layout —
-			// v1 clients reading the first three elements still parse
-			// the rest of the response correctly.
-			p.serialize(MsgPack::arr_size_t(4));
-			p.serialize((nid_t)ns.id());
-			p.serialize(ns.name().c_str());
-			p.serialize((nid_t)ns.parent_id());
-			const auto& fields = ns.fields();
-			p.serialize(MsgPack::arr_size_t(fields.size()));
-			for (const Field& f : fields) {
-				p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
-				p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
-				p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
-				p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
-				p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
-				p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
-				if (f.type == Type::Int && f.constraint.has_range) {
-					p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
-					p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
+	// Packs one namespace's schema entry: [id, name, parent_id, [field-maps]].
+	// parent_id of 0 means root (no parent). Schema v2 layout — v1 clients
+	// reading the first three elements still parse the rest correctly. Also
+	// used by begin() to CRC32 each namespace independently so clients can
+	// cache per-namespace schemas.
+	static void pack_namespace_schema(MsgPack::Packer& p, const Namespace& ns) {
+		p.serialize(MsgPack::arr_size_t(4));
+		p.serialize((nid_t)ns.id());
+		p.serialize(ns.name().c_str());
+		p.serialize((nid_t)ns.parent_id());
+		const auto& fields = ns.fields();
+		p.serialize(MsgPack::arr_size_t(fields.size()));
+		for (const Field& f : fields) {
+			p.serialize(MsgPack::map_size_t(schema_field_entries(f)));
+			p.serialize((uint16_t)Key::FieldId);    p.serialize((fid_t)f.id);
+			p.serialize((uint16_t)Key::FieldName);  p.serialize(f.name.c_str());
+			p.serialize((uint16_t)Key::FieldType);  p.serialize((uint8_t)f.type);
+			p.serialize((uint16_t)Key::FieldFlags); p.serialize((fflags_t)f.flags);
+			p.serialize((uint16_t)Key::FieldDefault); pack_field_default(p, f);
+			if (f.type == Type::Int && f.constraint.has_range) {
+				p.serialize((uint16_t)Key::FieldMinI); p.serialize((fint_t)f.constraint.imin);
+				p.serialize((uint16_t)Key::FieldMaxI); p.serialize((fint_t)f.constraint.imax);
+			}
+			if (f.type == Type::Float && f.constraint.has_range) {
+				p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
+				p.serialize((uint16_t)Key::FieldMaxF); p.serialize((double)f.constraint.fmax);
+			}
+			if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
+				p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
+			}
+			if (f.type == Type::Enum) {
+				if (!f.constraint.enum_values.empty()) {
+					p.serialize((uint16_t)Key::FieldEnumValues);
+					p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
+					for (fenum_t v : f.constraint.enum_values) p.serialize(v);
 				}
-				if (f.type == Type::Float && f.constraint.has_range) {
-					p.serialize((uint16_t)Key::FieldMinF); p.serialize((double)f.constraint.fmin);
-					p.serialize((uint16_t)Key::FieldMaxF); p.serialize((double)f.constraint.fmax);
+				if (!f.constraint.enum_labels.empty()) {
+					p.serialize((uint16_t)Key::FieldEnumLabels);
+					p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
+					for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
 				}
-				if ((f.type == Type::String || f.type == Type::Bytes) && f.constraint.max_len > 0) {
-					p.serialize((uint16_t)Key::FieldMaxLen); p.serialize((uint64_t)f.constraint.max_len);
+			}
+			if (f.type == Type::BytesList) {
+				if (f.constraint.element_size > 0) {
+					p.serialize((uint16_t)Key::FieldElementSize);
+					p.serialize((uint64_t)f.constraint.element_size);
 				}
-				if (f.type == Type::Enum) {
-					if (!f.constraint.enum_values.empty()) {
-						p.serialize((uint16_t)Key::FieldEnumValues);
-						p.serialize(MsgPack::arr_size_t(f.constraint.enum_values.size()));
-						for (fenum_t v : f.constraint.enum_values) p.serialize(v);
-					}
-					if (!f.constraint.enum_labels.empty()) {
-						p.serialize((uint16_t)Key::FieldEnumLabels);
-						p.serialize(MsgPack::arr_size_t(f.constraint.enum_labels.size()));
-						for (const auto& s : f.constraint.enum_labels) p.serialize(s.c_str());
-					}
-				}
-				if (f.type == Type::BytesList) {
-					if (f.constraint.element_size > 0) {
-						p.serialize((uint16_t)Key::FieldElementSize);
-						p.serialize((uint64_t)f.constraint.element_size);
-					}
-					if (f.constraint.max_count > 0) {
-						p.serialize((uint16_t)Key::FieldMaxCount);
-						p.serialize((uint64_t)f.constraint.max_count);
-					}
+				if (f.constraint.max_count > 0) {
+					p.serialize((uint16_t)Key::FieldMaxCount);
+					p.serialize((uint64_t)f.constraint.max_count);
 				}
 			}
 		}
 	}
 
+	// Packs the full GetSchema payload (namespaces array) onto `p`.
+	static void pack_schema_payload(MsgPack::Packer& p, const Registry& registry) {
+		const auto& nss = registry.namespaces();
+		p.serialize(MsgPack::arr_size_t(nss.size()));
+		for (const auto& ns_ptr : nss) {
+			pack_namespace_schema(p, *ns_ptr);
+		}
+	}
+
 	Bytes Provisioner::op_get_schema(seq_t seq, void* unpacker_v) {
-		const bool compress = parse_compress_only(unpacker_v);
-		return pack_response((opid_t)Op::GetSchema, seq, compress, [&](MsgPack::Packer& p) {
-			pack_schema_payload(p, _registry);
-		});
-	}
-
-	static void pack_state_value(MsgPack::Packer& p, Type t, const Value& v) {
-		(void)t;
-		Codec::pack_value(p, v);
-	}
-
-	Bytes Provisioner::op_get_state(seq_t seq, void* unpacker_v) {
+		// Optional request payload: { NamespaceFilter: [ns_ids], ReqCompress: bool }.
+		// Nil payload or missing filter → full schema (unchanged behavior).
+		// With a filter → only the listed namespaces are packed, preserving
+		// registry order. Unknown ids in the filter are silently ignored;
+		// callers can detect this by cross-checking against GetCapabilities.
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		std::unordered_set<nid_t> ns_filter;
 		bool has_filter = false;
-		bool pending = false;
 		bool compress = false;
-		// Optional payload map: {1: [ns_filter], 2: pending, 100: compress}
 		if (up && up->isMap()) {
 			const size_t n = up->unpackMapSize();
 			for (size_t i = 0; i < n; ++i) {
@@ -625,8 +634,148 @@ namespace RNS { namespace Provisioning {
 					}
 					else skip_value(*up);
 				}
-				else if (key == Key::Pending) {
-					if (up->isBool()) up->deserialize(pending);
+				else if (key == Key::ReqCompress) {
+					if (up->isBool()) up->deserialize(compress);
+					else skip_value(*up);
+				}
+				else skip_value(*up);
+			}
+		}
+		else if (up) skip_value(*up);
+
+		return pack_response((opid_t)Op::GetSchema, seq, compress, [&](MsgPack::Packer& p) {
+			if (!has_filter) {
+				pack_schema_payload(p, _registry);
+				return;
+			}
+			// Filtered: emit only the requested namespaces, in registry order.
+			std::vector<const Namespace*> selected;
+			for (const auto& ns_ptr : _registry.namespaces()) {
+				if (ns_filter.count(ns_ptr->id()) != 0) selected.push_back(ns_ptr.get());
+			}
+			p.serialize(MsgPack::arr_size_t(selected.size()));
+			for (const Namespace* ns : selected) pack_namespace_schema(p, *ns);
+		});
+	}
+
+	static void pack_state_value(MsgPack::Packer& p, Type t, const Value& v) {
+		(void)t;
+		Codec::pack_value(p, v);
+	}
+
+	// FF_REBOOT_REQUIRED reads return the working (committed-but-pending-reboot)
+	// value, not the live runtime via effective()'s getter — mirrors
+	// Codec::persist_value. Operators are entitled to see the canonical committed
+	// value across reconnects and reader identities; the live-runtime value of a
+	// reboot-gated field would diverge between commit and reboot and disagree
+	// across clients.
+	static Value base_state_value(const Namespace& n, const Field& fl) {
+		return fl.has_flag(FF_REBOOT_REQUIRED) ? n.working(fl.id) : n.effective(fl.id);
+	}
+
+	// Packs the `Values` sub-map { ns_id: { fid: value, ... }, ... } for the
+	// given namespaces. FF_SECRET and FF_WRITE_ONLY fields are excluded, none-
+	// typed values are dropped. Shared by op_get_state, op_commit, and
+	// op_set_state so all emit byte-identical Values content for the same
+	// underlying state.
+	static void pack_ns_values(MsgPack::Packer& p, const std::vector<const Namespace*>& ns_list) {
+		p.serialize(MsgPack::map_size_t(ns_list.size()));
+		for (const Namespace* ns : ns_list) {
+			p.serialize((nid_t)ns->id());
+			size_t fld_entries = 0;
+			for (const Field& f : ns->fields()) {
+				if (f.has_flag(FF_SECRET)) continue;
+				if (f.has_flag(FF_WRITE_ONLY)) continue;
+				Value v = base_state_value(*ns, f);
+				if (!v.is_none()) ++fld_entries;
+			}
+			p.serialize(MsgPack::map_size_t(fld_entries));
+			for (const Field& f : ns->fields()) {
+				if (f.has_flag(FF_SECRET)) continue;
+				if (f.has_flag(FF_WRITE_ONLY)) continue;
+				Value v = base_state_value(*ns, f);
+				if (v.is_none()) continue;
+				p.serialize((fid_t)f.id);
+				pack_state_value(p, f.type, v);
+			}
+		}
+	}
+
+	// Packs a sparse Drafts sub-map { ns_id: { fid: draft_value, ... }, ... }
+	// for the given namespaces (call with only namespaces that actually have
+	// drafts). Shared by op_get_state and op_set_state so both emit
+	// byte-identical Drafts content — lets the client cache-prime a GetState
+	// response with a hash returned by SetState.
+	static void pack_ns_drafts(MsgPack::Packer& p, const std::vector<const Namespace*>& draft_ns_list) {
+		p.serialize(MsgPack::map_size_t(draft_ns_list.size()));
+		for (const Namespace* ns : draft_ns_list) {
+			p.serialize((nid_t)ns->id());
+			size_t draft_entries = 0;
+			for (const Field& f : ns->fields()) {
+				if (ns->has_draft(f.id)) ++draft_entries;
+			}
+			p.serialize(MsgPack::map_size_t(draft_entries));
+			for (const Field& f : ns->fields()) {
+				Value v;
+				if (!ns->draft(f.id, v)) continue;
+				p.serialize((fid_t)f.id);
+				pack_state_value(p, f.type, v);
+			}
+		}
+	}
+
+	Bytes Provisioner::op_get_state(seq_t seq, void* unpacker_v) {
+		// Request payload (all optional):
+		//   { NamespaceFilter: [ns_ids], Draft: bool, PriorHash: uint32, ReqCompress: bool }
+		//
+		// Response body:
+		//   { Values: {ns: {fid: value, ...}, ...}, Drafts?: {ns: {fid: value, ...}, ...}, Hash: uint32 }
+		//
+		// Draft=true asks the server to include drafts alongside working in the
+		// same response. The Drafts sub-map is sparse — only namespaces that
+		// have pending drafts, and only fields with drafts. Omitted entirely
+		// when no in-scope namespace has drafts (Draft=false or drafts empty).
+		//
+		// PriorHash short-circuit: if the client-supplied hash matches the CRC32
+		// the server would compute over the response body (excluding the Hash
+		// entry itself), the body collapses to { Unchanged: true } and the
+		// client reuses its cache.
+		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
+		std::unordered_set<nid_t> ns_filter;
+		bool has_filter = false;
+		bool include_drafts = false;
+		bool has_prior_hash = false;
+		uint32_t prior_hash = 0;
+		bool compress = false;
+		if (up && up->isMap()) {
+			const size_t n = up->unpackMapSize();
+			for (size_t i = 0; i < n; ++i) {
+				nid_t key;
+				if (!read_uint_key(*up, key)) { skip_value(*up); continue; }
+				if (key == Key::NamespaceFilter) {
+					if (up->isArray()) {
+						const size_t m = up->unpackArraySize();
+						for (size_t j = 0; j < m; ++j) {
+							if (up->isUInt() || up->isInt()) {
+								fint_t v; up->deserialize(v);
+								ns_filter.insert((nid_t)v);
+							}
+							else skip_value(*up);
+						}
+						has_filter = true;
+					}
+					else skip_value(*up);
+				}
+				else if (key == Key::Draft) {
+					if (up->isBool()) up->deserialize(include_drafts);
+					else skip_value(*up);
+				}
+				else if (key == Key::PriorHash) {
+					if (up->isUInt() || up->isInt()) {
+						fint_t v = 0; up->deserialize(v);
+						prior_hash = (uint32_t)v;
+						has_prior_hash = true;
+					}
 					else skip_value(*up);
 				}
 				else if (key == Key::ReqCompress) {
@@ -638,109 +787,190 @@ namespace RNS { namespace Provisioning {
 		}
 		else if (up) skip_value(*up);
 
-		return pack_response((opid_t)Op::GetState, seq, compress, [&](MsgPack::Packer& p) {
-			std::vector<const Namespace*> ns_list;
-			for (const auto& ns_ptr : _registry.namespaces()) {
-				if (has_filter && ns_filter.count(ns_ptr->id()) == 0) continue;
-				ns_list.push_back(ns_ptr.get());
-			}
-			p.serialize(MsgPack::map_size_t(ns_list.size()));
+		// In-scope namespaces (registry order, respecting NamespaceFilter).
+		std::vector<const Namespace*> ns_list;
+		for (const auto& ns_ptr : _registry.namespaces()) {
+			if (has_filter && ns_filter.count(ns_ptr->id()) == 0) continue;
+			ns_list.push_back(ns_ptr.get());
+		}
+
+		// Sub-list of in-scope namespaces that have pending drafts. Only
+		// consulted when the client asked for drafts alongside working.
+		std::vector<const Namespace*> draft_ns_list;
+		if (include_drafts) {
 			for (const Namespace* ns : ns_list) {
-				p.serialize((nid_t)ns->id());
-				// For FF_REBOOT_REQUIRED fields the read returns the working
-				// (committed-but-pending-reboot) value, not the live runtime
-				// via effective()'s getter — see Codec::persist_value for the
-				// matching persistence rule. Operators are entitled to see
-				// the canonical committed value across reconnects, transports,
-				// and reader identities; the live-runtime value of a reboot-
-				// gated field would diverge between commit and reboot and
-				// would disagree across clients reading the same device.
-				auto base_value = [](const Namespace& n, const Field& fl) {
-					return fl.has_flag(FF_REBOOT_REQUIRED) ? n.working(fl.id) : n.effective(fl.id);
-				};
-				// Count entries first (skip SECRET fields).
-				size_t entries = 0;
-				for (const Field& f : ns->fields()) {
-					if (f.has_flag(FF_SECRET)) continue;
-					if (f.has_flag(FF_WRITE_ONLY)) continue;
-					Value v = base_value(*ns, f);
-					if (pending) {
-						Value d;
-						if (ns->draft(f.id, d)) v = d;
-					}
-					if (!v.is_none()) ++entries;
-				}
-				p.serialize(MsgPack::map_size_t(entries));
-				for (const Field& f : ns->fields()) {
-					if (f.has_flag(FF_SECRET)) continue;
-					Value v = base_value(*ns, f);
-					if (pending) {
-						Value d;
-						if (ns->draft(f.id, d)) v = d;
-					}
-					if (v.is_none()) continue;
-					p.serialize((fid_t)f.id);
-					pack_state_value(p, f.type, v);
-				}
+				if (ns->has_any_draft()) draft_ns_list.push_back(ns);
 			}
+		}
+
+		// Emit the content map (Values + optional Drafts) into a packer,
+		// with_hash controlling whether a Hash entry is appended. Called
+		// twice: once to compute the CRC over the hash-less form, and (on
+		// cache miss) once inside pack_response with the actual hash.
+		auto pack_content = [&](MsgPack::Packer& p, bool with_hash, uint32_t hash) {
+			const bool emit_drafts = include_drafts && !draft_ns_list.empty();
+			size_t entries = 1;						// Values always
+			if (emit_drafts) ++entries;
+			if (with_hash)   ++entries;
+			p.serialize(MsgPack::map_size_t(entries));
+
+			p.serialize((uint16_t)Key::Values);
+			pack_ns_values(p, ns_list);
+
+			if (emit_drafts) {
+				p.serialize((uint16_t)Key::Drafts);
+				pack_ns_drafts(p, draft_ns_list);
+			}
+
+			if (with_hash) {
+				p.serialize((uint16_t)Key::Hash);
+				p.serialize((uint32_t)hash);
+			}
+		};
+
+		// Hash pass: pack the content without the Hash entry and CRC the
+		// resulting bytes. Deterministic given the same in-memory state.
+		uint32_t body_hash = 0;
+		{
+			MsgPack::Packer scratch;
+			pack_content(scratch, false, 0);
+			body_hash = Utilities::Crc::crc32(0, (const uint8_t*)scratch.data(), scratch.size());
+		}
+
+		return pack_response((opid_t)Op::GetState, seq, compress, [&](MsgPack::Packer& p) {
+			if (has_prior_hash && prior_hash == body_hash) {
+				p.serialize(MsgPack::map_size_t(1));
+				p.serialize((uint16_t)Key::Unchanged);
+				p.serialize((bool)true);
+				return;
+			}
+			pack_content(p, true, body_hash);
 		});
 	}
 
 	Bytes Provisioner::op_set_state(seq_t seq, void* unpacker_v) {
+		// Request envelope:
+		//   { State: { ns_id: { fid: value, ... }, ... },   // required
+		//     IncludeState: bool,                            // optional
+		//     ReqCompress: bool }                            // optional
+		//
+		// Response body:
+		//   { Applied, DraftHasReboot, FieldErrors?,
+		//     PostOpValues?, PostOpDrafts?, PostOpHash? }
+		// PostOpValues/PostOpDrafts/PostOpHash appear iff IncludeState was true.
+		// PostOpValues is the working state for the namespaces referenced by the
+		// request (working is unchanged by SetState; still emitted so the client
+		// can refresh its cache without a follow-up GetState). PostOpDrafts is
+		// the sparse per-namespace draft map after the writes were applied,
+		// including whatever set_draft() dedup logic produced.
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		if (!up || !up->isMap()) {
 			return encode_error((opid_t)Op::SetState, seq, ErrorCode::MalformedRequest, "expected map payload");
 		}
-		const size_t n_ns = up->unpackMapSize();
 		size_t applied = 0;
 		struct Err { nid_t ns_id; fid_t field_id; ferror_t code; };
 		std::vector<Err> errors;
-		for (size_t i = 0; i < n_ns; ++i) {
-			if (!(up->isUInt() || up->isInt())) { skip_value(*up); skip_value(*up); continue; }
-			fint_t k1 = 0; up->deserialize(k1);
-			const nid_t ns_id = (nid_t)k1;
-			Namespace* ns = _registry.find(ns_id);
-			if (!up->isMap()) {
-				// Inner must be a map of {field_id: value}
-				skip_value(*up);
-				if (!ns) errors.push_back({ns_id, 0, (ferror_t)ErrorCode::UnknownNamespace});
-				else errors.push_back({ns_id, 0, (ferror_t)ErrorCode::MalformedRequest});
+		bool include_state = false;
+		bool compress = false;
+		bool saw_state = false;
+		// Namespaces referenced by the State map, in first-seen order, deduped.
+		// Used to scope the PostOpValues/PostOpDrafts response when IncludeState
+		// is true. Kept as a Namespace* list so we can iterate fields without a
+		// second registry lookup.
+		std::vector<const Namespace*> touched_ns;
+		std::unordered_set<nid_t> touched_seen;
+
+		const size_t n_top = up->unpackMapSize();
+		for (size_t t = 0; t < n_top; ++t) {
+			nid_t top_key;
+			if (!read_uint_key(*up, top_key)) { skip_value(*up); continue; }
+			if (top_key == Key::IncludeState) {
+				if (up->isBool()) up->deserialize(include_state);
+				else skip_value(*up);
 				continue;
 			}
-			const size_t n_fields = up->unpackMapSize();
-			for (size_t j = 0; j < n_fields; ++j) {
+			if (top_key == Key::ReqCompress) {
+				if (up->isBool()) up->deserialize(compress);
+				else skip_value(*up);
+				continue;
+			}
+			if (top_key != Key::State) {
+				// Unknown envelope key — skip its value.
+				skip_value(*up);
+				continue;
+			}
+			// State: process the inner { ns_id: { fid: value } } map.
+			saw_state = true;
+			if (!up->isMap()) { skip_value(*up); continue; }
+			const size_t n_ns = up->unpackMapSize();
+			for (size_t i = 0; i < n_ns; ++i) {
 				if (!(up->isUInt() || up->isInt())) { skip_value(*up); skip_value(*up); continue; }
-				fint_t k2 = 0; up->deserialize(k2);
-				const fid_t fid = (fid_t)k2;
-				if (!ns) {
+				fint_t k1 = 0; up->deserialize(k1);
+				const nid_t ns_id = (nid_t)k1;
+				Namespace* ns = _registry.find(ns_id);
+				if (ns && touched_seen.insert(ns_id).second) touched_ns.push_back(ns);
+				if (!up->isMap()) {
 					skip_value(*up);
-					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::UnknownNamespace});
+					if (!ns) errors.push_back({ns_id, 0, (ferror_t)ErrorCode::UnknownNamespace});
+					else errors.push_back({ns_id, 0, (ferror_t)ErrorCode::MalformedRequest});
 					continue;
 				}
-				const Field* f = ns->find_field(fid);
-				if (!f) {
-					skip_value(*up);
-					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::UnknownField});
-					continue;
+				const size_t n_fields = up->unpackMapSize();
+				for (size_t j = 0; j < n_fields; ++j) {
+					if (!(up->isUInt() || up->isInt())) { skip_value(*up); skip_value(*up); continue; }
+					fint_t k2 = 0; up->deserialize(k2);
+					const fid_t fid = (fid_t)k2;
+					if (!ns) {
+						skip_value(*up);
+						errors.push_back({ns_id, fid, (ferror_t)ErrorCode::UnknownNamespace});
+						continue;
+					}
+					const Field* f = ns->find_field(fid);
+					if (!f) {
+						skip_value(*up);
+						errors.push_back({ns_id, fid, (ferror_t)ErrorCode::UnknownField});
+						continue;
+					}
+					Value v;
+					if (!Codec::unpack_value(*up, f->type, v)) {
+						errors.push_back({ns_id, fid, (ferror_t)ErrorCode::InvalidValue});
+						continue;
+					}
+					if (f->has_flag(FF_READ_ONLY)) {
+						errors.push_back({ns_id, fid, (ferror_t)ErrorCode::ReadOnly});
+						continue;
+					}
+					if (!ns->set_draft(fid, v)) {
+						errors.push_back({ns_id, fid, (ferror_t)ErrorCode::ConstraintViolation});
+						continue;
+					}
+					++applied;
 				}
-				Value v;
-				if (!Codec::unpack_value(*up, f->type, v)) {
-					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::InvalidValue});
-					continue;
-				}
-				if (f->has_flag(FF_READ_ONLY)) {
-					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::ReadOnly});
-					continue;
-				}
-				if (!ns->set_draft(fid, v)) {
-					errors.push_back({ns_id, fid, (ferror_t)ErrorCode::ConstraintViolation});
-					continue;
-				}
-				++applied;
 			}
 		}
-		return pack_response((opid_t)Op::SetState, seq, [&](MsgPack::Packer& p) {
-			p.serialize(MsgPack::map_size_t(errors.empty() ? 2 : 3));
+		if (!saw_state) {
+			return encode_error((opid_t)Op::SetState, seq, ErrorCode::MalformedRequest, "missing State key");
+		}
+
+		// Determine which of the touched namespaces have drafts *after* the
+		// writes were applied — sparse Drafts map only lists non-empty ones.
+		std::vector<const Namespace*> touched_with_drafts;
+		if (include_state) {
+			for (const Namespace* ns : touched_ns) {
+				if (ns->has_any_draft()) touched_with_drafts.push_back(ns);
+			}
+		}
+
+		return pack_response((opid_t)Op::SetState, seq, compress, [&](MsgPack::Packer& p) {
+			// Base entries: Applied + DraftHasReboot. Plus optional
+			// FieldErrors, plus optional PostOpValues/PostOpDrafts/PostOpHash.
+			size_t entries = 2;
+			if (!errors.empty()) ++entries;
+			if (include_state) {
+				entries += 2;	// PostOpValues + PostOpHash
+				if (!touched_with_drafts.empty()) ++entries;
+			}
+			p.serialize(MsgPack::map_size_t(entries));
 			p.serialize((uint16_t)Key::Applied);        p.serialize((uint64_t)applied);
 			p.serialize((uint16_t)Key::DraftHasReboot); p.serialize((bool)draft_has_reboot());
 			if (!errors.empty()) {
@@ -753,20 +983,74 @@ namespace RNS { namespace Provisioning {
 					p.serialize((ferror_t)e.code);
 				}
 			}
+			if (include_state) {
+				// Build the PostOp content into a scratch, CRC32 it, then
+				// re-emit inline alongside the hash. Hash covers just the
+				// Values+Drafts content (excludes Applied/DraftHasReboot
+				// framing) so it matches what a follow-up GetState with the
+				// same scope + withDrafts:true would compute.
+				MsgPack::Packer scratch;
+				pack_ns_values(scratch, touched_ns);
+				if (!touched_with_drafts.empty()) {
+					pack_ns_drafts(scratch, touched_with_drafts);
+				}
+				const uint32_t hash = Utilities::Crc::crc32(0,
+					(const uint8_t*)scratch.data(), scratch.size());
+
+				p.serialize((uint16_t)Key::PostOpValues);
+				pack_ns_values(p, touched_ns);
+				if (!touched_with_drafts.empty()) {
+					p.serialize((uint16_t)Key::PostOpDrafts);
+					pack_ns_drafts(p, touched_with_drafts);
+				}
+				p.serialize((uint16_t)Key::PostOpHash);
+				p.serialize((uint32_t)hash);
+			}
 		});
 	}
 
 	Bytes Provisioner::op_commit(seq_t seq, void* unpacker_v) {
+		// Request payload (all optional):
+		//   { NamespaceFilter: [ns_ids], IncludeState: bool, ReqCompress: bool }
+		// Nil payload = commit all namespaces, IncludeState=false.
+		//
+		// Response body:
+		//   { Applied: N, NeedsReboot: bool, Values?: {ns: {fid: value}, ...}, Hash?: uint32 }
+		// Values and Hash appear iff IncludeState was true. The Values map is
+		// the post-commit working state for the committed namespaces (same
+		// content the client would see from a follow-up GetState), letting
+		// callers refresh the UI without an extra round-trip.
 		MsgPack::Unpacker* up = (MsgPack::Unpacker*)unpacker_v;
 		std::vector<nid_t> filter;
 		bool has_filter = false;
-		if (up && up->isArray()) {
-			const size_t n = up->unpackArraySize();
-			has_filter = true;
+		bool include_state = false;
+		bool compress = false;
+		if (up && up->isMap()) {
+			const size_t n = up->unpackMapSize();
 			for (size_t i = 0; i < n; ++i) {
-				if (up->isUInt() || up->isInt()) {
-					fint_t v; up->deserialize(v);
-					filter.push_back((nid_t)v);
+				nid_t key;
+				if (!read_uint_key(*up, key)) { skip_value(*up); continue; }
+				if (key == Key::NamespaceFilter) {
+					if (up->isArray()) {
+						const size_t m = up->unpackArraySize();
+						for (size_t j = 0; j < m; ++j) {
+							if (up->isUInt() || up->isInt()) {
+								fint_t v; up->deserialize(v);
+								filter.push_back((nid_t)v);
+							}
+							else skip_value(*up);
+						}
+						has_filter = true;
+					}
+					else skip_value(*up);
+				}
+				else if (key == Key::IncludeState) {
+					if (up->isBool()) up->deserialize(include_state);
+					else skip_value(*up);
+				}
+				else if (key == Key::ReqCompress) {
+					if (up->isBool()) up->deserialize(compress);
+					else skip_value(*up);
 				}
 				else skip_value(*up);
 			}
@@ -776,16 +1060,20 @@ namespace RNS { namespace Provisioning {
 		size_t applied_total = 0;
 		bool any_reboot = false;
 
+		// The set of namespaces that were actually touched by this commit —
+		// used when IncludeState is true to scope the post-commit Values map.
+		// If no explicit NamespaceFilter, we collect namespaces that had at
+		// least one draft to commit (rather than dumping every namespace's
+		// working state).
+		std::vector<const Namespace*> touched_ns;
+
 		auto do_one = [&](Namespace& ns) {
 			// Pre-commit hook: fires once per namespace iff at least one
 			// draft entry exists, before any field setter runs. Mirrors
 			// the in-process Provisioner::commit path so wire-driven commits
 			// see identical semantics.
-			bool has_any_draft = false;
-			for (const Field& f : ns.fields()) {
-				if (ns.has_draft(f.id)) { has_any_draft = true; break; }
-			}
-			if (has_any_draft && ns.has_on_commit()) {
+			const bool had_draft = ns.has_any_draft();
+			if (had_draft && ns.has_on_commit()) {
 				try { ns.on_commit_callback()(ns); }
 				catch (const std::exception& e) {
 					ERRORF("Provisioning::op_commit: on_commit callback for namespace %u threw: %s",
@@ -805,6 +1093,9 @@ namespace RNS { namespace Provisioning {
 				}
 			}
 			if (_storage) _storage->save_namespace(ns);
+			// Track for the post-commit Values response: include namespaces
+			// the caller filtered on OR namespaces that actually had drafts.
+			if (include_state && (has_filter || had_draft)) touched_ns.push_back(&ns);
 		};
 
 		if (has_filter) {
@@ -818,10 +1109,27 @@ namespace RNS { namespace Provisioning {
 		}
 		set_reboot_flag(any_reboot);
 
-		return pack_response((opid_t)Op::Commit, seq, [&](MsgPack::Packer& p) {
-			p.serialize(MsgPack::map_size_t(2));
+		return pack_response((opid_t)Op::Commit, seq, compress, [&](MsgPack::Packer& p) {
+			// Base entries: Applied + NeedsReboot. IncludeState adds Values + Hash.
+			const size_t entries = include_state ? 4 : 2;
+			p.serialize(MsgPack::map_size_t(entries));
 			p.serialize((uint16_t)Key::Applied);     p.serialize((uint64_t)applied_total);
 			p.serialize((uint16_t)Key::NeedsReboot); p.serialize((bool)_needs_reboot);
+			if (include_state) {
+				// Build the Values sub-payload into a scratch so we can hash
+				// it before emitting — matches the GetState convention where
+				// the Hash is CRC32 over the packed Values bytes (excluding
+				// the Hash entry itself). PostOpValues/PostOpHash slots avoid
+				// clashing with Applied's numeric slot 1.
+				MsgPack::Packer scratch;
+				pack_ns_values(scratch, touched_ns);
+				const uint32_t hash = Utilities::Crc::crc32(0,
+					(const uint8_t*)scratch.data(), scratch.size());
+				p.serialize((uint16_t)Key::PostOpValues);
+				pack_ns_values(p, touched_ns);
+				p.serialize((uint16_t)Key::PostOpHash);
+				p.serialize((uint32_t)hash);
+			}
 		});
 	}
 

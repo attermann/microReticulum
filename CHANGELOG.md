@@ -31,6 +31,11 @@
 * Added first-class remote reboot support.
 * Expanded built-in provisioning namespaces and metrics.
 * Added schema hashing for provisioning schema caching.
+* Added per-namespace schema hashes and repurposed `GET_CAPABILITIES` to return a namespace hierarchy map, letting clients fetch schema lazily per namespace.
+* Added `NamespaceFilter` support to `GET_SCHEMA` so clients can fetch only the namespaces they don't already have cached.
+* Added `Draft` flag to `GET_STATE`: when `true`, the response includes drafts alongside working values in a single round-trip. Response body is now `{Values, Drafts?, Hash}`.
+* Added `PriorHash` cache short-circuit to `GET_STATE`: clients echo a previously-received `Hash`, and the server responds with `{Unchanged: true}` when the state would be byte-identical.
+* Added `IncludeState` flag to `SET_STATE` and `COMMIT`: when `true`, the response includes post-op `PostOpValues` / `PostOpDrafts` / `PostOpHash`, eliminating the follow-up `GET_STATE` round-trip after a save or commit.
 * Added provisioning payload compression support.
 * Embedded Heatshrink compression implementation.
 
@@ -127,6 +132,12 @@
 
 * Persisted path-table data created by previous releases may not be reusable after upgrade and may be rebuilt automatically from network announces.
 * Applications using internal persistence formats should verify compatibility.
+* **Provisioning wire format changed.** Existing v0.4-era clients will not interoperate with a v0.5 server:
+    * `GET_CAPABILITIES` now returns an array of namespace map entries (`{NsId, NsName, NsParent, NsFieldCount, NsSchemaHash}`), replacing the previous bare array of ids.
+    * `GET_STATE` responses are wrapped in `{Values, Drafts?, Hash}` (previously the response body was the `{ns_id: {fid: value}}` map directly). The old `Pending` request flag is replaced by `Draft`, with new "include drafts alongside working" semantics.
+    * `SET_STATE` requests use a new envelope `{State: {...}, IncludeState?, ReqCompress?}` (previously the top-level map was the state map itself).
+    * `COMMIT` requests use a map envelope `{NamespaceFilter?, IncludeState?, ReqCompress?}` instead of a bare array of ns ids.
+    * The `Pending` request key and `Applied`-slot-3 collision in the old commit response are gone. See [`docs/provisioning_client_guide.md`](docs/provisioning_client_guide.md) for the current wire format.
 * Existing applications using function-pointer callback handlers do not require immediate changes but should migrate toward std::function callbacks.
 
 ## Contributors
