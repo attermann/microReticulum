@@ -79,6 +79,27 @@ namespace RNS { namespace Cryptography {
 
 		using Ptr = std::shared_ptr<X25519PrivateKey>;
 
+	private:
+		/*
+		RFC 7748 X25519 scalar clamping: clear the three low bits, clear the
+		high bit, and set the second-highest bit of the scalar.
+
+		The raw Curve25519::eval ladder leaves clamping to the caller (as
+		Curve25519::dh1 does for generated keys), but the Python reference
+		implementation clamps *inside* X25519 (the cryptography package
+		performs the clamp on every operation). Seeds loaded via
+		from_private_bytes must therefore be clamped here, or public-key
+		derivation and Diffie-Hellman shared secrets disagree with Python for
+		any seed that is not already clamped — e.g. deterministic identities
+		derived from "SHA-256(name) used directly as the private scalar".
+		Clamping is idempotent, so already-clamped keys (generated or loaded
+		from Python-written files) are unaffected.
+		*/
+		static void clamp(uint8_t scalar[32]) {
+			scalar[0] &= 0xF8;
+			scalar[31] = (scalar[31] & 0x7F) | 0x40;
+		}
+
 	public:
 /*
 		X25519PrivateKey(const Bytes& a) {
@@ -87,8 +108,11 @@ namespace RNS { namespace Cryptography {
 */
 		X25519PrivateKey(const Bytes& privateKey) {
 			if (privateKey) {
-				// use specified private key
-				_privateKey = privateKey;
+				// Use the specified private key. Assign from the raw chunk so
+				// the buffer is exclusive (a plain Bytes copy shares its data
+				// under COW builds), then clamp in place.
+				_privateKey.assign(privateKey.data(), privateKey.size());
+				clamp(_privateKey.writable(_privateKey.size()));
 				// similar to derive public key from private key
 				// second param "f" is secret
 				//eval(uint8_t result[32], const uint8_t s[32], const uint8_t x[32])
