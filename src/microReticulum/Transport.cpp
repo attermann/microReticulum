@@ -4304,7 +4304,9 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 }
 
 /*static*/ void Transport::probe_request_handler(const Bytes& data, const Packet& packet) {
+#if RNS_NEIGHBOR_PROBING
 	++_probes_received;
+#endif
 	TRACE("Transport::probe_request_handler");
 }
 
