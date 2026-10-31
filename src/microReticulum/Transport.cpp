@@ -492,6 +492,13 @@ DestinationEntry empty_destination_entry;
 
 	std::vector<Packet> outgoing;
 	std::map<Bytes, Interface> path_requests;	// destination_hash -> blocked_interface ({NONE} = no interface to avoid)
+	// Links whose resource watchdogs must be pumped. Ticking may send
+	// packets (e.g. resource advertisement retries) through
+	// Transport::outbound(), which spins while _jobs_running is set, so the
+	// tick must happen after _jobs_running is cleared (same as `outgoing`).
+	// Ticking inside the jobs section deadlocks the single-threaded loop
+	// until the hardware watchdog resets the device.
+	std::vector<Link> links_to_tick;
 	int count;
 	_jobs_running = true;
 
@@ -546,9 +553,8 @@ DestinationEntry empty_destination_entry;
 				// iterating std::set<Link> — the wrapper is const but
 				// shared_ptr-backed mutation is the codebase convention.
 				for (auto& link_const : active_links) {
-					Link& link = const_cast<Link&>(link_const);
-					if (link.status() != Type::Link::CLOSED) {
-						link.tick_resources();
+					if (link_const.status() != Type::Link::CLOSED) {
+						links_to_tick.push_back(link_const);
 					}
 				}
 
@@ -1041,6 +1047,13 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	}
 
 	_jobs_running = false;
+
+	// Pump resource watchdogs outside the jobs section (see links_to_tick)
+	for (auto& link : links_to_tick) {
+		if (link.status() != Type::Link::CLOSED) {
+			link.tick_resources();
+		}
+	}
 
 	// CBA send announce retransmission packets
 	for (auto& packet : outgoing) {
