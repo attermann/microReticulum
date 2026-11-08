@@ -1,8 +1,13 @@
 name: Prepare Release
 
 # Generates the CHANGELOG entry and release notes for a new version with Claude,
-# bumps the library version, and opens a `release/<version>` PR for review.
-# Merging that PR runs release-tag.yml, which creates the annotated tag.
+# bumps the library version, and pushes a `release/<version>` branch. Open a PR
+# from that branch by hand (the run summary has the link); merging it runs
+# release-tag.yml, which creates the annotated tag.
+#
+# The workflow deliberately doesn't open the PR: doing that with GITHUB_TOKEN
+# needs the repo setting that also lets Actions approve PRs, and CI doesn't run
+# on PRs opened by GITHUB_TOKEN.
 #
 #   gh workflow run release-prepare.yml --ref master -f version=0.5.1
 
@@ -19,8 +24,8 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: write       # push the release branch
+  pull-requests: read   # `collect` reads descriptions of PRs referenced by commits
 
 concurrency:
   group: release-prepare
@@ -83,7 +88,7 @@ jobs:
       - name: Apply to CHANGELOG.md and version files
         run: python scripts/release/generate_release_notes.py apply --version "$VERSION"
 
-      - name: Open release PR
+      - name: Push release branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -92,18 +97,28 @@ jobs:
           git commit -m "Release $VERSION"
           git push origin "$BRANCH"
 
+      - name: Show how to open the release PR
+        run: |
           prev=$(jq -r .previous_tag release/work/meta.json)
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/master...$BRANCH?expand=1&title=Release%20$VERSION"
+          echo "::notice title=Open the release PR::$url"
           {
-            echo "Generated release documentation for **$VERSION** (changes since \`$prev\`)."
+            echo "## Release $VERSION is ready for review"
             echo
-            echo "Review and edit \`CHANGELOG.md\` and \`release/$VERSION/RELEASE_NOTES.md\` on this branch as needed."
-            echo "Merging this PR creates the annotated tag \`$VERSION\` with the release notes as its message, plus a draft GitHub Release."
+            echo "Branch \`$BRANCH\` has the generated documentation for changes since \`$prev\`."
             echo
-            echo "---"
+            echo "**Next step:** [open the release pull request]($url), review it, and merge it."
+            echo "Merging creates the annotated tag \`$VERSION\` and a draft GitHub Release."
+            echo
+            echo "From the command line:"
+            echo
+            echo '```bash'
+            echo "git fetch origin $BRANCH"
+            echo "git show origin/$BRANCH:release/$VERSION/RELEASE_NOTES.md | \\"
+            echo "  gh pr create --base master --head $BRANCH --title \"Release $VERSION\" --body-file -"
+            echo '```'
+            echo
+            echo "### Generated release notes"
             echo
             cat "release/$VERSION/RELEASE_NOTES.md"
-            echo
-            echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-          } > pr_body.md
-          gh pr create --base master --head "$BRANCH" \
-            --title "Release $VERSION" --body-file pr_body.md
+          } >> "$GITHUB_STEP_SUMMARY"
