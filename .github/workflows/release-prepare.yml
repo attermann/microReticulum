@@ -65,8 +65,12 @@ jobs:
 
       - name: Generate changelog entry and release notes
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/release/generate_release_notes.py generate --version "$VERSION"
+          ANTHROPIC_API_KEY: ${{ secrets.RELEASE_ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::RELEASE_ANTHROPIC_API_KEY repository secret is not set"; exit 1
+          fi
+          python scripts/release/generate_release_notes.py generate --version "$VERSION"
 
       - name: Upload generator input and output
         if: always()

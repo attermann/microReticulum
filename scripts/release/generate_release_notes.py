@@ -284,7 +284,7 @@ Release date: {meta['date']}
         ) as stream:
             message = stream.get_final_message()
     except anthropic.AuthenticationError:
-        fail("Anthropic API rejected the key (check the ANTHROPIC_API_KEY secret)")
+        fail("Anthropic API rejected the key (check ANTHROPIC_API_KEY, which the workflow sets from the RELEASE_ANTHROPIC_API_KEY secret)")
     except anthropic.RateLimitError as e:
         fail(f"Anthropic API rate limit hit after retries: {e.message}")
     except anthropic.BadRequestError as e:

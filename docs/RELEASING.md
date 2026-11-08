@@ -2,7 +2,7 @@
 
 Releases are cut by two GitHub Actions workflows. **Prepare Release** (`release-prepare.yml`) uses Claude to generate a `CHANGELOG.md` entry and release notes from all changes since the previous tag, bumps the version in `library.json` and `library.properties`, and opens a `release/<version>` pull request. Merging that PR runs **Tag Release** (`release-tag.yml`), which creates the annotated tag `<version>` with the release notes as its message, plus a draft GitHub Release.
 
-One-time setup: add an `ANTHROPIC_API_KEY` repository secret, and enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**.
+One-time setup: add a `RELEASE_ANTHROPIC_API_KEY` repository secret (a key used only for release generation, separate from keys used by other automation), and enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**.
 
 ## From the GitHub portal
 
