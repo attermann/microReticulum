@@ -1,0 +1,105 @@
+name: Prepare Release
+
+# Generates the CHANGELOG entry and release notes for a new version with Claude,
+# bumps the library version, and opens a `release/<version>` PR for review.
+# Merging that PR runs release-tag.yml, which creates the annotated tag.
+#
+#   gh workflow run release-prepare.yml --ref master -f version=0.5.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z, no 'v' prefix)"
+        required: true
+        type: string
+      previous_tag:
+        description: "Previous release tag (default: most recent tag)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-prepare
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      PREVIOUS_TAG: ${{ inputs.previous_tag }}
+      BRANCH: release/${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate inputs
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '$VERSION' must look like X.Y.Z"; exit 1
+          fi
+          if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag '$VERSION' already exists"; exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::branch '$BRANCH' already exists; delete it to regenerate"; exit 1
+          fi
+
+      - name: Install generator dependencies
+        run: pip install -r scripts/release/requirements.txt
+
+      - name: Collect changes since previous release
+        run: |
+          python scripts/release/generate_release_notes.py collect \
+            --version "$VERSION" ${PREVIOUS_TAG:+--previous-tag "$PREVIOUS_TAG"}
+
+      - name: Generate changelog entry and release notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/release/generate_release_notes.py generate --version "$VERSION"
+
+      - name: Upload generator input and output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.version }}
+          path: release/work/
+          if-no-files-found: ignore
+
+      - name: Apply to CHANGELOG.md and version files
+        run: python scripts/release/generate_release_notes.py apply --version "$VERSION"
+
+      - name: Open release PR
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add CHANGELOG.md library.json library.properties "release/$VERSION/RELEASE_NOTES.md"
+          git commit -m "Release $VERSION"
+          git push origin "$BRANCH"
+
+          prev=$(jq -r .previous_tag release/work/meta.json)
+          {
+            echo "Generated release documentation for **$VERSION** (changes since \`$prev\`)."
+            echo
+            echo "Review and edit \`CHANGELOG.md\` and \`release/$VERSION/RELEASE_NOTES.md\` on this branch as needed."
+            echo "Merging this PR creates the annotated tag \`$VERSION\` with the release notes as its message, plus a draft GitHub Release."
+            echo
+            echo "---"
+            echo
+            cat "release/$VERSION/RELEASE_NOTES.md"
+            echo
+            echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+          } > pr_body.md
+          gh pr create --base master --head "$BRANCH" \
+            --title "Release $VERSION" --body-file pr_body.md
