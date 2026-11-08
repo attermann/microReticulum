@@ -9,6 +9,12 @@ name: Prepare Release
 # needs the repo setting that also lets Actions approve PRs, and CI doesn't run
 # on PRs opened by GITHUB_TOKEN.
 #
+# Credentials (repository secrets; at least one is required):
+#   RELEASE_CLAUDE_CODE_OAUTH_TOKEN  Claude Code subscription token from
+#                                    `claude setup-token`. Takes precedence.
+#   RELEASE_ANTHROPIC_API_KEY        Anthropic API key. Used when the token
+#                                    isn't set.
+#
 #   gh workflow run release-prepare.yml --ref master -f version=0.5.1
 
 on:
@@ -39,6 +45,10 @@ jobs:
       PREVIOUS_TAG: ${{ inputs.previous_tag }}
       BRANCH: release/${{ inputs.version }}
       GH_TOKEN: ${{ github.token }}
+      # Secrets can't be tested in `if:` expressions, so expose whether the
+      # subscription token is set as a plain flag.
+      USE_CLAUDE_CODE: ${{ secrets.RELEASE_CLAUDE_CODE_OAUTH_TOKEN != '' }}
+      CLAUDE_CODE_VERSION: '2.1.319'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,8 +70,15 @@ jobs:
             echo "::error::branch '$BRANCH' already exists; delete it to regenerate"; exit 1
           fi
 
-      - name: Install generator dependencies
+      - name: Install generator dependencies (Anthropic API)
+        if: env.USE_CLAUDE_CODE != 'true'
         run: pip install -r scripts/release/requirements.txt
+
+      - name: Install Claude Code CLI (subscription)
+        if: env.USE_CLAUDE_CODE == 'true'
+        run: |
+          npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          claude --version
 
       - name: Collect changes since previous release
         run: |
@@ -70,11 +87,13 @@ jobs:
 
       - name: Generate changelog entry and release notes
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.RELEASE_ANTHROPIC_API_KEY }}
+          RELEASE_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.RELEASE_CLAUDE_CODE_OAUTH_TOKEN }}
+          RELEASE_ANTHROPIC_API_KEY: ${{ secrets.RELEASE_ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::RELEASE_ANTHROPIC_API_KEY repository secret is not set"; exit 1
+          if [ -z "$RELEASE_CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$RELEASE_ANTHROPIC_API_KEY" ]; then
+            echo "::error::set the RELEASE_CLAUDE_CODE_OAUTH_TOKEN or RELEASE_ANTHROPIC_API_KEY repository secret"; exit 1
           fi
+          # --backend auto: the subscription token takes precedence over the API key.
           python scripts/release/generate_release_notes.py generate --version "$VERSION"
 
       - name: Upload generator input and output

@@ -6,20 +6,29 @@ own step; they work the same locally):
 
   collect   Gather commits, referenced PRs and contributors since the previous
             release tag into <work-dir>.
-  generate  Send that context, the prompt and the current CHANGELOG.md to the
-            Anthropic API; validate and write CHANGELOG_ENTRY.md and
-            RELEASE_NOTES.md into <work-dir>.
+  generate  Send that context, the prompt and the current CHANGELOG.md to
+            Claude; validate and write CHANGELOG_ENTRY.md and RELEASE_NOTES.md
+            into <work-dir>. Two backends:
+              claude-cli  the Claude Code CLI on a Claude Code subscription
+                          (RELEASE_CLAUDE_CODE_OAUTH_TOKEN, or your local login)
+              api         the Anthropic API (RELEASE_ANTHROPIC_API_KEY)
+            By default the subscription token takes precedence when both are set.
   apply     Prepend the entry to CHANGELOG.md, write
             release/<version>/RELEASE_NOTES.md, and bump the version in
             library.json and library.properties.
 
-Local dry run:
+Local dry run with a Claude Code subscription (uses your existing `claude` login):
+  python3 scripts/release/generate_release_notes.py collect  --version 0.5.1
+  python3 scripts/release/generate_release_notes.py generate --version 0.5.1 --backend claude-cli
+
+Local dry run with an API key:
   python3 -m venv .venv-release
   .venv-release/bin/pip install -r scripts/release/requirements.txt
-  export ANTHROPIC_API_KEY=...
+  export RELEASE_ANTHROPIC_API_KEY=...
   .venv-release/bin/python scripts/release/generate_release_notes.py collect  --version 0.5.1
   .venv-release/bin/python scripts/release/generate_release_notes.py generate --version 0.5.1
-  # inspect release/work/*.md; `apply` only if you want the repo changes
+
+Then inspect release/work/*.md; run `apply` only if you want the repo changes.
 """
 
 from __future__ import annotations
@@ -216,8 +225,36 @@ def validate(docs: dict[str, str], version: str, known_prs: set[int]) -> list[st
     return errs
 
 
-def cmd_generate(args: argparse.Namespace) -> None:
-    # Imported here so `collect` and `apply` work without the SDK installed.
+DOC_FIELDS = {
+    "changelog_entry": "New CHANGELOG.md section, Markdown",
+    "release_notes": "User-facing release notes, Markdown",
+}
+CLAUDE_CLI_TIMEOUT_S = 30 * 60
+
+
+def resolve_backend(choice: str) -> str:
+    """Pick the generation backend.
+
+    auto: a Claude Code subscription token (RELEASE_CLAUDE_CODE_OAUTH_TOKEN)
+    takes precedence over an API key (RELEASE_ANTHROPIC_API_KEY, or
+    ANTHROPIC_API_KEY for local runs).
+    """
+    if choice != "auto":
+        return choice
+    if os.environ.get("RELEASE_CLAUDE_CODE_OAUTH_TOKEN"):
+        return "claude-cli"
+    if os.environ.get("RELEASE_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"):
+        return "api"
+    raise ReleaseError(
+        "no credentials: set RELEASE_CLAUDE_CODE_OAUTH_TOKEN (Claude Code subscription) "
+        "or RELEASE_ANTHROPIC_API_KEY (Anthropic API), or pass --backend claude-cli "
+        "to use an existing local Claude Code login"
+    )
+
+
+def generate_with_api(system: str, user_content: str) -> dict[str, str]:
+    # Imported here so the other subcommands and the claude-cli backend work
+    # without the SDK installed.
     try:
         import anthropic
         from pydantic import BaseModel, Field
@@ -232,9 +269,115 @@ def cmd_generate(args: argparse.Namespace) -> None:
         )
 
     class ReleaseDocs(BaseModel):
-        changelog_entry: str = Field(description="New CHANGELOG.md section, Markdown")
-        release_notes: str = Field(description="User-facing release notes, Markdown")
+        changelog_entry: str = Field(description=DOC_FIELDS["changelog_entry"])
+        release_notes: str = Field(description=DOC_FIELDS["release_notes"])
 
+    api_key = os.environ.get("RELEASE_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ReleaseError("set RELEASE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) for the api backend")
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        with client.beta.messages.stream(
+            model=MODEL,
+            max_tokens=64000,
+            thinking={"type": "adaptive"},
+            output_config={"effort": "high"},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            system=system,
+            messages=[{"role": "user", "content": user_content}],
+            output_format=ReleaseDocs,
+        ) as stream:
+            message = stream.get_final_message()
+    except anthropic.AuthenticationError:
+        fail("Anthropic API rejected the key (check the RELEASE_ANTHROPIC_API_KEY secret)")
+    except anthropic.RateLimitError as e:
+        fail(f"Anthropic API rate limit hit after retries: {e.message}")
+    except anthropic.BadRequestError as e:
+        fail(f"Anthropic API rejected the request: {e.message}")
+    except anthropic.APIStatusError as e:
+        fail(f"Anthropic API error {e.status_code}: {e.message}")
+    except anthropic.APIConnectionError as e:
+        fail(f"could not reach the Anthropic API: {e}")
+
+    if message.stop_reason == "refusal":
+        fail(f"model declined the request: {message.stop_details}")
+    if message.stop_reason == "max_tokens":
+        fail("model output hit max_tokens before finishing")
+    docs_obj = message.parsed_output
+    if docs_obj is None:
+        fail(f"no structured output in response (stop_reason={message.stop_reason})")
+    u = message.usage
+    print(f"backend=api model={message.model} input_tokens={u.input_tokens} output_tokens={u.output_tokens}")
+    return {"changelog_entry": docs_obj.changelog_entry, "release_notes": docs_obj.release_notes}
+
+
+def generate_with_claude_cli(system: str, user_content: str) -> dict[str, str]:
+    """Run the official Claude Code CLI headless, authenticated by a Claude
+    Code subscription: RELEASE_CLAUDE_CODE_OAUTH_TOKEN when set (CI), otherwise
+    the existing local `claude` login."""
+    # Expand "~" in PATH entries too: shells resolve a literal "~/.local/bin"
+    # (where the native Claude Code installer puts `claude`), but Python doesn't.
+    path = os.pathsep.join(os.path.expanduser(d) for d in os.environ.get("PATH", "").split(os.pathsep))
+    claude = shutil.which("claude", path=path)
+    if claude is None:
+        raise ReleaseError("claude CLI not found; install it with `npm install -g @anthropic-ai/claude-code`")
+
+    env = dict(os.environ)
+    # An API key always takes precedence over subscription auth in `claude -p`,
+    # so remove every key from the child's environment.
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "RELEASE_ANTHROPIC_API_KEY",
+                "RELEASE_CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"):
+        env.pop(var, None)
+    token = os.environ.get("RELEASE_CLAUDE_CODE_OAUTH_TOKEN")
+    if token:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+
+    schema = {
+        "type": "object",
+        "properties": {k: {"type": "string", "description": d} for k, d in DOC_FIELDS.items()},
+        "required": list(DOC_FIELDS),
+        "additionalProperties": False,
+    }
+    cmd = [
+        claude, "-p",
+        "Write the two release documents described in the system prompt from the input provided.",
+        "--output-format", "json",
+        "--json-schema", json.dumps(schema),
+        "--system-prompt", system,
+        "--tools", "",              # a pure generation task: no file, shell or web access
+        "--strict-mcp-config",      # and no MCP servers
+        "--model", MODEL,
+        "--effort", "high",
+        "--no-session-persistence",
+    ]
+    # Run outside the repo so the project's CLAUDE.md and .claude/ settings
+    # don't load into the session.
+    tmp = Path(os.environ.get("RUNNER_TEMP") or "/tmp")
+    try:
+        r = subprocess.run(cmd, input=user_content, capture_output=True, text=True,
+                           env=env, cwd=tmp, timeout=CLAUDE_CLI_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        fail(f"claude CLI did not finish within {CLAUDE_CLI_TIMEOUT_S // 60} minutes")
+
+    try:
+        out = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        fail(f"claude CLI exited {r.returncode} without JSON output: "
+             f"{(r.stderr or r.stdout).strip()[:2000]}")
+    if r.returncode != 0 or out.get("is_error"):
+        reason = out.get("terminal_reason") or out.get("subtype") or f"exit {r.returncode}"
+        fail(f"claude CLI failed ({reason}): {str(out.get('result', r.stderr)).strip()[:2000]}")
+    docs = out.get("structured_output")
+    if not isinstance(docs, dict) or not all(isinstance(docs.get(k), str) for k in DOC_FIELDS):
+        fail(f"claude CLI returned no structured output: {str(out.get('result', '')).strip()[:2000]}")
+    auth = "RELEASE_CLAUDE_CODE_OAUTH_TOKEN" if token else "local Claude Code login"
+    print(f"backend=claude-cli auth={auth} model={MODEL} turns={out.get('num_turns')} "
+          f"duration_ms={out.get('duration_ms')}")
+    return {k: docs[k] for k in DOC_FIELDS}
+
+
+def cmd_generate(args: argparse.Namespace) -> None:
     work: Path = args.work_dir
     meta_path = work / "meta.json"
     if not meta_path.exists():
@@ -269,47 +412,16 @@ Release date: {meta['date']}
 """
     known_prs = set(meta["pr_numbers"]) | {int(n) for n in PR_REF_RE.findall(commits)}
 
-    client = anthropic.Anthropic()
-    try:
-        with client.beta.messages.stream(
-            model=MODEL,
-            max_tokens=64000,
-            thinking={"type": "adaptive"},
-            output_config={"effort": "high"},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            system=PROMPT_PATH.read_text(),
-            messages=[{"role": "user", "content": user_content}],
-            output_format=ReleaseDocs,
-        ) as stream:
-            message = stream.get_final_message()
-    except anthropic.AuthenticationError:
-        fail("Anthropic API rejected the key (check ANTHROPIC_API_KEY, which the workflow sets from the RELEASE_ANTHROPIC_API_KEY secret)")
-    except anthropic.RateLimitError as e:
-        fail(f"Anthropic API rate limit hit after retries: {e.message}")
-    except anthropic.BadRequestError as e:
-        fail(f"Anthropic API rejected the request: {e.message}")
-    except anthropic.APIStatusError as e:
-        fail(f"Anthropic API error {e.status_code}: {e.message}")
-    except anthropic.APIConnectionError as e:
-        fail(f"could not reach the Anthropic API: {e}")
+    backend = resolve_backend(args.backend)
+    system = PROMPT_PATH.read_text()
+    if backend == "claude-cli":
+        raw = generate_with_claude_cli(system, user_content)
+    else:
+        raw = generate_with_api(system, user_content)
 
-    if message.stop_reason == "refusal":
-        fail(f"model declined the request: {message.stop_details}")
-    if message.stop_reason == "max_tokens":
-        fail("model output hit max_tokens before finishing")
-    docs_obj = message.parsed_output
-    if docs_obj is None:
-        fail(f"no structured output in response (stop_reason={message.stop_reason})")
-
-    docs = {
-        "changelog_entry": _strip_fences(docs_obj.changelog_entry),
-        "release_notes": _strip_fences(docs_obj.release_notes),
-    }
+    docs = {k: _strip_fences(v) for k, v in raw.items()}
     (work / "CHANGELOG_ENTRY.md").write_text(docs["changelog_entry"])
     (work / "RELEASE_NOTES.md").write_text(docs["release_notes"])
-    u = message.usage
-    print(f"model={message.model} input_tokens={u.input_tokens} output_tokens={u.output_tokens}")
 
     errs = validate(docs, args.version, known_prs)
     if errs:
@@ -368,6 +480,13 @@ def main() -> None:
         sp.add_argument("--work-dir", type=Path, default=DEFAULT_WORK_DIR)
         if name == "collect":
             sp.add_argument("--previous-tag", help="defaults to the most recent tag")
+        if name == "generate":
+            sp.add_argument(
+                "--backend", choices=("auto", "api", "claude-cli"), default="auto",
+                help="auto (default): claude-cli if RELEASE_CLAUDE_CODE_OAUTH_TOKEN is set, "
+                     "else api. claude-cli runs Claude Code on a subscription; "
+                     "api calls the Anthropic API with an API key.",
+            )
     args = p.parse_args()
     try:
         {"collect": cmd_collect, "generate": cmd_generate, "apply": cmd_apply}[args.cmd](args)

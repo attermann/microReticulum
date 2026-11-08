@@ -2,11 +2,27 @@
 
 Releases are cut by two GitHub Actions workflows plus one manual step:
 
-1. **Prepare Release** (`release-prepare.yml`) uses Claude to generate a `CHANGELOG.md` entry and release notes from all changes since the previous tag. It also bumps the version in `library.json` and `library.properties`, then pushes everything to a `release/<version>` branch.
+1. **Prepare Release** (`release-prepare.yml`) uses Claude, through either a Claude Code subscription or the Anthropic API, to generate a `CHANGELOG.md` entry and release notes from all changes since the previous tag. It also bumps the version in `library.json` and `library.properties`, then pushes everything to a `release/<version>` branch.
 2. **You** open a pull request from that branch, review it, and merge it. The workflow doesn't open the PR itself. Letting `GITHUB_TOKEN` create PRs needs a repository setting that also lets Actions *approve* PRs, and CI doesn't run on PRs opened by `GITHUB_TOKEN`.
 3. **Tag Release** (`release-tag.yml`) runs when the PR is merged. It creates the annotated tag `<version>` with the release notes as the tag message, plus a draft GitHub Release.
 
-One-time setup: add a `RELEASE_ANTHROPIC_API_KEY` repository secret, under **Settings → Secrets and variables → Actions**. Use a key reserved for release generation, separate from keys used by other automation. No other repository settings are needed.
+## One-time setup
+
+Add **one** of these repository secrets under **Settings → Secrets and variables → Actions**. No other repository settings are needed.
+
+| Secret | Uses | How to get it |
+|---|---|---|
+| `RELEASE_CLAUDE_CODE_OAUTH_TOKEN` | Your Claude Code subscription (Pro, Max, Ultra, Team or Enterprise), through the Claude Code CLI | Run `claude setup-token` on your machine and copy the printed token. It's valid for one year. |
+| `RELEASE_ANTHROPIC_API_KEY` | The Anthropic API, billed per token | Create a key in the Claude Console that's reserved for release generation, separate from keys used by other automation. |
+
+If both secrets are set, **`RELEASE_CLAUDE_CODE_OAUTH_TOKEN` takes precedence**. Delete it to switch back to the API key.
+
+Notes on the subscription option:
+
+- **Shared allowance:** release runs draw from the same allowance as your interactive Claude Code use, including its five-hour and weekly limits.
+- **Tied to one account:** the token belongs to the account that ran `claude setup-token`. Use the API key instead for a secret shared across an organization.
+- **Generation settings:** both options use the same model (`claude-opus-5-5`) and effort (`high`). Only the API option has server-side refusal fallback.
+- **CLI version:** the workflow installs a pinned Claude Code version (`CLAUDE_CODE_VERSION` in `release-prepare.yml`). Bump it occasionally.
 
 ## From the GitHub portal
 
@@ -46,14 +62,25 @@ gh release edit 0.5.1 --draft=false   # publish the draft release
 
 ## Previewing locally
 
-To preview the generated documents without pushing a branch, run the generator in a virtualenv:
+To preview the generated documents without pushing a branch, run the generator on your machine.
+
+With your Claude Code subscription, which uses your existing `claude` login and needs no Python packages:
+
+```bash
+python3 scripts/release/generate_release_notes.py collect  --version 0.5.1
+python3 scripts/release/generate_release_notes.py generate --version 0.5.1 --backend claude-cli
+```
+
+With an API key, using a virtualenv:
 
 ```bash
 python3 -m venv .venv-release
 .venv-release/bin/pip install -r scripts/release/requirements.txt
-export ANTHROPIC_API_KEY=...
+export RELEASE_ANTHROPIC_API_KEY=...
 .venv-release/bin/python scripts/release/generate_release_notes.py collect  --version 0.5.1
 .venv-release/bin/python scripts/release/generate_release_notes.py generate --version 0.5.1
 ```
+
+Without `--backend`, `generate` picks the same way the workflow does: it uses `RELEASE_CLAUDE_CODE_OAUTH_TOKEN` if set, and otherwise `RELEASE_ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY`). With `--backend claude-cli`, any API key in your environment is ignored, so your subscription login is used.
 
 The output is written to `release/work/CHANGELOG_ENTRY.md` and `release/work/RELEASE_NOTES.md`. The `apply` subcommand makes the same repository changes as the workflow. Releases should still normally go through the workflow, so that the tag is created from a merged PR.
