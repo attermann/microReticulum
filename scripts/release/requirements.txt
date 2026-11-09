@@ -1,0 +1,2 @@
+anthropic==2.6.0
+pydantic==2.14.3

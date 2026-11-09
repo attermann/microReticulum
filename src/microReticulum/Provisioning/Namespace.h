@@ -71,6 +71,9 @@ namespace RNS { namespace Provisioning {
 		bool draft(fid_t field_id, Value& out) const;
 		bool has_draft(fid_t field_id) const;
 
+		// True iff at least one draft entry exists in this namespace.
+		bool has_any_draft() const { return !_draft.empty(); }
+
 		// Write to draft after validating against the field's constraint.
 		// Returns false if the field is unknown, read-only, or invalid.
 		bool set_draft(fid_t field_id, const Value& v);
@@ -110,6 +113,13 @@ namespace RNS { namespace Provisioning {
 		bool has_on_commit() const { return (bool)_on_commit; }
 		const CommitCallback& on_commit_callback() const { return _on_commit; }
 
+		// CRC32 of this namespace's schema entry as it would appear in the
+		// GetSchema payload. Computed by Provisioner::begin() after all fields
+		// are registered and surfaced in GetCapabilities so clients can cache
+		// each namespace's schema independently.
+		uint32_t schema_hash() const { return _schema_hash; }
+		void schema_hash(uint32_t h) { _schema_hash = h; }
+
 	private:
 		nid_t _id;
 		fstring_t _name;
@@ -120,6 +130,7 @@ namespace RNS { namespace Provisioning {
 		std::unordered_map<fid_t, Value> _working;
 		std::unordered_map<fid_t, Value> _draft;
 		CommitCallback _on_commit;
+		uint32_t _schema_hash = 0;
 		bool _dirty_for_persist = false;
 	};
 

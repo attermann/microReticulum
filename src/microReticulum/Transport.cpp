@@ -1817,6 +1817,7 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 		if (!Type::isNan(interface.r_stat_snr()))  packet.snr(interface.r_stat_snr());
 		if (!Type::isNan(interface.r_stat_q()))    packet.q(interface.r_stat_q());
 	}
+	TRACEF("Transport::inbound: packet rssi: %d dBm snr: %d dB q: %u%%", (int16_t)packet.rssi(), (int16_t)packet.snr(), (uint8_t)packet.q());
 
 	if (_local_client_interfaces.size() > 0) {
 		if (is_local_client_interface(interface)) {

@@ -355,8 +355,8 @@ Mechanics:
 - Each `.register_namespace()` call pushes onto a per-`Provisioner` scope stack and uses the current scope top as the new namespace's parent.
 - Each `.end()` pops one level. Forgetting `.end()` is caught at `Provisioner::begin()` — the scope stack must be empty by the time `begin()` runs (or it gets cleared with a warning).
 - The Registry remains **flat** internally — every namespace is a top-level entry with an optional `parent_id`. Lookups stay O(1) by id.
-- On disk: `Interfaces.msgpack`, `Interfaces.LoRa.msgpack`, `Interfaces.UDP.msgpack`. Three files at the top level of the storage directory.
-- On the wire: `GET_STATE` keeps each namespace at the top level keyed by its own id. The tree shape is conveyed only through the schema's `parent_id`. Clients reconstruct the tree client-side.
+- On disk: `ns<id>.msgpack` — one file per namespace, keyed by numeric id. The tree shape is not reflected in filenames.
+- On the wire: `GET_STATE` returns values in a flat `{ns_id: {field_id: value, ...}, ...}` map (nested inside the response body's `Values` key). The tree shape is conveyed only through the schema's `parent_id`. Clients reconstruct the tree client-side.
 
 Cycle detection runs at registration time — declaring a parent that walks up to the new namespace itself is refused.
 
@@ -724,7 +724,8 @@ public:
     Registry& registry();
     Storage* storage();
 
-    static constexpr uint16_t SCHEMA_VERSION = 1;
+    static constexpr uint16_t SCHEMA_VERSION = 2;
+    uint32_t schema_hash() const;
 };
 ```
 
@@ -766,7 +767,7 @@ using CommitCallback = std::function<void(Namespace&)>;
 ### `Value` (tagged variant)
 
 ```cpp
-enum class Type : uint8_t { None=0, Bool=1, Int=2, Float=3, String=4, Bytes=5, Enum=6, BytesList=7 };
+enum class Type : uint8_t { None=0, Bool=1, Int=2, Float=3, String=4, Bytes=5, Enum=6, BytesList=7, Void=8 };
 
 class Value {
 public:

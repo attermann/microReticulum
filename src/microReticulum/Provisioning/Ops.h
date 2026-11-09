@@ -69,11 +69,27 @@ namespace RNS { namespace Provisioning {
 		constexpr uint16_t NeedsReboot    = 2;
 		constexpr uint16_t DraftHasReboot = 2;	// alias for SetState
 		constexpr uint16_t FieldErrors    = 3;
+		// Post-op state returned in Commit and SetState responses when
+		// IncludeState was requested. Slots 4-6 avoid collision with
+		// Applied(1) / NeedsReboot(2) / FieldErrors(3) in the enclosing
+		// response body. Commit only emits Values+Hash (drafts are cleared
+		// by commit); SetState emits Values+Drafts+Hash (drafts persist).
+		constexpr uint16_t PostOpValues   = 4;
+		constexpr uint16_t PostOpDrafts   = 5;
+		constexpr uint16_t PostOpHash     = 6;
 
-		// GetState / SetState request flags
+		// GetState / SetState / Commit request flags
 		constexpr uint16_t NamespaceFilter = 1;
-		constexpr uint16_t Pending         = 2;
+		constexpr uint16_t Draft           = 2;	// GetState request: true = also include drafts alongside working
 		constexpr uint16_t State           = 3;	// the {ns: {field: value}} map
+		constexpr uint16_t PriorHash       = 4;	// GetState request: client-supplied CRC32 for cache short-circuit
+		constexpr uint16_t IncludeState    = 5;	// Commit request: return post-commit Values in the response
+
+		// GetState response body
+		constexpr uint16_t Values          = 1;	// {ns_id: {field_id: value}} map (working values)
+		constexpr uint16_t Drafts          = 2;	// sparse {ns_id: {field_id: value}} — only ns/fields with drafts
+		constexpr uint16_t Hash            = 3;	// CRC32 over the response body; echoed back as PriorHash
+		constexpr uint16_t Unchanged       = 4;	// present iff the client's PriorHash matched
 
 		// GetInfo
 		constexpr uint16_t FirmwareVersion = 1;
@@ -90,6 +106,8 @@ namespace RNS { namespace Provisioning {
 		constexpr uint16_t NsName           = 2;
 		constexpr uint16_t NsFields         = 3;
 		constexpr uint16_t NsParent         = 4;	// optional parent ns id (0 = root)
+		constexpr uint16_t NsFieldCount     = 5;	// GetCapabilities map: number of fields
+		constexpr uint16_t NsSchemaHash     = 6;	// GetCapabilities map: per-namespace CRC32
 		constexpr uint16_t FieldId          = 1;
 		constexpr uint16_t FieldName        = 2;
 		constexpr uint16_t FieldType        = 3;

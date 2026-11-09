@@ -117,7 +117,7 @@ RNS::Bytes response = RNS::Provisioning::Provisioner::instance().handle_message(
 send_to_transport(response);
 ```
 
-Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, and `FACTORY_RESET`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/microReticulum/Provisioning/Ops.h` for op-id and key constants.
+Supported operations are `GET_SCHEMA`, `GET_INFO`, `GET_CAPABILITIES`, `GET_STATE`, `SET_STATE`, `COMMIT`, `DISCARD`, `FACTORY_RESET`, and `REBOOT`. The envelope is a 3-element MsgPack array `[op_id, seq, payload]`; see `src/microReticulum/Provisioning/Ops.h` for op-id and key constants, and [`docs/provisioning_client_guide.md`](docs/provisioning_client_guide.md) for the full wire format (per-op request/response shapes, `Draft`/`IncludeState`/`PriorHash` round-trip optimizations, and heatshrink-compressed responses).
 
 ### Manual operations (no wire)
 
@@ -370,3 +370,17 @@ Use of nrf52840 based boards as a transport node will necessitate the use of ext
 
 Please open an Issue if you have trouble building ior using the API, and feel free to start a new Discussion for anything else.
 
+## Contributing
+
+Contributions to **microReticulum** are welcome and appreciated.
+
+Before opening an issue or submitting a pull request, please read the project's **[CONTRIBUTING.md](CONTRIBUTING.md)** guide. It describes the expectations for bug reports, feature requests, coding standards, testing, and pull requests.
+
+In particular, contributors are asked to:
+
+- Clearly identify the problem being solved before describing the proposed solution.
+- Keep pull requests focused on a **single logical concern**.
+- Test changes thoroughly, including on **all affected platforms** when modifying shared code.
+- Update documentation when introducing user-visible changes.
+
+Following these guidelines helps streamline reviews, improve software quality, and make it easier to integrate contributions.
