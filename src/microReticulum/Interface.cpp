@@ -16,13 +16,50 @@
 
 #include "Identity.h"
 #include "Transport.h"
+#include "Reticulum.h"
+#include "Cryptography/HKDF.h"
 #include "Utilities/OS.h"
+
+#include <string.h>
 
 using namespace RNS;
 using namespace RNS::Type::Interface;
 using namespace RNS::Utilities;
 
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY | MODE_ROAMING;
+
+// Ported from the IFAC implementation of RTNode-HeltecV4's microReticulum
+// copy (Apache-2.0), itself following Python RNS Reticulum._add_interface():
+// ifac_key = HKDF(64, SHA256(SHA256(netname) || SHA256(netkey)), IFAC_SALT),
+// used both as a signing identity and as the mask salt.
+void Interface::setup_ifac(const char* ifac_netname, const char* ifac_netkey) {
+	assert(_impl);
+	bool has_netname = (ifac_netname != nullptr && ifac_netname[0] != '\0');
+	bool has_netkey = (ifac_netkey != nullptr && ifac_netkey[0] != '\0');
+	if (!has_netname && !has_netkey) {
+		_impl->_ifac_identity = {Bytes::NONE};
+		_impl->_ifac_key = {Bytes::NONE};
+		_impl->_ifac_id = {Type::NONE};
+		return;
+	}
+
+	Bytes ifac_origin;
+	if (has_netname) {
+		ifac_origin += Identity::full_hash(Bytes((const uint8_t*)ifac_netname, strlen(ifac_netname)));
+	}
+	if (has_netkey) {
+		ifac_origin += Identity::full_hash(Bytes((const uint8_t*)ifac_netkey, strlen(ifac_netkey)));
+	}
+	Bytes ifac_origin_hash = Identity::full_hash(ifac_origin);
+	_impl->_ifac_key = Cryptography::hkdf(64, ifac_origin_hash, Bytes(IFAC_SALT, IFAC_SALT_SIZE));
+
+	Identity ifac_id(false);
+	ifac_id.load_private_key(_impl->_ifac_key);
+	_impl->_ifac_id = ifac_id;
+	// Non-empty = IFAC on (Transport tests it with operator bool).
+	_impl->_ifac_identity = ifac_id.get_public_key();
+	DEBUGF("Interface::setup_ifac: IFAC enabled on %s, ifac_size=%d", _impl->_name.c_str(), _impl->_ifac_size);
+}
 
 void InterfaceImpl::handle_outgoing(const Bytes& data) {
 	//TRACEF("InterfaceImpl.handle_outgoing: data: %s", data.toHex().c_str());

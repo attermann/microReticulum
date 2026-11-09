@@ -95,6 +95,9 @@ namespace RNS {
 		std::string _name;
 		bool _online = false;
 		Bytes _ifac_identity;
+		Bytes _ifac_key;
+		Identity _ifac_id = {Type::NONE};
+		uint8_t _ifac_size = 8;  // Python RNS: DEFAULT_IFAC_SIZE of LoRa (RNode) interfaces
 		Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 		uint32_t _bitrate = 0;
 		uint16_t _HW_MTU = 0;
@@ -254,6 +257,15 @@ namespace RNS {
 		inline bool online() const { assert(_impl); return _impl->_online; }
 		inline std::string name() const { assert(_impl); return _impl->_name; }
 		inline const Bytes& ifac_identity() const { assert(_impl); return _impl->_ifac_identity; }
+		inline const Bytes& ifac_key() const { assert(_impl); return _impl->_ifac_key; }
+		inline const Identity& ifac_id() const { assert(_impl); return _impl->_ifac_id; }
+		inline uint8_t ifac_size() const { assert(_impl); return _impl->_ifac_size; }
+		inline void ifac_size(uint8_t size) { assert(_impl); _impl->_ifac_size = size; }
+		// Interface access codes (IFAC), as Python RNS: packets carry a
+		// truncated Ed25519 signature and are masked with a key derived
+		// from the network name and/or passphrase. Empty/null for both
+		// leaves IFAC off.
+		void setup_ifac(const char* ifac_netname, const char* ifac_netkey);
 		inline Type::Interface::modes mode() const { assert(_impl); return _impl->_mode; }
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }
