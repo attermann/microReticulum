@@ -1016,6 +1016,22 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
             // Run interface-related jobs
 			if (OS::time() > (_interface_last_jobs + _interface_jobs_interval)) {
 				prioritize_interfaces();
+				// Announces that outbound() had to queue are sent from here.
+				// RNS arms a timer per interface for this; this port has none,
+				// so the queues are polled and each interface's own announce
+				// cap decides whether anything actually goes out. Nothing
+				// called process_announce_queue() at all before, and outbound()
+				// will not transmit an announce while an interface has one
+				// queued -- so an interface that queued a single announce
+				// forwarded no further announce for the rest of the uptime.
+				try {
+					for (auto& interface : _interfaces) {
+						interface.process_announce_queue();
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("Error while processing queued per-interface announces: %s", e.what());
+				}
 				// TODO
 /*
 				try {
@@ -1402,12 +1418,7 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 
 								bool queued_announces = (interface.announce_queue().size() > 0);
 								if (!queued_announces && outbound_time > interface.announce_allowed_at()) {
-									uint16_t wait_time = 0;
-									if (interface.bitrate() > 0 && interface.announce_cap() > 0) {
-										uint16_t tx_time = (packet.raw().size() * 8) / interface.bitrate();
-										wait_time = (tx_time / interface.announce_cap());
-									}
-									interface.announce_allowed_at(outbound_time + wait_time);
+									interface.announce_allowed_at(outbound_time + interface.announce_wait_time(packet.raw().size()));
 								}
 								else {
 									should_transmit = false;
@@ -3793,12 +3804,7 @@ will announce it.
 				return;
 			}
 			else {
-				//p tx_time   = ((len(path_request_data)+RNS.Reticulum.HEADER_MINSIZE)*8) / on_interface.bitrate
-				uint32_t wait_time = 0;
-				if ( on_interface.bitrate() > 0 && on_interface.announce_cap() > 0) {
-					uint32_t tx_time = ((path_request_data.size() + Type::Reticulum::HEADER_MINSIZE)*8) / on_interface.bitrate();
-					wait_time = (tx_time / on_interface.announce_cap());
-				}
+				double wait_time = on_interface.announce_wait_time(path_request_data.size() + Type::Reticulum::HEADER_MINSIZE);
 				const_cast<Interface&>(on_interface).announce_allowed_at(now + wait_time);
 			}
 		}

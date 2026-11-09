@@ -210,6 +210,22 @@ namespace RNS {
 		inline const Bytes get_hash() const { assert(_impl); return _impl->get_hash(); }
 		void process_announce_queue();
 
+		// How long the announce cap makes this interface wait after sending an
+		// announce of this size: the packet's airtime divided by the share of
+		// the link announces are allowed to take. Both the callers that need it
+		// -- Transport::outbound when it lets an announce through, and
+		// process_announce_queue when it sends a queued one -- ask here, so the
+		// two cannot disagree about when the next announce is due. Answered in
+		// seconds, in floating point: computed in integers, as one caller used
+		// to, every wait below one second rounds to none at all, which is every
+		// wait an interface faster than a slow LoRa channel ever has.
+		inline double announce_wait_time(size_t tx_size) const {
+			assert(_impl);
+			if (_impl->_bitrate == 0 || _impl->_announce_cap <= 0.0) return 0.0;
+			double tx_time = (double)(tx_size * 8) / (double)_impl->_bitrate;
+			return tx_time / (double)_impl->_announce_cap;
+		}
+
 		// CBA ACCUMULATES
 		inline void add_announce(AnnounceEntry& entry) { assert(_impl); _impl->_announce_queue.push_back(entry); }
 

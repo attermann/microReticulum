@@ -16,9 +16,11 @@
 
 #include "Identity.h"
 #include "Transport.h"
+#include "Utilities/OS.h"
 
 using namespace RNS;
 using namespace RNS::Type::Interface;
+using namespace RNS::Utilities;
 
 /*static*/ uint8_t Interface::DISCOVER_PATHS_FOR = MODE_ACCESS_POINT | MODE_GATEWAY | MODE_ROAMING;
 
@@ -86,51 +88,68 @@ void Interface::handle_incoming(const Bytes& data) {
     }
 }
 
+// Send an announce that Transport::outbound had to queue, as often as the
+// interface's announce cap allows one out.
+//
+// RNS arms a timer for the cap's wait and sends the next announce when it
+// fires. There are no timers here, so Transport::jobs calls this on every
+// interface and the cap is kept by _announce_allowed_at instead: the interval
+// between calls decides only how promptly a queue drains, never how fast
+// announces leave. One per call is what the timer does per firing, and is far
+// more than the arrival rate a queue forms from.
+//
+// While this had no body nothing ever drained the queue, and outbound()
+// refuses to transmit an announce onto an interface that has any queued: the
+// first announce an interface ever queued stopped it forwarding announces for
+// the rest of the uptime, silently and with no way back short of a reboot.
 void Interface::process_announce_queue() {
-/*
-	if not hasattr(self, "announce_cap"):
-		self.announce_cap = RNS.Reticulum.ANNOUNCE_CAP
+	assert(_impl);
+	if (_impl->_announce_queue.empty()) return;
 
-	if hasattr(self, "announce_queue"):
-		try:
-			now = time.time()
-			stale = []
-			for a in self.announce_queue:
-				if now > a["time"]+RNS.Reticulum.QUEUED_ANNOUNCE_LIFE:
-					stale.append(a)
+	try {
+		double now = OS::time();
 
-			for s in stale:
-				if s in self.announce_queue:
-					self.announce_queue.remove(s)
+		// An announce that has been waiting this long is not worth the airtime
+		// any more: whoever sent it has almost certainly announced again since.
+		size_t held = _impl->_announce_queue.size();
+		_impl->_announce_queue.remove_if([now](const AnnounceEntry& entry) {
+			return now > entry._time + Type::Reticulum::QUEUED_ANNOUNCE_LIFE;
+		});
+		if (_impl->_announce_queue.size() < held) {
+			DEBUGF("Dropped %u stale queued announce(s) on %s",
+				(unsigned)(held - _impl->_announce_queue.size()), toString().c_str());
+		}
+		if (_impl->_announce_queue.empty() || now < _impl->_announce_allowed_at) return;
 
-			if len(self.announce_queue) > 0:
-				min_hops = min(entry["hops"] for entry in self.announce_queue)
-				entries = list(filter(lambda e: e["hops"] == min_hops, self.announce_queue))
-				entries.sort(key=lambda e: e["time"])
-				selected = entries[0]
+		// Fewest hops first, and among those the one that has waited longest,
+		// so a queue draining slowly still carries the nearest path onwards
+		// first and nothing in it can be starved by later arrivals.
+		auto selected = _impl->_announce_queue.begin();
+		for (auto entry = _impl->_announce_queue.begin(); entry != _impl->_announce_queue.end(); ++entry) {
+			if (entry->_hops < selected->_hops ||
+				(entry->_hops == selected->_hops && entry->_time < selected->_time)) {
+				selected = entry;
+			}
+		}
 
-				double now = OS::time();
-				uint32_t wait_time = 0;
-				if (_impl->_bitrate > 0 && _impl->_announce_cap > 0) {
-					uint32_t tx_time = (len(selected["raw"])*8) / _impl->_bitrate;
-					wait_time = (tx_time / _impl->_announce_cap);
-				}
-				_impl->_announce_allowed_at = now + wait_time;
+		double wait_time = announce_wait_time(selected->_raw.size());
+		_impl->_announce_allowed_at = now + wait_time;
 
-				self.on_outgoing(selected["raw"])
+		Bytes raw(selected->_raw);
+		_impl->_announce_queue.erase(selected);
+		DEBUGF("Sending queued announce on %s, %u still queued, next allowed in %.1f s",
+			toString().c_str(), (unsigned)_impl->_announce_queue.size(), wait_time);
 
-				if selected in self.announce_queue:
-					self.announce_queue.remove(selected)
-
-				if len(self.announce_queue) > 0:
-					timer = threading.Timer(wait_time, self.process_announce_queue)
-					timer.start()
-
-		except Exception as e:
-			self.announce_queue = []
-			RNS.log("Error while processing announce queue on "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
-			RNS.log("The announce queue for this interface has been cleared.", RNS.LOG_ERROR)
-*/
+		if (Transport::transmit(*this, raw)) {
+			sent_announce();
+		}
+	}
+	catch (const std::exception& e) {
+		_impl->_announce_queue.clear();
+		ERRORF("Error while processing the announce queue on %s. The contained exception was: %s",
+			toString().c_str(), e.what());
+		ERROR("The announce queue for this interface has been cleared.");
+	}
 }
 
 /*
