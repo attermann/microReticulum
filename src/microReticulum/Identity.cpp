@@ -145,6 +145,43 @@ bool Identity::load_private_key(const Bytes& prv_bytes) {
 }
 
 /*
+Load private keys that live outside this process, such as in a secure element.
+
+The key objects carry their public halves and perform sign and exchange
+themselves (see the External constructors of X25519PrivateKey and
+Ed25519PrivateKey). Whatever private_bytes() they expose is what gets
+persisted; for external keys that is nothing, so to_file() will refuse.
+
+:param prv: The X25519 private key object.
+:param sig_prv: The Ed25519 private key object.
+:returns: True if the keys were loaded, otherwise False.
+*/
+bool Identity::load_private_keys(X25519PrivateKey::Ptr prv, Ed25519PrivateKey::Ptr sig_prv) {
+	assert(_object);
+	if (!prv || !sig_prv) {
+		ERROR("Failed to load identity keys: both key objects are required");
+		return false;
+	}
+
+	_object->_prv           = prv;
+	_object->_prv_bytes     = prv->private_bytes();
+	_object->_sig_prv       = sig_prv;
+	_object->_sig_prv_bytes = sig_prv->private_bytes();
+
+	_object->_pub           = prv->public_key();
+	assert(_object->_pub);
+	_object->_pub_bytes     = _object->_pub->public_bytes();
+
+	_object->_sig_pub       = sig_prv->public_key();
+	assert(_object->_sig_pub);
+	_object->_sig_pub_bytes = _object->_sig_pub->public_bytes();
+
+	update_hashes();
+
+	return true;
+}
+
+/*
 Load a public key into the instance.
 
 :param pub_bytes: The public key as *bytes*.
@@ -203,6 +240,10 @@ communication for the identity. Be very careful with this method.
 */
 bool Identity::to_file(const char* path) {
 	TRACE("Writing identity key to storage...");
+	if (get_private_key().size() == 0) {
+		WARNING("Identity has no private key bytes to write (keys held externally?)");
+		return false;
+	}
 #if defined(RNS_USE_FS)
 	try {
 		return (OS::write_file(path, get_private_key()) == get_private_key().size());
