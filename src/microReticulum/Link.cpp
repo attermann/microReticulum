@@ -473,6 +473,7 @@ void Link::validate_proof(const Packet& packet) {
 					_object->_status = Type::Link::ACTIVE;
 					_object->_activated_at = OS::time();
 					_object->_last_proof = _object->_activated_at;
+					update_keepalive();
 					Transport::activate_link(*this);
 					VERBOSEF("Link %s established with %s, RTT is %.3f s", toString().c_str(), _object->_destination.toString().c_str(), OS::round(_object->_rtt, 3));
 					
@@ -636,6 +637,7 @@ void Link::rtt_packet(const Packet& packet) {
 			_object->_rtt = std::max(measured_rtt, rtt);
 			_object->_status = Type::Link::ACTIVE;
 			_object->_activated_at = OS::time();
+			update_keepalive();
 
 			//p if _object->_rtt != None and _object->_establishment_cost != None and _object->_rtt > 0 and _object->_establishment_cost > 0:
 			if (_object->_rtt != 0.0 && _object->_establishment_cost != 0.0 && _object->_rtt > 0 and _object->_establishment_cost > 0) {
@@ -780,6 +782,9 @@ void Link::had_outbound(bool is_keepalive /*= false*/) {
 	if (!is_keepalive) {
 		_object->_last_data = _object->_last_outbound;
 	}
+	else {
+		_object->_last_keepalive = _object->_last_outbound;
+	}
 }
 
 /*
@@ -880,86 +885,74 @@ void Link::tick_resources() {
 	for (auto& r : outgoing) r.__watchdog_job();
 }
 
-// CBA TODO Implement watchdog
+// No thread: Transport::jobs() calls __watchdog_job() for each link.
 void Link::start_watchdog() {
-	//z thread = threading.Thread(target=_object->___watchdog_job)
-	//z thread.daemon = True
-	//z thread.start()
 }
-
-/*p TODO
 
 void Link::__watchdog_job() {
 	assert(_object);
-	while not _object->_status == Type::Link::CLOSED:
-		while (_object->_watchdog_lock):
-			rtt_wait = 0.025
-			if hasattr(self, "rtt") and _object->_rtt:
-				rtt_wait = _object->_rtt
+	if (_object->_watchdog_lock) {
+		return;
+	}
+	const double now = OS::time();
+	switch (_object->_status) {
+		case Type::Link::PENDING:
+		case Type::Link::HANDSHAKE:
+		{
+			if (now >= _object->_request_time + _object->_establishment_timeout) {
+				if (_object->_status == Type::Link::PENDING) {
+					VERBOSE("Link establishment timed out");
+				}
+				else if (_object->_initiator) {
+					DEBUG("Timeout waiting for link request proof");
+				}
+				else {
+					DEBUG("Timeout waiting for RTT packet from link initiator");
+				}
+				_object->_status = Type::Link::CLOSED;
+				_object->_teardown_reason = Type::Link::TIMEOUT;
+				link_closed();
+			}
+			break;
+		}
+		case Type::Link::ACTIVE:
+		{
+			const double last_inbound = std::max(std::max(_object->_last_inbound, _object->_last_proof), _object->_activated_at);
+			if (now >= last_inbound + _object->_keepalive || now >= _object->_last_outbound + _object->_keepalive) {
+				if (_object->_initiator && now >= _object->_last_keepalive + _object->_keepalive) {
+					send_keepalive();
+				}
+				if (now >= last_inbound + _object->_stale_time) {
+					_object->_status = Type::Link::STALE;
+				}
+			}
+			break;
+		}
+		case Type::Link::STALE:
+		{
+			const double last_inbound = std::max(std::max(_object->_last_inbound, _object->_last_proof), _object->_activated_at);
+			const double grace = _object->_rtt * _object->_keepalive_timeout_factor + Type::Link::STALE_GRACE;
+			if (now >= last_inbound + _object->_stale_time + grace) {
+				Packet(*this, _object->_link_id).context(Type::Packet::LINKCLOSE).send();
+				had_outbound();
+				_object->_status = Type::Link::CLOSED;
+				_object->_teardown_reason = Type::Link::TIMEOUT;
+				link_closed();
+			}
+			break;
+		}
+		default:
+			break;
+	}
+}
 
-			sleep(max(rtt_wait, 0.025))
-
-		if not _object->_status == Type::Link::CLOSED:
-			# Link was initiated, but no response
-			# from destination yet
-			if _object->_status == PENDING:
-				next_check = _object->_request_time + _object->_establishment_timeout
-				sleep_time = next_check - OS::time()
-				if OS::time() >= _object->_request_time + _object->_establishment_timeout:
-					RNS.log("Link establishment timed out", RNS.LOG_VERBOSE)
-					_object->_status = Type::Link::CLOSED
-					_object->_teardown_reason = TIMEOUT
-					link_closed()
-					sleep_time = 0.001
-
-			elif _object->_status == Type::Link::HANDSHAKE:
-				next_check = _object->_request_time + _object->_establishment_timeout
-				sleep_time = next_check - OS::time()
-				if OS::time() >= _object->_request_time + _object->_establishment_timeout:
-					_object->_status = Type::Link::CLOSED
-					_object->_teardown_reason = TIMEOUT
-					link_closed()
-					sleep_time = 0.001
-
-					if _object->_initiator:
-						RNS.log("Timeout waiting for link request proof", RNS.LOG_DEBUG)
-					else:
-						RNS.log("Timeout waiting for RTT packet from link initiator", RNS.LOG_DEBUG)
-
-			elif _object->_status == Type::Link::ACTIVE:
-				activated_at = _object->_activated_at if _object->_activated_at != None else 0
-				last_inbound = max(max(_object->_last_inbound, _object->_last_proof), activated_at)
-
-				if OS::time() >= last_inbound + _object->_keepalive:
-					if _object->_initiator:
-						send_keepalive()
-
-					if OS::time() >= last_inbound + _object->_stale_time:
-						sleep_time = _object->_rtt * _object->_keepalive_timeout_factor + STALE_GRACE
-						_object->_status = STALE
-					else:
-						sleep_time = _object->_keepalive
-				
-				else:
-					sleep_time = (last_inbound + _object->_keepalive) - OS::time()
-
-			elif _object->_status == STALE:
-				sleep_time = 0.001
-				_object->_status = Type::Link::CLOSED
-				_object->_teardown_reason = TIMEOUT
-				link_closed()
-
-
-			if sleep_time == 0:
-				RNS.log("Warning! Link watchdog sleep time of 0!", RNS.LOG_ERROR)
-			if sleep_time == None or sleep_time < 0:
-				RNS.log("Timing error! Tearing down link "+str(self)+" now.", RNS.LOG_ERROR)
-				teardown()
-				sleep_time = 0.1
-
-			sleep(sleep_time)
-
-*/
+void Link::update_keepalive() {
+	assert(_object);
+	//p self.keepalive = max(min(self.rtt*(Link.KEEPALIVE_MAX/Link.KEEPALIVE_MAX_RTT), Link.KEEPALIVE_MAX), Link.KEEPALIVE_MIN)
+	const double keepalive = _object->_rtt * (Type::Link::KEEPALIVE_MAX / Type::Link::KEEPALIVE_MAX_RTT);
+	_object->_keepalive = (uint16_t)std::max(std::min(keepalive, (double)Type::Link::KEEPALIVE_MAX), (double)Type::Link::KEEPALIVE_MIN);
+	_object->_stale_time = _object->_keepalive * Type::Link::STALE_FACTOR;
+}
 
 void Link::send_keepalive() {
 	assert(_object);
@@ -1842,6 +1835,11 @@ void Link::request_time(double time) {
 void Link::last_inbound(double time) {
 	assert(_object);
 	_object->_last_inbound = time;
+}
+
+void Link::last_proof(double time) {
+	assert(_object);
+	_object->_last_proof = time;
 }
 
 void Link::last_outbound(double time) {

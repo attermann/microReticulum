@@ -501,11 +501,14 @@ DestinationEntry empty_destination_entry;
 
 	std::vector<Packet> outgoing;
 	std::map<Bytes, Interface> path_requests;	// destination_hash -> blocked_interface ({NONE} = no interface to avoid)
+	std::vector<Link> watched_links;
+	bool jobs_ran = false;
 	int count;
 	_jobs_running = true;
 
 	try {
 		if (!_jobs_locked) {
+			jobs_ran = true;
 
 			// Process active and pending link lists
 			if (OS::time() > (_links_last_checked + _links_check_interval)) {
@@ -547,48 +550,10 @@ DestinationEntry empty_destination_entry;
 					}
 				}
 
-				// Pump each active link's resource watchdogs. Resource
-				// retransmit/timeout retries depend on this — without it,
-				// a dropped resource part stalls the transfer forever
-				// (we never re-request the missing part, server gives up).
-				// const_cast mirrors the pattern used elsewhere when
-				// iterating std::set<Link> — the wrapper is const but
-				// shared_ptr-backed mutation is the codebase convention.
-				for (auto& link_const : active_links) {
-					Link& link = const_cast<Link&>(link_const);
-					if (link.status() != Type::Link::CLOSED) {
-						link.tick_resources();
-					}
-				}
+				watched_links.insert(watched_links.end(), _pending_links.begin(), _pending_links.end());
+				watched_links.insert(watched_links.end(), _active_links.begin(), _active_links.end());
 
 				_links_last_checked = OS::time();
-			}
-
-			// Process receipts list for timed-out packets
-			if (OS::time() > (_receipts_last_checked + _receipts_check_interval)) {
-				while (_receipts.size() > Type::Transport::MAX_RECEIPTS) {
-					//p culled_receipt = Transport.receipts.pop(0)
-					PacketReceipt culled_receipt = _receipts.front();
-					_receipts.pop_front();
-					culled_receipt.set_timeout(-1);
-					culled_receipt.check_timeout();
-				}
-
-				std::list<PacketReceipt> cull_receipts;
-				for (auto& receipt : _receipts) {
-					receipt.check_timeout();
-					if (receipt.status() != Type::PacketReceipt::SENT) {
-						//p if receipt in Transport.receipts:
-						//p 	Transport.receipts.remove(receipt)
-						cull_receipts.push_back(receipt);
-					}
-				}
-				// CBA since modifying of collection while iterating is forbidden
-				for (auto& receipt : cull_receipts) {
-					_receipts.remove(receipt);
-				}
-
-				_receipts_last_checked = OS::time();
 			}
 
 			// Process announces needing retransmission
@@ -1066,6 +1031,44 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	}
 
 	_jobs_running = false;
+
+	// Watchdogs send, and outbound() blocks while jobs run, so they run after.
+	for (auto& link : watched_links) {
+		if (link.status() != Type::Link::CLOSED) {
+			link.__watchdog_job();
+		}
+		if (link.status() != Type::Link::CLOSED) {
+			link.tick_resources();
+		}
+	}
+
+	// Process receipts list for timed-out packets
+	// Runs after jobs: a timeout callback may send.
+	if (jobs_ran && OS::time() > (_receipts_last_checked + _receipts_check_interval)) {
+		while (_receipts.size() > Type::Transport::MAX_RECEIPTS) {
+			//p culled_receipt = Transport.receipts.pop(0)
+			PacketReceipt culled_receipt = _receipts.front();
+			_receipts.pop_front();
+			culled_receipt.set_timeout(-1);
+			culled_receipt.check_timeout();
+		}
+
+		std::list<PacketReceipt> cull_receipts;
+		for (auto& receipt : _receipts) {
+			receipt.check_timeout();
+			if (receipt.status() != Type::PacketReceipt::SENT) {
+				//p if receipt in Transport.receipts:
+				//p 	Transport.receipts.remove(receipt)
+				cull_receipts.push_back(receipt);
+			}
+		}
+		// CBA since modifying of collection while iterating is forbidden
+		for (auto& receipt : cull_receipts) {
+			_receipts.remove(receipt);
+		}
+
+		_receipts_last_checked = OS::time();
+	}
 
 	// CBA send announce retransmission packets
 	for (auto& packet : outgoing) {
