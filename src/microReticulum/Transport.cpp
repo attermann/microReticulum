@@ -399,6 +399,15 @@ DestinationEntry empty_destination_entry;
 			}
 		}
 #endif // RNS_USE_FS && RNS_PERSIST_PATHS
+		// Apply the record cap to the path store, as is already done for the
+		// packet hashlist above and the known destinations below. Without this
+		// the RNS_PATH_TABLE_MAX default never reaches microStore, whose
+		// policy_max_recs defaults to 0 meaning disabled, so the path store
+		// runs uncapped unless the application calls
+		// Transport::path_table_maxsize() itself. The same value also gates
+		// compact_if_threshold(), so leaving it unset costs both the record cap
+		// and the compaction that reclaims expired records nothing reads back.
+		_path_store.set_max_recs(_path_table_maxsize);
 
 #if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 		if (Utilities::OS::get_filesystem()) {
