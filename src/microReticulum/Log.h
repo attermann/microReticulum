@@ -16,6 +16,11 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+// Arduino.h defines min/max as macros, which break any std:: template named
+// min/max (std::min, uniform_int_distribution::min/max, etc.) included later
+// in the same translation unit -- undef them right away, standard fix.
+#undef min
+#undef max
 #endif
 
 #include <stdarg.h>

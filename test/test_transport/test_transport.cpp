@@ -631,6 +631,165 @@ void test_receipt_timeout_handler_capture() {
 void setUp(void) {}
 void tearDown(void) {}
 
+// ============================================================================
+// Announce queue
+// ============================================================================
+
+// Counts what it is asked to send and keeps the last of it, so a test can say
+// which queued announce went out and when. Bitrate and announce cap are what
+// decide the wait between two announces, so each test sets the pair its case
+// is about.
+class QueueInterface : public RNS::InterfaceImpl {
+public:
+	QueueInterface(uint32_t bitrate, float cap, const char* name = "QueueInterface")
+		: RNS::InterfaceImpl(name) {
+		_OUT = true;
+		_IN = false;
+		_bitrate = bitrate;
+		_announce_cap = cap;
+	}
+	virtual ~QueueInterface() { _name = "(deleted)"; }
+	virtual bool send_outgoing(const RNS::Bytes& data) {
+		_sent++;
+		_last = data;
+		return true;
+	}
+public:
+	size_t _sent = 0;
+	RNS::Bytes _last;
+};
+
+// A queued announce of a given age and hop count, its raw bytes filled with a
+// marker so a test can tell which one was sent.
+static RNS::AnnounceEntry test_announce(uint8_t hops, double time, uint8_t marker) {
+	uint8_t raw[100];
+	memset(raw, marker, sizeof(raw));
+	uint8_t destination[1] = { marker };
+	return RNS::AnnounceEntry(RNS::Bytes(destination, sizeof(destination)), time, hops, 0,
+		RNS::Bytes(raw, sizeof(raw)));
+}
+
+// The fewest hops leaves first, and the cap holds the rest back. Both halves
+// matter: without the first the queue is a queue in name only, and without the
+// second an interface can be talked into spending its whole link on announces.
+void test_announce_queue_sends_fewest_hops_first() {
+
+	printf("test_announce_queue_sends_fewest_hops_first: BEGIN\n");
+
+	// 1200 bits/s at a 2 % cap: a 100-byte announce owes about 33 s before the
+	// next one may go. Computed in integers, as this used to be, the whole wait
+	// truncates to nothing and the cap never engages at all.
+	QueueInterface* impl = new QueueInterface(1200, 0.02f);
+	RNS::Interface iface(impl);
+
+	double now = RNS::Utilities::OS::time();
+	RNS::AnnounceEntry far(test_announce(3, now, 'f'));
+	RNS::AnnounceEntry near(test_announce(1, now, 'n'));
+	RNS::AnnounceEntry mid(test_announce(2, now, 'm'));
+	iface.add_announce(far);
+	iface.add_announce(near);
+	iface.add_announce(mid);
+	TEST_ASSERT_EQUAL_UINT32(3, iface.announce_queue().size());
+
+	iface.process_announce_queue();
+
+	TEST_ASSERT_EQUAL_UINT32(1, impl->_sent);
+	TEST_ASSERT_EQUAL_UINT32(2, iface.announce_queue().size());
+	TEST_ASSERT_EQUAL_UINT8('n', impl->_last.data()[0]);
+	// About 33 s of it: 800 bits at 1200 bits/s is two thirds of a second of
+	// airtime, and a 2 % cap is fifty times that. Unity's double assertions
+	// are compiled out here, so the comparison is a plain one.
+	double wait = iface.announce_allowed_at() - now;
+	TEST_ASSERT_TRUE(wait > 30.0 && wait < 36.0);
+
+	// Called again straight away, the cap has not elapsed and nothing else goes.
+	iface.process_announce_queue();
+	TEST_ASSERT_EQUAL_UINT32(1, impl->_sent);
+	TEST_ASSERT_EQUAL_UINT32(2, iface.announce_queue().size());
+
+	printf("test_announce_queue_sends_fewest_hops_first: END\n");
+}
+
+// The queue drains once the cap's wait has passed. Nothing drained it at all
+// before -- and because Transport::outbound refuses to transmit an announce on
+// an interface that has one queued, a single queued announce used to stop that
+// interface forwarding announces for the rest of the uptime.
+void test_announce_queue_drains_when_the_cap_allows() {
+
+	printf("test_announce_queue_drains_when_the_cap_allows: BEGIN\n");
+
+	// 10 Mbit/s at 2 %: a 100-byte announce owes 4 ms.
+	QueueInterface* impl = new QueueInterface(10000000, 0.02f);
+	RNS::Interface iface(impl);
+
+	double now = RNS::Utilities::OS::time();
+	RNS::AnnounceEntry first(test_announce(1, now, 'a'));
+	RNS::AnnounceEntry second(test_announce(1, now + 0.001, 'b'));
+	iface.add_announce(first);
+	iface.add_announce(second);
+
+	iface.process_announce_queue();
+	TEST_ASSERT_EQUAL_UINT32(1, impl->_sent);
+	TEST_ASSERT_EQUAL_UINT8('a', impl->_last.data()[0]);      // same hops: oldest first
+
+	RNS::Utilities::OS::sleep(0.02);
+	iface.process_announce_queue();
+	TEST_ASSERT_EQUAL_UINT32(2, impl->_sent);
+	TEST_ASSERT_EQUAL_UINT8('b', impl->_last.data()[0]);
+	TEST_ASSERT_EQUAL_UINT32(0, iface.announce_queue().size());
+
+	// An empty queue is not an error, and asks nothing of the interface.
+	iface.process_announce_queue();
+	TEST_ASSERT_EQUAL_UINT32(2, impl->_sent);
+
+	printf("test_announce_queue_drains_when_the_cap_allows: END\n");
+}
+
+// An announce that has waited longer than a queued announce may live is not
+// worth the airtime: whoever sent it has announced again several times since.
+void test_stale_queued_announces_are_dropped() {
+
+	printf("test_stale_queued_announces_are_dropped: BEGIN\n");
+
+	QueueInterface* impl = new QueueInterface(10000000, 0.02f);
+	RNS::Interface iface(impl);
+
+	double now = RNS::Utilities::OS::time();
+	RNS::AnnounceEntry stale(test_announce(1, now - (double)RNS::Type::Reticulum::QUEUED_ANNOUNCE_LIFE - 1, 's'));
+	RNS::AnnounceEntry fresh(test_announce(1, now, 'f'));
+	iface.add_announce(stale);
+	iface.add_announce(fresh);
+
+	iface.process_announce_queue();
+
+	TEST_ASSERT_EQUAL_UINT32(1, impl->_sent);
+	TEST_ASSERT_EQUAL_UINT8('f', impl->_last.data()[0]);
+	TEST_ASSERT_EQUAL_UINT32(0, iface.announce_queue().size());
+
+	printf("test_stale_queued_announces_are_dropped: END\n");
+}
+
+// An interface that has not said how fast it is owes no wait, and must still
+// drain rather than sit on the queue forever.
+void test_announce_queue_drains_without_a_bitrate() {
+
+	printf("test_announce_queue_drains_without_a_bitrate: BEGIN\n");
+
+	QueueInterface* impl = new QueueInterface(0, 0.02f);
+	RNS::Interface iface(impl);
+
+	double now = RNS::Utilities::OS::time();
+	RNS::AnnounceEntry only(test_announce(1, now, 'o'));
+	iface.add_announce(only);
+
+	iface.process_announce_queue();
+
+	TEST_ASSERT_EQUAL_UINT32(1, impl->_sent);
+	TEST_ASSERT_EQUAL_UINT32(0, iface.announce_queue().size());
+
+	printf("test_announce_queue_drains_without_a_bitrate: END\n");
+}
+
 int runUnityTests(void) {
 	UNITY_BEGIN();
 
@@ -658,6 +817,12 @@ int runUnityTests(void) {
 */
 	RUN_TEST(test_prioritize_interfaces);
 	RUN_TEST(test_incoming_announce_over_limit);
+
+	// Announce queue
+	RUN_TEST(test_announce_queue_sends_fewest_hops_first);
+	RUN_TEST(test_announce_queue_drains_when_the_cap_allows);
+	RUN_TEST(test_stale_queued_announces_are_dropped);
+	RUN_TEST(test_announce_queue_drains_without_a_bitrate);
 	//RUN_TEST(test_incoming_announce_stress);
 
 #if RNS_NEIGHBOR_PROBING

@@ -1,0 +1,90 @@
+name: Tag Release
+
+# Runs when a `release/<version>` PR (opened by release-prepare.yml) is merged.
+# Creates the annotated tag <version> on the merge commit, with the release notes
+# as the tag message, and a draft GitHub Release to publish by hand.
+#
+# Manual re-run (e.g. if the automatic run failed):
+#   gh workflow run release-tag.yml --ref master -f version=0.5.1
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to tag at the head of the selected branch"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'release/'))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve version and target commit
+        id: target
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"; sha="$GITHUB_SHA"
+          else
+            version="${HEAD_REF#release/}"; sha="$MERGE_SHA"
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '$version' must look like X.Y.Z"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Check release files
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag '$VERSION' already exists"; exit 1
+          fi
+          notes="release/$VERSION/RELEASE_NOTES.md"
+          [ -s "$notes" ] || { echo "::error::$notes is missing or empty"; exit 1; }
+          lib=$(jq -r .version library.json)
+          [ "$lib" = "$VERSION" ] || { echo "::error::library.json version is '$lib', expected '$VERSION'"; exit 1; }
+          grep -qx "version=$VERSION" library.properties \
+            || { echo "::error::library.properties version does not match '$VERSION'"; exit 1; }
+
+      - name: Create annotated tag
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          { echo "$VERSION"; echo; cat "release/$VERSION/RELEASE_NOTES.md"; } > "$RUNNER_TEMP/tag_msg.md"
+          # --cleanup=verbatim: the default "strip" mode deletes lines starting
+          # with '#', which would remove every Markdown heading from the notes.
+          git tag -a "$VERSION" --cleanup=verbatim -F "$RUNNER_TEMP/tag_msg.md" "$SHA"
+          git push origin "refs/tags/$VERSION"
+
+      - name: Create draft GitHub Release
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          gh release create "$VERSION" --draft --verify-tag \
+            --title "microReticulum $VERSION" \
+            --notes-file "release/$VERSION/RELEASE_NOTES.md"

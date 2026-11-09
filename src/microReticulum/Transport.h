@@ -352,6 +352,8 @@ namespace RNS {
 		static void start(const Reticulum& reticulum_instance);
 		static void loop();
 		static void jobs();
+		static const Bytes ifac_mask(const Interface& interface, const Bytes& raw);
+		static const Bytes ifac_unmask(const Interface& interface, const Bytes& raw);
 		static bool transmit(Interface& interface, const Bytes& raw);
 		static bool outbound(Packet& packet);
 		static void add_packet_hash(const Bytes& packet_hash);

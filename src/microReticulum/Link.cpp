@@ -462,7 +462,7 @@ void Link::validate_proof(const Packet& packet) {
 				TRACEF("Link %s validating identity", link_id().toHex().c_str());
 				if (_object->_destination.identity().validate(signature, signed_data)) {
 					if (_object->_status != Type::Link::HANDSHAKE) {
-						throw std::runtime_error("Invalid link state for proof validation: " + _object->_status);
+						throw std::runtime_error("Invalid link state for proof validation: " + std::to_string(_object->_status));
 					}
 					_object->_rtt = OS::time() - _object->_request_time;
 					_object->_attached_interface = packet.receiving_interface();

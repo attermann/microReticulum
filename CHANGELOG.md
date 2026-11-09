@@ -1,3 +1,58 @@
+# microReticulum v0.5.1
+
+## Changed
+
+### Transport
+
+* Changed link proof timeouts to schedule a neighbor probe (divergence from the Python reference).
+* Changed link proof timeouts on a path already marked UNRESPONSIVE to force replacement of the path (divergence from the Python reference).
+* Changed announce handling to replace UNRESPONSIVE paths when a new announce is received (divergence from the Python reference).
+* Disabled path lookup for neighbor probes, since neighbors are always adjacent.
+* Refactored neighbor probe handling and invalidation.
+
+### Link
+
+* Added a per-hop grace period to the link establishment timeout.
+
+### Identity
+
+* Skipped known destination caching when the destination is already cached.
+
+### Persistence
+
+* Refactored `packet_hashlist` persistence.
+
+### Packet / Link Metrics
+
+* Adjusted packet RSSI, SNR and Q handling.
+
+## Fixed
+
+### Transport
+
+* Fixed announce processing so that skipping an announce no longer breaks out of processing early.
+* Fixed the `receiving_interface` of cached announce packets not being restored after reading them from cache.
+
+### Persistence
+
+* Fixed loading of corrupted or incorrect persisted time offsets by limiting the accepted value to a reasonable range.
+
+### Build
+
+* Fixed CMake handling of missing GitHub tags.
+
+## General
+
+* Added `CONTRIBUTING.md` with contributor information and linked it from the README.
+* Updated the PR policy and added a pull request template.
+* Applied minor optimizations and logging changes in Identity and Transport.
+
+## Contributors
+
+* Chad Attermann (@attermann)
+* Nils-Lucas Schönfeld (@nilu96)
+* @ronandi
+
 # microReticulum v0.5.0
 
 ## Added
