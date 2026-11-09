@@ -212,6 +212,55 @@ void testIdentityValidate() {
 	TEST_ASSERT_FALSE(identity.validate(signature, other_message));
 }
 
+// Keys held outside the process (a secure element, an HSM): the key objects only know their
+// public halves and hand sign() / exchange() to wherever the private key lives. Here that
+// "elsewhere" is a software key, so the results can be checked against an ordinary identity.
+class DelegatingX25519PrivateKey : public RNS::Cryptography::X25519PrivateKey {
+public:
+	DelegatingX25519PrivateKey(RNS::Cryptography::X25519PrivateKey::Ptr inner) :
+		X25519PrivateKey(External(), inner->public_key()->public_bytes()), _inner(inner) {}
+	const RNS::Bytes exchange(const RNS::Bytes& peer_public_key) override { return _inner->exchange(peer_public_key); }
+private:
+	RNS::Cryptography::X25519PrivateKey::Ptr _inner;
+};
+
+class DelegatingEd25519PrivateKey : public RNS::Cryptography::Ed25519PrivateKey {
+public:
+	DelegatingEd25519PrivateKey(RNS::Cryptography::Ed25519PrivateKey::Ptr inner) :
+		Ed25519PrivateKey(External(), inner->public_key()->public_bytes()), _inner(inner) {}
+	const RNS::Bytes sign(const RNS::Bytes& message) override { return _inner->sign(message); }
+private:
+	RNS::Cryptography::Ed25519PrivateKey::Ptr _inner;
+};
+
+void testIdentityExternalKeys() {
+	RNS::Identity software(true);
+	RNS::Bytes prv = software.get_private_key();
+	auto prv_x = RNS::Cryptography::X25519PrivateKey::from_private_bytes(prv.left(32));
+	auto prv_ed = RNS::Cryptography::Ed25519PrivateKey::from_private_bytes(prv.right(32));
+
+	RNS::Identity external(false);
+	TEST_ASSERT_TRUE(external.load_private_keys(
+		std::make_shared<DelegatingX25519PrivateKey>(prv_x),
+		std::make_shared<DelegatingEd25519PrivateKey>(prv_ed)));
+	TEST_ASSERT_FALSE(external.load_private_keys(nullptr, nullptr));
+
+	// Same public keys, so the same identity on the network.
+	TEST_ASSERT_TRUE(external.get_public_key() == software.get_public_key());
+	TEST_ASSERT_TRUE(external.hash() == software.hash());
+	// Nothing private to persist, and to_file() says so instead of writing an empty file.
+	TEST_ASSERT_EQUAL_size_t(0, external.get_private_key().size());
+	TEST_ASSERT_FALSE(external.to_file("/external_identity"));
+
+	// Signatures made through the external key validate against the software identity.
+	RNS::Bytes message("the quick brown fox jumps over the lazy dog");
+	TEST_ASSERT_TRUE(software.validate(external.sign(message), message));
+
+	// A token encrypted to the identity decrypts through the external key's exchange().
+	RNS::Bytes token = software.encrypt(message);
+	TEST_ASSERT_TRUE(external.decrypt(token) == message);
+}
+
 void testDirectAnnounceValidate() {
 	RNS::Bytes raw;
 	raw.assignHex("0100f083a7f4b00d799808c44a4634bba7d7006afd960bf3b01801a2e88b2ce1f7040817dc1b6bffa366b103468f3988e0db7f00dc1fdc15fa7fd31a34a02207cfb4d26e11e57504e43686ec7fad84774bec88fd68805f2ea383c8d6f6c39824652e00698fd5fd1088b38832f247a9daebf017d8bfe641882d9fe9b37cf49a97402b7e3d8bec61b4950d39c0996588dd0288bf6a7a0a4390bb331bd82704b618f107cf8bf2230f");
@@ -261,6 +310,7 @@ int runUnityTests(void) {
 	RUN_TEST(testIncrementalCrc32);
 	RUN_TEST(testByteCrc32);
 	RUN_TEST(testIdentityValidate);
+	RUN_TEST(testIdentityExternalKeys);
 	RUN_TEST(testDirectAnnounceValidate);
 	RUN_TEST(testRebroadcastAnnounceValidate);
 	RUN_TEST(testDirectRatchetAnnounceValidate);

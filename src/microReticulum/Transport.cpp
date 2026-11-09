@@ -400,6 +400,15 @@ DestinationEntry empty_destination_entry;
 			}
 		}
 #endif // RNS_USE_FS && RNS_PERSIST_PATHS
+		// Apply the record cap to the path store, as is already done for the
+		// packet hashlist above and the known destinations below. Without this
+		// the RNS_PATH_TABLE_MAX default never reaches microStore, whose
+		// policy_max_recs defaults to 0 meaning disabled, so the path store
+		// runs uncapped unless the application calls
+		// Transport::path_table_maxsize() itself. The same value also gates
+		// compact_if_threshold(), so leaving it unset costs both the record cap
+		// and the compaction that reclaims expired records nothing reads back.
+		_path_store.set_max_recs(_path_table_maxsize);
 
 #if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 		if (Utilities::OS::get_filesystem()) {
@@ -1008,6 +1017,22 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
             // Run interface-related jobs
 			if (OS::time() > (_interface_last_jobs + _interface_jobs_interval)) {
 				prioritize_interfaces();
+				// Announces that outbound() had to queue are sent from here.
+				// RNS arms a timer per interface for this; this port has none,
+				// so the queues are polled and each interface's own announce
+				// cap decides whether anything actually goes out. Nothing
+				// called process_announce_queue() at all before, and outbound()
+				// will not transmit an announce while an interface has one
+				// queued -- so an interface that queued a single announce
+				// forwarded no further announce for the rest of the uptime.
+				try {
+					for (auto& interface : _interfaces) {
+						interface.process_announce_queue();
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("Error while processing queued per-interface announces: %s", e.what());
+				}
 				// TODO
 /*
 				try {
@@ -1419,12 +1444,7 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 
 								bool queued_announces = (interface.announce_queue().size() > 0);
 								if (!queued_announces && outbound_time > interface.announce_allowed_at()) {
-									uint16_t wait_time = 0;
-									if (interface.bitrate() > 0 && interface.announce_cap() > 0) {
-										uint16_t tx_time = (packet.raw().size() * 8) / interface.bitrate();
-										wait_time = (tx_time / interface.announce_cap());
-									}
-									interface.announce_allowed_at(outbound_time + wait_time);
+									interface.announce_allowed_at(outbound_time + interface.announce_wait_time(packet.raw().size()));
 								}
 								else {
 									should_transmit = false;
@@ -3762,12 +3782,7 @@ will announce it.
 				return;
 			}
 			else {
-				//p tx_time   = ((len(path_request_data)+RNS.Reticulum.HEADER_MINSIZE)*8) / on_interface.bitrate
-				uint32_t wait_time = 0;
-				if ( on_interface.bitrate() > 0 && on_interface.announce_cap() > 0) {
-					uint32_t tx_time = ((path_request_data.size() + Type::Reticulum::HEADER_MINSIZE)*8) / on_interface.bitrate();
-					wait_time = (tx_time / on_interface.announce_cap());
-				}
+				double wait_time = on_interface.announce_wait_time(path_request_data.size() + Type::Reticulum::HEADER_MINSIZE);
 				const_cast<Interface&>(on_interface).announce_allowed_at(now + wait_time);
 			}
 		}
@@ -3831,7 +3846,7 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	// ignore unknown keys; clients that look for them get the receiving
 	// interface's last reported signal-quality stats, with nil for "not
 	// reported by this interface" (e.g. non-radio interfaces such as UDP).
-	p.packMapSize(18);
+	p.packMapSize(23);
 
 	// Cache std::string values so .c_str() / .size() reference stable storage.
 	const std::string name_str = iface.toString();
@@ -3878,6 +3893,20 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	p.serialize(static_cast<uint64_t>(iface.tx()));
 	p.pack("txb");
 	p.serialize(static_cast<uint64_t>(iface.txbytes()));
+
+	// rnstatus 1.5.x reads these without a presence check: `mtu` whenever
+	// `bitrate` is set, and `txdrp` (then `txdrb`) unconditionally. There is no
+	// TX drop accounting here, so they report zero rather than crash the client.
+	p.pack("mtu");
+	p.serialize(static_cast<uint32_t>(iface.HW_MTU() > 0 ? iface.HW_MTU() : Type::Reticulum::MTU));
+	p.pack("txdrp");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txdrb");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txbuffered");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txstalled");
+	p.serialize(static_cast<uint32_t>(0));
 
 	p.pack("rxs");
 	p.packFloat64(iface.current_rx_speed());

@@ -79,6 +79,9 @@ namespace RNS { namespace Cryptography {
 
 		using Ptr = std::shared_ptr<X25519PrivateKey>;
 
+		// Tag for the external-key constructor below.
+		struct External {};
+
 	public:
 /*
 		X25519PrivateKey(const Bytes& a) {
@@ -102,7 +105,11 @@ namespace RNS { namespace Cryptography {
 				Curve25519::dh1(_publicKey.writable(32), _privateKey.writable(32));
 			}
 		}
-		~X25519PrivateKey() {}
+		// A key held outside this process (a secure element, an HSM): only the public
+		// half is known here. Derive from this class and override exchange();
+		// private_bytes() stays empty because there is nothing to persist.
+		X25519PrivateKey(External, const Bytes& publicKey) : _publicKey(publicKey) {}
+		virtual ~X25519PrivateKey() {}
 
 	public:
 		// creates a new instance with a random seed
@@ -130,7 +137,7 @@ namespace RNS { namespace Cryptography {
 			return _pack_number(_a);
 		}
 */
-		inline const Bytes& private_bytes() {
+		virtual const Bytes& private_bytes() {
 			return _privateKey;
 		}
 
@@ -140,7 +147,7 @@ namespace RNS { namespace Cryptography {
 			return X25519PublicKey::from_public_bytes(_pack_number(_raw_curve25519(9, _a)));
 		}
 */
-		inline X25519PublicKey::Ptr public_key() {
+		virtual X25519PublicKey::Ptr public_key() {
 			return X25519PublicKey::from_public_bytes(_publicKey);
 		}
 
@@ -183,7 +190,7 @@ namespace RNS { namespace Cryptography {
 			return shared
 		}
 */
-		inline const Bytes exchange(const Bytes& peer_public_key) {
+		virtual const Bytes exchange(const Bytes& peer_public_key) {
 			DEBUGF("X25519PublicKey::exchange: public key:       %s", _publicKey.toHex().c_str());
 			DEBUGF("X25519PublicKey::exchange: peer public key:  %s", peer_public_key.toHex().c_str());
 			DEBUGF("X25519PublicKey::exchange: pre private key:  %s", _privateKey.toHex().c_str());
@@ -207,7 +214,7 @@ namespace RNS { namespace Cryptography {
 			return success;
 		}
 
-	private:
+	protected:
 		//Bytes _a;
 		Bytes _privateKey;
 		Bytes _publicKey;
