@@ -3868,7 +3868,7 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	// ignore unknown keys; clients that look for them get the receiving
 	// interface's last reported signal-quality stats, with nil for "not
 	// reported by this interface" (e.g. non-radio interfaces such as UDP).
-	p.packMapSize(18);
+	p.packMapSize(23);
 
 	// Cache std::string values so .c_str() / .size() reference stable storage.
 	const std::string name_str = iface.toString();
@@ -3915,6 +3915,20 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	p.serialize(static_cast<uint64_t>(iface.tx()));
 	p.pack("txb");
 	p.serialize(static_cast<uint64_t>(iface.txbytes()));
+
+	// rnstatus 1.5.x reads these without a presence check: `mtu` whenever
+	// `bitrate` is set, and `txdrp` (then `txdrb`) unconditionally. There is no
+	// TX drop accounting here, so they report zero rather than crash the client.
+	p.pack("mtu");
+	p.serialize(static_cast<uint32_t>(iface.HW_MTU() > 0 ? iface.HW_MTU() : Type::Reticulum::MTU));
+	p.pack("txdrp");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txdrb");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txbuffered");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txstalled");
+	p.serialize(static_cast<uint32_t>(0));
 
 	p.pack("rxs");
 	p.packFloat64(iface.current_rx_speed());
