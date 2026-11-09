@@ -1,3 +1,21 @@
+# WIP
+
+### Cryptography
+
+* Fixed X25519 seeded-key derivation to clamp the scalar per RFC 7748
+  (`X25519PrivateKey::from_private_bytes`): the raw Curve25519 ladder left
+  clamping to the caller, so identities derived from an unclamped seed
+  (e.g. `SHA-256(name)` used directly as the private scalar) produced public
+  keys and Diffie-Hellman secrets that disagreed with the Python reference
+  implementation, which clamps inside X25519. Clamping is idempotent, so
+  generated and file-loaded keys are unaffected.
+
+### Tests
+
+* Added a `test_crypto` interop vector pinning seeded X25519 public-key
+  derivation, Diffie-Hellman, and `Identity::load_private_key` agreement
+  with the Python reference.
+
 # microReticulum v0.5.1
 
 ## Changed
@@ -163,19 +181,6 @@
 ### Identity
 
 * Fixed crash conditions when identities were missing from known destinations.
-* Fixed X25519 seeded-key derivation to clamp the scalar per RFC 7748
-  (`X25519PrivateKey::from_private_bytes`): the raw Curve25519 ladder left
-  clamping to the caller, so identities derived from an unclamped seed
-  (e.g. `SHA-256(name)` used directly as the private scalar) produced public
-  keys and Diffie-Hellman secrets that disagreed with the Python reference
-  implementation, which clamps inside X25519. Clamping is idempotent, so
-  generated and file-loaded keys are unaffected.
-
-### Tests
-
-* Added a `test_crypto` interop vector pinning seeded X25519 public-key
-  derivation, Diffie-Hellman, and `Identity::load_private_key` agreement
-  with the Python reference.
 * Fixed identity recall from cached announces.
 * Added gating for updated identity recall behavior.
 
