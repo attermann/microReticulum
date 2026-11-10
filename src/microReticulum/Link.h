@@ -87,6 +87,7 @@ namespace RNS {
 	public:
 		void request_resource_concluded(const Resource& resource);
 		void __response_timeout_job();
+		void tick_queued_resource();
 		void request_timed_out(const PacketReceipt& packet_receipt);
 		void response_resource_progress(const Resource& resource);
 		void response_received(const Bytes& response);

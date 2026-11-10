@@ -106,7 +106,7 @@ namespace RNS {
 		void check_timeout();
 
 		// :param timeout: The timeout in seconds.
-		inline void set_timeout(int16_t timeout) { assert(_object); _object->_timeout = timeout; }
+		inline void set_timeout(double timeout) { assert(_object); _object->_timeout = timeout; }
 
 		// Deprecated function-pointer setter retained for source compat
 		// with existing firmware; new code should use set_delivery_handler
@@ -175,7 +175,7 @@ namespace RNS {
 			double _concluded_at = 0;
 			// CBA TODO This shoujld almost certainly not be a reference but we have an issue with circular dependency between Packet and PacketReceipt
 			//Packet _proof_packet = {Type::NONE};
-			int16_t _timeout = 0;
+			double _timeout = 0;
 		friend class PacketReceipt;
 		};
 		std::shared_ptr<Object> _object;

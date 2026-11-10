@@ -574,7 +574,7 @@ const RNS::RequestReceipt Link::request(const Bytes& path, const Bytes& data /*=
 
 	if (packed_request.size() <= MDU) {
 		Packet request_packet = Packet(*this, packed_request).context(Type::Packet::REQUEST);
-		PacketReceipt packet_receipt = request_packet.send();
+		PacketReceipt packet_receipt = request_packet.receipt_send();
 
 		if (!packet_receipt) {
 			return {Type::NONE};
@@ -881,6 +881,12 @@ void Link::tick_resources() {
 	                               _object->_outgoing_resources.end());
 	for (auto& r : incoming) r.__watchdog_job();
 	for (auto& r : outgoing) r.__watchdog_job();
+	// Queued request resources are not yet in the outgoing resource set.
+	// Retain receipts because advertising may invoke callbacks that erase them.
+	std::vector<RequestReceipt> pending(_object->_pending_requests.begin(),
+	                                    _object->_pending_requests.end());
+	for (auto& request : pending) request.tick_queued_resource();
+
 }
 
 // CBA TODO Implement watchdog
@@ -1973,6 +1979,17 @@ void RequestReceipt::request_timed_out(const PacketReceipt& packet_receipt) {
 	}
 }
 
+
+void RequestReceipt::tick_queued_resource() {
+	assert(_object);
+	if (_object->_status == Type::RequestReceipt::FAILED ||
+	    _object->_status == Type::RequestReceipt::READY) return;
+	if (_object->_resource && _object->_resource.status() == Type::Resource::QUEUED &&
+	    _object->_link.status() == Type::Link::ACTIVE &&
+	    _object->_link.ready_for_new_resource()) {
+		_object->_resource.advertise_job();
+	}
+}
 
 void RequestReceipt::response_resource_progress(const Resource& resource) {
 	assert(_object);
