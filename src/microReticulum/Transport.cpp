@@ -502,6 +502,7 @@ DestinationEntry empty_destination_entry;
 
 	std::vector<Packet> outgoing;
 	std::map<Bytes, Interface> path_requests;	// destination_hash -> blocked_interface ({NONE} = no interface to avoid)
+	std::vector<Link> watched_links;
 	int count;
 	_jobs_running = true;
 
@@ -548,19 +549,8 @@ DestinationEntry empty_destination_entry;
 					}
 				}
 
-				// Pump each active link's resource watchdogs. Resource
-				// retransmit/timeout retries depend on this — without it,
-				// a dropped resource part stalls the transfer forever
-				// (we never re-request the missing part, server gives up).
-				// const_cast mirrors the pattern used elsewhere when
-				// iterating std::set<Link> — the wrapper is const but
-				// shared_ptr-backed mutation is the codebase convention.
-				for (auto& link_const : active_links) {
-					Link& link = const_cast<Link&>(link_const);
-					if (link.status() != Type::Link::CLOSED) {
-						link.tick_resources();
-					}
-				}
+				watched_links.insert(watched_links.end(), _pending_links.begin(), _pending_links.end());
+				watched_links.insert(watched_links.end(), _active_links.begin(), _active_links.end());
 
 				_links_last_checked = OS::time();
 			}
@@ -1067,6 +1057,16 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	}
 
 	_jobs_running = false;
+
+	// Watchdogs send, and outbound() blocks while jobs run, so they run after.
+	for (auto& link : watched_links) {
+		if (link.status() != Type::Link::CLOSED) {
+			link.__watchdog_job();
+		}
+		if (link.status() != Type::Link::CLOSED) {
+			link.tick_resources();
+		}
+	}
 
 	// CBA send announce retransmission packets
 	for (auto& packet : outgoing) {
