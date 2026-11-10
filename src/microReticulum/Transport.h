@@ -66,6 +66,17 @@ namespace RNS {
 		// configured aspect filter. Filters must be specific,
 		// and cannot use wildcards.
 		virtual void received_announce(const Bytes& destination_hash, const Identity& announced_identity, const Bytes& app_data) = 0;
+		// Richer variant with the announce packet itself: receiving interface
+		// (packet.receiving_interface()), hop count (packet.hops()), signal
+		// stats (packet.rssi()/snr()), transport id. Defaults to the classic
+		// callback so existing handlers keep working; override this one to
+		// get the metadata. The packet is only valid for the duration of the
+		// call: copy anything you need to keep (e.g. packet.hops(), or the
+		// receiving interface) rather than holding the reference.
+		virtual void received_announce(const Bytes& destination_hash, const Identity& announced_identity, const Bytes& app_data, const Packet& packet) {
+			(void)packet;
+			received_announce(destination_hash, announced_identity, app_data);
+		}
 		std::string& aspect_filter() { return _aspect_filter; }
 	private:
 		std::string _aspect_filter;

@@ -2737,7 +2737,8 @@ TRACEF("path_announce_emitted=%lu", path_announce_emitted);
 										handler->received_announce(
 											packet.destination_hash(),
 											announce_identity,
-											Identity::recall_app_data(packet.destination_hash())
+											Identity::recall_app_data(packet.destination_hash()),
+											packet
 										);
 									}
 								}

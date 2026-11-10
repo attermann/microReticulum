@@ -74,6 +74,27 @@ Also note the following preprocessor directives used to tune `microStore::FileSt
   `-DRNS_PATH_TABLE_SEGMENT_COUNT`: Maximum number of segment files to rotate (minimum of 3)
 Appropriate settings should be selected to match the storage and memory resources available on the target platform.
 
+## Announce Handlers
+
+Applications receive announces by registering a subclass of `RNS::AnnounceHandler` with `RNS::Transport::register_announce_handler()`. The basic callback is pure virtual and must always be implemented; override the extended one as well when the handler needs the announce packet:
+
+```cpp
+class MyHandler : public RNS::AnnounceHandler {
+public:
+	// Basic form: destination hash, announced identity and app data.
+	void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data) override;
+
+	// Extended form: additionally receives the announce packet, giving access to
+	// packet.receiving_interface(), packet.hops(), packet.rssi() and packet.snr().
+	// The default implementation forwards to the basic form.
+	void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data, const RNS::Packet& packet) override;
+};
+```
+
+The `Packet` passed to the extended form is only valid for the duration of the callback. Copy anything the handler needs to keep, such as `packet.hops()` or the receiving interface, rather than storing a reference to the packet.
+
+Pass an aspect filter such as `"lxmf.delivery"` to the `AnnounceHandler` constructor to receive only announces for that destination name, or `nullptr` for all announces.
+
 ## Provisioning
 
 microReticulum ships an optional schema-driven configuration subsystem under `src/microReticulum/Provisioning/`. It maintains a registry of namespaces and fields, holds a "working" config in RAM plus a "draft" overlay for pending edits, and (when filesystem support is enabled) persists committed values atomically to flash. Apps frame and transport MsgPack request/response payloads using their preferred link (KISS, BLE GATT, Web Serial, etc.); the library handles everything from the engine inward.
