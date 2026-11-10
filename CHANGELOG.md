@@ -1,3 +1,11 @@
+# Unreleased
+
+## Added
+
+### Transport
+
+* Added an optional packet-carrying `AnnounceHandler::received_announce(destination_hash, announced_identity, app_data, packet)` overload, giving handlers the receiving interface, hop count and signal quality of the announce. Its default forwards to the existing three-argument callback, so existing handlers are unchanged.
+
 # microReticulum v0.5.1
 
 ## Changed

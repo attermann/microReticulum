@@ -76,7 +76,7 @@ Appropriate settings should be selected to match the storage and memory resource
 
 ## Announce Handlers
 
-Applications receive announces by registering a subclass of `RNS::AnnounceHandler` with `RNS::Transport::register_announce_handler()`. Override either callback:
+Applications receive announces by registering a subclass of `RNS::AnnounceHandler` with `RNS::Transport::register_announce_handler()`. The basic callback is pure virtual and must always be implemented; override the extended one as well when the handler needs the announce packet:
 
 ```cpp
 class MyHandler : public RNS::AnnounceHandler {
@@ -90,6 +90,8 @@ public:
 	void received_announce(const RNS::Bytes& destination_hash, const RNS::Identity& announced_identity, const RNS::Bytes& app_data, const RNS::Packet& packet) override;
 };
 ```
+
+The `Packet` passed to the extended form is only valid for the duration of the callback. Copy anything the handler needs to keep, such as `packet.hops()` or the receiving interface, rather than storing a reference to the packet.
 
 Pass an aspect filter such as `"lxmf.delivery"` to the `AnnounceHandler` constructor to receive only announces for that destination name, or `nullptr` for all announces.
 
