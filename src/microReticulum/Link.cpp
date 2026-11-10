@@ -788,6 +788,9 @@ be used if a new link to the same destination is established.
 */
 void Link::teardown() {
 	assert(_object);
+	if (_object->_status == Type::Link::CLOSED) {
+		return;
+	}
 	if (_object->_status != Type::Link::PENDING && _object->_status != Type::Link::CLOSED) {
 		Packet(*this, _object->_link_id).context(Type::Packet::LINKCLOSE).send();
 		had_outbound();
