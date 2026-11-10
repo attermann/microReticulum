@@ -206,6 +206,28 @@ namespace RNS {
 			_object->_proof_strategy = proof_strategy;
 		}
 
+		/*
+		Sets the default app_data for the destination. If set, the default
+		app_data will be included in every announce sent by the destination,
+		unless other app_data is specified in the announce method. This
+		includes the announces sent in response to path requests, which
+		otherwise carry no app_data (e.g. no NomadNet node name).
+
+		:param app_data: *bytes* containing the default app_data.
+		*/
+		inline void set_default_app_data(const Bytes& app_data) {
+			assert(_object);
+			_object->_default_app_data = app_data;
+		}
+
+		/*
+		Clears default app_data previously set for the destination.
+		*/
+		inline void clear_default_app_data() {
+			assert(_object);
+			_object->_default_app_data = {};
+		}
+
 		void receive(const Packet& packet);
 		void incoming_link_request(const Bytes& data, const Packet& packet);
 
