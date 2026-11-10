@@ -89,6 +89,7 @@ namespace RNS {
 			return _object->_pub_bytes + _object->_sig_pub_bytes;
 		}
 		bool load_private_key(const Bytes& prv_bytes);
+		bool load_private_keys(Cryptography::X25519PrivateKey::Ptr prv, Cryptography::Ed25519PrivateKey::Ptr sig_prv);
 		void load_public_key(const Bytes& pub_bytes);
 		inline void update_hashes() {
 			assert(_object);

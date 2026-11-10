@@ -63,6 +63,9 @@ namespace RNS { namespace Cryptography {
 	public:
 		using Ptr = std::shared_ptr<Ed25519PrivateKey>;
 
+		// Tag for the external-key constructor below.
+		struct External {};
+
 	public:
 		Ed25519PrivateKey(const Bytes& privateKey) {
 			if (privateKey) {
@@ -76,7 +79,11 @@ namespace RNS { namespace Cryptography {
 			// derive public key from private key
 			Ed25519::derivePublicKey(_publicKey.writable(32), _privateKey.data());
 		}
-		~Ed25519PrivateKey() {}
+		// A key held outside this process (a secure element, an HSM): only the public
+		// half is known here. Derive from this class and override sign(); private_bytes()
+		// stays empty because there is nothing to persist.
+		Ed25519PrivateKey(External, const Bytes& publicKey) : _publicKey(publicKey) {}
+		virtual ~Ed25519PrivateKey() {}
 
 	public:
 		// creates a new instance with a random seed
@@ -91,23 +98,23 @@ namespace RNS { namespace Cryptography {
 			return Ptr(new Ed25519PrivateKey(privateKey));
 		}
 
-		inline const Bytes& private_bytes() {
+		virtual const Bytes& private_bytes() {
 			return _privateKey;
 		}
 
 		// creates a new instance of public key for this private key
-		inline Ed25519PublicKey::Ptr public_key() {
+		virtual Ed25519PublicKey::Ptr public_key() {
 			return Ed25519PublicKey::from_public_bytes(_publicKey);
 		}
 
-		inline const Bytes sign(const Bytes& message) {
+		virtual const Bytes sign(const Bytes& message) {
 			//z return _sk.sign(message);
 			Bytes signature;
 			Ed25519::sign(signature.writable(64), _privateKey.data(), _publicKey.data(), message.data(), message.size());
 			return signature;
 		}
 
-	private:
+	protected:
 		Bytes _privateKey;
 		Bytes _publicKey;
 

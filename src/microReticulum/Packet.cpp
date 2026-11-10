@@ -903,8 +903,8 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 		Bytes proof_hash = proof.left(Type::Identity::HASHLENGTH/8);
 		Bytes signature = proof.mid(Type::Identity::HASHLENGTH/8, Type::Identity::SIGLENGTH/8);
 		if (proof_hash == _object->_hash) {
-			//z if (link.validate(signature, _object->_hash)) {
-			if (false) {
+			Link proving(link);
+			if (proving.validate(signature, _object->_hash)) {
 				_object->_status = DELIVERED;
 				_object->_proved = true;
 				_object->_concluded_at = OS::time();

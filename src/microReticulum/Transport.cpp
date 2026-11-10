@@ -22,6 +22,7 @@
 #include "Interface.h"
 #include "Log.h"
 #include "Cryptography/Random.h"
+#include "Cryptography/HKDF.h"
 #include "Utilities/OS.h"
 #include "Utilities/Persistence.h"
 
@@ -399,6 +400,15 @@ DestinationEntry empty_destination_entry;
 			}
 		}
 #endif // RNS_USE_FS && RNS_PERSIST_PATHS
+		// Apply the record cap to the path store, as is already done for the
+		// packet hashlist above and the known destinations below. Without this
+		// the RNS_PATH_TABLE_MAX default never reaches microStore, whose
+		// policy_max_recs defaults to 0 meaning disabled, so the path store
+		// runs uncapped unless the application calls
+		// Transport::path_table_maxsize() itself. The same value also gates
+		// compact_if_threshold(), so leaving it unset costs both the record cap
+		// and the compaction that reclaims expired records nothing reads back.
+		_path_store.set_max_recs(_path_table_maxsize);
 
 #if defined(RNS_USE_FS) && RNS_PERSIST_KNOWN_DESTINATIONS
 		if (Utilities::OS::get_filesystem()) {
@@ -1007,6 +1017,22 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
             // Run interface-related jobs
 			if (OS::time() > (_interface_last_jobs + _interface_jobs_interval)) {
 				prioritize_interfaces();
+				// Announces that outbound() had to queue are sent from here.
+				// RNS arms a timer per interface for this; this port has none,
+				// so the queues are polled and each interface's own announce
+				// cap decides whether anything actually goes out. Nothing
+				// called process_announce_queue() at all before, and outbound()
+				// will not transmit an announce while an interface has one
+				// queued -- so an interface that queued a single announce
+				// forwarded no further announce for the rest of the uptime.
+				try {
+					for (auto& interface : _interfaces) {
+						interface.process_announce_queue();
+					}
+				}
+				catch (const std::exception& e) {
+					ERRORF("Error while processing queued per-interface announces: %s", e.what());
+				}
 				// TODO
 /*
 				try {
@@ -1089,6 +1115,67 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	}
 }
 
+// Interface access codes (Python RNS Transport.transmit/inbound; ported
+// from RTNode-HeltecV4's microReticulum copy, Apache-2.0). The IFAC is the
+// last ifac_size bytes of the IFAC identity's signature of the packet;
+// header and payload are then masked with HKDF(ifac) salted by the IFAC key.
+/*static*/ const Bytes Transport::ifac_mask(const Interface& interface, const Bytes& raw) {
+	const size_t ifac_size = interface.ifac_size();
+	Bytes ifac = interface.ifac_id().sign(raw).right(ifac_size);
+	Bytes mask = Cryptography::hkdf(raw.size() + ifac_size, ifac, interface.ifac_key());
+
+	Bytes new_raw;
+	new_raw.append((uint8_t)(raw[0] | 0x80));
+	new_raw.append(raw[1]);
+	new_raw.append(ifac);
+	new_raw.append(raw.mid(2));
+
+	Bytes masked_raw;
+	for (size_t i = 0; i < new_raw.size(); i++) {
+		if (i == 0) {
+			// Mask the first header byte, keeping the IFAC flag set
+			masked_raw.append((uint8_t)((new_raw[i] ^ mask[i]) | 0x80));
+		}
+		else if (i == 1 || i > ifac_size + 1) {
+			// Mask the second header byte and the payload
+			masked_raw.append((uint8_t)(new_raw[i] ^ mask[i]));
+		}
+		else {
+			// The IFAC itself stays clear
+			masked_raw.append(new_raw[i]);
+		}
+	}
+	return masked_raw;
+}
+
+// The packet without its IFAC, or NONE when the IFAC flag is missing, the
+// packet is too short, or the code doesn't authenticate.
+/*static*/ const Bytes Transport::ifac_unmask(const Interface& interface, const Bytes& raw) {
+	const size_t ifac_size = interface.ifac_size();
+	if (raw.size() <= 2 + ifac_size || (raw[0] & 0x80) != 0x80) {
+		return {Bytes::NONE};
+	}
+	Bytes ifac = raw.mid(2, ifac_size);
+	Bytes mask = Cryptography::hkdf(raw.size(), ifac, interface.ifac_key());
+	Bytes unmasked_raw;
+	for (size_t i = 0; i < raw.size(); i++) {
+		if (i <= 1 || i > ifac_size + 1) {
+			unmasked_raw.append((uint8_t)(raw[i] ^ mask[i]));
+		}
+		else {
+			unmasked_raw.append(raw[i]);
+		}
+	}
+	Bytes new_raw;
+	new_raw.append((uint8_t)(unmasked_raw[0] & 0x7F));
+	new_raw.append(unmasked_raw[1]);
+	new_raw.append(unmasked_raw.mid(2 + ifac_size));
+	if (interface.ifac_id().sign(new_raw).right(ifac_size) != ifac) {
+		return {Bytes::NONE};
+	}
+	return new_raw;
+}
+
 /*static*/ bool Transport::transmit(Interface& interface, const Bytes& raw) {
 	TRACE("Transport::transmit()");
 	bool sent = false;
@@ -1104,43 +1191,7 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	try {
 		//if hasattr(interface, "ifac_identity") and interface.ifac_identity != None:
 		if (interface.ifac_identity()) {
-// TODO
-/*p
-			// Calculate packet access code
-			ifac = interface.ifac_identity.sign(raw)[-interface.ifac_size:]
-
-			// Generate mask
-			mask = RNS.Cryptography.hkdf(
-				length=len(raw)+interface.ifac_size,
-				derive_from=ifac,
-				salt=interface.ifac_key,
-				context=None,
-			)
-
-			// Set IFAC flag
-			new_header = bytes([raw[0] | 0x80, raw[1]])
-
-			// Assemble new payload with IFAC
-			new_raw    = new_header+ifac+raw[2:]
-			
-			// Mask payload
-			i = 0; masked_raw = b""
-			for byte in new_raw:
-				if i == 0:
-					// Mask first header byte, but make sure the
-					// IFAC flag is still set
-					masked_raw += bytes([byte ^ mask[i] | 0x80])
-				elif i == 1 or i > interface.ifac_size+1:
-					// Mask second header byte and payload
-					masked_raw += bytes([byte ^ mask[i]])
-				else:
-					// Don't mask the IFAC itself
-					masked_raw += bytes([byte])
-				i += 1
-
-			// Send it
-			sent = interface.on_outgoing(masked_raw)
-*/
+			sent = interface.send_outgoing(ifac_mask(interface, raw));
 		}
 		else {
 			sent = interface.send_outgoing(raw);
@@ -1393,12 +1444,7 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 
 								bool queued_announces = (interface.announce_queue().size() > 0);
 								if (!queued_announces && outbound_time > interface.announce_allowed_at()) {
-									uint16_t wait_time = 0;
-									if (interface.bitrate() > 0 && interface.announce_cap() > 0) {
-										uint16_t tx_time = (packet.raw().size() * 8) / interface.bitrate();
-										wait_time = (tx_time / interface.announce_cap());
-									}
-									interface.announce_allowed_at(outbound_time + wait_time);
+									interface.announce_allowed_at(outbound_time + interface.announce_wait_time(packet.raw().size()));
 								}
 								else {
 									should_transmit = false;
@@ -1694,85 +1740,37 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 	return false;
 }
 
-/*static*/ void Transport::inbound(const Bytes& raw, const Interface& interface /*= {Type::NONE}*/) {
-	TRACEF("Transport::inbound: received %d bytes", raw.size());
+/*static*/ void Transport::inbound(const Bytes& raw_in, const Interface& interface /*= {Type::NONE}*/) {
+	TRACEF("Transport::inbound: received %d bytes", raw_in.size());
 	++_packets_received;
 	// CBA
 	if (_callbacks._receive_packet) {
 		try {
-			_callbacks._receive_packet(raw, interface);
+			_callbacks._receive_packet(raw_in, interface);
 		}
 		catch (const std::exception& e) {
 			DEBUGF("Error while executing receive packet callback. The contained exception was: %s", e.what());
 		}
 	}
-// TODO
-/*p
-	// If interface access codes are enabled,
-	// we must authenticate each packet.
-	//if len(raw) > 2:
-	if (raw.size() > 2) {
-		if interface != None and hasattr(interface, "ifac_identity") and interface.ifac_identity != None:
-			// Check that IFAC flag is set
-			if raw[0] & 0x80 == 0x80:
-				if len(raw) > 2+interface.ifac_size:
-					// Extract IFAC
-					ifac = raw[2:2+interface.ifac_size]
-
-					// Generate mask
-					mask = RNS.Cryptography.hkdf(
-						length=len(raw),
-						derive_from=ifac,
-						salt=interface.ifac_key,
-						context=None,
-					)
-
-					// Unmask payload
-					i = 0; unmasked_raw = b""
-					for byte in raw:
-						if i <= 1 or i > interface.ifac_size+1:
-							// Unmask header bytes and payload
-							unmasked_raw += bytes([byte ^ mask[i]])
-						else:
-							// Don't unmask IFAC itself
-							unmasked_raw += bytes([byte])
-						i += 1
-					raw = unmasked_raw
-
-					// Unset IFAC flag
-					new_header = bytes([raw[0] & 0x7f, raw[1]])
-
-					// Re-assemble packet
-					new_raw = new_header+raw[2+interface.ifac_size:]
-
-					// Calculate expected IFAC
-					expected_ifac = interface.ifac_identity.sign(new_raw)[-interface.ifac_size:]
-
-					// Check it
-					if ifac == expected_ifac:
-						raw = new_raw
-					else:
-						return
-
-				else:
-					return
-
-			else:
-				// If the IFAC flag is not set, but should be,
-				// drop the packet.
-				return
-
-		else:
-			// If the interface does not have IFAC enabled,
-			// check the received packet IFAC flag.
-			if raw[0] & 0x80 == 0x80:
-				// If the flag is set, drop the packet
-				return
-	}
-	else {
+	// If interface access codes are enabled, every packet must carry a
+	// valid one (Python RNS Transport.inbound; ported from
+	// RTNode-HeltecV4, Apache-2.0). Without IFAC, a packet flagged with
+	// one is dropped rather than misread as garbage.
+	Bytes raw = raw_in;
+	if (raw.size() <= 2) {
 		return;
 	}
-*/
+	if (interface && interface.ifac_identity()) {
+		raw = ifac_unmask(interface, raw);
+		if (!raw) {
+			TRACE("Transport::inbound: missing or invalid IFAC, dropping packet");
+			return;
+		}
+	}
+	else if ((raw[0] & 0x80) == 0x80) {
+		TRACE("Transport::inbound: IFAC flag set but interface has no IFAC, dropping packet");
+		return;
+	}
 
 	if (_jobs_running) DEBUG("Transport::inbound: jobs still running!");
 	while (_jobs_running) {
@@ -3785,12 +3783,7 @@ will announce it.
 				return;
 			}
 			else {
-				//p tx_time   = ((len(path_request_data)+RNS.Reticulum.HEADER_MINSIZE)*8) / on_interface.bitrate
-				uint32_t wait_time = 0;
-				if ( on_interface.bitrate() > 0 && on_interface.announce_cap() > 0) {
-					uint32_t tx_time = ((path_request_data.size() + Type::Reticulum::HEADER_MINSIZE)*8) / on_interface.bitrate();
-					wait_time = (tx_time / on_interface.announce_cap());
-				}
+				double wait_time = on_interface.announce_wait_time(path_request_data.size() + Type::Reticulum::HEADER_MINSIZE);
 				const_cast<Interface&>(on_interface).announce_allowed_at(now + wait_time);
 			}
 		}
@@ -3854,7 +3847,7 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	// ignore unknown keys; clients that look for them get the receiving
 	// interface's last reported signal-quality stats, with nil for "not
 	// reported by this interface" (e.g. non-radio interfaces such as UDP).
-	p.packMapSize(18);
+	p.packMapSize(23);
 
 	// Cache std::string values so .c_str() / .size() reference stable storage.
 	const std::string name_str = iface.toString();
@@ -3901,6 +3894,20 @@ static void remote_status_pack_interface(MsgPack::Packer& p, const Interface& if
 	p.serialize(static_cast<uint64_t>(iface.tx()));
 	p.pack("txb");
 	p.serialize(static_cast<uint64_t>(iface.txbytes()));
+
+	// rnstatus 1.5.x reads these without a presence check: `mtu` whenever
+	// `bitrate` is set, and `txdrp` (then `txdrb`) unconditionally. There is no
+	// TX drop accounting here, so they report zero rather than crash the client.
+	p.pack("mtu");
+	p.serialize(static_cast<uint32_t>(iface.HW_MTU() > 0 ? iface.HW_MTU() : Type::Reticulum::MTU));
+	p.pack("txdrp");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txdrb");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txbuffered");
+	p.serialize(static_cast<uint32_t>(0));
+	p.pack("txstalled");
+	p.serialize(static_cast<uint32_t>(0));
 
 	p.pack("rxs");
 	p.packFloat64(iface.current_rx_speed());
@@ -4305,7 +4312,9 @@ static void remote_path_pack_rate_entry(MsgPack::Packer& p,
 }
 
 /*static*/ void Transport::probe_request_handler(const Bytes& data, const Packet& packet) {
+#if RNS_NEIGHBOR_PROBING
 	++_probes_received;
+#endif
 	TRACE("Transport::probe_request_handler");
 }
 

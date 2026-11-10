@@ -95,6 +95,9 @@ namespace RNS {
 		std::string _name;
 		bool _online = false;
 		Bytes _ifac_identity;
+		Bytes _ifac_key;
+		Identity _ifac_id = {Type::NONE};
+		uint8_t _ifac_size = 8;  // Python RNS: DEFAULT_IFAC_SIZE of LoRa (RNode) interfaces
 		Type::Interface::modes _mode = Type::Interface::MODE_NONE;
 		uint32_t _bitrate = 0;
 		uint16_t _HW_MTU = 0;
@@ -210,6 +213,22 @@ namespace RNS {
 		inline const Bytes get_hash() const { assert(_impl); return _impl->get_hash(); }
 		void process_announce_queue();
 
+		// How long the announce cap makes this interface wait after sending an
+		// announce of this size: the packet's airtime divided by the share of
+		// the link announces are allowed to take. Both the callers that need it
+		// -- Transport::outbound when it lets an announce through, and
+		// process_announce_queue when it sends a queued one -- ask here, so the
+		// two cannot disagree about when the next announce is due. Answered in
+		// seconds, in floating point: computed in integers, as one caller used
+		// to, every wait below one second rounds to none at all, which is every
+		// wait an interface faster than a slow LoRa channel ever has.
+		inline double announce_wait_time(size_t tx_size) const {
+			assert(_impl);
+			if (_impl->_bitrate == 0 || _impl->_announce_cap <= 0.0) return 0.0;
+			double tx_time = (double)(tx_size * 8) / (double)_impl->_bitrate;
+			return tx_time / (double)_impl->_announce_cap;
+		}
+
 		// CBA ACCUMULATES
 		inline void add_announce(AnnounceEntry& entry) { assert(_impl); _impl->_announce_queue.push_back(entry); }
 
@@ -238,6 +257,15 @@ namespace RNS {
 		inline bool online() const { assert(_impl); return _impl->_online; }
 		inline std::string name() const { assert(_impl); return _impl->_name; }
 		inline const Bytes& ifac_identity() const { assert(_impl); return _impl->_ifac_identity; }
+		inline const Bytes& ifac_key() const { assert(_impl); return _impl->_ifac_key; }
+		inline const Identity& ifac_id() const { assert(_impl); return _impl->_ifac_id; }
+		inline uint8_t ifac_size() const { assert(_impl); return _impl->_ifac_size; }
+		inline void ifac_size(uint8_t size) { assert(_impl); _impl->_ifac_size = size; }
+		// Interface access codes (IFAC), as Python RNS: packets carry a
+		// truncated Ed25519 signature and are masked with a key derived
+		// from the network name and/or passphrase. Empty/null for both
+		// leaves IFAC off.
+		void setup_ifac(const char* ifac_netname, const char* ifac_netkey);
 		inline Type::Interface::modes mode() const { assert(_impl); return _impl->_mode; }
 		inline void mode(Type::Interface::modes mode) { assert(_impl); _impl->_mode = mode; }
 		inline uint32_t bitrate() const { assert(_impl); return _impl->_bitrate; }

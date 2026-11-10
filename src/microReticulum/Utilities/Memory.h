@@ -16,6 +16,8 @@
 
 #include "../Log.h"
 
+#include <stdint.h>
+
 #include "tlsf/tlsf.h"
 
 #include <memory>

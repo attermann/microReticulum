@@ -1059,6 +1059,7 @@ namespace RNS { namespace Provisioning {
 
 		size_t applied_total = 0;
 		bool any_reboot = false;
+		bool storage_ok = true;
 
 		// The set of namespaces that were actually touched by this commit —
 		// used when IncludeState is true to scope the post-commit Values map.
@@ -1092,7 +1093,12 @@ namespace RNS { namespace Provisioning {
 					default: break;
 				}
 			}
-			if (_storage) _storage->save_namespace(ns);
+			// A commit is only successful if the promoted working state made it
+			// to durable storage. Previously this return value was discarded, so
+			// wire clients received a normal Commit response even when the
+			// namespace file could not be written. The in-process commit() path
+			// already propagates this failure; keep the wire path consistent.
+			if (_storage && !_storage->save_namespace(ns)) storage_ok = false;
 			// Track for the post-commit Values response: include namespaces
 			// the caller filtered on OR namespaces that actually had drafts.
 			if (include_state && (has_filter || had_draft)) touched_ns.push_back(&ns);
@@ -1108,6 +1114,14 @@ namespace RNS { namespace Provisioning {
 			for (const auto& ns_ptr : _registry.namespaces()) do_one(*ns_ptr);
 		}
 		set_reboot_flag(any_reboot);
+		if (!storage_ok) {
+			return encode_error(
+				(opid_t)Op::Commit,
+				seq,
+				ErrorCode::StorageError,
+				"failed to persist committed state"
+			);
+		}
 
 		return pack_response((opid_t)Op::Commit, seq, compress, [&](MsgPack::Packer& p) {
 			// Base entries: Applied + NeedsReboot. IncludeState adds Values + Hash.

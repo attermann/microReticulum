@@ -1,0 +1,143 @@
+name: Prepare Release
+
+# Generates the CHANGELOG entry and release notes for a new version with Claude,
+# bumps the library version, and pushes a `release/<version>` branch. Open a PR
+# from that branch by hand (the run summary has the link); merging it runs
+# release-tag.yml, which creates the annotated tag.
+#
+# The workflow deliberately doesn't open the PR: doing that with GITHUB_TOKEN
+# needs the repo setting that also lets Actions approve PRs, and CI doesn't run
+# on PRs opened by GITHUB_TOKEN.
+#
+# Credentials (repository secrets; at least one is required):
+#   RELEASE_CLAUDE_CODE_OAUTH_TOKEN  Claude Code subscription token from
+#                                    `claude setup-token`. Takes precedence.
+#   RELEASE_ANTHROPIC_API_KEY        Anthropic API key. Used when the token
+#                                    isn't set.
+#
+#   gh workflow run release-prepare.yml --ref master -f version=0.5.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z, no 'v' prefix)"
+        required: true
+        type: string
+      previous_tag:
+        description: "Previous release tag (default: most recent tag)"
+        required: false
+        type: string
+
+permissions:
+  contents: write       # push the release branch
+  pull-requests: read   # `collect` reads descriptions of PRs referenced by commits
+
+concurrency:
+  group: release-prepare
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      PREVIOUS_TAG: ${{ inputs.previous_tag }}
+      BRANCH: release/${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      # Secrets can't be tested in `if:` expressions, so expose whether the
+      # subscription token is set as a plain flag.
+      USE_CLAUDE_CODE: ${{ secrets.RELEASE_CLAUDE_CODE_OAUTH_TOKEN != '' }}
+      CLAUDE_CODE_VERSION: '2.1.319'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate inputs
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '$VERSION' must look like X.Y.Z"; exit 1
+          fi
+          if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag '$VERSION' already exists"; exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::branch '$BRANCH' already exists; delete it to regenerate"; exit 1
+          fi
+
+      - name: Install generator dependencies (Anthropic API)
+        if: env.USE_CLAUDE_CODE != 'true'
+        run: pip install -r scripts/release/requirements.txt
+
+      - name: Install Claude Code CLI (subscription)
+        if: env.USE_CLAUDE_CODE == 'true'
+        run: |
+          npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          claude --version
+
+      - name: Collect changes since previous release
+        run: |
+          python scripts/release/generate_release_notes.py collect \
+            --version "$VERSION" ${PREVIOUS_TAG:+--previous-tag "$PREVIOUS_TAG"}
+
+      - name: Generate changelog entry and release notes
+        env:
+          RELEASE_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.RELEASE_CLAUDE_CODE_OAUTH_TOKEN }}
+          RELEASE_ANTHROPIC_API_KEY: ${{ secrets.RELEASE_ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$RELEASE_CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$RELEASE_ANTHROPIC_API_KEY" ]; then
+            echo "::error::set the RELEASE_CLAUDE_CODE_OAUTH_TOKEN or RELEASE_ANTHROPIC_API_KEY repository secret"; exit 1
+          fi
+          # --backend auto: the subscription token takes precedence over the API key.
+          python scripts/release/generate_release_notes.py generate --version "$VERSION"
+
+      - name: Upload generator input and output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.version }}
+          path: release/work/
+          if-no-files-found: ignore
+
+      - name: Apply to CHANGELOG.md and version files
+        run: python scripts/release/generate_release_notes.py apply --version "$VERSION"
+
+      - name: Push release branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add CHANGELOG.md library.json library.properties "release/$VERSION/RELEASE_NOTES.md"
+          git commit -m "Release $VERSION"
+          git push origin "$BRANCH"
+
+      - name: Show how to open the release PR
+        run: |
+          prev=$(jq -r .previous_tag release/work/meta.json)
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/master...$BRANCH?expand=1&title=Release%20$VERSION"
+          echo "::notice title=Open the release PR::$url"
+          {
+            echo "## Release $VERSION is ready for review"
+            echo
+            echo "Branch \`$BRANCH\` has the generated documentation for changes since \`$prev\`."
+            echo
+            echo "**Next step:** [open the release pull request]($url), review it, and merge it."
+            echo "Merging creates the annotated tag \`$VERSION\` and a draft GitHub Release."
+            echo
+            echo "From the command line:"
+            echo
+            echo '```bash'
+            echo "git fetch origin $BRANCH"
+            echo "git show origin/$BRANCH:release/$VERSION/RELEASE_NOTES.md | \\"
+            echo "  gh pr create --base master --head $BRANCH --title \"Release $VERSION\" --body-file -"
+            echo '```'
+            echo
+            echo "### Generated release notes"
+            echo
+            cat "release/$VERSION/RELEASE_NOTES.md"
+          } >> "$GITHUB_STEP_SUMMARY"

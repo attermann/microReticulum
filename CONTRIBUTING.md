@@ -238,6 +238,9 @@ Maintainers may request revisions before merging.
 
 Submitting a pull request does not guarantee that it will be accepted.
 
+Pull requests are evaluated against [.github/PR_POLICY.md](.github/PR_POLICY.md).
+
+
 ---
 
 # Be Respectful
