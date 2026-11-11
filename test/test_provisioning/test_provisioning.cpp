@@ -2285,7 +2285,10 @@ int runUnityTests(void) {
 	UNITY_BEGIN();
 
 	// Suite setup: register the filesystem once.
-	microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem()};
+	// Root it at the host "/" (not the default cwd): the fixtures build
+	// absolute host paths under /tmp and also manipulate them directly with
+	// raw mkdir / fopen / rm -rf, so microStore must resolve them identically.
+	microStore::FileSystem filesystem{microStore::Adapters::UniversalFileSystem("/")};
 	filesystem.init();
 	Utilities::OS::register_filesystem(filesystem);
 
