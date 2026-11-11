@@ -79,7 +79,7 @@ namespace RNS { namespace Utilities {
 #ifdef ARDUINO
 		inline static void sleep(float seconds) { delay((uint32_t)(seconds * 1000)); }
 #else
-		inline static void sleep(float seconds) { timespec time; time.tv_sec = (time_t)(seconds); time.tv_nsec = (seconds - (float)time.tv_sec) * 1000000000; ::nanosleep(&time, nullptr); }
+		inline static void sleep(float seconds) { ::usleep((useconds_t)(seconds * 1000000.0f)); }
 #endif
 		//inline static void sleep(uint32_t milliseconds) { ::sleep((float)milliseconds / 1000.0); }
 
