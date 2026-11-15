@@ -293,6 +293,20 @@ void testRebroadcastRatchetAnnounceValidate() {
 	TEST_ASSERT_TRUE(RNS::Identity::validate_announce(packet));
 }
 
+// PKCS#7 fills every pad byte with the pad length, as Python's pad() does.
+void testPKCS7PadBytes() {
+	for (size_t len = 0; len <= RNS::Cryptography::PKCS7::BLOCKSIZE; len++) {
+		RNS::Bytes bytes;
+		for (size_t i = 0; i < len; i++) bytes.append(uint8_t('a'));
+		RNS::Bytes padded = RNS::Cryptography::PKCS7::pad(bytes);
+		const size_t padlen = padded.size() - len;
+		TEST_ASSERT_TRUE(padlen >= 1 && padlen <= RNS::Cryptography::PKCS7::BLOCKSIZE);
+		for (size_t i = len; i < padded.size(); i++) {
+			TEST_ASSERT_EQUAL_UINT8(padlen, padded.data()[i]);
+		}
+	}
+}
+
 void setUp(void) {
     // set stuff up here before each test
 }
@@ -305,6 +319,7 @@ int runUnityTests(void) {
     UNITY_BEGIN();
 	RUN_TEST(testHMAC);
 	RUN_TEST(testPKCS7);
+	RUN_TEST(testPKCS7PadBytes);
 	RUN_TEST(testCrc8);
 	RUN_TEST(testCrc32);
 	RUN_TEST(testIncrementalCrc32);
