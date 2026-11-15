@@ -78,6 +78,10 @@ namespace RNS { namespace Utilities {
 		//inline static void sleep(float seconds) { ::sleep(seconds); }
 #ifdef ARDUINO
 		inline static void sleep(float seconds) { delay((uint32_t)(seconds * 1000)); }
+#elif defined(ESP_PLATFORM)
+		// ESP-IDF has no nanosleep(), so builds without Arduino fail to link.
+		// Its usleep() takes any duration (its own sleep() calls it).
+		inline static void sleep(float seconds) { ::usleep((useconds_t)(seconds * 1000000.0f)); }
 #else
 		inline static void sleep(float seconds) { timespec time; time.tv_sec = (time_t)(seconds); time.tv_nsec = (seconds - (float)time.tv_sec) * 1000000000; ::nanosleep(&time, nullptr); }
 #endif
