@@ -4,6 +4,10 @@
 
 #include "microReticulum.h"
 
+#include <atomic>
+#include <cstdlib>
+#include <thread>
+
 // ============================================================================
 // Test infrastructure - loopback interfaces
 // ============================================================================
@@ -624,6 +628,50 @@ void test_receipt_timeout_handler_capture() {
 }
 #endif
 
+// A timeout callback that sends a packet, as a retry does. Transport::outbound()
+// waits while the job loop runs, so if jobs() calls the callback from inside
+// the loop, the send never returns. jobs() runs on a worker thread so that
+// case fails here instead of hanging the suite.
+void test_receipt_timeout_callback_can_send() {
+	initRNS();
+
+	RNS::Identity remote_id(true);
+	RNS::Destination retry_dest(remote_id, RNS::Type::Destination::OUT,
+		RNS::Type::Destination::SINGLE, "test", "unreachable_retry");
+
+	RNS::Packet packet(retry_dest, RNS::Bytes("Times out, then retries"));
+	packet.send();
+	RNS::PacketReceipt receipt = packet.receipt();
+	receipt.set_timeout(1);
+	bool retry_sent = false;
+	receipt.set_timeout_handler([retry_dest, &retry_sent](const RNS::PacketReceipt& r) {
+		RNS::Packet retry(retry_dest, RNS::Bytes("Retry"));
+		retry.send();
+		retry_sent = true;
+	});
+
+	std::atomic<bool> finished(false);
+	std::thread runner([&finished]() {
+		for (int i = 0; i < 5; i++) {
+			RNS::Utilities::OS::sleep(0.5);
+			test_reticulum.loop();
+		}
+		finished = true;
+	});
+	for (int i = 0; i < 100 && !finished; i++) {
+		RNS::Utilities::OS::sleep(0.1);
+	}
+	if (!finished) {
+		// The worker is stuck in outbound() and every later send would be too.
+		printf("test_receipt_timeout_callback_can_send: FAIL: Transport jobs did not return after the timeout callback sent\n");
+		fflush(stdout);
+		std::_Exit(1);
+	}
+	runner.join();
+
+	TEST_ASSERT_TRUE_MESSAGE(retry_sent, "Timeout callback should have sent its retry");
+}
+
 // ============================================================================
 // Test runner
 // ============================================================================
@@ -828,6 +876,7 @@ int runUnityTests(void) {
 #if RNS_NEIGHBOR_PROBING
 	RUN_TEST(test_receipt_timeout_handler_capture);
 #endif
+	RUN_TEST(test_receipt_timeout_callback_can_send);
 
 	return UNITY_END();
 }

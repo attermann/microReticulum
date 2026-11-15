@@ -509,11 +509,13 @@ DestinationEntry empty_destination_entry;
 	// Ticking inside the jobs section deadlocks the single-threaded loop
 	// until the hardware watchdog resets the device.
 	std::vector<Link> links_to_tick;
+	bool jobs_ran = false;
 	int count;
 	_jobs_running = true;
 
 	try {
 		if (!_jobs_locked) {
+			jobs_ran = true;
 
 			// Process active and pending link lists
 			if (OS::time() > (_links_last_checked + _links_check_interval)) {
@@ -569,33 +571,6 @@ DestinationEntry empty_destination_entry;
 				}
 
 				_links_last_checked = OS::time();
-			}
-
-			// Process receipts list for timed-out packets
-			if (OS::time() > (_receipts_last_checked + _receipts_check_interval)) {
-				while (_receipts.size() > Type::Transport::MAX_RECEIPTS) {
-					//p culled_receipt = Transport.receipts.pop(0)
-					PacketReceipt culled_receipt = _receipts.front();
-					_receipts.pop_front();
-					culled_receipt.set_timeout(-1);
-					culled_receipt.check_timeout();
-				}
-
-				std::list<PacketReceipt> cull_receipts;
-				for (auto& receipt : _receipts) {
-					receipt.check_timeout();
-					if (receipt.status() != Type::PacketReceipt::SENT) {
-						//p if receipt in Transport.receipts:
-						//p 	Transport.receipts.remove(receipt)
-						cull_receipts.push_back(receipt);
-					}
-				}
-				// CBA since modifying of collection while iterating is forbidden
-				for (auto& receipt : cull_receipts) {
-					_receipts.remove(receipt);
-				}
-
-				_receipts_last_checked = OS::time();
 			}
 
 			// Process announces needing retransmission
@@ -1079,6 +1054,34 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 		if (link.status() != Type::Link::CLOSED) {
 			link.tick_resources();
 		}
+	}
+
+	// Process receipts list for timed-out packets
+	// Runs after jobs: a timeout callback may send.
+	if (jobs_ran && OS::time() > (_receipts_last_checked + _receipts_check_interval)) {
+		while (_receipts.size() > Type::Transport::MAX_RECEIPTS) {
+			//p culled_receipt = Transport.receipts.pop(0)
+			PacketReceipt culled_receipt = _receipts.front();
+			_receipts.pop_front();
+			culled_receipt.set_timeout(-1);
+			culled_receipt.check_timeout();
+		}
+
+		std::list<PacketReceipt> cull_receipts;
+		for (auto& receipt : _receipts) {
+			receipt.check_timeout();
+			if (receipt.status() != Type::PacketReceipt::SENT) {
+				//p if receipt in Transport.receipts:
+				//p 	Transport.receipts.remove(receipt)
+				cull_receipts.push_back(receipt);
+			}
+		}
+		// CBA since modifying of collection while iterating is forbidden
+		for (auto& receipt : cull_receipts) {
+			_receipts.remove(receipt);
+		}
+
+		_receipts_last_checked = OS::time();
 	}
 
 	// CBA send announce retransmission packets
