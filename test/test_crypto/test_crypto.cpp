@@ -6,6 +6,7 @@
 #include "microReticulum/Utilities/Crc.h"
 #include "microReticulum/Cryptography/HMAC.h"
 #include "microReticulum/Cryptography/PKCS7.h"
+#include "microReticulum/Cryptography/Token.h"
 
 #include <string.h>
 #include <vector>
@@ -293,6 +294,83 @@ void testRebroadcastRatchetAnnounceValidate() {
 	TEST_ASSERT_TRUE(RNS::Identity::validate_announce(packet));
 }
 
+// Unpad must refuse anything it can't strip without reading or cutting past
+// the buffer: an empty input, or a pad length longer than the block or the
+// data. A pad length of zero strips nothing, as in Python's unpad().
+void testPKCS7UnpadRejectsBadPadding() {
+	const auto rejected = [](const RNS::Bytes& data) {
+		RNS::Bytes copy(data);
+		try {
+			RNS::Cryptography::PKCS7::inplace_unpad(copy);
+		}
+		catch (const std::exception&) {
+			return true;
+		}
+		return false;
+	};
+	TEST_ASSERT_TRUE(rejected(RNS::Bytes()));
+	uint8_t block[16] = {0};
+	block[15] = 17;
+	TEST_ASSERT_TRUE(rejected(RNS::Bytes(block, sizeof(block))));
+	const uint8_t short_data[3] = {0, 0, 4};
+	TEST_ASSERT_TRUE(rejected(RNS::Bytes(short_data, sizeof(short_data))));
+	block[15] = 4;
+	TEST_ASSERT_FALSE(rejected(RNS::Bytes(block, sizeof(block))));
+	block[15] = 0;
+	TEST_ASSERT_FALSE(rejected(RNS::Bytes(block, sizeof(block))));
+}
+
+// IV, ciphertext and an HMAC the sender computed itself, as anyone who
+// chose an ephemeral key can for a token addressed to a known identity.
+static RNS::Bytes forged_token(const RNS::Bytes& key, size_t ciphertext_len) {
+	RNS::Bytes token;
+	uint8_t* body = token.writable(16 + ciphertext_len);
+	memset(body, 0x5a, 16 + ciphertext_len);
+	const RNS::Bytes signing_key = key.left(key.size() / 2);
+	token.append(RNS::Cryptography::HMAC::generate(signing_key, token)->digest());
+	return token;
+}
+
+// A token whose HMAC checks out but whose ciphertext is empty or not a
+// whole number of blocks is refused with an exception.
+void testTokenRejectsShortCiphertext() {
+	for (size_t key_len : {32, 64}) {
+		RNS::Bytes key;
+		uint8_t* k = key.writable(key_len);
+		for (size_t i = 0; i < key_len; i++) k[i] = uint8_t(i);
+		RNS::Cryptography::Token token(key);
+		for (size_t ciphertext_len : {0, 1, 15, 17}) {
+			bool refused = false;
+			try {
+				token.decrypt(forged_token(key, ciphertext_len));
+			}
+			catch (const std::exception&) {
+				refused = true;
+			}
+			TEST_ASSERT_TRUE(refused);
+		}
+	}
+}
+
+// Round trip at every length around a block boundary.
+void testTokenRoundTrip() {
+	RNS::Bytes key;
+	uint8_t* k = key.writable(64);
+	for (size_t i = 0; i < 64; i++) k[i] = uint8_t(255 - i);
+	RNS::Cryptography::Token token(key);
+	for (size_t len = 0; len <= 33; len++) {
+		RNS::Bytes plaintext;
+		for (size_t i = 0; i < len; i++) plaintext.append(uint8_t(i));
+		const RNS::Bytes encrypted = token.encrypt(plaintext);
+		TEST_ASSERT_EQUAL_size_t(0, (encrypted.size() - 48) % 16);
+		const RNS::Bytes decrypted = token.decrypt(encrypted);
+		TEST_ASSERT_EQUAL_size_t(len, decrypted.size());
+		if (len > 0) {
+			TEST_ASSERT_EQUAL_MEMORY(plaintext.data(), decrypted.data(), len);
+		}
+	}
+}
+
 void setUp(void) {
     // set stuff up here before each test
 }
@@ -305,6 +383,9 @@ int runUnityTests(void) {
     UNITY_BEGIN();
 	RUN_TEST(testHMAC);
 	RUN_TEST(testPKCS7);
+	RUN_TEST(testPKCS7UnpadRejectsBadPadding);
+	RUN_TEST(testTokenRejectsShortCiphertext);
+	RUN_TEST(testTokenRoundTrip);
 	RUN_TEST(testCrc8);
 	RUN_TEST(testCrc32);
 	RUN_TEST(testIncrementalCrc32);

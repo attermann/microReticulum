@@ -93,8 +93,12 @@ const Bytes Fernet::encrypt(const Bytes& data) {
 const Bytes Fernet::decrypt(const Bytes& token) {
 
 	DEBUGF("Fernet::decrypt: token length: %lu", token.size());
-	if (token.size() < 48) {
-		throw std::invalid_argument("Cannot decrypt token of only " + std::to_string(token.size()) + " bytes");
+	// IV (16) + at least one block of ciphertext + HMAC (32). A shorter
+	// token, or a ciphertext that isn't whole blocks, can't have been made
+	// by encrypt(), and its HMAC is no proof otherwise: the sender of a
+	// token for an identity chooses the key it is signed with.
+	if (token.size() < 64 || (token.size() - 48) % 16 != 0) {
+		throw std::invalid_argument("Cannot decrypt token of " + std::to_string(token.size()) + " bytes");
 	}
 
 	if (!verify_hmac(token)) {

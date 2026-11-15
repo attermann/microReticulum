@@ -62,11 +62,14 @@ namespace RNS { namespace Cryptography {
 		static inline void inplace_unpad(Bytes& data, size_t bs = BLOCKSIZE) {
 			size_t len = data.size();
 			//DEBUGF("PKCS7::unpad: len: %lu", len);
+			if (len == 0) {
+				throw std::runtime_error("Cannot unpad empty data");
+			}
 			// read last byte which is pad length
 			//pad = data[-1]
-			size_t padlen = (size_t)data.data()[data.size()-1];
+			size_t padlen = (size_t)data.data()[len-1];
 			//DEBUGF("PKCS7::unpad: pad len: %lu", padlen);
-			if (padlen > bs) {
+			if (padlen > bs || padlen > len) {
 				throw std::runtime_error("Cannot unpad, invalid padding length of " + std::to_string(padlen) + " bytes");
 			}
 			// truncate data to strip padding
