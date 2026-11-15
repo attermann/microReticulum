@@ -507,7 +507,8 @@ DestinationEntry empty_destination_entry;
 	// Transport::outbound(), which spins while _jobs_running is set, so the
 	// tick must happen after _jobs_running is cleared (same as `outgoing`).
 	// Ticking inside the jobs section deadlocks the single-threaded loop
-	// until the hardware watchdog resets the device.
+	// until the hardware watchdog resets the device. The link watchdog
+	// sends too (keepalives, closes), so it runs there as well.
 	std::vector<Link> links_to_tick;
 	int count;
 	_jobs_running = true;
@@ -563,6 +564,13 @@ DestinationEntry empty_destination_entry;
 				// iterating std::set<Link> — the wrapper is const but
 				// shared_ptr-backed mutation is the codebase convention.
 				for (auto& link_const : active_links) {
+					if (link_const.status() != Type::Link::CLOSED) {
+						links_to_tick.push_back(link_const);
+					}
+				}
+				// The link watchdog also runs for pending links: it times
+				// out link requests that are never answered.
+				for (auto& link_const : pending_links) {
 					if (link_const.status() != Type::Link::CLOSED) {
 						links_to_tick.push_back(link_const);
 					}
@@ -1074,8 +1082,11 @@ TRACEF("path_request_conditions=%u", path_request_conditions);
 
 	_jobs_running = false;
 
-	// Pump resource watchdogs outside the jobs section (see links_to_tick)
+	// Run link and resource watchdogs outside the jobs section (see links_to_tick)
 	for (auto& link : links_to_tick) {
+		if (link.status() != Type::Link::CLOSED) {
+			link.__watchdog_job();
+		}
 		if (link.status() != Type::Link::CLOSED) {
 			link.tick_resources();
 		}

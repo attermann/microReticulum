@@ -23,6 +23,7 @@ TESTS=(
   "resource|test_interop/resource_interop_sender|test_interop/run_resource_transfer.sh"
   "packet|test_interop/packet_interop_sender|test_interop/run_packet_exchange.sh"
   "link|test_interop/link_interop_sender|test_interop/run_link_lifecycle.sh"
+  "keepalive|test_interop/link_keepalive_sender|test_interop/run_link_keepalive.sh"
   "request|test_interop/request_interop_sender|test_interop/run_request_response.sh"
 )
 

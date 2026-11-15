@@ -23,5 +23,6 @@ endfunction()
 
 rns_add_interop(packet_interop_sender   packet_interop_sender/src/main.cpp   14253 14252)
 rns_add_interop(link_interop_sender     link_interop_sender/src/main.cpp     14255 14254)
+rns_add_interop(link_keepalive_sender   link_keepalive_sender/src/main.cpp   14259 14258)
 rns_add_interop(request_interop_sender  request_interop_sender/src/main.cpp  14257 14256)
 rns_add_interop(resource_interop_sender resource_interop_sender/src/main.cpp 14243 14242)

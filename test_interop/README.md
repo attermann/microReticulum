@@ -5,7 +5,7 @@ Python Reticulum reference implementation. Two flavours, in increasing scope:
 
 ## Targets
 
-Four C++ sender executables, one per interop scenario. Each is a CMake
+Five C++ sender executables, one per interop scenario. Each is a CMake
 target of the same name and is configured at compile time with its own
 UDP port pair so the scenarios can coexist on a single host:
 
@@ -13,12 +13,13 @@ UDP port pair so the scenarios can coexist on a single host:
 |---------------------------|-----------|------------|---------------------------------------------------------|
 | `packet_interop_sender`   | 14253     | 14252      | DATA packets to a Destination, bidirectional            |
 | `link_interop_sender`     | 14255     | 14254      | Link establish + two-pass teardown                      |
+| `link_keepalive_sender`   | 14259     | 14258      | Idle link held by keepalives, then closed as stale      |
 | `request_interop_sender`  | 14257     | 14256      | `Link::request("/echo", ...)` single-packet RPC         |
 | `resource_interop_sender` | 14243     | 14242      | Full Resource transfer over a Link (1024-byte payload)  |
 
 ## CMake
 
-The four C++ interop senders are built by the top-level CMake project.
+The five C++ interop senders are built by the top-level CMake project.
 Configure and build from the repository root:
 
 Configure:
@@ -28,7 +29,7 @@ cmake -S . -B build
 
 Build all interop senders:
 ```
-cmake --build build -j --target packet_interop_sender link_interop_sender request_interop_sender resource_interop_sender
+cmake --build build -j --target packet_interop_sender link_interop_sender link_keepalive_sender request_interop_sender resource_interop_sender
 ```
 
 Build a single sender:
@@ -51,7 +52,7 @@ cmake -S . -B build -DRNS_BUILD_INTEROP=OFF
 
 ## Top-level driver
 
-`test_interop/run_all.sh` builds each C++ test app and runs all four
+`test_interop/run_all.sh` builds each C++ test app and runs all five
 interop scenarios sequentially, reporting per-test PASS/FAIL and an
 aggregated exit status. Run from the repo root:
 
@@ -66,9 +67,11 @@ Each scenario also has its own driver script if you only want to run one:
 | resource     | `test_interop/run_resource_transfer.sh`  | Full Resource transfer over a Link (1024-byte payload)           |
 | packet       | `test_interop/run_packet_exchange.sh`    | DATA packets to a Destination, bidirectional, 256-byte patterns  |
 | link         | `test_interop/run_link_lifecycle.sh`     | Link establish + two-pass teardown (initiator and destination)   |
+| keepalive    | `test_interop/run_link_keepalive.sh`     | Keepalives hold an idle link past its stale time; the initiator closes it (TIMEOUT, LINKCLOSE) once the destination goes silent |
 | request      | `test_interop/run_request_response.sh`   | `Link::request("/echo", ...)` single-packet RPC (200-byte payload) |
 
 All four currently PASS against Python RNS 1.2.9 at `/Users/chad/python/Reticulum-latest`.
+The keepalive scenario, added later, passes against Python RNS 1.3.8. It takes about 40 s.
 
 ## 1. Wire-format cross-validation (implemented)
 

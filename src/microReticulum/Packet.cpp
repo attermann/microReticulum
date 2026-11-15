@@ -909,7 +909,7 @@ bool PacketReceipt::validate_link_proof(const Bytes& proof, const Link& link, co
 				_object->_proved = true;
 				_object->_concluded_at = OS::time();
 				//z _object->_proof_packet = proof_packet;
-				//z link.last_proof(_object->_concluded_at);
+				proving.last_proof(_object->_concluded_at);
 
 				// Prefer std::function handler over legacy
 				// function-pointer callback so capture-bearing handlers

@@ -213,6 +213,7 @@ namespace RNS {
 		void link_closed();
 		void start_watchdog();
 		void __watchdog_job();
+		void update_keepalive();
 		// Cooperative pump: iterate this link's incoming/outgoing resources
 		// and tick each Resource::__watchdog_job(). Safe to call from
 		// Transport::jobs() — snapshots both sets before pumping so that a
@@ -276,6 +277,7 @@ namespace RNS {
 		void establishment_cost(uint16_t cost);
 		void request_time(double time);
 		void last_inbound(double time);
+		void last_proof(double time);
 		void last_outbound(double time);
 		void increment_tx();
 		void increment_txbytes(uint16_t bytes);

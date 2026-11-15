@@ -625,6 +625,83 @@ void test_receipt_timeout_handler_capture() {
 #endif
 
 // ============================================================================
+// Link watchdog
+// ============================================================================
+
+static int watchdog_closed_count = 0;
+static void on_watchdog_link_closed(RNS::Link& link) {
+	watchdog_closed_count++;
+}
+
+// A link request that is never answered times out. Transport::jobs() runs the
+// watchdog for pending links, so this goes through Reticulum::loop().
+void test_link_watchdog_pending_timeout() {
+	initRNS();
+	watchdog_closed_count = 0;
+
+	RNS::Identity remote_id(true);
+	RNS::Destination remote_dest(remote_id, RNS::Type::Destination::OUT,
+		RNS::Type::Destination::SINGLE, "test", "watchdog_pending");
+	RNS::Link link(remote_dest, nullptr, on_watchdog_link_closed);
+	TEST_ASSERT_EQUAL(RNS::Type::Link::PENDING, link.status());
+
+	// Not timed out yet: the link stays pending.
+	RNS::Utilities::OS::sleep(1.1);
+	test_reticulum.loop();
+	TEST_ASSERT_EQUAL(RNS::Type::Link::PENDING, link.status());
+
+	// Sent longer ago than the establishment timeout.
+	link.request_time(RNS::Utilities::OS::time() - link.establishment_timeout() - 1);
+	RNS::Utilities::OS::sleep(1.1);
+	test_reticulum.loop();
+	TEST_ASSERT_EQUAL(RNS::Type::Link::CLOSED, link.status());
+	TEST_ASSERT_EQUAL(RNS::Type::Link::TIMEOUT, link.teardown_reason());
+	TEST_ASSERT_EQUAL(1, watchdog_closed_count);
+}
+
+// An active link with no inbound traffic goes stale after stale_time, then
+// closes after the grace period. The watchdog is called directly so the test
+// can move last_inbound instead of waiting for the real timeouts.
+void test_link_watchdog_stale_then_close() {
+	initRNS();
+	watchdog_closed_count = 0;
+
+	RNS::Identity remote_id(true);
+	RNS::Destination remote_dest(remote_id, RNS::Type::Destination::OUT,
+		RNS::Type::Destination::SINGLE, "test", "watchdog_stale");
+	RNS::Link link(remote_dest, nullptr, on_watchdog_link_closed);
+
+	// Give the link keys, as a proof would, so it can encrypt its LINKCLOSE.
+	RNS::Bytes peer_pub = remote_id.get_public_key();
+	link.load_peer(peer_pub.left(32), peer_pub.mid(32));
+	link.handshake();
+	link.status(RNS::Type::Link::ACTIVE);
+
+	const double now = RNS::Utilities::OS::time();
+	const double stale_time = RNS::Type::Link::STALE_TIME;
+
+	// Heard from within the keepalive interval: stays active.
+	link.last_inbound(now);
+	link.__watchdog_job();
+	TEST_ASSERT_EQUAL(RNS::Type::Link::ACTIVE, link.status());
+
+	// Nothing heard for longer than stale_time: goes stale, not closed.
+	link.last_inbound(now - stale_time - 1);
+	link.__watchdog_job();
+	TEST_ASSERT_EQUAL(RNS::Type::Link::STALE, link.status());
+	link.__watchdog_job();
+	TEST_ASSERT_EQUAL(RNS::Type::Link::STALE, link.status());
+	TEST_ASSERT_EQUAL(0, watchdog_closed_count);
+
+	// The grace period (WATCHDOG_MAX_SLEEP) has passed too: closes.
+	link.last_inbound(now - stale_time - RNS::Type::Link::WATCHDOG_MAX_SLEEP - 1);
+	link.__watchdog_job();
+	TEST_ASSERT_EQUAL(RNS::Type::Link::CLOSED, link.status());
+	TEST_ASSERT_EQUAL(RNS::Type::Link::TIMEOUT, link.teardown_reason());
+	TEST_ASSERT_EQUAL(1, watchdog_closed_count);
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -828,6 +905,10 @@ int runUnityTests(void) {
 #if RNS_NEIGHBOR_PROBING
 	RUN_TEST(test_receipt_timeout_handler_capture);
 #endif
+
+	// Link watchdog
+	RUN_TEST(test_link_watchdog_pending_timeout);
+	RUN_TEST(test_link_watchdog_stale_then_close);
 
 	return UNITY_END();
 }
